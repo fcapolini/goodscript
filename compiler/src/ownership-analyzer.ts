@@ -1,0 +1,1049 @@
+/**
+ * Ownership Analyzer
+ * Performs static analysis to track ownership and detect cycles
+ */
+
+import * as ts from 'typescript';
+import { OwnershipKind, OwnershipInfo, OwnershipGraph, Diagnostic, SourceLocation } from './types';
+import { Parser } from './parser';
+
+export class OwnershipAnalyzer {
+  private ownershipGraph: OwnershipGraph = {
+    nodes: new Map(),
+    edges: [],
+  };
+
+  private diagnostics: Diagnostic[] = [];
+  private classFieldOwnership: Map<string, Map<string, OwnershipInfo>> = new Map();
+  
+  // Global cross-file ownership tracking
+  private globalClassGraph: Map<string, Set<string>> = new Map();
+  private globalClassLocations: Map<string, SourceLocation> = new Map();
+  private sourceFiles: ts.SourceFile[] = [];
+  
+  // Generic type tracking
+  private classDeclarations: Map<string, ts.ClassDeclaration> = new Map();
+  private interfaceDeclarations: Map<string, ts.InterfaceDeclaration> = new Map();
+  private typeAliasDeclarations: Map<string, ts.TypeAliasDeclaration> = new Map();
+
+  /**
+   * Analyze ownership in a source file
+   */
+  analyze(sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
+    // Don't reset global state - accumulate across files
+    if (this.sourceFiles.length === 0) {
+      this.ownershipGraph = {
+        nodes: new Map(),
+        edges: [],
+      };
+      this.diagnostics = [];
+      this.classFieldOwnership = new Map();
+      this.globalClassGraph = new Map();
+      this.globalClassLocations = new Map();
+      this.classDeclarations = new Map();
+      this.interfaceDeclarations = new Map();
+      this.typeAliasDeclarations = new Map();
+    }
+    
+    this.sourceFiles.push(sourceFile);
+    
+    // First pass: collect all declarations
+    this.collectDeclarations(sourceFile);
+    
+    // Second pass: analyze ownership
+    this.visit(sourceFile, sourceFile, checker);
+    this.detectClassFieldCycles(sourceFile);
+    this.detectCycles();
+  }
+
+  /**
+   * Finalize analysis after all files are processed
+   */
+  finalizeAnalysis(): void {
+    // Detect cross-file cycles
+    this.detectCrossFileCycles();
+  }
+
+  /**
+   * Reset analyzer state (call before analyzing a new program)
+   */
+  reset(): void {
+    this.ownershipGraph = {
+      nodes: new Map(),
+      edges: [],
+    };
+    this.diagnostics = [];
+    this.classFieldOwnership = new Map();
+    this.globalClassGraph = new Map();
+    this.globalClassLocations = new Map();
+    this.sourceFiles = [];
+    this.classDeclarations = new Map();
+    this.interfaceDeclarations = new Map();
+    this.typeAliasDeclarations = new Map();
+  }
+
+  /**
+   * Collect all class, interface, and type alias declarations
+   */
+  private collectDeclarations(sourceFile: ts.SourceFile): void {
+    const visit = (node: ts.Node) => {
+      if (ts.isClassDeclaration(node) && node.name) {
+        const className = node.name.getText(sourceFile);
+        this.classDeclarations.set(className, node);
+      } else if (ts.isInterfaceDeclaration(node) && node.name) {
+        const interfaceName = node.name.getText(sourceFile);
+        this.interfaceDeclarations.set(interfaceName, node);
+      } else if (ts.isTypeAliasDeclaration(node) && node.name) {
+        const aliasName = node.name.getText(sourceFile);
+        this.typeAliasDeclarations.set(aliasName, node);
+      }
+      
+      ts.forEachChild(node, visit);
+    };
+    
+    visit(sourceFile);
+  }
+
+  /**
+   * Visit AST nodes recursively
+   */
+  private visit(node: ts.Node, sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
+    // Analyze variable declarations
+    if (ts.isVariableDeclaration(node)) {
+      this.analyzeVariableDeclaration(node, sourceFile, checker);
+    }
+
+    // Analyze function parameters
+    if (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node) || ts.isArrowFunction(node)) {
+      this.analyzeFunctionParameters(node, sourceFile, checker);
+    }
+
+    // Analyze class properties
+    if (ts.isPropertyDeclaration(node)) {
+      this.analyzePropertyDeclaration(node, sourceFile, checker);
+    }
+
+    // Recurse into children
+    ts.forEachChild(node, child => this.visit(child, sourceFile, checker));
+  }
+
+  /**
+   * Analyze a variable declaration for ownership
+   */
+  private analyzeVariableDeclaration(
+    node: ts.VariableDeclaration,
+    sourceFile: ts.SourceFile,
+    _checker: ts.TypeChecker
+  ): void {
+    const name = node.name.getText(sourceFile);
+    const location = Parser.getLocation(node, sourceFile);
+
+    // Phase 2: Determine ownership kind
+    // 1. Variables with `new` expression: Shared (not nullable)
+    // 2. Variables with literal initializers ([], {}, etc.): Shared (not nullable)
+    // 3. Variables with unique<T> or shared<T> annotation: Unique/Shared (not nullable)
+    // 4. Variables assigned from other variables: Weak (implicitly nullable)
+    // 5. Variables with bare type annotation and no initializer: Weak (implicitly nullable)
+    
+    let kind = OwnershipKind.Shared; // Default for local variables with `new` or literals
+    let isNullable = false;
+
+    // Check if initialized with `new` expression or literal
+    const hasNewInitializer = node.initializer && ts.isNewExpression(node.initializer);
+    const hasLiteralInitializer = node.initializer && (
+      ts.isArrayLiteralExpression(node.initializer) ||
+      ts.isObjectLiteralExpression(node.initializer) ||
+      ts.isStringLiteral(node.initializer) ||
+      ts.isNumericLiteral(node.initializer) ||
+      ts.isBigIntLiteral(node.initializer) ||
+      node.initializer.kind === ts.SyntaxKind.TrueKeyword ||
+      node.initializer.kind === ts.SyntaxKind.FalseKeyword ||
+      node.initializer.kind === ts.SyntaxKind.NullKeyword
+    );
+    const hasOwningInitializer = hasNewInitializer || hasLiteralInitializer;
+
+    // Check for 'unique<T>' or 'shared<T>' type annotation - explicit ownership
+    if (node.type && ts.isTypeReferenceNode(node.type)) {
+      const typeName = node.type.typeName.getText(sourceFile);
+      if (typeName === 'unique') {
+        kind = OwnershipKind.Unique;
+        isNullable = false;
+      } else if (typeName === 'shared') {
+        kind = OwnershipKind.Shared;
+        isNullable = false;
+      } else if (typeName === 'weak') {
+        kind = OwnershipKind.Weak;
+        isNullable = true;
+      } else if (!hasOwningInitializer) {
+        // Bare type annotation without owning initializer = weak reference
+        kind = OwnershipKind.Weak;
+        isNullable = true; // Phase 2: implicitly nullable
+      }
+    }
+    // No explicit unique<T>/shared<T>/weak<T>, check context
+    else if (!hasOwningInitializer) {
+      // Phase 2: Assignment from another variable or bare type = weak reference
+      if (node.type || (node.initializer && ts.isIdentifier(node.initializer))) {
+        kind = OwnershipKind.Weak;
+        isNullable = true; // Phase 2: implicitly nullable
+      }
+    }
+
+    // Phase 2: Explicit | null is still supported but not required
+    if (node.type && ts.isUnionTypeNode(node.type)) {
+      // Check if it's a union with null/undefined
+      const hasNull = node.type.types.some(t => {
+        // Check for direct null/undefined keyword
+        if (t.kind === ts.SyntaxKind.NullKeyword || t.kind === ts.SyntaxKind.UndefinedKeyword) {
+          return true;
+        }
+        // Check for LiteralType containing null
+        if (ts.isLiteralTypeNode(t) && t.literal.kind === ts.SyntaxKind.NullKeyword) {
+          return true;
+        }
+        return false;
+      });
+      if (hasNull) {
+        kind = OwnershipKind.Weak;
+        isNullable = true;
+      }
+    }
+
+    const info: OwnershipInfo = {
+      kind,
+      isNullable,
+      symbol: name,
+      location,
+    };
+
+    this.ownershipGraph.nodes.set(name, info);
+
+    // Track assignment edges if initializer exists
+    if (node.initializer && ts.isIdentifier(node.initializer)) {
+      const targetName = node.initializer.getText(sourceFile);
+      if (kind === OwnershipKind.Shared) {
+        this.addOwnershipEdge(targetName, name, location);
+      }
+    }
+  }
+
+  /**
+   * Analyze function parameters
+   */
+  private analyzeFunctionParameters(
+    node: ts.FunctionDeclaration | ts.MethodDeclaration | ts.ArrowFunction,
+    sourceFile: ts.SourceFile,
+    _checker: ts.TypeChecker
+  ): void {
+    for (const param of node.parameters) {
+      const name = param.name.getText(sourceFile);
+      const location = Parser.getLocation(param, sourceFile);
+
+      // Phase 2: Parameters default to weak (implicitly nullable)
+      // Unless marked with unique<T> or shared<T> (which are not nullable)
+      let kind = OwnershipKind.Weak;
+      let isNullable = true; // Phase 2: implicit nullability for weak references
+
+      if (param.type && ts.isTypeReferenceNode(param.type)) {
+        const typeName = param.type.typeName.getText(sourceFile);
+        if (typeName === 'unique') {
+          kind = OwnershipKind.Unique;
+          isNullable = false;
+        } else if (typeName === 'shared') {
+          kind = OwnershipKind.Shared;
+          isNullable = false;
+        } else if (typeName === 'weak') {
+          kind = OwnershipKind.Weak;
+          isNullable = true;
+        }
+      }
+
+      // Phase 2: Explicit | null is still supported but not required
+      if (param.type && ts.isUnionTypeNode(param.type)) {
+        const hasNull = param.type.types.some(t => {
+          if (t.kind === ts.SyntaxKind.NullKeyword || t.kind === ts.SyntaxKind.UndefinedKeyword) {
+            return true;
+          }
+          if (ts.isLiteralTypeNode(t) && t.literal.kind === ts.SyntaxKind.NullKeyword) {
+            return true;
+          }
+          return false;
+        });
+        
+        if (hasNull) {
+          // Explicitly nullable weak reference (still valid)
+          kind = OwnershipKind.Weak;
+          isNullable = true;
+        }
+      }
+
+      const info: OwnershipInfo = {
+        kind,
+        isNullable,
+        symbol: name,
+        location,
+      };
+
+      this.ownershipGraph.nodes.set(name, info);
+    }
+  }
+
+  /**
+   * Analyze class property declarations
+   */
+  private analyzePropertyDeclaration(
+    node: ts.PropertyDeclaration,
+    sourceFile: ts.SourceFile,
+    _checker: ts.TypeChecker
+  ): void {
+    const name = node.name.getText(sourceFile);
+    const location = Parser.getLocation(node, sourceFile);
+
+    // Get the containing class
+    const classDecl = this.findContainingClass(node);
+    const className = classDecl?.name?.getText(sourceFile) || 'unknown';
+
+    // Phase 2: Determine ownership based on type annotation
+    // Bare types are weak references (implicitly nullable)
+    // unique<T>/shared<T> types are ownership references (not nullable)
+    let kind = OwnershipKind.Weak; // Default to weak reference
+    let isNullable = true; // Phase 2: implicit nullability for weak
+
+    if (node.type) {
+      // Check for ownership wrappers - explicit ownership
+      if (ts.isTypeReferenceNode(node.type)) {
+        const typeName = node.type.typeName.getText(sourceFile);
+        if (typeName === 'unique') {
+          kind = OwnershipKind.Unique;
+          isNullable = false;
+        } else if (typeName === 'shared') {
+          kind = OwnershipKind.Shared;
+          isNullable = false;
+        } else if (typeName === 'weak') {
+          kind = OwnershipKind.Weak;
+          isNullable = true;
+        } else {
+          // Plain type reference without ownership wrapper is a weak reference
+          kind = OwnershipKind.Weak;
+          isNullable = true; // Phase 2: implicitly nullable
+        }
+      } 
+      // Check for union with null (still supported for backward compatibility)
+      else if (ts.isUnionTypeNode(node.type)) {
+        const hasNull = node.type.types.some(t => {
+          if (t.kind === ts.SyntaxKind.NullKeyword || t.kind === ts.SyntaxKind.UndefinedKeyword) {
+            return true;
+          }
+          if (ts.isLiteralTypeNode(t) && t.literal.kind === ts.SyntaxKind.NullKeyword) {
+            return true;
+          }
+          return false;
+        });
+        isNullable = hasNull || true; // Phase 2: always nullable for weak
+        
+        // Check if any type in the union is unique<T> or shared<T>
+        const ownershipType = node.type.types.find(t => {
+          if (ts.isTypeReferenceNode(t)) {
+            const name = t.typeName.getText(sourceFile);
+            return name === 'unique' || name === 'shared' || name === 'weak';
+          }
+          return false;
+        });
+        
+        if (ownershipType && ts.isTypeReferenceNode(ownershipType)) {
+          const typeName = ownershipType.typeName.getText(sourceFile);
+          if (typeName === 'unique') {
+            kind = OwnershipKind.Unique;
+            isNullable = false;
+          } else if (typeName === 'shared') {
+            kind = OwnershipKind.Shared;
+            isNullable = false;
+          } else if (typeName === 'weak') {
+            kind = OwnershipKind.Weak;
+            isNullable = true;
+          }
+        } else {
+          // Union without ownership wrapper is a weak reference
+          kind = OwnershipKind.Weak;
+          isNullable = true; // Phase 2: implicitly nullable
+        }
+      }
+      // Check for array types
+      else if (ts.isArrayTypeNode(node.type)) {
+        const elementType = node.type.elementType;
+        if (ts.isTypeReferenceNode(elementType)) {
+          const typeName = elementType.typeName.getText(sourceFile);
+          if (typeName === 'unique') {
+            kind = OwnershipKind.Unique;
+            isNullable = false;
+          } else if (typeName === 'shared') {
+            kind = OwnershipKind.Shared;
+            isNullable = false;
+          } else if (typeName === 'weak') {
+            kind = OwnershipKind.Weak;
+            isNullable = true;
+          } else {
+            kind = OwnershipKind.Weak;
+            isNullable = true; // Phase 2: implicitly nullable
+          }
+        } else {
+          kind = OwnershipKind.Weak;
+          isNullable = true; // Phase 2: implicitly nullable
+        }
+      }
+    }
+
+    const info: OwnershipInfo = {
+      kind,
+      isNullable,
+      symbol: name,
+      location,
+    };
+
+    this.ownershipGraph.nodes.set(name, info);
+
+    // Track class field ownership for cycle detection
+    if (!this.classFieldOwnership.has(className)) {
+      this.classFieldOwnership.set(className, new Map());
+    }
+    this.classFieldOwnership.get(className)!.set(name, info);
+  }
+
+  /**
+   * Find the containing class declaration
+   */
+  private findContainingClass(node: ts.Node): ts.ClassDeclaration | undefined {
+    let current = node.parent;
+    while (current) {
+      if (ts.isClassDeclaration(current)) {
+        return current;
+      }
+      current = current.parent;
+    }
+    return undefined;
+  }
+
+  /**
+   * Add an ownership edge to the graph
+   */
+  private addOwnershipEdge(from: string, to: string, location: SourceLocation): void {
+    this.ownershipGraph.edges.push({
+      from,
+      to,
+      kind: OwnershipKind.Shared,
+      location,
+    });
+  }
+
+  /**
+   * Detect ownership cycles using DFS
+   */
+  private detectCycles(): void {
+    const visited = new Set<string>();
+    const recursionStack = new Set<string>();
+    const path: string[] = [];
+
+    for (const [node] of this.ownershipGraph.nodes) {
+      if (!visited.has(node)) {
+        this.dfsDetectCycle(node, visited, recursionStack, path);
+      }
+    }
+  }
+
+  /**
+   * DFS helper for cycle detection
+   */
+  private dfsDetectCycle(
+    node: string,
+    visited: Set<string>,
+    recursionStack: Set<string>,
+    path: string[]
+  ): boolean {
+    visited.add(node);
+    recursionStack.add(node);
+    path.push(node);
+
+    // Get outgoing shared ownership edges (only shared can create cycles)
+    const edges = this.ownershipGraph.edges.filter(
+      e => e.from === node && e.kind === OwnershipKind.Shared
+    );
+
+    for (const edge of edges) {
+      if (!visited.has(edge.to)) {
+        if (this.dfsDetectCycle(edge.to, visited, recursionStack, path)) {
+          return true;
+        }
+      } else if (recursionStack.has(edge.to)) {
+        // Cycle detected!
+        const cycleStart = path.indexOf(edge.to);
+        const cycle = path.slice(cycleStart).concat(edge.to);
+        this.reportCycle(cycle, edge.location);
+        return true;
+      }
+    }
+
+    recursionStack.delete(node);
+    path.pop();
+    return false;
+  }
+
+  /**
+   * Detect cycles in class field ownership (comprehensive version)
+   */
+  private detectClassFieldCycles(sourceFile: ts.SourceFile): void {
+    // Build a graph of class ownership relationships
+    const classGraph = new Map<string, Set<string>>();
+    const classLocations = new Map<string, SourceLocation>();
+
+    // First pass: collect all class declarations and their field types
+    const visit = (node: ts.Node) => {
+      if (ts.isClassDeclaration(node) && node.name) {
+        const className = node.name.getText(sourceFile);
+        const location = Parser.getLocation(node, sourceFile);
+        classLocations.set(className, location);
+        
+        // Store in global tracking for cross-file detection
+        this.globalClassLocations.set(className, location);
+        
+        const owningFields: string[] = [];
+        
+        for (const member of node.members) {
+          if (ts.isPropertyDeclaration(member) && member.type) {
+            const fieldName = member.name.getText(sourceFile);
+            const fieldInfo = this.classFieldOwnership.get(className)?.get(fieldName);
+            
+            // Only shared ownership can create cycles (unique and weak cannot)
+            if (fieldInfo && (fieldInfo.kind === OwnershipKind.Shared || fieldInfo.kind === OwnershipKind.Unique)) {
+              // Extract ALL owned types (handles arrays, tuples, generics, etc.)
+              const ownedTypes = this.extractOwnedTypes(member.type, sourceFile);
+              
+              // Filter out type parameters (they're not concrete classes)
+              const concreteTypes = ownedTypes.filter(t => !this.isTypeParameter(t, className));
+              
+              // Check for indirect self-ownership through generics (but not through arrays)
+              // If we own both a generic container AND ourselves in a non-array field, that's a cycle
+              const isArrayField = ts.isArrayTypeNode(member.type) || 
+                                   (ts.isUnionTypeNode(member.type) && 
+                                    member.type.types.some(t => ts.isArrayTypeNode(t)));
+              
+              if (!isArrayField && concreteTypes.includes(className) && concreteTypes.length > 1) {
+                const location = Parser.getLocation(member, sourceFile);
+                this.diagnostics.push({
+                  severity: 'error',
+                  message: `Ownership cycle detected in class '${className}': field '${fieldName}' creates indirect self-ownership through generic type`,
+                  location,
+                  code: 'GS001',
+                });
+              }
+              
+              owningFields.push(...concreteTypes);
+              
+              // Add to local class graph
+              if (!classGraph.has(className)) {
+                classGraph.set(className, new Set());
+              }
+              concreteTypes.forEach(ownedType => {
+                classGraph.get(className)!.add(ownedType);
+              });
+              
+              // Add to global class graph for cross-file detection
+              if (!this.globalClassGraph.has(className)) {
+                this.globalClassGraph.set(className, new Set());
+              }
+              concreteTypes.forEach(ownedType => {
+                this.globalClassGraph.get(className)!.add(ownedType);
+              });
+            }
+          }
+        }
+
+        // Check for bidirectional ownership within the same class
+        // Multiple ownership fields of the same type can create cycles at runtime
+        const ownedTypes = new Set(owningFields);
+        const nodeCount = owningFields.filter(t => t === className).length;
+        
+        if (ownedTypes.has(className) && nodeCount > 1) {
+          // Multiple self-referential ownership fields (can create cycles)
+          const location = classLocations.get(className) || {
+            fileName: sourceFile.fileName,
+            line: 0,
+            column: 0,
+          };
+          this.diagnostics.push({
+            severity: 'error',
+            message: `Multiple self-ownership fields detected in class '${className}'. Use arena pattern instead: store owned instances in an array and use usage references for relationships.`,
+            location,
+            code: 'GS001',
+          });
+        }
+
+        // Check for multiple ownership fields of the same type
+        // This can also create cycles (e.g., headers: shared<Map>, params: shared<Map>)
+        const typeCounts = new Map<string, number>();
+        for (const type of owningFields) {
+          typeCounts.set(type, (typeCounts.get(type) || 0) + 1);
+        }
+        for (const [type, count] of typeCounts) {
+          if (count > 1) {
+            const location = classLocations.get(className) || {
+              fileName: sourceFile.fileName,
+              line: 0,
+              column: 0,
+            };
+            this.diagnostics.push({
+              severity: 'error',
+              message: `Multiple fields own '${type}' instances in class '${className}'. Use arena pattern or separate ownership to avoid potential cycles.`,
+              location,
+              code: 'GS001',
+            });
+          }
+        }
+      }
+      
+      ts.forEachChild(node, visit);
+    };
+
+    visit(sourceFile);
+
+    // Second pass: detect inter-class cycles (but skip single self-references)
+    const visited = new Set<string>();
+    const recursionStack = new Set<string>();
+    const path: string[] = [];
+
+    const dfs = (className: string, depth: number): boolean => {
+      if (!classGraph.has(className)) {
+        return false;
+      }
+
+      visited.add(className);
+      recursionStack.add(className);
+      path.push(className);
+
+      const ownedClasses = classGraph.get(className)!;
+      for (const ownedClass of ownedClasses) {
+        // Skip self-references at depth 0 (unidirectional self-ownership is OK)
+        if (ownedClass === className && depth === 0) {
+          continue;
+        }
+        
+        if (!visited.has(ownedClass)) {
+          if (dfs(ownedClass, depth + 1)) {
+            return true;
+          }
+        } else if (recursionStack.has(ownedClass)) {
+          // Cycle detected
+          const cycleStart = path.indexOf(ownedClass);
+          const cycle = path.slice(cycleStart).concat(ownedClass);
+          
+          // Only report if it's not a simple self-reference
+          if (cycle.length > 2 || (cycle.length === 2 && cycle[0] !== cycle[1])) {
+            const location = classLocations.get(className) || {
+              fileName: sourceFile.fileName,
+              line: 0,
+              column: 0,
+            };
+            this.diagnostics.push({
+              severity: 'error',
+              message: `Ownership cycle detected between classes: ${cycle.join(' -> ')}`,
+              location,
+              code: 'GS001',
+            });
+            return true;
+          }
+        }
+      }
+
+      recursionStack.delete(className);
+      path.pop();
+      return false;
+    };
+
+    for (const className of classGraph.keys()) {
+      if (!visited.has(className)) {
+        dfs(className, 0);
+      }
+    }
+  }
+
+  /**
+   * Extract all types being owned from a type node (recursively handles complex types)
+   * Returns array of owned class names found in the type
+   */
+  private extractOwnedTypes(typeNode: ts.TypeNode, sourceFile: ts.SourceFile): string[] {
+    const ownedTypes: string[] = [];
+
+    const extractRecursive = (node: ts.TypeNode, typeSubstitution?: Map<string, ts.TypeNode>): void => {
+      // Handle unique<T>, shared<T>, weak<T>
+      if (ts.isTypeReferenceNode(node)) {
+        const typeName = node.typeName.getText(sourceFile);
+        
+        if ((typeName === 'unique' || typeName === 'shared' || typeName === 'weak') && node.typeArguments && node.typeArguments.length > 0) {
+          // Extract the type from unique<T>, shared<T>, or weak<T>
+          const innerType = node.typeArguments[0];
+          extractRecursive(innerType, typeSubstitution);
+        } else if (typeName !== 'unique' && typeName !== 'shared' && typeName !== 'weak') {
+          // Check if this is a type parameter that needs substitution
+          if (typeSubstitution && typeSubstitution.has(typeName)) {
+            const substitutedType = typeSubstitution.get(typeName)!;
+            extractRecursive(substitutedType, typeSubstitution);
+            return;
+          }
+          
+          // Direct type reference without ownership wrapper is treated as implicit ownership
+          ownedTypes.push(typeName);
+          
+          // Check generic type arguments for owned types via substitution
+          // For Container<Box>, we need to resolve what Container owns with Box substituted
+          if (node.typeArguments && node.typeArguments.length > 0) {
+            // Resolve generic class/interface fields with type substitution
+            const resolvedTypes = this.resolveGenericOwnership(typeName, node.typeArguments, sourceFile);
+            ownedTypes.push(...resolvedTypes);
+          }
+        }
+      }
+      
+      // Handle union types: unique<T> | null, shared<T> | null, or T | null
+      else if (ts.isUnionTypeNode(node)) {
+        for (const type of node.types) {
+          // Skip null/undefined
+          if (type.kind !== ts.SyntaxKind.NullKeyword && 
+              type.kind !== ts.SyntaxKind.UndefinedKeyword) {
+            extractRecursive(type, typeSubstitution);
+          }
+        }
+      }
+
+      // Handle array types: unique<T>[], shared<T>[], weak<T>[], or T[]
+      else if (ts.isArrayTypeNode(node)) {
+        extractRecursive(node.elementType, typeSubstitution);
+      }
+
+      // Handle tuple types: [unique<A>, B, shared<C>]
+      else if (ts.isTupleTypeNode(node)) {
+        node.elements.forEach(elem => extractRecursive(elem, typeSubstitution));
+      }
+
+      // Handle intersection types: A & B
+      else if (ts.isIntersectionTypeNode(node)) {
+        node.types.forEach(type => extractRecursive(type, typeSubstitution));
+      }
+
+      // Handle type literals with properties
+      else if (ts.isTypeLiteralNode(node)) {
+        node.members.forEach(member => {
+          if (ts.isPropertySignature(member) && member.type) {
+            extractRecursive(member.type, typeSubstitution);
+          }
+        });
+      }
+    };
+
+    extractRecursive(typeNode);
+    return ownedTypes;
+  }
+
+  /**
+   * Resolve ownership from generic class/interface instantiation
+   * For Container<Box>, find Container's fields and substitute Box for T
+   * Returns only the concrete types that would be owned (not the container itself)
+   */
+  private resolveGenericOwnership(
+    typeName: string,
+    typeArguments: ts.NodeArray<ts.TypeNode>,
+    sourceFile: ts.SourceFile
+  ): string[] {
+    const ownedTypes: string[] = [];
+    
+    // Check if this is a class
+    const classDecl = this.classDeclarations.get(typeName);
+    if (classDecl && classDecl.typeParameters) {
+      // Build type parameter substitution map
+      const substitution = new Map<string, ts.TypeNode>();
+      classDecl.typeParameters.forEach((param, index) => {
+        if (index < typeArguments.length) {
+          const paramName = param.name.getText(sourceFile);
+          substitution.set(paramName, typeArguments[index]);
+        }
+      });
+      
+      // Extract owned types from class fields with substitution
+      for (const member of classDecl.members) {
+        if (ts.isPropertyDeclaration(member) && member.type) {
+          // Only extract if field has ownership annotation (indicates ownership)
+          if (this.hasOwnershipAnnotation(member.type)) {
+            const fieldTypes = this.extractOwnedTypesWithSubstitution(member.type, sourceFile, substitution);
+            ownedTypes.push(...fieldTypes);
+          }
+        }
+      }
+    }
+    
+    // Check if this is an interface
+    const interfaceDecl = this.interfaceDeclarations.get(typeName);
+    if (interfaceDecl && interfaceDecl.typeParameters) {
+      // Build type parameter substitution map
+      const substitution = new Map<string, ts.TypeNode>();
+      interfaceDecl.typeParameters.forEach((param, index) => {
+        if (index < typeArguments.length) {
+          const paramName = param.name.getText(sourceFile);
+          substitution.set(paramName, typeArguments[index]);
+        }
+      });
+      
+      // Extract owned types from interface properties with substitution
+      for (const member of interfaceDecl.members) {
+        if (ts.isPropertySignature(member) && member.type) {
+          if (this.hasOwnershipAnnotation(member.type)) {
+            const fieldTypes = this.extractOwnedTypesWithSubstitution(member.type, sourceFile, substitution);
+            ownedTypes.push(...fieldTypes);
+          }
+        }
+      }
+    }
+    
+    // Check if this is a type alias
+    const typeAliasDecl = this.typeAliasDeclarations.get(typeName);
+    if (typeAliasDecl && typeAliasDecl.typeParameters) {
+      // Build type parameter substitution map
+      const substitution = new Map<string, ts.TypeNode>();
+      typeAliasDecl.typeParameters.forEach((param, index) => {
+        if (index < typeArguments.length) {
+          const paramName = param.name.getText(sourceFile);
+          substitution.set(paramName, typeArguments[index]);
+        }
+      });
+      
+      // Extract owned types from the aliased type with substitution
+      if (this.hasOwnershipAnnotation(typeAliasDecl.type)) {
+        const fieldTypes = this.extractOwnedTypesWithSubstitution(typeAliasDecl.type, sourceFile, substitution);
+        ownedTypes.push(...fieldTypes);
+      }
+    }
+    
+    return ownedTypes;
+  }
+
+  /**
+   * Check if a type node contains ownership annotation (unique/shared/weak)
+   */
+  private hasOwnershipAnnotation(typeNode: ts.TypeNode): boolean {
+    let hasOwnership = false;
+    
+    const check = (node: ts.TypeNode): void => {
+      if (ts.isTypeReferenceNode(node)) {
+        const typeName = node.typeName.getText();
+        if (typeName === 'unique' || typeName === 'shared' || typeName === 'weak') {
+          hasOwnership = true;
+          return;
+        }
+        if (node.typeArguments) {
+          node.typeArguments.forEach(check);
+        }
+      } else if (ts.isUnionTypeNode(node)) {
+        node.types.forEach(check);
+      } else if (ts.isArrayTypeNode(node)) {
+        check(node.elementType);
+      } else if (ts.isTupleTypeNode(node)) {
+        node.elements.forEach(check);
+      } else if (ts.isIntersectionTypeNode(node)) {
+        node.types.forEach(check);
+      }
+    };
+    
+    check(typeNode);
+    return hasOwnership;
+  }
+
+  /**
+   * Check if a type name is a type parameter of a class
+   */
+  private isTypeParameter(typeName: string, className: string): boolean {
+    const classDecl = this.classDeclarations.get(className);
+    if (classDecl && classDecl.typeParameters) {
+      return classDecl.typeParameters.some(param => param.name.text === typeName);
+    }
+    
+    const interfaceDecl = this.interfaceDeclarations.get(className);
+    if (interfaceDecl && interfaceDecl.typeParameters) {
+      return interfaceDecl.typeParameters.some(param => param.name.text === typeName);
+    }
+    
+    return false;
+  }
+
+  /**
+   * Extract owned types with type parameter substitution
+   */
+  private extractOwnedTypesWithSubstitution(
+    typeNode: ts.TypeNode,
+    sourceFile: ts.SourceFile,
+    substitution: Map<string, ts.TypeNode>
+  ): string[] {
+    const ownedTypes: string[] = [];
+
+    const extractRecursive = (node: ts.TypeNode): void => {
+      // Handle unique<T>, shared<T>, weak<T>
+      if (ts.isTypeReferenceNode(node)) {
+        const typeName = node.typeName.getText(sourceFile);
+        
+        if ((typeName === 'unique' || typeName === 'shared' || typeName === 'weak') && node.typeArguments && node.typeArguments.length > 0) {
+          // Extract the type from unique<T>, shared<T>, or weak<T>
+          const innerType = node.typeArguments[0];
+          extractRecursive(innerType);
+        } else if (typeName !== 'unique' && typeName !== 'shared' && typeName !== 'weak') {
+          // Check if this is a type parameter
+          if (substitution.has(typeName)) {
+            // Substitute and extract
+            const substitutedType = substitution.get(typeName)!;
+            extractRecursive(substitutedType);
+          } else {
+            // Direct type reference
+            ownedTypes.push(typeName);
+            
+            // Process type arguments
+            if (node.typeArguments) {
+              node.typeArguments.forEach(arg => extractRecursive(arg));
+            }
+          }
+        }
+      }
+      
+      // Handle union types
+      else if (ts.isUnionTypeNode(node)) {
+        for (const type of node.types) {
+          if (type.kind !== ts.SyntaxKind.NullKeyword && 
+              type.kind !== ts.SyntaxKind.UndefinedKeyword) {
+            extractRecursive(type);
+          }
+        }
+      }
+
+      // Handle array types
+      else if (ts.isArrayTypeNode(node)) {
+        extractRecursive(node.elementType);
+      }
+
+      // Handle tuple types
+      else if (ts.isTupleTypeNode(node)) {
+        node.elements.forEach(elem => extractRecursive(elem));
+      }
+
+      // Handle intersection types
+      else if (ts.isIntersectionTypeNode(node)) {
+        node.types.forEach(type => extractRecursive(type));
+      }
+
+      // Handle type literals
+      else if (ts.isTypeLiteralNode(node)) {
+        node.members.forEach(member => {
+          if (ts.isPropertySignature(member) && member.type) {
+            extractRecursive(member.type);
+          }
+        });
+      }
+    };
+
+    extractRecursive(typeNode);
+    return ownedTypes;
+  }
+
+  /**
+   * Detect cross-file ownership cycles
+   * This runs after all files have been analyzed
+   */
+  private detectCrossFileCycles(): void {
+    const visited = new Set<string>();
+    const recursionStack = new Set<string>();
+    const path: string[] = [];
+
+    const dfs = (className: string, depth: number): boolean => {
+      visited.add(className);
+      recursionStack.add(className);
+      path.push(className);
+
+      const ownedTypes = this.globalClassGraph.get(className);
+      if (ownedTypes) {
+        for (const ownedClass of ownedTypes) {
+          // Skip if not a defined class
+          if (!this.globalClassGraph.has(ownedClass)) {
+            continue;
+          }
+
+          if (!visited.has(ownedClass)) {
+            if (dfs(ownedClass, depth + 1)) {
+              return true;
+            }
+          } else if (recursionStack.has(ownedClass)) {
+            // Cycle detected!
+            // Skip single self-reference at depth 0 (allowed pattern)
+            if (depth === 0 && ownedClass === className) {
+              continue;
+            }
+
+            const cycleStart = path.indexOf(ownedClass);
+            const cycle = path.slice(cycleStart).concat(ownedClass);
+
+            // Only report if it's not a simple self-reference
+            if (cycle.length > 2 || (cycle.length === 2 && cycle[0] !== cycle[1])) {
+              const location = this.globalClassLocations.get(className) || {
+                fileName: 'unknown',
+                line: 0,
+                column: 0,
+              };
+              this.diagnostics.push({
+                severity: 'error',
+                message: `Cross-file ownership cycle detected: ${cycle.join(' -> ')}`,
+                location,
+                code: 'GS001',
+              });
+              return true;
+            }
+          }
+        }
+      }
+
+      recursionStack.delete(className);
+      path.pop();
+      return false;
+    };
+
+    for (const className of this.globalClassGraph.keys()) {
+      if (!visited.has(className)) {
+        dfs(className, 0);
+      }
+    }
+  }
+
+  /**
+   * Report a detected ownership cycle
+   */
+  private reportCycle(cycle: string[], location: SourceLocation): void {
+    this.diagnostics.push({
+      severity: 'error',
+      message: `Ownership cycle detected: ${cycle.join(' -> ')}`,
+      location,
+      code: 'GS001',
+    });
+  }
+
+  /**
+   * Get ownership graph
+   */
+  getOwnershipGraph(): OwnershipGraph {
+    return this.ownershipGraph;
+  }
+
+  /**
+   * Get ownership info for a symbol
+   */
+  getOwnershipInfo(symbol: string): OwnershipInfo | undefined {
+    return this.ownershipGraph.nodes.get(symbol);
+  }
+
+  /**
+   * Get diagnostics
+   */
+  getDiagnostics(): Diagnostic[] {
+    return this.diagnostics;
+  }
+}

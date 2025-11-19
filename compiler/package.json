@@ -1,0 +1,60 @@
+{
+  "name": "goodscript",
+  "version": "0.4.1",
+  "description": "TypeScript without the bad parts - strict, ownership-aware compiler with tsc compatibility",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "gsc": "dist/gsc.js",
+    "gs": "dist/gs.js"
+  },
+  "files": [
+    "dist",
+    "lib",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fcapolini/goodscript.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fcapolini/goodscript/issues"
+  },
+  "homepage": "https://github.com/fcapolini/goodscript#readme",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/**/*.ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "goodscript",
+    "typescript",
+    "compiler",
+    "ownership",
+    "memory-management",
+    "tsc",
+    "strict-typescript",
+    "rust",
+    "wasm",
+    "systems-programming"
+  ],
+  "author": "Fabio Capolini",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "@typescript-eslint/eslint-plugin": "^6.17.0",
+    "@typescript-eslint/parser": "^6.17.0",
+    "@vitest/coverage-v8": "^1.0.4",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.4"
+  },
+  "dependencies": {
+    "typescript": "^5.3.3"
+  }
+}

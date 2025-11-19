@@ -1,0 +1,22 @@
+{
+  "name": "GoodScript",
+  "scopeName": "source.goodscript",
+  "patterns": [
+    {
+      "include": "source.ts"
+    },
+    {
+      "include": "#owns-keyword"
+    }
+  ],
+  "repository": {
+    "owns-keyword": {
+      "patterns": [
+        {
+          "match": "\\bowns\\b(?=\\s*<)",
+          "name": "storage.type.owns.goodscript"
+        }
+      ]
+    }
+  }
+}

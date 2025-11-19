@@ -1,0 +1,89 @@
+{
+  "name": "goodscript",
+  "displayName": "GoodScript",
+  "description": "Language support for GoodScript - TypeScript with ownership semantics",
+  "version": "0.4.1",
+  "publisher": "goodscript",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fcapolini/goodscript.git",
+    "directory": "vscode-extension"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "keywords": [
+    "goodscript",
+    "typescript",
+    "ownership",
+    "memory-safety"
+  ],
+  "activationEvents": [
+    "onLanguage:typescript"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "grammars": [
+      {
+        "language": "typescript",
+        "scopeName": "source.ts",
+        "path": "./syntaxes/goodscript.tmLanguage.json",
+        "injectTo": ["source.ts"]
+      }
+    ],
+    "configuration": {
+      "title": "GoodScript",
+      "properties": {
+        "goodscript.compilerPath": {
+          "type": "string",
+          "default": "gsc",
+          "description": "Path to the GoodScript compiler (gsc)"
+        },
+        "goodscript.enableValidation": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable real-time validation using GoodScript compiler"
+        },
+        "goodscript.validateOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Validate GoodScript files on save"
+        },
+        "goodscript.validateOnType": {
+          "type": "boolean",
+          "default": true,
+          "description": "Validate GoodScript files as you type (may impact performance)"
+        },
+        "goodscript.validateOnTypeDebounce": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 500,
+          "maximum": 10000,
+          "description": "Debounce interval in milliseconds for on-type validation (default: 2000ms)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.80.0",
+    "@typescript-eslint/eslint-plugin": "^6.x",
+    "@typescript-eslint/parser": "^6.x",
+    "eslint": "^8.x",
+    "typescript": "^5.x",
+    "@vscode/vsce": "^2.x"
+  },
+  "dependencies": {}
+}
