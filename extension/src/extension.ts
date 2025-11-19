@@ -173,6 +173,29 @@ function validateForbiddenOperators(document: vscode.TextDocument): vscode.Diagn
       diagnostics.push(diagnostic);
     }
 
+    // Check for 'any' type (GS109: forbidden in GoodScript)
+    const anyPattern = /:\s*any\b/g;
+    anyPattern.lastIndex = 0;
+    let anyMatch;
+    
+    while ((anyMatch = anyPattern.exec(lineToCheck)) !== null) {
+      // Find the position of 'any' keyword
+      const anyIndex = anyMatch.index + anyMatch[0].indexOf('any');
+      const startPos = new vscode.Position(lineIndex, anyIndex);
+      const endPos = new vscode.Position(lineIndex, anyIndex + 'any'.length);
+      const range = new vscode.Range(startPos, endPos);
+      
+      const diagnostic = new vscode.Diagnostic(
+        range,
+        `'any' type is forbidden in GoodScript. Use explicit types or generics instead`,
+        vscode.DiagnosticSeverity.Error
+      );
+      
+      diagnostic.code = 'GS109';
+      diagnostic.source = 'GoodScript';
+      diagnostics.push(diagnostic);
+    }
+
     // Check for non-arrow functions (GS108: except class methods)
     const functionPattern = /\bfunction\s+([a-zA-Z_$][a-zA-Z0-9_$]*)?/g;
     functionPattern.lastIndex = 0;
@@ -213,6 +236,36 @@ function validateForbiddenOperators(document: vscode.TextDocument): vscode.Diagn
         diagnostic.source = 'GoodScript';
         diagnostics.push(diagnostic);
       }
+    }
+
+    // Check for implicit truthy/falsy (GS110: basic pattern matching)
+    // Match: if (variable), while (variable), etc. - not perfect but catches common cases
+    const truthyPattern = /\b(if|while|do)\s*\(\s*(!?)([a-zA-Z_$][a-zA-Z0-9_$.]*)\s*\)/g;
+    truthyPattern.lastIndex = 0;
+    let truthyMatch;
+    
+    while ((truthyMatch = truthyPattern.exec(lineToCheck)) !== null) {
+      const [, keyword, negation, identifier] = truthyMatch;
+      
+      // Skip if it looks like a function call (has parentheses after identifier)
+      const afterMatch = lineToCheck.substring(truthyMatch.index + truthyMatch[0].length);
+      if (afterMatch.trim().startsWith('(')) {
+        continue; // Likely a function call, which is okay
+      }
+      
+      const startPos = new vscode.Position(lineIndex, truthyMatch.index);
+      const endPos = new vscode.Position(lineIndex, truthyMatch.index + truthyMatch[0].length);
+      const range = new vscode.Range(startPos, endPos);
+      
+      const diagnostic = new vscode.Diagnostic(
+        range,
+        `Implicit truthy/falsy check is not allowed. Use explicit comparison (e.g., "${identifier} !== null", "${identifier} > 0")`,
+        vscode.DiagnosticSeverity.Warning  // Warning since our detection isn't perfect
+      );
+      
+      diagnostic.code = 'GS110';
+      diagnostic.source = 'GoodScript';
+      diagnostics.push(diagnostic);
     }
   }
 

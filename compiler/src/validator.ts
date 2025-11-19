@@ -39,6 +39,12 @@ export class Validator {
     // Check for == operator (should use ===)
     this.checkStrictEquality(node, sourceFile);
 
+    // Check for any type
+    this.checkAnyType(node, sourceFile);
+
+    // Check for truthy/falsy conditions
+    this.checkTruthyFalsy(node, sourceFile);
+
     // Recurse into children
     ts.forEachChild(node, (child: ts.Node) => this.visit(child, sourceFile, checker));
   }
@@ -180,6 +186,118 @@ export class Validator {
         );
       }
     }
+  }
+
+  /**
+   * Check for any type usage (GS109)
+   */
+  private checkAnyType(node: ts.Node, sourceFile: ts.SourceFile): void {
+    // Check for 'any' keyword in various contexts
+    if (node.kind === ts.SyntaxKind.AnyKeyword) {
+      const location = Parser.getLocation(node, sourceFile);
+      this.addError(
+        'The "any" type is not allowed. Use explicit types or generics instead',
+        location,
+        'GS109'
+      );
+    }
+  }
+
+  /**
+   * Check for implicit truthy/falsy conditions (GS110)
+   */
+  private checkTruthyFalsy(node: ts.Node, sourceFile: ts.SourceFile): void {
+    // Check if statements
+    if (ts.isIfStatement(node)) {
+      this.checkConditionExpression(node.expression, sourceFile);
+    }
+
+    // Check while statements
+    if (ts.isWhileStatement(node)) {
+      this.checkConditionExpression(node.expression, sourceFile);
+    }
+
+    // Check do-while statements
+    if (ts.isDoStatement(node)) {
+      this.checkConditionExpression(node.expression, sourceFile);
+    }
+
+    // Check for loop conditions
+    if (ts.isForStatement(node) && node.condition) {
+      this.checkConditionExpression(node.condition, sourceFile);
+    }
+
+    // Check ternary operator conditions
+    if (ts.isConditionalExpression(node)) {
+      this.checkConditionExpression(node.condition, sourceFile);
+    }
+  }
+
+  /**
+   * Helper: Check if a condition expression is an implicit truthy/falsy check
+   */
+  private checkConditionExpression(expr: ts.Expression, sourceFile: ts.SourceFile): void {
+    // Allow explicit boolean expressions
+    if (this.isExplicitBooleanExpression(expr)) {
+      return;
+    }
+
+    // Allow boolean literals (true/false)
+    if (expr.kind === ts.SyntaxKind.TrueKeyword || expr.kind === ts.SyntaxKind.FalseKeyword) {
+      return;
+    }
+
+    // Allow logical NOT of explicit boolean expression
+    if (ts.isPrefixUnaryExpression(expr) && expr.operator === ts.SyntaxKind.ExclamationToken) {
+      if (this.isExplicitBooleanExpression(expr.operand)) {
+        return;
+      }
+    }
+
+    // All other cases are implicit truthy/falsy checks
+    const location = Parser.getLocation(expr, sourceFile);
+    this.addError(
+      'Implicit truthy/falsy check is not allowed. Use explicit comparison (e.g., "x !== null", "x > 0", "x.length > 0")',
+      location,
+      'GS110'
+    );
+  }
+
+  /**
+   * Helper: Check if expression is an explicit boolean expression
+   */
+  private isExplicitBooleanExpression(expr: ts.Expression): boolean {
+    // Binary comparison operators
+    if (ts.isBinaryExpression(expr)) {
+      const op = expr.operatorToken.kind;
+      return (
+        op === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+        op === ts.SyntaxKind.ExclamationEqualsEqualsToken ||
+        op === ts.SyntaxKind.LessThanToken ||
+        op === ts.SyntaxKind.LessThanEqualsToken ||
+        op === ts.SyntaxKind.GreaterThanToken ||
+        op === ts.SyntaxKind.GreaterThanEqualsToken ||
+        op === ts.SyntaxKind.AmpersandAmpersandToken ||
+        op === ts.SyntaxKind.BarBarToken
+      );
+    }
+
+    // Prefix unary ! with explicit boolean expression
+    if (ts.isPrefixUnaryExpression(expr) && expr.operator === ts.SyntaxKind.ExclamationToken) {
+      return this.isExplicitBooleanExpression(expr.operand);
+    }
+
+    // Function calls that return boolean (we assume they do)
+    if (ts.isCallExpression(expr)) {
+      return true; // Assume function calls return boolean if used in condition
+    }
+
+    // Parenthesized expressions
+    if (ts.isParenthesizedExpression(expr)) {
+      return this.isExplicitBooleanExpression(expr.expression);
+    }
+
+    return false;
   }
 
   /**

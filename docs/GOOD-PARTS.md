@@ -267,21 +267,126 @@ const result = operations.add(x, y);
 
 ---
 
+### 9. No `any` Type (GS109)
+
+**Restriction:** The `any` type is forbidden. Must use explicit types or generics.
+
+**Rationale:**
+- `any` defeats the entire purpose of static typing
+- Disables all type checking for that value
+- Hides bugs that TypeScript would otherwise catch
+- Makes code unpredictable - value could be anything at runtime
+- Prevents IDE autocomplete and refactoring tools
+- Cannot transpile to Rust without knowing actual types
+- `unknown` type is a safer alternative when type is truly unknown
+
+**Example:**
+```typescript
+// ❌ Not allowed
+const data: any = fetchData();
+const process = (input: any): any => {
+  return input.someMethod();  // No type checking!
+};
+
+// ✅ Correct - use explicit types
+interface Data {
+  id: number;
+  name: string;
+}
+const data: Data = fetchData();
+
+// ✅ Correct - use generics for flexibility
+const identity = <T>(x: T): T => x;
+
+// ✅ Correct - use unknown for truly unknown types
+const data: unknown = fetchData();
+if (typeof data === 'object' && data !== null) {
+  // Type narrowing required
+}
+```
+
+**Why this matters:** If you don't know the type, the compiler can't help you. Using `any` is like turning off TypeScript's safety features. It's the biggest escape hatch in TypeScript and has no place in enterprise code.
+
+---
+
+### 10. No Implicit Truthy/Falsy Checks (GS110)
+
+**Restriction:** All conditions must be explicit boolean expressions. No relying on truthy/falsy coercion.
+
+**Rationale:**
+- JavaScript's truthy/falsy rules are confusing and error-prone
+- `0`, `""`, `false`, `null`, `undefined`, `NaN` are all falsy
+- Easy to confuse "no value" with "value is zero" or "value is empty string"
+- Explicit comparisons make intent clear
+- Prevents bugs from unexpected falsy values
+- Aligns with "no implicit coercion" philosophy
+
+**Example:**
+```typescript
+// ❌ Not allowed
+const count = 0;
+if (count) {  // 0 is falsy!
+  console.log('has items');
+}
+
+const name = '';
+if (!name) {  // Empty string is falsy
+  console.log('no name');
+}
+
+// ✅ Correct - explicit null check
+const user: User | null = getUser();
+if (user !== null) {
+  console.log(user.name);
+}
+
+// ✅ Correct - explicit comparison
+if (count > 0) {
+  console.log('has items');
+}
+
+// ✅ Correct - explicit length check
+const items: number[] = [];
+if (items.length > 0) {
+  console.log('not empty');
+}
+
+// ✅ Correct - explicit string check
+if (name !== '') {
+  console.log(name);
+}
+```
+
+**JavaScript falsy values eliminated:**
+```javascript
+// All of these are falsy in JavaScript:
+if (0) { }          // false
+if ('') { }         // false  
+if (null) { }       // false
+if (undefined) { } // false
+if (NaN) { }        // false
+if (false) { }      // false (only legitimate one)
+```
+
+**Why this matters:** A common bug is `if (value)` when `value` could legitimately be `0` or `""`. Explicit checks eliminate this entire class of errors.
+
+---
+
 ## Additional Type System Requirements
 
-While not enforced by specific error codes, GoodScript also requires:
+GoodScript enforces strict static typing through the restrictions above. Additional best practices include:
 
-### Strict Static Typing
+### Explicit Return Types
 
-- No `any` type (use specific types or generics)
-- No implicit `any` (must annotate function parameters and return types when inference fails)
-- All types must be known at compile time
-
-### Explicit Over Implicit
-
-- Function return types should be explicit
+- Function return types should be explicit in public APIs
 - Type annotations preferred when they improve clarity
-- No reliance on type inference in public APIs
+- Generic types should be used instead of `any` or `unknown` when possible
+
+### No Implicit Any
+
+- TypeScript's `noImplicitAny` must be enabled
+- All function parameters must have type annotations
+- Variables should have types when inference is unclear
 
 ---
 
@@ -315,6 +420,8 @@ These restrictions transform TypeScript from a gradually-typed superset of JavaS
 | GS106 | `==` operator | Use `===` |
 | GS107 | `!=` operator | Use `!==` |
 | GS108 | Function declarations/expressions | Use arrow functions or class methods |
+| GS109 | `any` type | Use explicit types, generics, or `unknown` |
+| GS110 | Implicit truthy/falsy checks | Use explicit comparisons |
 | GS201 | Implicit type coercion | Use template literals or explicit conversion |
 
 ---

@@ -66,6 +66,8 @@ Phase 1 tests verify that GoodScript correctly enforces the "Good Parts" restric
 | `var-keyword.test.ts` | GS105 | No `var` keyword - use `let` or `const` |
 | `strict-equality.test.ts` | GS106, GS107 | Use `===` and `!==` instead of `==` and `!=` |
 | `arrow-functions.test.ts` | GS108 | Use arrow functions instead of `function` keyword |
+| `no-any-type.test.ts` | GS109 | No `any` type - use explicit types or generics |
+| `no-truthy-falsy.test.ts` | GS110 | No implicit truthy/falsy - use explicit comparisons |
 | `no-arguments.test.ts` | GS103 | No `arguments` object - use rest parameters |
 | `no-for-in.test.ts` | GS104 | No `for-in` loops - use `for-of` or explicit iteration |
 | `no-with.test.ts` | GS101 | No `with` statement |

@@ -17,6 +17,8 @@ GoodScript Phase 1 enforces "The Good Parts" - a strict TypeScript subset that e
 - ❌ No `var` keyword (use `let` or `const`)
 - ❌ No `==` or `!=` (use `===` or `!==`)
 - ❌ No `function` keyword (use arrow functions)
+- ❌ No `any` type (use explicit types or generics)
+- ❌ No implicit truthy/falsy (use explicit comparisons)
 - ❌ No `with` statement
 - ❌ No `eval` or `Function()` constructor
 - ❌ No `arguments` object (use rest parameters)
