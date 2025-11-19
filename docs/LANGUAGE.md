@@ -17,7 +17,7 @@ The language is founded on the following strict rules:
 
 ## The Three-Tiered Ownership System
 
-The core innovation is the requirement that all heap-allocated reference types (excluding primitives like `integer`, `number`, and `boolean`) must use one of these three ownership qualifiers.
+The core innovation is the requirement that all heap-allocated reference types (excluding primitives like `number` and `boolean`) must use one of these three ownership qualifiers.
 
 ### 1. Unique Ownership: $\text{unique}<T>$
 
@@ -62,11 +62,12 @@ The language will be implemented incrementally, focusing on safety and correctne
 
 Only the following **Value Types** can be used without an explicit qualifier:
 
-* `number` (mapped to `f64`)
-* `integer` (mapped to a safe default like `i64` in Phase 1)
+* `number` (mapped to `f64` in Rust)
 * `boolean`
 
 All other complex types, including **Strings** and **Arrays**, are treated as heap-allocated **Reference Types** and **must** be qualified (e.g., `let s: unique<string>`).
+
+> **Future Evolution**: Additional numeric types (like dedicated integer types) may be added in post-Phase 3 releases.
 
 ***
 

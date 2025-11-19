@@ -23,7 +23,7 @@ If a `class A` declares a field `b: shared<B>`, an edge exists: $A \to B$.
 If a container (like `Array`, `Map`, `Set`) is defined to hold shared elements, ownership is conferred transitively.
 
   * If `class A` declares a field `list: shared<B>[]` (or `Array<shared<B>>`), an edge exists: $A \to B$.
-  * If `class C` declares a field `map: Map<K, shared<D>>`, an edge exists: $C \to D$. (The key $K$ is usually a value type like $\text{string}$ or $\text{integer}$, so it does not affect the cycle analysis).
+  * If `class C` declares a field `map: Map<K, shared<D>>`, an edge exists: $C \to D$. (The key $K$ is usually a value type like `string` or `number`, so it does not affect the cycle analysis).
 
 #### Rule 1.3: Intermediate Wrapper Transitivity (Deep Ownership)
 
