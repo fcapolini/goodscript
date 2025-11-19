@@ -921,6 +921,81 @@ describe('Phase 2: Null-Check Analysis', () => {
     });
   });
 
+  describe('Variable aliasing', () => {
+    
+    it('should handle local variable aliasing', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getValue(): number {
+            const item = this.item;
+            if (item !== null) {
+              return item.value;  // Should work - item is checked
+            }
+            return -1;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+
+    it('should track aliases independently', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getValue(): number {
+            const item = this.item;
+            // item is a separate variable - needs its own check
+            // (could be enhanced to track relationship with this.item)
+            if (item !== null) {
+              return item.value;
+            }
+            return -1;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      // Currently requires check on the alias itself
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+
+    it('should handle destructuring', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getValue(): number {
+            const { item } = this;
+            if (item !== null) {
+              return item.value;  // Should work
+            }
+            return -1;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+  });
+
   describe('Edge cases', () => {
     
     it('should allow Weak<T> initialization', () => {
