@@ -178,6 +178,34 @@ export class OwnershipAnalyzer {
   }
 
   /**
+   * Resolve type aliases to get the underlying type node
+   */
+  private resolveTypeAlias(
+    typeNode: ts.TypeNode,
+    checker: ts.TypeChecker,
+    visited: Set<ts.TypeNode> = new Set()
+  ): ts.TypeNode {
+    // Prevent infinite recursion
+    if (visited.has(typeNode)) {
+      return typeNode;
+    }
+    visited.add(typeNode);
+
+    if (ts.isTypeReferenceNode(typeNode)) {
+      const type = checker.getTypeAtLocation(typeNode);
+      if (type.aliasSymbol) {
+        // This is a type alias - get the underlying type declaration
+        const aliasDeclaration = type.aliasSymbol.declarations?.[0];
+        if (aliasDeclaration && ts.isTypeAliasDeclaration(aliasDeclaration)) {
+          // Recursively resolve nested aliases
+          return this.resolveTypeAlias(aliasDeclaration.type, checker, visited);
+        }
+      }
+    }
+    return typeNode;
+  }
+
+  /**
    * Extract Shared<T> ownership from a type annotation
    * Handles:
    * - Direct Shared<T>: Rule 1.1
@@ -194,17 +222,38 @@ export class OwnershipAnalyzer {
   ): Set<string> {
     const ownedTypes = new Set<string>();
 
+    // Union types: check each branch first (before resolving aliases)
+    if (ts.isUnionTypeNode(typeNode)) {
+      for (const unionMember of typeNode.types) {
+        const memberOwnedTypes = this.extractSharedOwnership(unionMember, sourceFile, checker);
+        memberOwnedTypes.forEach(t => ownedTypes.add(t));
+      }
+      return ownedTypes;
+    }
+
+    // Intersection types: check each branch first
+    if (ts.isIntersectionTypeNode(typeNode)) {
+      for (const intersectionMember of typeNode.types) {
+        const memberOwnedTypes = this.extractSharedOwnership(intersectionMember, sourceFile, checker);
+        memberOwnedTypes.forEach(t => ownedTypes.add(t));
+      }
+      return ownedTypes;
+    }
+
+    // Resolve type aliases
+    const resolvedType = this.resolveTypeAlias(typeNode, checker);
+
     // Rule 3.1 & 3.2: Weak<T> and Unique<T> do NOT create edges
-    if (ts.isTypeReferenceNode(typeNode)) {
-      const typeName = typeNode.typeName.getText(sourceFile);
+    if (ts.isTypeReferenceNode(resolvedType)) {
+      const typeName = resolvedType.typeName.getText(sourceFile);
       
       if (typeName === 'Weak' || typeName === 'Unique') {
         return ownedTypes; // Empty set - these don't create ownership edges
       }
       
       // Rule 1.1: Direct Shared<T> field
-      if (typeName === 'Shared' && typeNode.typeArguments && typeNode.typeArguments.length > 0) {
-        const targetType = this.getTypeNameFromTypeNode(typeNode.typeArguments[0], sourceFile);
+      if (typeName === 'Shared' && resolvedType.typeArguments && resolvedType.typeArguments.length > 0) {
+        const targetType = this.getTypeNameFromTypeNode(resolvedType.typeArguments[0], sourceFile);
         if (targetType) {
           ownedTypes.add(targetType);
         }
@@ -214,14 +263,15 @@ export class OwnershipAnalyzer {
       // Rule 1.2: Container transitivity
       // Array<Shared<T>> or Set<Shared<T>>
       if ((typeName === 'Array' || typeName === 'Set') && 
-          typeNode.typeArguments && typeNode.typeArguments.length > 0) {
-        const elementType = typeNode.typeArguments[0];
-        // Check if element is Shared<T>
-        if (ts.isTypeReferenceNode(elementType)) {
-          const elementTypeName = elementType.typeName.getText(sourceFile);
+          resolvedType.typeArguments && resolvedType.typeArguments.length > 0) {
+        const elementType = resolvedType.typeArguments[0];
+        // Check if element is Shared<T> (recursively resolve)
+        const resolvedElement = this.resolveTypeAlias(elementType, checker);
+        if (ts.isTypeReferenceNode(resolvedElement)) {
+          const elementTypeName = resolvedElement.typeName.getText(sourceFile);
           if (elementTypeName === 'Shared' && 
-              elementType.typeArguments && elementType.typeArguments.length > 0) {
-            const targetType = this.getTypeNameFromTypeNode(elementType.typeArguments[0], sourceFile);
+              resolvedElement.typeArguments && resolvedElement.typeArguments.length > 0) {
+            const targetType = this.getTypeNameFromTypeNode(resolvedElement.typeArguments[0], sourceFile);
             if (targetType) {
               ownedTypes.add(targetType);
             }
@@ -231,14 +281,15 @@ export class OwnershipAnalyzer {
       }
       
       // Rule 1.2: Map<K, Shared<V>>
-      if (typeName === 'Map' && typeNode.typeArguments && typeNode.typeArguments.length === 2) {
-        const valueType = typeNode.typeArguments[1];
-        // Check if value is Shared<T>
-        if (ts.isTypeReferenceNode(valueType)) {
-          const valueTypeName = valueType.typeName.getText(sourceFile);
+      if (typeName === 'Map' && resolvedType.typeArguments && resolvedType.typeArguments.length === 2) {
+        const valueType = resolvedType.typeArguments[1];
+        // Check if value is Shared<T> (recursively resolve)
+        const resolvedValue = this.resolveTypeAlias(valueType, checker);
+        if (ts.isTypeReferenceNode(resolvedValue)) {
+          const valueTypeName = resolvedValue.typeName.getText(sourceFile);
           if (valueTypeName === 'Shared' && 
-              valueType.typeArguments && valueType.typeArguments.length > 0) {
-            const targetType = this.getTypeNameFromTypeNode(valueType.typeArguments[0], sourceFile);
+              resolvedValue.typeArguments && resolvedValue.typeArguments.length > 0) {
+            const targetType = this.getTypeNameFromTypeNode(resolvedValue.typeArguments[0], sourceFile);
             if (targetType) {
               ownedTypes.add(targetType);
             }
@@ -260,24 +311,6 @@ export class OwnershipAnalyzer {
             ownedTypes.add(targetType);
           }
         }
-      }
-      return ownedTypes;
-    }
-
-    // Union types: check each branch
-    if (ts.isUnionTypeNode(typeNode)) {
-      for (const unionMember of typeNode.types) {
-        const memberOwnedTypes = this.extractSharedOwnership(unionMember, sourceFile, checker);
-        memberOwnedTypes.forEach(t => ownedTypes.add(t));
-      }
-      return ownedTypes;
-    }
-
-    // Intersection types: check each branch
-    if (ts.isIntersectionTypeNode(typeNode)) {
-      for (const intersectionMember of typeNode.types) {
-        const memberOwnedTypes = this.extractSharedOwnership(intersectionMember, sourceFile, checker);
-        memberOwnedTypes.forEach(t => ownedTypes.add(t));
       }
       return ownedTypes;
     }
