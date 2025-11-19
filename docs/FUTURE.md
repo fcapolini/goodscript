@@ -76,6 +76,7 @@ This strategy leverages the fact that we already have a working JavaScript targe
 
 ## Table of Contents
 - [JSX/TSX Support](#jsxtsx-support)
+- [Standard Library & Utilities](#standard-library--utilities)
 - [Additional Language Features](#additional-language-features)
 - [Tooling & Ecosystem](#tooling--ecosystem)
 - [Performance Optimizations](#performance-optimizations)
@@ -191,6 +192,75 @@ To validate feasibility:
 .gs.tsx → TypeScript output ✓
         → Rust output ✗ (not supported, web-only)
 ```
+
+---
+
+## Standard Library & Utilities
+
+### Pool Pattern Utilities
+
+**Package**: `@goodscript/pools` or built into `goodscript` runtime library
+
+**Purpose**: Provide ready-to-use pool/arena implementations so developers don't have to implement the pattern from scratch every time.
+
+**Core Components**:
+
+```typescript
+// Generic pool with free list management
+class Pool<T> {
+  alloc(value: T): number;
+  free(index: number): void;
+  get(index: number): weak<T>;
+  has(index: number): boolean;
+}
+
+// Arena variant for bulk deallocation
+class Arena<T> {
+  alloc(value: T): number;
+  get(index: number): weak<T>;
+  clear(): void;  // Free all nodes at once
+}
+
+// Generational indices for detecting stale references
+class GenerationalPool<T> {
+  alloc(value: T): GenerationalIndex;
+  free(index: GenerationalIndex): void;
+  get(index: GenerationalIndex): weak<T> | null;
+}
+
+// Pre-built data structures using pools
+class PooledLinkedList<T> {
+  push(value: T): number;
+  pop(): T | null;
+  get(index: number): weak<T>;
+  iterate(): IterableIterator<T>;
+}
+
+class PooledTree<T> {
+  createRoot(value: T): number;
+  addChild(parent: number, value: T): number;
+  get(index: number): weak<T>;
+  traverse(): IterableIterator<T>;
+}
+
+class PooledGraph<T> {
+  addNode(value: T): number;
+  addEdge(from: number, to: number): void;
+  bfs(start: number): IterableIterator<T>;
+  dfs(start: number): IterableIterator<T>;
+}
+```
+
+**Benefits**:
+- **Lower barrier to entry** - Developers can use pools without deep understanding
+- **Best practices built-in** - Free list optimization, generation tracking, etc.
+- **Consistent API** - Standard patterns across the ecosystem
+- **Performance-tested** - Optimized implementations
+- **Documentation by example** - Real-world usage patterns
+
+**Implementation Priority**: MEDIUM - Needed for Phase 2/3 adoption, but developers can implement manually
+
+**Rust Translation**: Maps to existing Rust crates like `typed-arena`, `generational-arena`, `slotmap`
 
 ---
 
