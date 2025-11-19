@@ -477,6 +477,150 @@ describe('Phase 2: Null-Check Analysis', () => {
     });
   });
   
+  describe('Short-circuit operators', () => {
+    
+    it('should accept && operator for null check', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getValue(): number | undefined {
+            return this.item && this.item.value;  // OK: short-circuit
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should accept !== null && pattern', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getValue(): boolean {
+            return this.item !== null && this.item.value > 0;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should accept || operator with fallback', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getValue(): number {
+            return (this.item && this.item.value) || 0;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should accept ?? nullish coalescing with optional chaining', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getValue(): number {
+            return this.item?.value ?? 0;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+  });
+  
+  describe('Ternary operator', () => {
+    
+    it('should accept ternary with condition check', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getValue(): number {
+            return this.item ? this.item.value : 0;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should accept ternary with !== null check', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getValue(): number {
+            return this.item !== null ? this.item.value : 0;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should accept nested ternaries', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          fallback: Weak<Item> = null;
+          
+          getValue(): number {
+            return this.item 
+              ? this.item.value 
+              : this.fallback 
+                ? this.fallback.value 
+                : 0;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+  });
+
   describe('Edge cases', () => {
     
     it('should allow Weak<T> initialization', () => {
