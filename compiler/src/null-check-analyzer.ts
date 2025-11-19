@@ -343,10 +343,8 @@ export class NullCheckAnalyzer {
     const newCheckedVars = new Set(checkedVars);
 
     if (node.condition) {
-      const nullCheck = this.extractNullCheck(node.condition, sourceFile);
-      if (nullCheck && nullCheck.isNonNull) {
-        newCheckedVars.add(nullCheck.variable);
-      }
+      const { thenNonNull } = this.extractAllNullChecks(node.condition, sourceFile);
+      thenNonNull.forEach(varName => newCheckedVars.add(varName));
     }
 
     if (node.initializer) {

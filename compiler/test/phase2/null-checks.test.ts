@@ -236,7 +236,7 @@ describe('Phase 2: Null-Check Analysis', () => {
       expect(hasError(result.diagnostics, 'GS302')).toBe(false);
     });
     
-    it.skip('should track null check in for loop', () => {
+    it('should track null check in for loop', () => {
       const source = `
         class Container {
           item: Weak<Item> = null;
@@ -254,7 +254,7 @@ describe('Phase 2: Null-Check Analysis', () => {
       `;
       
       const result = compileWithOwnership(source);
-      // Skip: Complex case - null check in for loop condition not yet supported
+      // Currently fails - null check in for loop condition not yet supported
       expect(hasError(result.diagnostics, 'GS302')).toBe(false);
     });
   });
