@@ -122,6 +122,11 @@ Phase 1 enforces "The Good Parts" - a subset of TypeScript that eliminates error
 | GS106 | No `==` operator | Use `===` for strict equality |
 | GS107 | No `!=` operator | Use `!==` for strict inequality |
 | GS108 | No function declarations/expressions | Use arrow functions for lexical `this` |
+| GS109 | No `any` type | All types must be explicit and known |
+| GS110 | No truthy/falsy coercion | Explicit boolean conditions only |
+| GS111 | No `delete` operator | Use optional properties or immutable patterns |
+| GS112 | No comma operator | Use separate statements for clarity |
+| GS115 | No `void` operator | Use `undefined` explicitly if needed |
 | GS201 | No implicit type coercion | Explicit string/number conversion |
 
 See [../docs/GOOD-PARTS.md](../docs/GOOD-PARTS.md) for detailed rationale and examples.

@@ -101,9 +101,15 @@ The compiler enforces that `shared<T>` references form a **Directed Acyclic Grap
 
 | Phase | Goal | Output | Status |
 |-------|------|--------|--------|
-| **Phase 1** | Strict TypeScript semantics | JavaScript/TypeScript | ✅ In Progress |
+| **Phase 1** | Strict TypeScript semantics<br/>(13 restrictions, 234 tests) | JavaScript/TypeScript | ✅ **Complete** |
 | **Phase 2** | Ownership analysis & DAG validation | JavaScript/TypeScript | 🚧 In Progress |
 | **Phase 3** | Rust code generation | Native binaries via Rust | 📋 Planned |
+
+**Phase 1 Restrictions** (see [docs/GOOD-PARTS.md](docs/GOOD-PARTS.md) for details):
+- GS101-GS108: Language features (`with`, `eval`, `arguments`, `for-in`, `var`, `==`, `!=`, function declarations)
+- GS109-GS112: Type safety (`any` type, truthy/falsy, `delete`, comma operator)
+- GS115: `void` operator
+- GS201: Implicit type coercion
 
 See [docs/DAG-DETECTION.md](docs/DAG-DETECTION.md) for cycle detection implementation details.
 
