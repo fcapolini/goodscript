@@ -394,6 +394,47 @@ describe('Phase 2: Null-Check Analysis', () => {
       const result = compileWithOwnership(source);
       expect(hasError(result.diagnostics, 'GS302')).toBe(false);
     });
+
+    it('should accept inline throw statement', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getValueOrThrow(): number {
+            if (this.item === null) throw new Error('Item is null');
+            
+            return this.item.value;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+
+    it('should accept throw with string literal', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getValueOrThrow(): number {
+            if (this.item === null) throw 'error';
+            return this.item.value;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
   });
   
   describe('Method calls', () => {
