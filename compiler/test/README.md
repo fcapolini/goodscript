@@ -16,6 +16,7 @@ test/
 │   ├── index.test.ts              # Test suite entry point
 │   ├── test-helpers.ts            # Shared test utilities
 │   ├── codegen-comparison.test.ts # Fixture validation tests
+│   ├── interop.test.ts            # GoodScript/TypeScript interoperability
 │   ├── var-keyword.test.ts        # GS105: No var keyword
 │   ├── strict-equality.test.ts    # GS106/107: === and !== only
 │   ├── arrow-functions.test.ts    # GS108: Arrow functions only
@@ -70,6 +71,16 @@ Phase 1 tests verify that GoodScript correctly enforces the "Good Parts" restric
 | `no-with.test.ts` | GS101 | No `with` statement |
 | `no-eval.test.ts` | GS102 | No `eval` function |
 | `no-type-coercion.test.ts` | GS201 | No mixing string and number types |
+
+### Interoperability
+
+**`interop.test.ts`** - Validates seamless integration between `.gs.ts` and `.ts` files:
+
+- **TypeScript importing from GoodScript** - Import types, functions, and classes from `.gs.ts` using `.gs` extension
+- **GoodScript importing from TypeScript** - Import from standard `.ts` files without restrictions
+- **Bidirectional imports** - Mixed projects with circular dependencies work correctly
+- **Re-exports** - Both file types can re-export from each other
+- **Restriction isolation** - Phase 1 restrictions only apply to `.gs.ts` files, not imported `.ts` code
 
 See [docs/GOOD-PARTS.md](../../docs/GOOD-PARTS.md) for detailed rationale and examples.
 
