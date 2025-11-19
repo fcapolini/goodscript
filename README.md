@@ -44,6 +44,8 @@ GoodScript combines TypeScript's familiar syntax with Rust's memory safety throu
 
 The compiler enforces that `shared<T>` references form a **Directed Acyclic Graph (DAG)**, preventing memory leaks from reference cycles at compile time.
 
+**Avoiding cycles:** For complex data structures like trees, graphs, and linked lists that would naturally create ownership cycles, use the **arena pattern** to centralize ownership. See [docs/ARENA-PATTERN.md](docs/ARENA-PATTERN.md) for detailed examples.
+
 **Null handling:** GoodScript treats `null` and `undefined` as synonyms. All `weak<T>` references are implicitly nullable (`T | null | undefined`), and checking for either satisfies null-safety requirements.
 
 **📖 See [docs/LANGUAGE.md](docs/LANGUAGE.md) for complete language specification**

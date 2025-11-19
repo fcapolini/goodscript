@@ -79,11 +79,6 @@ compiler/
 │   ├── phase2/                # Phase 2 ownership tests (TBD)
 │   └── phase3/                # Phase 3 codegen tests (TBD)
 │
-├── docs/
-│   ├── LANGUAGE.md            # Complete language specification
-│   ├── GOOD-PARTS.md          # Phase 1 restrictions & rationale
-│   └── DAG-DETECTION.md       # Cycle detection algorithm
-│
 └── lib/
     └── goodscript.d.ts        # Type definitions for ownership wrappers
 ```
@@ -129,7 +124,7 @@ Phase 1 enforces "The Good Parts" - a subset of TypeScript that eliminates error
 | GS108 | No function declarations/expressions | Use arrow functions for lexical `this` |
 | GS201 | No implicit type coercion | Explicit string/number conversion |
 
-See [docs/GOOD-PARTS.md](docs/GOOD-PARTS.md) for detailed rationale and examples.
+See [../docs/GOOD-PARTS.md](../docs/GOOD-PARTS.md) for detailed rationale and examples.
 
 ## Phase 2: Ownership System
 
@@ -143,7 +138,7 @@ The compiler enforces that `shared<T>` references form a **Directed Acyclic Grap
 
 **Null semantics:** `null` and `undefined` are synonyms in GoodScript. All `weak<T>` types are implicitly `T | null | undefined`.
 
-See [/docs/LANGUAGE.md](../docs/LANGUAGE.md) for the complete ownership specification.
+See [../docs/LANGUAGE.md](../docs/LANGUAGE.md) for the complete ownership specification.
 
 ## Phase 3: Rust Code Generation
 
