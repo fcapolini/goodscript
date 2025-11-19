@@ -30,7 +30,7 @@ The first part gets rid of JS baggage and results in a more robust, cleaner lang
 
 > The name GoodScript is a reference to "JavaScript: The Good Parts" by Douglas Crockford, from which this philosophy was taken.
 
-The secont part leverages what is now an enterprise level, fully statically typed language to add deterministic and efficient memory handling and making it compilable to self-contained binary executables.
+The second part leverages what is now an enterprise level, fully statically typed language to add deterministic and efficient memory handling and making it compilable to self-contained binary executables.
 
 > GoodScript handles compilation using the Rust toolchain, which allows for excellent performance, native binaries, and WASM modules generation.
 
