@@ -35,10 +35,18 @@ See: https://code.visualstudio.com/api/working-with-extensions/publishing-extens
 The extension automatically:
 1. Activates when any TypeScript file is opened
 2. Detects `.gs.ts` files in the workspace
-3. Auto-generates `tsconfig.json` and `.goodscript/goodscript.d.ts` if needed
-4. Runs `gsc --json-output` for validation
-5. Shows GoodScript diagnostics as error squiggles
-6. Provides full TypeScript language features (go to definition, etc.)
+3. Auto-generates `tsconfig.json` if needed
+4. Runs client-side validation for quick feedback on Phase 1 violations
+5. Runs `gsc` compiler for complete validation
+6. Shows GoodScript diagnostics as error squiggles
+7. Provides full TypeScript language features (go to definition, etc.)
+
+## Phase 1 Validation
+
+The extension performs two levels of validation:
+
+1. **Client-side** (instant): Checks for `==`, `!=`, `var`, and `function` keywords
+2. **Compiler** (on save/type): Full validation via `gsc` including all Phase 1 restrictions
 
 ## Requirements
 

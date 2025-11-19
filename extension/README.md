@@ -1,14 +1,29 @@
 # GoodScript VS Code Extension
 
-Language support for GoodScript - TypeScript with ownership semantics.
+Language support for GoodScript - TypeScript without the bad parts.
 
 ## Features
 
 - **Full TypeScript Integration**: `.gs.ts` files work as TypeScript files with all IDE features
 - **Zero Configuration**: Automatic setup - just open a `.gs.ts` file and start coding
-- **Real-time Validation**: Instant feedback on ownership cycles, missing null checks, and forbidden syntax
+- **Real-time Validation**: Instant feedback on Phase 1 violations (var, ==, function keyword, etc.)
 - **Error Squiggles**: All GoodScript diagnostics shown as VS Code problems
-- **Auto-Generated Types**: Extension automatically creates type definitions for `owns<T>`
+- **Incremental Adoption**: Mix `.gs.ts` and `.ts` files in the same project
+
+## What is Phase 1?
+
+GoodScript Phase 1 enforces "The Good Parts" - a strict TypeScript subset that eliminates JavaScript's problematic features:
+
+- ❌ No `var` keyword (use `let` or `const`)
+- ❌ No `==` or `!=` (use `===` or `!==`)
+- ❌ No `function` keyword (use arrow functions)
+- ❌ No `with` statement
+- ❌ No `eval` or `Function()` constructor
+- ❌ No `arguments` object (use rest parameters)
+- ❌ No `for-in` loops (use `for-of`)
+- ❌ No implicit type coercion (explicit conversions required)
+
+See the [GoodScript documentation](https://github.com/fcapolini/goodscript) for complete details.
 
 ## Requirements
 
@@ -28,9 +43,8 @@ Alternatively, configure a custom compiler path in VS Code settings.
 2. Create a file with `.gs.ts` extension
 3. Start coding - the extension will:
    - Auto-generate `tsconfig.json` if needed
-   - Auto-generate `.goodscript/goodscript.d.ts` with type definitions
    - Provide full TypeScript IntelliSense
-   - Show GoodScript-specific errors
+   - Show GoodScript Phase 1 errors in real-time
 
 ## File Extension
 
@@ -46,25 +60,20 @@ This provides:
 
 When you open a folder with `.gs.ts` files, the extension automatically creates:
 
-**`.goodscript/goodscript.d.ts`** - Type definitions:
-```typescript
-declare type owns<T> = T;
-declare const console: { ... };
-```
-
-**`tsconfig.json`** - TypeScript configuration:
+**`tsconfig.json`** - TypeScript configuration (if not present):
 ```json
 {
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
-    "lib": ["ES2020"]
+    "lib": ["ES2020"],
+    "strict": true
   },
-  "include": ["**/*.gs.ts", ".goodscript/goodscript.d.ts"]
+  "include": ["**/*.gs.ts"]
 }
 ```
 
-These files are generated once and can be added to `.gitignore` if desired.
+You can customize this configuration as needed - the extension respects existing TypeScript settings.
 
 ## Extension Settings
 

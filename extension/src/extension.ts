@@ -117,10 +117,10 @@ function validateForbiddenOperators(document: vscode.TextDocument): vscode.Diagn
   const text = document.getText();
   const lines = text.split('\n');
 
-  // Forbidden operators in GoodScript
+  // Phase 1 forbidden operators in GoodScript
   const forbiddenOperators = [
-    { pattern: /!=(?!=)/g, name: '!=' },
-    { pattern: /(?<![!=])==(?!=)/g, name: '==' }
+    { pattern: /!=(?!=)/g, name: '!=', code: 'GS107', replacement: '!==' },
+    { pattern: /(?<![!=])==(?!=)/g, name: '==', code: 'GS106', replacement: '===' }
   ];
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
@@ -131,7 +131,7 @@ function validateForbiddenOperators(document: vscode.TextDocument): vscode.Diagn
     const lineToCheck = commentIndex !== -1 ? line.substring(0, commentIndex) : line;
     
     // Check for forbidden operators
-    for (const { pattern, name } of forbiddenOperators) {
+    for (const { pattern, name, code, replacement } of forbiddenOperators) {
       pattern.lastIndex = 0; // Reset regex
       let match;
       
@@ -142,61 +142,17 @@ function validateForbiddenOperators(document: vscode.TextDocument): vscode.Diagn
         
         const diagnostic = new vscode.Diagnostic(
           range,
-          `Operator '${name}' is forbidden in GoodScript. Use '${name === '!=' ? '!==' : '==='}'`,
+          `Operator '${name}' is forbidden in GoodScript. Use '${replacement}' instead`,
           vscode.DiagnosticSeverity.Error
         );
         
-        diagnostic.code = name === '!=' ? 'GS001' : 'GS002';
+        diagnostic.code = code;
         diagnostic.source = 'GoodScript';
         diagnostics.push(diagnostic);
       }
     }
 
-    // Check for truthy/falsy conditions (must use explicit boolean expressions)
-    // Matches: if (variable), while (variable), if (!variable), etc.
-    const truthyPattern = /\b(if|while|for)\s*\(\s*(!?)\s*([a-zA-Z_$][a-zA-Z0-9_$]*(?:\.[a-zA-Z_$][a-zA-Z0-9_$]*)*)\s*\)/g;
-    truthyPattern.lastIndex = 0;
-    let truthyMatch;
-    
-    while ((truthyMatch = truthyPattern.exec(lineToCheck)) !== null) {
-      const [fullMatch, keyword, negation, identifier] = truthyMatch;
-      const startPos = new vscode.Position(lineIndex, truthyMatch.index);
-      const endPos = new vscode.Position(lineIndex, truthyMatch.index + fullMatch.length);
-      const range = new vscode.Range(startPos, endPos);
-      
-      const diagnostic = new vscode.Diagnostic(
-        range,
-        `Implicit truthy/falsy check is forbidden in GoodScript. Use explicit comparison: '${negation ? identifier + ' === null' : identifier + ' !== null'}'`,
-        vscode.DiagnosticSeverity.Error
-      );
-      
-      diagnostic.code = 'GS003';
-      diagnostic.source = 'GoodScript';
-      diagnostics.push(diagnostic);
-    }
-
-    // Check for 'undefined' keyword (forbidden in GoodScript, use null instead)
-    const undefinedPattern = /\bundefined\b/g;
-    undefinedPattern.lastIndex = 0;
-    let undefinedMatch;
-    
-    while ((undefinedMatch = undefinedPattern.exec(lineToCheck)) !== null) {
-      const startPos = new vscode.Position(lineIndex, undefinedMatch.index);
-      const endPos = new vscode.Position(lineIndex, undefinedMatch.index + 'undefined'.length);
-      const range = new vscode.Range(startPos, endPos);
-      
-      const diagnostic = new vscode.Diagnostic(
-        range,
-        `'undefined' is forbidden in GoodScript. Use 'null' instead`,
-        vscode.DiagnosticSeverity.Error
-      );
-      
-      diagnostic.code = 'GS004';
-      diagnostic.source = 'GoodScript';
-      diagnostics.push(diagnostic);
-    }
-
-    // Check for 'var' keyword (forbidden in GoodScript, use let or const instead)
+    // Check for 'var' keyword (GS105: forbidden in GoodScript, use let or const instead)
     const varPattern = /\bvar\b/g;
     varPattern.lastIndex = 0;
     let varMatch;
@@ -212,45 +168,21 @@ function validateForbiddenOperators(document: vscode.TextDocument): vscode.Diagn
         vscode.DiagnosticSeverity.Error
       );
       
-      diagnostic.code = 'GS005';
+      diagnostic.code = 'GS105';
       diagnostic.source = 'GoodScript';
       diagnostics.push(diagnostic);
     }
 
-    // Check for 'any' type (forbidden in GoodScript)
-    const anyPattern = /\bany\b/g;
-    anyPattern.lastIndex = 0;
-    let anyMatch;
-    
-    while ((anyMatch = anyPattern.exec(lineToCheck)) !== null) {
-      const startPos = new vscode.Position(lineIndex, anyMatch.index);
-      const endPos = new vscode.Position(lineIndex, anyMatch.index + 'any'.length);
-      const range = new vscode.Range(startPos, endPos);
-      
-      const diagnostic = new vscode.Diagnostic(
-        range,
-        `'any' type is forbidden in GoodScript. Use explicit types instead`,
-        vscode.DiagnosticSeverity.Error
-      );
-      
-      diagnostic.code = 'GS006';
-      diagnostic.source = 'GoodScript';
-      diagnostics.push(diagnostic);
-    }
-
-    // Check for non-arrow functions (except constructors and class methods)
-    // Match: function keyword not in class context
+    // Check for non-arrow functions (GS108: except class methods)
     const functionPattern = /\bfunction\s+([a-zA-Z_$][a-zA-Z0-9_$]*)?/g;
     functionPattern.lastIndex = 0;
     let functionMatch;
     
     while ((functionMatch = functionPattern.exec(lineToCheck)) !== null) {
       // Check if this is a class method or constructor by looking at surrounding context
-      // Skip if line appears to be inside a class (has leading whitespace and no 'class' keyword before it)
       const beforeFunction = lineToCheck.substring(0, functionMatch.index).trim();
       
-      // Skip if it's a method definition (no 'function' keyword needed in classes)
-      // or if preceded by class/static/async/get/set which indicates a class member
+      // Skip if it's a method definition or preceded by class/static/async/get/set
       const isClassMember = /\b(class|static|async|get|set|public|private|protected)\s*$/.test(beforeFunction);
       
       // Also check if we're likely inside a class by looking at indentation and previous lines
@@ -262,7 +194,6 @@ function validateForbiddenOperators(document: vscode.TextDocument): vscode.Diagn
           break;
         }
         if (prevLine === '}' || prevLine.startsWith('}')) {
-          // Likely exited the class
           break;
         }
       }
@@ -274,7 +205,7 @@ function validateForbiddenOperators(document: vscode.TextDocument): vscode.Diagn
         
         const diagnostic = new vscode.Diagnostic(
           range,
-          `Non-arrow functions are forbidden in GoodScript. Use arrow functions for lexical 'this' binding`,
+          `Non-arrow functions are forbidden in GoodScript. Use arrow functions instead`,
           vscode.DiagnosticSeverity.Error
         );
         
@@ -415,8 +346,8 @@ function convertToVSDiagnostic(gsDiag: GoodScriptDiagnostic): vscode.Diagnostic 
 }
 
 /**
- * Ensures TypeScript knows about GoodScript types by creating a minimal
- * jsconfig.json/tsconfig.json in the workspace if needed.
+ * Ensures TypeScript knows about GoodScript files by creating a minimal
+ * tsconfig.json in the workspace if needed.
  */
 function ensureTypeScriptConfiguration(context: vscode.ExtensionContext) {
   const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -429,7 +360,6 @@ function ensureTypeScriptConfiguration(context: vscode.ExtensionContext) {
     const folderPath = folder.uri.fsPath;
     const tsconfigPath = path.join(folderPath, 'tsconfig.json');
     const jsconfigPath = path.join(folderPath, 'jsconfig.json');
-    const goodscriptDtsPath = path.join(context.extensionPath, 'goodscript.d.ts');
 
     // Check if either config exists
     const hasTsconfig = fs.existsSync(tsconfigPath);
@@ -437,51 +367,22 @@ function ensureTypeScriptConfiguration(context: vscode.ExtensionContext) {
 
     if (hasTsconfig || hasJsconfig) {
       // User has their own config - don't override
-      // They can add goodscript.d.ts manually if needed
       continue;
     }
 
     // Check if workspace has any .gs.ts files
     vscode.workspace.findFiles('**/*.gs.ts', '**/node_modules/**', 1).then((files) => {
       if (files.length > 0) {
-        // Create .goodscript directory and copy goodscript.d.ts there
-        const goodscriptDir = path.join(folderPath, '.goodscript');
-        const workspaceGoodscriptDts = path.join(goodscriptDir, 'goodscript.d.ts');
-        
         try {
-          // Create .goodscript directory if it doesn't exist
-          if (!fs.existsSync(goodscriptDir)) {
-            fs.mkdirSync(goodscriptDir, { recursive: true });
-          }
-          
-          // Copy the type definitions to the workspace
-          const goodscriptDtsContent = `/**
- * Ownership type - indicates a variable owns a value
- * This contributes to reference counting
- */
-declare type owns<T> = T;
-
-/**
- * Console interface for output
- */
-declare const console: {
-  log(...args: any[]): void;
-  error(...args: any[]): void;
-  warn(...args: any[]): void;
-};
-`;
-          
-          fs.writeFileSync(workspaceGoodscriptDts, goodscriptDtsContent);
-          
           const config = {
             compilerOptions: {
               target: 'ES2020',
               module: 'commonjs',
               lib: ['ES2020'],
-              strict: false,
+              strict: true,
               skipLibCheck: true
             },
-            include: ['**/*.gs.ts', '.goodscript/goodscript.d.ts']
+            include: ['**/*.gs.ts', '**/*.ts']
           };
           
           fs.writeFileSync(tsconfigPath, JSON.stringify(config, null, 2));
