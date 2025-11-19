@@ -143,7 +143,7 @@ The compiler enforces that `shared<T>` references form a **Directed Acyclic Grap
 
 **Null semantics:** `null` and `undefined` are synonyms in GoodScript. All `weak<T>` types are implicitly `T | null | undefined`.
 
-See [docs/LANGUAGE.md](docs/LANGUAGE.md) for the complete ownership specification.
+See [/docs/LANGUAGE.md](../docs/LANGUAGE.md) for the complete ownership specification.
 
 ## Phase 3: Rust Code Generation
 
@@ -182,8 +182,8 @@ MIT - See [LICENSE](LICENSE) file for details.
 
 ## Links
 
-- 📖 [Language Documentation](docs/LANGUAGE.md)
-- 📋 [Good Parts Rationale](docs/GOOD-PARTS.md)
-- 🔍 [DAG Detection Algorithm](docs/DAG-DETECTION.md)
+- 📖 [Language Documentation](../docs/LANGUAGE.md)
+- 📋 [Good Parts Rationale](../docs/GOOD-PARTS.md)
+- 🔍 [DAG Detection Algorithm](../docs/DAG-DETECTION.md)
 - 🐛 [Issue Tracker](https://github.com/fcapolini/goodscript/issues)
 - 💬 [Discussions](https://github.com/fcapolini/goodscript/discussions)
