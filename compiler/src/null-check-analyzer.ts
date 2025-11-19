@@ -52,24 +52,63 @@ export class NullCheckAnalyzer {
    * GoodScript treats null and undefined as synonyms
    */
   private isNullOrUndefined(node: ts.Node): boolean {
-    return node.kind === ts.SyntaxKind.NullKeyword || 
-           node.kind === ts.SyntaxKind.UndefinedKeyword;
+    // null keyword
+    if (node.kind === ts.SyntaxKind.NullKeyword) {
+      return true;
+    }
+    
+    // undefined is an identifier, not a keyword in TypeScript AST
+    if (ts.isIdentifier(node) && node.text === 'undefined') {
+      return true;
+    }
+    
+    return false;
   }
 
   /**
    * Check if a type is weak<T> (implicitly nullable)
    */
   private isWeakType(node: ts.Node, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
-    // Try to get the type from the type checker
+    // First, try to get the symbol and check its declaration
+    const symbol = checker.getSymbolAtLocation(node);
+    if (symbol && symbol.valueDeclaration) {
+      if (this.hasWeakTypeInDeclaration(symbol.valueDeclaration, sourceFile)) {
+        return true;
+      }
+    }
+
+    // Fallback: try type node conversion
     const type = checker.getTypeAtLocation(node);
-    if (!type) return false;
+    if (type) {
+      const typeNode = checker.typeToTypeNode(type, node, ts.NodeBuilderFlags.None);
+      if (typeNode && this.hasWeakAnnotation(typeNode, sourceFile)) {
+        return true;
+      }
+    }
 
-    // Check if the type symbol indicates a weak<T> reference
-    // This is a simplified check - we look for explicit weak<T> annotations
-    const typeNode = checker.typeToTypeNode(type, node, ts.NodeBuilderFlags.None);
-    if (!typeNode) return false;
+    return false;
+  }
 
-    return this.hasWeakAnnotation(typeNode, sourceFile);
+  /**
+   * Check if a declaration has weak<T> type
+   */
+  private hasWeakTypeInDeclaration(decl: ts.Declaration, sourceFile: ts.SourceFile): boolean {
+    if (ts.isPropertyDeclaration(decl) || ts.isPropertySignature(decl)) {
+      if (decl.type) {
+        return this.hasWeakAnnotation(decl.type, sourceFile);
+      }
+    }
+    if (ts.isVariableDeclaration(decl)) {
+      if (decl.type) {
+        return this.hasWeakAnnotation(decl.type, sourceFile);
+      }
+    }
+    if (ts.isParameter(decl)) {
+      if (decl.type) {
+        return this.hasWeakAnnotation(decl.type, sourceFile);
+      }
+    }
+    return false;
   }
 
   /**
@@ -176,10 +215,25 @@ export class NullCheckAnalyzer {
       checkedVars.delete(leftText);  // Invalidate null check on reassignment
     }
 
-    // Recurse into children
-    ts.forEachChild(node, (child: ts.Node) => 
-      this.visit(child, sourceFile, checker, checkedVars)
-    );
+    // Recurse into children (unless we've already handled them specially above)
+    //
+    // Don't recurse if we've already handled flow-sensitive analysis for:
+    // - If statements (handled above with branch-specific checked vars)
+    // - While/do-while/for statements (handled above with loop-specific vars)
+    // - Conditional expressions (handled above with branch-specific vars)
+    // - && expressions (handled above with left-right sequencing)
+    const isHandledSpecially = ts.isIfStatement(node) ||
+      ts.isWhileStatement(node) ||
+      ts.isDoStatement(node) ||
+      ts.isForStatement(node) ||
+      ts.isConditionalExpression(node) ||
+      (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken);
+    
+    if (!isHandledSpecially) {
+      ts.forEachChild(node, (child: ts.Node) => 
+        this.visit(child, sourceFile, checker, checkedVars)
+      );
+    }
   }
 
   /**
@@ -492,19 +546,16 @@ export class NullCheckAnalyzer {
     const baseExpr = node.expression;
     const baseText = baseExpr.getText(sourceFile);
 
+    // Debug logging
+    // console.log(`Checking property access: ${baseText}.${node.name.text}`);
+    // console.log(`Checked vars: ${Array.from(checkedVars).join(', ')}`);
+    // console.log(`Is checked: ${checkedVars.has(baseText)}`);
+
     // Skip if already checked
     if (checkedVars.has(baseText)) return;
 
     // Check if base expression has weak<T> type
-    const baseType = checker.getTypeAtLocation(baseExpr);
-    if (!baseType) return;
-
-    // Try to detect weak<T> through type node
-    const baseTypeNode = checker.typeToTypeNode(baseType, baseExpr, ts.NodeBuilderFlags.None);
-    if (!baseTypeNode) return;
-
-    const isWeak = this.hasWeakAnnotation(baseTypeNode, sourceFile);
-    if (isWeak) {
+    if (this.isWeakType(baseExpr, sourceFile, checker)) {
       this.reportNullCheckRequired(node, baseText, sourceFile);
     }
   }
@@ -525,14 +576,7 @@ export class NullCheckAnalyzer {
     if (checkedVars.has(baseText)) return;
 
     // Check if base expression has weak<T> type
-    const baseType = checker.getTypeAtLocation(baseExpr);
-    if (!baseType) return;
-
-    const baseTypeNode = checker.typeToTypeNode(baseType, baseExpr, ts.NodeBuilderFlags.None);
-    if (!baseTypeNode) return;
-
-    const isWeak = this.hasWeakAnnotation(baseTypeNode, sourceFile);
-    if (isWeak) {
+    if (this.isWeakType(baseExpr, sourceFile, checker)) {
       this.reportNullCheckRequired(node, baseText, sourceFile);
     }
   }

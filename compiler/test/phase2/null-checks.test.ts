@@ -15,8 +15,7 @@ describe('Phase 2: Null-Check Analysis', () => {
   
   describe('Basic weak<T> null checks', () => {
     
-    // TODO: Weak type detection needs improvement - TypeChecker.typeToTypeNode doesn't always work
-    it.skip('should require null check before property access', () => {
+    it('should require null check before property access', () => {
       const source = `
         class Container {
           item: weak<Item> = null;
@@ -262,8 +261,7 @@ describe('Phase 2: Null-Check Analysis', () => {
   
   describe('Method calls', () => {
     
-    // TODO: Weak type detection needs improvement
-    it.skip('should require null check before method call', () => {
+    it('should require null check before method call', () => {
       const source = `
         class Container {
           item: weak<Item> = null;
@@ -325,8 +323,7 @@ describe('Phase 2: Null-Check Analysis', () => {
   
   describe('Array/element access', () => {
     
-    // TODO: Weak type detection needs improvement
-    it.skip('should require null check before element access', () => {
+    it('should require null check before element access', () => {
       const source = `
         class Container {
           items: weak<ItemList> = null;
@@ -366,8 +363,7 @@ describe('Phase 2: Null-Check Analysis', () => {
   
   describe('Complex scenarios', () => {
     
-    // TODO: Weak type detection needs improvement for this test to work
-    it.skip('should invalidate check on reassignment', () => {
+    it('should invalidate check on reassignment', () => {
       const source = `
         class Container {
           item: weak<Item> = null;
@@ -443,8 +439,7 @@ describe('Phase 2: Null-Check Analysis', () => {
   
   describe('Function parameters', () => {
     
-    // TODO: Weak type detection needs improvement
-    it.skip('should require null check for weak<T> parameters', () => {
+    it('should require null check for weak<T> parameters', () => {
       const source = `
         class Processor {
           process(item: weak<Item>): number {

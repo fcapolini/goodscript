@@ -64,8 +64,7 @@ describe('Phase 2: Ownership Analysis Overview', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(true);
     });
     
-    // TODO: Weak type detection needs improvement - TypeChecker doesn't always resolve weak<T>
-    it.skip('should report GS302 for missing null checks', () => {
+    it('should report GS302 for missing null checks', () => {
       const source = `
         class Container {
           item: weak<Item> = null;
@@ -87,7 +86,7 @@ describe('Phase 2: Ownership Analysis Overview', () => {
   
   describe('Real-world patterns', () => {
     
-    // TODO: TypeScript errors for property initialization need to be resolved
+    // TODO: TypeScript errors for array of unique<T> - type compatibility issue
     it.skip('should accept Pool Pattern for data structures', () => {
       const source = `
         // Pool Pattern: centralized ownership

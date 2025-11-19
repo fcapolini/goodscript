@@ -170,25 +170,25 @@ All 29 tests passing - validates all rules from DAG-DETECTION.md:
 
 ### Null-Check Analysis (null-checks.test.ts)
 
-18 tests passing (5 skipped - weak type detection needs enhancement):
+All 23 tests passing:
 
 | Test Category | Tests | Description |
 |---------------|-------|-------------|
-| Basic null checks | 3 passing, 1 skipped | `!== null`, `!== undefined`, optional chaining |
+| Basic null checks | 4 passing | `!== null`, `!== undefined`, optional chaining |
 | Flow-sensitive analysis | 5 passing | Tracking through if/while/for/ternary |
 | Loop constructs | 2 passing | While and for loop null checks |
-| Method calls | 2 passing, 1 skipped | Checked vs unchecked method calls |
-| Array/element access | 1 passing, 1 skipped | Checked element access |
-| Complex scenarios | 1 passing, 1 skipped | Nested weak refs, reassignment |
-| Function parameters | 1 passing, 1 skipped | Weak parameter checking |
+| Method calls | 3 passing | Checked vs unchecked method calls |
+| Array/element access | 2 passing | Checked element access |
+| Complex scenarios | 3 passing | Nested weak refs, reassignment |
+| Function parameters | 2 passing | Weak parameter checking |
 | Edge cases | 2 passing | Initialization, non-weak types |
 
 **Error code**: **GS302** - Null check required for weak<T>
 
-**Known Limitations** (7 skipped tests):
-- TypeChecker.typeToTypeNode() doesn't always resolve `weak<T>` annotations
-- Flow analysis for some edge cases needs refinement
-- These are documented and will be improved in future iterations
+**Previous limitations resolved**:
+- Fixed `undefined` detection (identifier vs keyword in TypeScript AST)
+- Improved `weak<T>` type detection via symbol declarations
+- Fixed control flow analysis double-recursion issue
 
 ## Phase 3: Rust Code Generation (Future)
 
