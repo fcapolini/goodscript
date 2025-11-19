@@ -28,11 +28,58 @@ Write clean TypeScript. Get native performance. No borrow checker required.
 
 The first part gets rid of JS baggage and results in a more robust, cleaner language overall. It can serve as a stricter replacement for TypeScript, offering better maintainability.
 
-> The name GoodScript is a reference to "JavaScript: The Good Parts" by Crockford, from which this phylosophy was taken.
+> The name GoodScript is a reference to "JavaScript: The Good Parts" by Douglas Crockford, from which this phylosophy was taken.
 
 The secont part leverages what is now an enterprise level, fully statically typed language to add deterministic and efficient memory handling and making it compilable to self-contained binary executables.
 
-> GoodScript handles compilation using the Rust toolchain, which allows excellent performance, native binaries, and WASM modules generation.
+> GoodScript handles compilation using the Rust toolchain, which allows for excellent performance, native binaries, and WASM modules generation.
+
+## Clean TypeScript
+
+GoodScript can be **incrementally adopted** in existing TypeScript projects. Use the `.gs.ts` file extension for GoodScript sources and continue using `.ts` for standard TypeScript files—they work side by side seamlessly.
+
+Simply replace `tsc` with `gsc` in your build process:
+
+```bash
+# Instead of: tsc
+gsc
+```
+
+Because GoodScript is a **strict subset of TypeScript**, you can gradually migrate files one at a time. Import GoodScript modules from TypeScript and vice versa:
+
+```typescript
+// node.ts (regular TypeScript)
+import { Config } from './config.gs';  // Import from GoodScript
+
+// config.gs.ts (GoodScript - strict rules enforced)
+import { Node } from './node.gs';      // Import from GoodScript
+import { logger } from './logger';     // Import from TypeScript
+```
+
+The `gsc` compiler enforces Phase 1 restrictions (no `var`, no `==`, arrow functions only, etc.) on `.gs.ts` files while treating `.ts` files as standard TypeScript. This allows you to introduce stricter coding standards incrementally without requiring a full codebase rewrite.
+
+## Rust transpiler
+
+In **Phase 3**, GoodScript will transpile to **optimized Rust source code**, delivering:
+
+- **Native Performance:** 1.05-1.15x overhead vs hand-written C/Rust
+- **Self-Contained Binaries:** No runtime dependencies, no garbage collector
+- **WASM Support:** Compile to WebAssembly via Rust's `wasm32` target
+- **Memory Safety:** Ownership system maps directly to Rust's `Box<T>`, `Rc<T>`, and `Weak<T>`
+- **Deterministic Performance:** No GC pauses, predictable memory usage
+
+The compiler's **DAG validation** (Phase 2) ensures that generated Rust code is memory-leak-free by preventing reference cycles at compile time. Complex data structures use the [arena pattern](docs/ARENA-PATTERN.md) to maintain DAG invariants while supporting natural graph/tree topologies.
+
+```bash
+# Compile GoodScript to Rust (Phase 3)
+gsc --target rust src/main.gs.ts
+
+# Build native binary via Rust toolchain
+cd out/rust
+cargo build --release
+```
+
+The Rust backend will support both server-side applications and browser WASM modules, making GoodScript suitable for performance-critical full-stack development.
 
 ## Language Overview
 
