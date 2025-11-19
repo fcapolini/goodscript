@@ -68,7 +68,7 @@ In **Phase 3**, GoodScript will transpile to **optimized Rust source code**, del
 - **Memory Safety:** Ownership system maps directly to Rust's `Box<T>`, `Rc<T>`, and `Weak<T>`
 - **Deterministic Performance:** No GC pauses, predictable memory usage
 
-The compiler's **DAG validation** (Phase 2) ensures that generated Rust code is memory-leak-free by preventing reference cycles at compile time. Complex data structures use the [arena pattern](docs/ARENA-PATTERN.md) to maintain DAG invariants while supporting natural graph/tree topologies.
+The compiler's **DAG validation** (Phase 2) ensures that generated Rust code is memory-leak-free by preventing reference cycles at compile time. Complex data structures use the [pool pattern](docs/POOL-PATTERN.md) to maintain DAG invariants while supporting natural graph/tree topologies.
 
 ```bash
 # Compile GoodScript to Rust (Phase 3)
@@ -91,7 +91,7 @@ GoodScript combines TypeScript's familiar syntax with Rust's memory safety throu
 
 The compiler enforces that `shared<T>` references form a **Directed Acyclic Graph (DAG)**, preventing memory leaks from reference cycles at compile time.
 
-**Avoiding cycles:** For complex data structures like trees, graphs, and linked lists that would naturally create ownership cycles, use the **arena pattern** to centralize ownership. See [docs/ARENA-PATTERN.md](docs/ARENA-PATTERN.md) for detailed examples.
+**Avoiding cycles:** For complex data structures like trees, graphs, and linked lists that would naturally create ownership cycles, use the **pool pattern** to centralize ownership. See [docs/POOL-PATTERN.md](docs/POOL-PATTERN.md) for detailed examples.
 
 **Null handling:** GoodScript treats `null` and `undefined` as synonyms. All `weak<T>` references are implicitly nullable (`T | null | undefined`), and checking for either satisfies null-safety requirements.
 

@@ -1,10 +1,17 @@
-# Arena Pattern for Cycle-Free Data Structures
+# Pool Pattern for Cycle-Free Data Structures
 
 ## Overview
 
-The **arena pattern** is a fundamental technique for building complex data structures in GoodScript without creating ownership cycles. Instead of nodes owning their neighbors directly, all nodes are owned by a central arena, and nodes reference each other using weak references or indices.
+The **pool pattern** is a fundamental technique for building complex data structures in GoodScript without creating ownership cycles. Instead of nodes owning their neighbors directly, all nodes are owned by a central pool, and nodes reference each other using weak references or indices.
 
 This pattern is essential because GoodScript's ownership system (like Rust's) prohibits cyclic ownership to enable deterministic memory management.
+
+### Pool vs Arena
+
+- **Pool Pattern** (general): Central ownership with individual node lifecycle management. Nodes can be added/removed independently.
+- **Arena Pattern** (optimization): A pool variant optimized for bulk allocation/deallocation. All nodes share the same lifecycle and are freed together.
+
+Use the **pool pattern** as the default solution for DAG conflicts. Use the **arena pattern** only when bulk deallocation is appropriate.
 
 ## The Problem: Ownership Cycles
 
@@ -34,26 +41,35 @@ class GraphNode<T> {
 
 These structures create cycles because nodes try to own each other, which violates the ownership hierarchy.
 
-## The Solution: Arena Pattern
+## The Solution: Pool Pattern
 
-The arena pattern solves this by:
+The pool pattern solves this by:
 
-1. **Centralizing ownership**: A single arena owns all nodes
+1. **Centralizing ownership**: A single pool owns all nodes
 2. **Using indices/weak references**: Nodes reference each other without ownership
-3. **Maintaining a flat structure**: All nodes live in the arena's storage
+3. **Maintaining a flat structure**: All nodes live in the pool's storage
 
-### Basic Arena Structure
+### Basic Pool Structure
 
 ```typescript
-class Arena<T> {
+class Pool<T> {
   nodes: unique<Node<T>>[];
+  freeList: number[];  // Indices of freed nodes for reuse
   
   constructor() {
     this.nodes = [];
+    this.freeList = [];
   }
   
   // Allocate a new node, returns its index
   alloc(value: T): number {
+    // Reuse freed slot if available
+    if (this.freeList.length > 0) {
+      const index = this.freeList.pop()!;
+      this.nodes[index] = new Node(value, index);
+      return index;
+    }
+    // Otherwise allocate new slot
     const index = this.nodes.length;
     this.nodes.push(new Node(value, index));
     return index;
@@ -64,10 +80,11 @@ class Arena<T> {
     return this.nodes[index] ?? null;
   }
   
-  // Free a node (mark as unused)
+  // Free a node and make its slot available for reuse
   free(index: number): void {
-    // Implementation depends on reuse strategy
-    // Could mark as free, add to free list, etc.
+    this.freeList.push(index);
+    // Note: We don't actually remove from nodes array
+    // to keep indices stable. Node is simply marked as free.
   }
 }
 
@@ -334,22 +351,23 @@ class ArenaWithFreeList<T> {
 }
 ```
 
-## Benefits of the Arena Pattern
+## Benefits of the Pool Pattern
 
-1. **No Ownership Cycles**: Arena owns all nodes; nodes use indices/weak references
-2. **Cache Locality**: All nodes stored contiguously in memory
-3. **Simple Memory Management**: Free entire arena at once when done
+1. **No Ownership Cycles**: Pool owns all nodes; nodes use indices/weak references
+2. **Flexible Lifecycle**: Individual nodes can be freed independently (pool) or bulk-freed (arena variant)
+3. **Cache Locality**: All nodes stored contiguously in memory
 4. **Deterministic Cleanup**: No need for garbage collection cycles
-5. **Rust Compatibility**: Maps directly to Rust's arena patterns (e.g., `typed-arena`, `generational-arena`)
+5. **Rust Compatibility**: Maps directly to Rust's pool/arena patterns (e.g., `typed-arena`, `generational-arena`)
 
 ## Rust Translation
 
-GoodScript arena patterns translate naturally to Rust:
+GoodScript pool patterns translate naturally to Rust:
 
 ```rust
-// GoodScript arena compiles to Rust using Vec and indices
-struct Arena<T> {
+// GoodScript pool compiles to Rust using Vec and indices
+struct Pool<T> {
     nodes: Vec<Node<T>>,
+    free_list: Vec<usize>,
 }
 
 impl<T> Arena<T> {
@@ -365,30 +383,60 @@ impl<T> Arena<T> {
 }
 ```
 
-## When to Use the Arena Pattern
+## When to Use the Pool Pattern
 
-✅ **Use arenas when:**
+✅ **Use pools when:**
 - Building complex data structures (trees, graphs, linked lists)
-- Nodes need to reference each other
-- You need cache-friendly memory layout
-- Bulk allocation/deallocation is acceptable
-- Structure lifetime is well-defined
+- Nodes need to reference each other (would create DAG cycles)
+- Need to break ownership cycles for compiler validation
+- Nodes may have different lifetimes (individual add/remove)
 
-❌ **Don't use arenas when:**
+✅ **Use arena variant when:**
+- All nodes share the same lifecycle
+- Bulk allocation/deallocation is beneficial
+- Cache-friendly memory layout is important
+- Structure lifetime is well-defined (e.g., per-request allocator)
+
+❌ **Don't use pools when:**
 - Simple linear ownership suffices (e.g., `unique<T>`)
-- Nodes have independent lifetimes
-- Need true shared ownership (use `shared<T>` instead)
 - Structure is simple enough for standard collections
+- Need true shared ownership across independent contexts (use `shared<T>` instead)
+
+## Pool vs Arena Implementation
+
+### Pool (General Case)
+```typescript
+class Pool<T> {
+  nodes: unique<Node<T>>[];
+  freeList: number[];
+  
+  free(index: number): void {
+    this.freeList.push(index);  // Individual removal
+  }
+}
+```
+
+### Arena (Bulk Deallocation)
+```typescript
+class Arena<T> {
+  nodes: unique<Node<T>>[];
+  
+  clear(): void {
+    this.nodes = [];  // Bulk removal of all nodes
+  }
+}
+```
 
 ## Related Patterns
 
 - **Generational Indices**: Add generation counters to detect stale references
-- **Slotmap Pattern**: Combine free list with generation tracking
-- **Entity-Component-System (ECS)**: Multiple arenas for different component types
+- **Slotmap Pattern**: Combine free list with generation tracking for safety
+- **Entity-Component-System (ECS)**: Multiple pools for different component types
+- **Arena Allocator**: Specialized pool optimized for bulk deallocation
 
 ## See Also
 
 - [DAG-DETECTION.md](./DAG-DETECTION.md) - How GoodScript detects ownership cycles
 - [LANGUAGE.md](./LANGUAGE.md) - Complete ownership semantics
-- Rust's `typed-arena` crate
-- Rust's `generational-arena` crate
+- Rust's `typed-arena` crate (bulk deallocation)
+- Rust's `generational-arena` crate (individual lifecycle management)

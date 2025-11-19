@@ -60,7 +60,7 @@ These rules define how $\text{weak}<T>$ references are permitted to exist withou
 
 **Fields declared using $\text{weak}<T>$ do not create an ownership edge in the DAG analysis.** They are ignored during cycle detection.
 
-  * This is the mechanism used to implement the **Arena Pattern** and **Parent-Child** relationships safely (e.g., `Child` holds `parent: weak<Parent>`).
+  * This is the mechanism used to implement the **Pool Pattern** and **Parent-Child** relationships safely (e.g., `Child` holds `parent: weak<Parent>`).
 
 #### Rule 3.2: $\text{unique}<T>$ is NOT an Edge
 
@@ -72,7 +72,7 @@ These rules define how $\text{weak}<T>$ references are permitted to exist withou
 
 ### 4\. Special Case: Handling Self-Contained Structures
 
-#### Rule 4.1: The Arena Pattern Requirement (Enforcing the False Positive)
+#### Rule 4.1: The Pool Pattern Requirement (Enforcing the False Positive)
 
 If a developer attempts to define a structure like a `TreeNode` that is naturally acyclic but *potentially* cyclic in the type system:
 
@@ -83,7 +83,7 @@ class TreeNode {
 }
 ```
 
-The compiler **must reject** this definition if the type of the contained element (`TreeNode`) is the same as the containing type. This enforces the use of the **Arena Pattern**:
+The compiler **must reject** this definition if the type of the contained element (`TreeNode`) is the same as the containing type. This enforces the use of the **Pool Pattern**:
 
 ```typescript
 class Tree {
