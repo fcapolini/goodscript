@@ -257,6 +257,74 @@ describe('Phase 2: Null-Check Analysis', () => {
       // Currently fails - null check in for loop condition not yet supported
       expect(hasError(result.diagnostics, 'GS302')).toBe(false);
     });
+
+    it('should accept continue in loop', () => {
+      const source = `
+        class Container {
+          items: Weak<Item>[] = [];
+          
+          process(): void {
+            for (const item of this.items) {
+              if (item === null) continue;
+              const value = item.value;  // Safe - null items skip this
+            }
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+
+    it('should accept break in loop', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          process(): void {
+            while (true) {
+              if (this.item === null) break;
+              const value = this.item.value;  // Safe after check
+            }
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+
+    it('should accept continue with negated check', () => {
+      const source = `
+        class Container {
+          items: Weak<Item>[] = [];
+          
+          process(): void {
+            for (const item of this.items) {
+              if (item !== null) {
+                const value = item.value;  // Safe in this branch
+              }
+              // After if-block, can't assume anything
+            }
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
   });
   
   describe('Early return / Guard clauses', () => {

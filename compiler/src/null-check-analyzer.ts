@@ -271,13 +271,16 @@ export class NullCheckAnalyzer {
   }
 
   /**
-   * Check if a statement contains an early exit (return or throw)
+   * Check if a statement contains an early exit (return, throw, break, or continue)
    */
   private hasEarlyExit(statement: ts.Statement): boolean {
     let hasExit = false;
 
     const visit = (node: ts.Node) => {
-      if (ts.isReturnStatement(node) || ts.isThrowStatement(node)) {
+      if (ts.isReturnStatement(node) || 
+          ts.isThrowStatement(node) ||
+          ts.isBreakStatement(node) ||
+          ts.isContinueStatement(node)) {
         hasExit = true;
         return;
       }
