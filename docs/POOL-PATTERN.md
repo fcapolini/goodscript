@@ -18,15 +18,15 @@ Traditional data structures often create ownership cycles that are incompatible 
 // ❌ ILLEGAL: Cyclic ownership in a doubly-linked list
 class Node<T> {
   value: T;
-  next: unique<Node<T>> | null;  // owns next node
-  prev: unique<Node<T>> | null;  // owns previous node - CYCLE!
+  next: Unique<Node<T>> | null;  // owns next node
+  prev: Unique<Node<T>> | null;  // owns previous node - CYCLE!
 }
 
 // ❌ ILLEGAL: Parent-child cycle in a tree
 class TreeNode<T> {
   value: T;
-  parent: shared<TreeNode<T>> | null; // Shared ownership to parent - CYCLE!
-  children: unique<TreeNode<T>>[];   // owns children
+  parent: Shared<TreeNode<T>> | null; // Shared ownership to parent - CYCLE!
+  children: Unique<TreeNode<T>>[];   // owns children
 }
 ```
 
@@ -38,7 +38,7 @@ These structures violate the Directed Acyclic Graph (DAG) invariant enforced by 
 
 The pool pattern solves this by flattening the structure and centralizing ownership:
 
-1.  **Centralized Ownership**: A single **Pool** holds the strong, exclusive ownership (`unique<T>`) of all nodes.
+1.  **Centralized Ownership**: A single **Pool** holds the strong, exclusive ownership (`Unique<T>`) of all nodes.
 2.  **Weak Referencing**: Nodes refer to each other using **simple indices (`number`)**, which are non-owning and fast.
 3.  **Contiguous Storage**: All nodes are stored contiguously in an array, providing the performance advantage of **cache locality**.
 
@@ -48,8 +48,8 @@ The terms **Pool** and **Arena** define the object lifecycle:
 
 | Pattern | Ownership Structure | Node Lifecycle | Use Case |
 | :--- | :--- | :--- | :--- |
-| **Pool** (General) | Central ownership (`unique<T>[]`) | **Individual** nodes can be added and removed/freed independently. | Long-lived structures (e.g., entity system). |
-| **Arena** (Optimization) | Central ownership (`unique<T>[]`) | **Bulk** allocation and deallocation. All nodes are freed together (`clear()`). | Short-lived, cache-friendly structures (e.g., per-request storage). |
+| **Pool** (General) | Central ownership (`Unique<T>[]`) | **Individual** nodes can be added and removed/freed independently. | Long-lived structures (e.g., entity system). |
+| **Arena** (Optimization) | Central ownership (`Unique<T>[]`) | **Bulk** allocation and deallocation. All nodes are freed together (`clear()`). | Short-lived, cache-friendly structures (e.g., per-request storage). |
 
 Use the **pool pattern** as the default solution for complex graph/tree conflicts.
 
@@ -59,7 +59,7 @@ Use the **pool pattern** as the default solution for complex graph/tree conflict
 
 While a `Set<T>` or `Map<number, T>` can store objects, the array-based pool is mandatory for achieving GoodScript's **Rust-level performance**:
 
-| Feature | Array/Vector Pool (`unique<T>[]`) | Set/Map (Hash Table) |
+| Feature | Array/Vector Pool (`Unique<T>[]`) | Set/Map (Hash Table) |
 | :--- | :--- | :--- |
 | **Memory Layout** | **Contiguous**. Nodes are packed tightly in memory. | **Scattered**. Nodes are placed arbitrarily based on a hash function. |
 | **CPU Cache** | **Excellent Cache Locality**. CPU pre-fetches adjacent nodes during traversal. | **Frequent Cache Misses**. Requires costly jumps to random memory locations. |
@@ -90,7 +90,7 @@ class Node<T> {
 
 class Pool<T> {
   // Array holds the strong, exclusive ownership of all nodes.
-  nodes: (unique<Node<T>> | null)[];
+  nodes: (Unique<Node<T>> | null)[];
   freeList: number[]; // Indices of freed nodes for reuse
   
   constructor() {
@@ -114,8 +114,8 @@ class Pool<T> {
   }
   
   // Access a node by index (returns a non-owning, weak reference)
-  get(index: number): weak<Node<T>> {
-    // Note: The Pool holds the unique<T> owner. We expose a weak reference.
+  get(index: number): Weak<Node<T>> {
+    // Note: The Pool holds the Unique<T> owner. We expose a weak reference.
     return this.nodes[index] ?? null;
   }
   
@@ -133,7 +133,7 @@ class Pool<T> {
 
 ## 3\. Example: Doubly-Linked List
 
-By using indices instead of direct ownership pointers (`unique<T>`), we break the cycle.
+By using indices instead of direct ownership pointers (`Unique<T>`), we break the cycle.
 
 ```typescript
 class ListNode<T> {
@@ -146,7 +146,7 @@ class ListNode<T> {
 }
 
 class LinkedListArena<T> {
-  nodes: unique<ListNode<T>>[]; // The Pool array
+  nodes: Unique<ListNode<T>>[]; // The Pool array
   head: number | null;
   tail: number | null;
   
@@ -171,7 +171,7 @@ class TreeNode<T> {
 }
 
 class TreeArena<T> {
-  nodes: unique<TreeNode<T>>[];
+  nodes: Unique<TreeNode<T>>[];
   root: number | null;
   
   // ... createRoot, addChild, and traversal methods ...
@@ -194,7 +194,7 @@ class GraphNode<T> {
 }
 
 class GraphArena<T> {
-  nodes: unique<GraphNode<T>>[];
+  nodes: Unique<GraphNode<T>>[];
   
   // ... addNode, addEdge, and traversal methods (like BFS) ...
 }
@@ -235,7 +235,7 @@ For maximum safety, you must use **Generational Indices** (or the **Slotmap Patt
 | :--- | :--- |
 | ✅ **Pool** (General) | Complex structures, individual node management, long-lived data. |
 | ✅ **Arena** (Optimization) | Structures that are built and destroyed together (e.g., data per request). |
-| ❌ **Don't Use** | Simple linear ownership (`unique<T>`) or pure shared ownership (`shared<T>`). |
+| ❌ **Don't Use** | Simple linear ownership (`Unique<T>`) or pure shared ownership (`Shared<T>`). |
 
 ## See Also
 

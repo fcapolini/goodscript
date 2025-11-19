@@ -21,25 +21,25 @@ The core innovation is the requirement that all heap-allocated reference types (
 
 ### 1. Unique Ownership: $\text{unique}<T>$
 
-* **Syntax Example:** `config: unique<Settings>`
+* **Syntax Example:** `config: Unique<Settings>`
 * **Purpose:** Denotes **exclusive ownership**. The variable is the sole owner of the data on the heap.
 * **Rust Mapping (Phase 3):** `std::boxed::Box<T>`
-* **Memory Guarantee:** **Zero-Cost Abstraction.** The data is deallocated immediately when the `unique<T>` variable goes out of scope. Sharing or cloning is forbidden.
+* **Memory Guarantee:** **Zero-Cost Abstraction.** The data is deallocated immediately when the `Unique<T>` variable goes out of scope. Sharing or cloning is forbidden.
 
 ---
 
 ### 2. Shared Ownership: $\text{shared}<T>$
 
-* **Syntax Example:** `nodes: shared<TreeNode>[]`
+* **Syntax Example:** `nodes: Shared<TreeNode>[]`
 * **Purpose:** Denotes **co-ownership** where multiple variables may access and manage the lifetime of the same data. The data is only deallocated when the last co-owner is dropped.
 * **Rust Mapping (Phase 3):** `std::rc::Rc<T>`
-* **Memory Guarantee:** **Requires Static Analysis.** The compiler must verify that no path of `shared<T>` references leads back to itself (the **DAG Check**). If a cycle is detected, the definition is forbidden, and the developer must break the cycle using $\text{weak}<T>$. This is the foundation of the language's memory safety.
+* **Memory Guarantee:** **Requires Static Analysis.** The compiler must verify that no path of `Shared<T>` references leads back to itself (the **DAG Check**). If a cycle is detected, the definition is forbidden, and the developer must break the cycle using $\text{weak}<T>$. This is the foundation of the language's memory safety.
 
 ---
 
 ### 3. Non-Owning Reference: $\text{weak}<T>$
 
-* **Syntax Example:** `parent: weak<TreeNode>`
+* **Syntax Example:** `parent: Weak<TreeNode>`
 * **Purpose:** Denotes a non-owning pointer used only for access. It does **not** contribute to the shared reference count.
 * **Rust Mapping (Phase 3):** `std::rc::Weak<T>`
 * **Memory Guarantee:** **Cycle Breaking.** Because it does not count towards the lifetime, it is used for back-pointers (e.g., Child $\to$ Parent) in complex structures, ensuring that shared ownership cycles cannot form. The reference must always be **conditionally dereferenced** (checked for existence) before use.
@@ -65,7 +65,7 @@ Only the following **Value Types** can be used without an explicit qualifier:
 * `number` (mapped to `f64` in Rust)
 * `boolean`
 
-All other complex types, including **Strings** and **Arrays**, are treated as heap-allocated **Reference Types** and **must** be qualified (e.g., `let s: unique<string>`).
+All other complex types, including **Strings** and **Arrays**, are treated as heap-allocated **Reference Types** and **must** be qualified (e.g., `let s: Unique<string>`).
 
 > **Future Evolution**: Additional numeric types (like dedicated integer types) may be added in post-Phase 3 releases.
 
@@ -115,11 +115,11 @@ console.log(map.get("d")?.toString());
 
 ### Weak Reference Null Safety
 
-All `weak<T>` references are implicitly nullable (either `null` or `undefined` may occur at runtime). The compiler enforces null checks before dereferencing:
+All `Weak<T>` references are implicitly nullable (either `null` or `undefined` may occur at runtime). The compiler enforces null checks before dereferencing:
 
 ```typescript
 class Node {
-  parent: weak<Node>;  // Implicitly nullable
+  parent: Weak<Node>;  // Implicitly nullable
   
   getParentValue(): string {
     // Must check before access

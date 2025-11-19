@@ -113,12 +113,12 @@ Integrate JSX syntax support for React and similar frameworks, enabling GoodScri
 **Ownership Semantics in JSX:**
 ```typescript
 // Component props with ownership types
-const UserCard = (props: { user: unique<User> }) => {
+const UserCard = (props: { user: Unique<User> }) => {
   return <div className="card">{props.user.name}</div>
 }
 
 // Weak references for optional children
-const Container = (props: { children: weak<ReactNode> }) => {
+const Container = (props: { children: Weak<ReactNode> }) => {
   return (
     <div className="container">
       {props.children ?? <EmptyState />}
@@ -127,11 +127,11 @@ const Container = (props: { children: weak<ReactNode> }) => {
 }
 
 // Shared ownership for context values
-const ThemeContext = createContext<shared<Theme>>(defaultTheme)
+const ThemeContext = createContext<Shared<Theme>>(defaultTheme)
 
 // Component ownership transfer
 const App = () => {
-  const user: unique<User> = loadUser()
+  const user: Unique<User> = loadUser()
   return <UserCard user={user} /> // ownership transfers to UserCard
 }
 ```
@@ -147,7 +147,7 @@ const App = () => {
 ### Challenges
 - React's `ref` system and hooks need special ownership handling
 - Event handlers involve complex shared ownership patterns
-- Need to define JSX element ownership semantics (likely `unique<ReactElement>`)
+- Need to define JSX element ownership semantics (likely `Unique<ReactElement>`)
 - Component lifecycle and state management with ownership semantics
 - Integration with React's virtual DOM and reconciliation
 - Ensuring ownership analysis works correctly but doesn't interfere with React's runtime behavior
@@ -210,14 +210,14 @@ To validate feasibility:
 class Pool<T> {
   alloc(value: T): number;
   free(index: number): void;
-  get(index: number): weak<T>;
+  get(index: number): Weak<T>;
   has(index: number): boolean;
 }
 
 // Arena variant for bulk deallocation
 class Arena<T> {
   alloc(value: T): number;
-  get(index: number): weak<T>;
+  get(index: number): Weak<T>;
   clear(): void;  // Free all nodes at once
 }
 
@@ -225,21 +225,21 @@ class Arena<T> {
 class GenerationalPool<T> {
   alloc(value: T): GenerationalIndex;
   free(index: GenerationalIndex): void;
-  get(index: GenerationalIndex): weak<T> | null;
+  get(index: GenerationalIndex): Weak<T> | null;
 }
 
 // Pre-built data structures using pools
 class PooledLinkedList<T> {
   push(value: T): number;
   pop(): T | null;
-  get(index: number): weak<T>;
+  get(index: number): Weak<T>;
   iterate(): IterableIterator<T>;
 }
 
 class PooledTree<T> {
   createRoot(value: T): number;
   addChild(parent: number, value: T): number;
-  get(index: number): weak<T>;
+  get(index: number): Weak<T>;
   traverse(): IterableIterator<T>;
 }
 
@@ -270,10 +270,10 @@ class PooledGraph<T> {
 How should ownership work with Promises and async functions?
 ```typescript
 // Does this transfer ownership?
-const user: unique<User> = await fetchUser()
+const user: Unique<User> = await fetchUser()
 
 // What about Promise chains?
-const promise: Promise<unique<User>> = fetchUser()
+const promise: Promise<Unique<User>> = fetchUser()
 ```
 
 ### Pattern Matching
@@ -290,8 +290,8 @@ How should iterators interact with ownership? Can we prevent iteration over move
 
 ### Destructuring with Ownership
 ```typescript
-const { name, email }: unique<User> = user // Does this move or clone?
-const [first, ...rest]: unique<Array<T>> = items // Partial moves?
+const { name, email }: Unique<User> = user // Does this move or clone?
+const [first, ...rest]: Unique<Array<T>> = items // Partial moves?
 ```
 
 ---

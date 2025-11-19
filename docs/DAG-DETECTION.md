@@ -2,34 +2,34 @@
 
 This are the rules for the **Directed Acyclic Graph (DAG) Check** which forms the central safety mechanism of the language. These rules must be applied during **Phase 2 (Ownership Analysis)** by traversing the Abstract Syntax Tree (AST) after basic type checking.
 
-The analysis focuses exclusively on the **`shared<T>`** qualifier, as `unique<T>` cannot form cycles and `weak<T>` actively breaks them.
+The analysis focuses exclusively on the **`Shared<T>`** qualifier, as `Unique<T>` cannot form cycles and `Weak<T>` actively breaks them.
 
 -----
 
 ## 🛑 Rule Set for the Static Ownership DAG Check
 
-The compiler's ownership analyzer must build a graph where **Types are Nodes** and **`shared<T>` relationships are Edges**. The entire graph must be a DAG.
+The compiler's ownership analyzer must build a graph where **Types are Nodes** and **`Shared<T>` relationships are Edges**. The entire graph must be a DAG.
 
 ### 1\. Building the Ownership Graph (Edges)
 
-An **Ownership Edge** exists from Type $A$ to Type $B$ if and only if **Type $A$ contains a field that confers `shared<T>` ownership of Type $B$**.
+An **Ownership Edge** exists from Type $A$ to Type $B$ if and only if **Type $A$ contains a field that confers `Shared<T>` ownership of Type $B$**.
 
 #### Rule 1.1: Direct $\text{shared}<T>$ Field
 
-If a `class A` declares a field `b: shared<B>`, an edge exists: $A \to B$.
+If a `class A` declares a field `b: Shared<B>`, an edge exists: $A \to B$.
 
 #### Rule 1.2: Container Transitivity (Shallow Ownership)
 
 If a container (like `Array`, `Map`, `Set`) is defined to hold shared elements, ownership is conferred transitively.
 
-  * If `class A` declares a field `list: shared<B>[]` (or `Array<shared<B>>`), an edge exists: $A \to B$.
-  * If `class C` declares a field `map: Map<K, shared<D>>`, an edge exists: $C \to D$. (The key $K$ is usually a value type like `string` or `number`, so it does not affect the cycle analysis).
+  * If `class A` declares a field `list: Shared<B>[]` (or `Array<Shared<B>>`), an edge exists: $A \to B$.
+  * If `class C` declares a field `map: Map<K, Shared<D>>`, an edge exists: $C \to D$. (The key $K$ is usually a value type like `string` or `number`, so it does not affect the cycle analysis).
 
 #### Rule 1.3: Intermediate Wrapper Transitivity (Deep Ownership)
 
 If Type $A$ owns Type $B$, and Type $B$ owns Type $C$, the ownership link extends.
 
-  * If `class A` declares `b: shared<B>` and `class B` declares `c: shared<C>`, an edge exists: $A \to B$ and $B \to C$. The ownership is transitively $A \to C$.
+  * If `class A` declares `b: Shared<B>` and `class B` declares `c: Shared<C>`, an edge exists: $A \to B$ and $B \to C$. The ownership is transitively $A \to C$.
 
 -----
 
@@ -46,9 +46,9 @@ The fundamental rule for rejecting code is based on graph theory:
 
 | Forbidden Cycle Type | Example Declaration | Graph Path |
 | :--- | :--- | :--- |
-| **Direct Cycle** (Length 1) | `class A { child: shared<A>; }` | $A \to A$ |
-| **Mutual Cycle** (Length 2) | `class A { b: shared<B>; }` + `class B { a: shared<A>; }` | $A \to B \to A$ |
-| **Container Cycle** | `class A { children: shared<A>[]; }` | $A \to \text{Array} \to A$ (Rejected due to Rule 1.2) |
+| **Direct Cycle** (Length 1) | `class A { child: Shared<A>; }` | $A \to A$ |
+| **Mutual Cycle** (Length 2) | `class A { b: Shared<B>; }` + `class B { a: Shared<A>; }` | $A \to B \to A$ |
+| **Container Cycle** | `class A { children: Shared<A>[]; }` | $A \to \text{Array} \to A$ (Rejected due to Rule 1.2) |
 
 -----
 
@@ -60,13 +60,13 @@ These rules define how $\text{weak}<T>$ references are permitted to exist withou
 
 **Fields declared using $\text{weak}<T>$ do not create an ownership edge in the DAG analysis.** They are ignored during cycle detection.
 
-  * This is the mechanism used to implement the **Pool Pattern** and **Parent-Child** relationships safely (e.g., `Child` holds `parent: weak<Parent>`).
+  * This is the mechanism used to implement the **Pool Pattern** and **Parent-Child** relationships safely (e.g., `Child` holds `parent: Weak<Parent>`).
 
 #### Rule 3.2: $\text{unique}<T>$ is NOT an Edge
 
 **Fields declared using $\text{unique}<T>$ do not create an edge in the $\text{shared}<T>$ DAG analysis.**
 
-  * Since `unique<T>` cannot be shared, it cannot participate in the `shared<T>` cycle. It creates its own orthogonal graph of unique ownership.
+  * Since `Unique<T>` cannot be shared, it cannot participate in the `Shared<T>` cycle. It creates its own orthogonal graph of unique ownership.
 
 -----
 
@@ -78,8 +78,8 @@ If a developer attempts to define a structure like a `TreeNode` that is naturall
 
 ```typescript
 class TreeNode {
-  children: shared<TreeNode>[]; // A -> TreeNode
-  parent: weak<TreeNode>;        // Ignored
+  children: Shared<TreeNode>[]; // A -> TreeNode
+  parent: Weak<TreeNode>;        // Ignored
 }
 ```
 
@@ -88,12 +88,12 @@ The compiler **must reject** this definition if the type of the contained elemen
 ```typescript
 class Tree {
   // Tree is the single, non-cyclic owner of nodes
-  nodes: unique<TreeNode>[];
+  nodes: Unique<TreeNode>[];
 }
 
 class TreeNode {
-  children: weak<TreeNode>[]; // All links are non-owning
-  parent: weak<TreeNode>;
+  children: Weak<TreeNode>[]; // All links are non-owning
+  parent: Weak<TreeNode>;
 }
 ```
 
