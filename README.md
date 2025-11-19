@@ -115,7 +115,43 @@ See [docs/DAG-DETECTION.md](docs/DAG-DETECTION.md) for cycle detection implement
 
 ## Installation
 
-# Language description
+### NPM Package
+
+Install the GoodScript compiler globally or as a dev dependency:
+
+```bash
+# Global installation
+npm install -g goodscript
+
+# Project-level installation
+npm install --save-dev goodscript
+```
+
+The package includes:
+- `gsc` - TypeScript-compatible compiler with Phase 1 restrictions
+- `gs` - Direct runner for GoodScript files
+- Full TypeScript type definitions
+
+**NPM**: [`goodscript@0.5.0`](https://www.npmjs.com/package/goodscript)
+
+### VS Code Extension
+
+Install the GoodScript extension for real-time validation and syntax highlighting:
+
+1. Open VS Code
+2. Go to Extensions (Cmd+Shift+X / Ctrl+Shift+X)
+3. Search for "GoodScript"
+4. Click Install
+
+Or install from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/).
+
+The extension provides:
+- Real-time Phase 1 restriction validation
+- Syntax highlighting for `.gs.ts` files
+- Configurable validation settings
+- Client-side checking (no compiler required for basic validation)
+
+## Language description
 
 > A Strongly Typed, Memory-Safe Language
 
