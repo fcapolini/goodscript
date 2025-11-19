@@ -80,7 +80,7 @@ function parseArgs(args: string[]): CliOptions {
 
 function printHelp(): void {
   console.log(`
-GoodScript Compiler v0.3.1
+GoodScript Compiler v${VERSION}
 Rust performance for the rest of us
 
 Usage: gsc [options] [files...]
