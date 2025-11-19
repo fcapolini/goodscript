@@ -1,32 +1,39 @@
 /**
  * Null-Check Analyzer
- * Enforces null checks on weak references (implicit nullability)
+ * 
+ * Enforces null-safety for weak<T> references based on DAG-DETECTION.md principles.
+ * 
+ * Key Concepts:
+ * 1. weak<T> is implicitly nullable (equivalent to T | null | undefined)
+ * 2. Both null and undefined are treated as synonyms in GoodScript
+ * 3. weak<T> references must be checked before dereferencing
+ * 4. Flow-sensitive analysis tracks null checks through control flow
+ * 
+ * Checking Patterns:
+ * - if (x !== null) or if (x !== undefined) - both valid
+ * - if (x === null) or if (x === undefined) - both valid
+ * - x && x.property - short-circuit null check
+ * - x ? x.property : default - conditional check
+ * - Optional chaining (x?.property) - automatic null-safety
  */
 
 import * as ts from 'typescript';
-import { Diagnostic, SourceLocation, OwnershipKind, OwnershipInfo } from './types';
+import { Diagnostic, SourceLocation } from './types';
 import { Parser } from './parser';
-import { OwnershipAnalyzer } from './ownership-analyzer';
+
+/**
+ * Information about a null check performed on a variable
+ */
+interface NullCheckInfo {
+  variable: string;      // Variable name that was checked
+  isNonNull: boolean;    // true if check proves non-null, false if proves null
+}
 
 export class NullCheckAnalyzer {
   private diagnostics: Diagnostic[] = [];
-  private ownershipAnalyzer: OwnershipAnalyzer;
-
-  constructor(ownershipAnalyzer: OwnershipAnalyzer) {
-    this.ownershipAnalyzer = ownershipAnalyzer;
-  }
 
   /**
-   * Helper: Check if a node is null or undefined literal
-   * GoodScript treats null and undefined as synonyms
-   */
-  private isNullOrUndefined(node: ts.Node): boolean {
-    return node.kind === ts.SyntaxKind.NullKeyword || 
-           node.kind === ts.SyntaxKind.UndefinedKeyword;
-  }
-
-  /**
-   * Analyze a source file for missing null checks
+   * Analyze a source file for weak<T> null-safety violations
    */
   analyze(sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
     this.diagnostics = [];
@@ -41,7 +48,56 @@ export class NullCheckAnalyzer {
   }
 
   /**
-   * Visit AST nodes recursively
+   * Check if a node is null or undefined literal
+   * GoodScript treats null and undefined as synonyms
+   */
+  private isNullOrUndefined(node: ts.Node): boolean {
+    return node.kind === ts.SyntaxKind.NullKeyword || 
+           node.kind === ts.SyntaxKind.UndefinedKeyword;
+  }
+
+  /**
+   * Check if a type is weak<T> (implicitly nullable)
+   */
+  private isWeakType(node: ts.Node, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
+    // Try to get the type from the type checker
+    const type = checker.getTypeAtLocation(node);
+    if (!type) return false;
+
+    // Check if the type symbol indicates a weak<T> reference
+    // This is a simplified check - we look for explicit weak<T> annotations
+    const typeNode = checker.typeToTypeNode(type, node, ts.NodeBuilderFlags.None);
+    if (!typeNode) return false;
+
+    return this.hasWeakAnnotation(typeNode, sourceFile);
+  }
+
+  /**
+   * Check if a type node has weak<T> annotation
+   */
+  private hasWeakAnnotation(typeNode: ts.TypeNode, sourceFile: ts.SourceFile): boolean {
+    // Direct weak<T> reference
+    if (ts.isTypeReferenceNode(typeNode)) {
+      const typeName = typeNode.typeName.getText(sourceFile);
+      if (typeName === 'weak') {
+        return true;
+      }
+    }
+
+    // Union type containing weak<T>
+    if (ts.isUnionTypeNode(typeNode)) {
+      for (const member of typeNode.types) {
+        if (this.hasWeakAnnotation(member, sourceFile)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Visit AST nodes recursively with flow-sensitive null check tracking
    */
   private visit(
     node: ts.Node,
@@ -52,12 +108,6 @@ export class NullCheckAnalyzer {
     // Handle if statements - track null checks
     if (ts.isIfStatement(node)) {
       this.handleIfStatement(node, sourceFile, checker, checkedVars);
-      return;
-    }
-
-    // Handle switch statements - track null checks
-    if (ts.isSwitchStatement(node)) {
-      this.handleSwitchStatement(node, sourceFile, checker, checkedVars);
       return;
     }
 
@@ -79,12 +129,6 @@ export class NullCheckAnalyzer {
       return;
     }
 
-    // Handle reassignments - invalidate null checks
-    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
-      this.handleReassignment(node, sourceFile, checker, checkedVars);
-      return;  // Don't recurse - we already visited children in handleReassignment
-    }
-
     // Handle ternary expressions - track null checks in condition
     if (ts.isConditionalExpression(node)) {
       this.handleConditionalExpression(node, sourceFile, checker, checkedVars);
@@ -98,8 +142,19 @@ export class NullCheckAnalyzer {
       return;
     }
 
-    // Handle property access - check for null safety (includes optional chaining)
-    if (ts.isPropertyAccessExpression(node)) {
+    // Handle variable declarations with weak<T> type
+    if (ts.isVariableDeclaration(node)) {
+      this.checkWeakVariableDeclaration(node, sourceFile, checker);
+    }
+
+    // Handle parameter declarations with weak<T> type
+    if (ts.isParameter(node)) {
+      // Parameters are checked at usage sites
+    }
+
+    // Handle property access - check for null safety (unless optional chaining)
+    if (ts.isPropertyAccessExpression(node) && 
+        node.questionDotToken === undefined) {  // Not optional chaining
       this.checkPropertyAccess(node, sourceFile, checker, checkedVars);
     }
 
@@ -110,7 +165,15 @@ export class NullCheckAnalyzer {
 
     // Handle method calls
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
-      this.checkPropertyAccess(node.expression, sourceFile, checker, checkedVars);
+      if (node.expression.questionDotToken === undefined) {  // Not optional chaining
+        this.checkPropertyAccess(node.expression, sourceFile, checker, checkedVars);
+      }
+    }
+
+    // Handle reassignments - invalidate null checks
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+      const leftText = node.left.getText(sourceFile);
+      checkedVars.delete(leftText);  // Invalidate null check on reassignment
     }
 
     // Recurse into children
@@ -132,7 +195,7 @@ export class NullCheckAnalyzer {
     const thenCheckedVars = new Set(checkedVars);
     const elseCheckedVars = new Set(checkedVars);
 
-    // Extract all null checks from condition (handles &&, ||, !, etc.)
+    // Extract null checks from condition
     const { thenNonNull, elseNonNull } = this.extractAllNullChecks(condition, sourceFile);
     
     thenNonNull.forEach(v => thenCheckedVars.add(v));
@@ -149,7 +212,6 @@ export class NullCheckAnalyzer {
       this.visit(node.elseStatement, sourceFile, checker, elseCheckedVars);
     } else if (hasEarlyExit) {
       // If then branch exits early and there's no else, propagate else assumptions
-      // to the parent scope by updating checkedVars
       elseNonNull.forEach(v => checkedVars.add(v));
     }
   }
@@ -165,9 +227,8 @@ export class NullCheckAnalyzer {
         hasExit = true;
         return;
       }
-      // Don't recurse into nested functions
       if (ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
-        return;
+        return; // Don't recurse into nested functions
       }
       ts.forEachChild(node, visit);
     };
@@ -188,13 +249,11 @@ export class NullCheckAnalyzer {
     const condition = node.expression;
     const newCheckedVars = new Set(checkedVars);
 
-    // Check for null check patterns (only non-null checks make sense for loops)
     const nullCheck = this.extractNullCheck(condition, sourceFile);
     if (nullCheck && nullCheck.isNonNull) {
       newCheckedVars.add(nullCheck.variable);
     }
 
-    // Visit loop body with extended checked variables
     this.visit(node.statement, sourceFile, checker, newCheckedVars);
   }
 
@@ -210,13 +269,11 @@ export class NullCheckAnalyzer {
     const condition = node.expression;
     const newCheckedVars = new Set(checkedVars);
 
-    // Check for null check patterns (only non-null checks make sense for loops)
     const nullCheck = this.extractNullCheck(condition, sourceFile);
     if (nullCheck && nullCheck.isNonNull) {
       newCheckedVars.add(nullCheck.variable);
     }
 
-    // Visit loop body with extended checked variables
     this.visit(node.statement, sourceFile, checker, newCheckedVars);
   }
 
@@ -231,7 +288,6 @@ export class NullCheckAnalyzer {
   ): void {
     const newCheckedVars = new Set(checkedVars);
 
-    // Check condition for null check patterns (only non-null checks)
     if (node.condition) {
       const nullCheck = this.extractNullCheck(node.condition, sourceFile);
       if (nullCheck && nullCheck.isNonNull) {
@@ -239,114 +295,21 @@ export class NullCheckAnalyzer {
       }
     }
 
-    // Visit initializer with original scope
     if (node.initializer) {
       this.visit(node.initializer, sourceFile, checker, checkedVars);
     }
 
-    // Visit loop body with extended checked variables
     if (node.statement) {
       this.visit(node.statement, sourceFile, checker, newCheckedVars);
     }
 
-    // Visit incrementor with extended checked variables
     if (node.incrementor) {
       this.visit(node.incrementor, sourceFile, checker, newCheckedVars);
     }
   }
 
   /**
-   * Handle switch statements for flow-sensitive analysis
-   */
-  private handleSwitchStatement(
-    node: ts.SwitchStatement,
-    sourceFile: ts.SourceFile,
-    checker: ts.TypeChecker,
-    checkedVars: Set<string>
-  ): void {
-    const expression = node.expression;
-    
-    // Visit the switch expression first to check for property access
-    // This will error if user.role is accessed without checking user
-    this.visit(expression, sourceFile, checker, checkedVars);
-    
-    // If the expression is a property access, the base object must be non-null
-    // Add it to checked vars for all case clauses
-    const baseCheckedVars = new Set(checkedVars);
-    if (ts.isPropertyAccessExpression(expression)) {
-      const baseExpr = expression.expression;
-      if (ts.isIdentifier(baseExpr) || ts.isPropertyAccessExpression(baseExpr)) {
-        baseCheckedVars.add(baseExpr.getText(sourceFile));
-      }
-    }
-    
-    // Visit each case clause
-    for (const caseClause of node.caseBlock.clauses) {
-      const caseCheckedVars = new Set(baseCheckedVars);
-      
-      // Check if this is a null case
-      if (ts.isCaseClause(caseClause)) {
-        // case null: or case undefined: means expression is null in this case
-        if (this.isNullOrUndefined(caseClause.expression)) {
-          // Don't add to checked vars in null case
-        } else {
-          // For non-null cases, if we're switching on a variable, it's non-null
-          const exprText = expression.getText(sourceFile);
-          if (ts.isIdentifier(expression) || ts.isPropertyAccessExpression(expression)) {
-            caseCheckedVars.add(exprText);
-          }
-        }
-      } else if (ts.isDefaultClause(caseClause)) {
-        // In default clause, check if any case was null
-        let hasNullCase = false;
-        for (const otherCase of node.caseBlock.clauses) {
-          if (ts.isCaseClause(otherCase) && this.isNullOrUndefined(otherCase.expression)) {
-            hasNullCase = true;
-            break;
-          }
-        }
-        
-        // If there was a null case, default means non-null
-        if (hasNullCase) {
-          const exprText = expression.getText(sourceFile);
-          if (ts.isIdentifier(expression) || ts.isPropertyAccessExpression(expression)) {
-            caseCheckedVars.add(exprText);
-          }
-        }
-      }
-      
-      // Visit statements in this case
-      for (const statement of caseClause.statements) {
-        this.visit(statement, sourceFile, checker, caseCheckedVars);
-      }
-    }
-  }
-
-  /**
-   * Handle reassignments - invalidate null checks for reassigned variables
-   */
-  private handleReassignment(
-    node: ts.BinaryExpression,
-    sourceFile: ts.SourceFile,
-    checker: ts.TypeChecker,
-    checkedVars: Set<string>
-  ): void {
-    const left = node.left;
-    const varName = left.getText(sourceFile);
-    
-    // Visit the right side FIRST (while variable is still in checkedVars)
-    // This allows expressions like: node = node.next
-    this.visit(node.right, sourceFile, checker, checkedVars);
-    
-    // THEN remove the variable from checked set
-    // because it's being reassigned and may now be null
-    if (checkedVars.has(varName)) {
-      checkedVars.delete(varName);
-    }
-  }
-
-  /**
-   * Handle ternary/conditional expressions for flow-sensitive analysis
+   * Handle ternary conditional expressions
    */
   private handleConditionalExpression(
     node: ts.ConditionalExpression,
@@ -354,26 +317,21 @@ export class NullCheckAnalyzer {
     checker: ts.TypeChecker,
     checkedVars: Set<string>
   ): void {
-    // Extract null checks from condition
-    const { thenNonNull, elseNonNull } = this.extractAllNullChecks(node.condition, sourceFile);
-    
-    // Visit condition first
-    this.visit(node.condition, sourceFile, checker, checkedVars);
-    
-    // Visit then branch with then-specific checked variables
+    const condition = node.condition;
+    const { thenNonNull, elseNonNull } = this.extractAllNullChecks(condition, sourceFile);
+
     const thenCheckedVars = new Set(checkedVars);
-    thenNonNull.forEach(v => thenCheckedVars.add(v));
-    this.visit(node.whenTrue, sourceFile, checker, thenCheckedVars);
-    
-    // Visit else branch with else-specific checked variables
     const elseCheckedVars = new Set(checkedVars);
+    
+    thenNonNull.forEach(v => thenCheckedVars.add(v));
     elseNonNull.forEach(v => elseCheckedVars.add(v));
+
+    this.visit(node.whenTrue, sourceFile, checker, thenCheckedVars);
     this.visit(node.whenFalse, sourceFile, checker, elseCheckedVars);
   }
 
   /**
-   * Handle && expressions - support idiom like: x !== null && x.method()
-   * This allows short-circuit evaluation as a null-check pattern
+   * Handle && expressions (short-circuit null checks)
    */
   private handleAndExpression(
     node: ts.BinaryExpression,
@@ -381,377 +339,218 @@ export class NullCheckAnalyzer {
     checker: ts.TypeChecker,
     checkedVars: Set<string>
   ): void {
-    // Visit left side with current scope
-    this.visit(node.left, sourceFile, checker, checkedVars);
-    
-    // Extract null checks from left side
-    const { thenNonNull } = this.extractAllNullChecks(node.left, sourceFile);
-    
-    // Visit right side with extended scope (as if left side is true)
+    const leftCheckedVars = new Set(checkedVars);
+    this.visit(node.left, sourceFile, checker, leftCheckedVars);
+
+    // For right side, add any null checks from left
     const rightCheckedVars = new Set(checkedVars);
-    thenNonNull.forEach(v => rightCheckedVars.add(v));
+    const nullCheck = this.extractNullCheck(node.left, sourceFile);
+    if (nullCheck && nullCheck.isNonNull) {
+      rightCheckedVars.add(nullCheck.variable);
+    }
+
     this.visit(node.right, sourceFile, checker, rightCheckedVars);
   }
 
   /**
-   * Extract variable name from null check condition
-   * Returns { variable: string, isNonNull: boolean } or null
+   * Extract null check information from a condition
    */
-  private extractNullCheck(condition: ts.Expression, sourceFile: ts.SourceFile): { variable: string; isNonNull: boolean } | null {
-    // x ?? y - nullish coalescing: don't extract null checks
-    // The operator itself handles the null case
-    if (ts.isBinaryExpression(condition) &&
-        condition.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
-      return null;
-    }
-    
-    // Handle: if (x !== null) or if (x === null)
-    if (ts.isBinaryExpression(condition)) {
-      const { left, operatorToken, right } = condition;
-      
-      // if (x !== null) or if (x !== undefined) -> non-null check
-      if (
-        (operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken ||
-         operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken) &&
-        this.isNullOrUndefined(right)
-      ) {
-        return { variable: left.getText(sourceFile), isNonNull: true };
+  private extractNullCheck(condition: ts.Expression, sourceFile: ts.SourceFile): NullCheckInfo | null {
+    // x !== null or x !== undefined
+    if (ts.isBinaryExpression(condition) && 
+        condition.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken) {
+      if (this.isNullOrUndefined(condition.right)) {
+        return {
+          variable: condition.left.getText(sourceFile),
+          isNonNull: true,
+        };
       }
-
-      // if (null !== x) or if (undefined !== x) -> non-null check
-      if (
-        (operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken ||
-         operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken) &&
-        this.isNullOrUndefined(left)
-      ) {
-        return { variable: right.getText(sourceFile), isNonNull: true };
-      }
-
-      // if (x === null) or if (x === undefined) -> null check
-      if (
-        (operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken ||
-         operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken) &&
-        this.isNullOrUndefined(right)
-      ) {
-        return { variable: left.getText(sourceFile), isNonNull: false };
-      }
-
-      // if (null === x) or if (undefined === x) -> null check
-      if (
-        (operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken ||
-         operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken) &&
-        this.isNullOrUndefined(left)
-      ) {
-        return { variable: right.getText(sourceFile), isNonNull: false };
+      if (this.isNullOrUndefined(condition.left)) {
+        return {
+          variable: condition.right.getText(sourceFile),
+          isNonNull: true,
+        };
       }
     }
 
-    // Handle: if (x) - truthy check (non-null)
+    // x === null or x === undefined
+    if (ts.isBinaryExpression(condition) && 
+        condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken) {
+      if (this.isNullOrUndefined(condition.right)) {
+        return {
+          variable: condition.left.getText(sourceFile),
+          isNonNull: false,
+        };
+      }
+      if (this.isNullOrUndefined(condition.left)) {
+        return {
+          variable: condition.right.getText(sourceFile),
+          isNonNull: false,
+        };
+      }
+    }
+
+    // !x (truthy check)
+    if (ts.isPrefixUnaryExpression(condition) && 
+        condition.operator === ts.SyntaxKind.ExclamationToken) {
+      return {
+        variable: condition.operand.getText(sourceFile),
+        isNonNull: false,
+      };
+    }
+
+    // x (truthy check)
     if (ts.isIdentifier(condition) || ts.isPropertyAccessExpression(condition)) {
-      return { variable: condition.getText(sourceFile), isNonNull: true };
+      return {
+        variable: condition.getText(sourceFile),
+        isNonNull: true,
+      };
     }
 
     return null;
   }
 
   /**
-   * Extract all null checks from a complex condition
-   * Handles &&, ||, !, and nested expressions
+   * Extract all null checks from a complex condition (handles &&, ||, !)
    */
   private extractAllNullChecks(
     condition: ts.Expression,
     sourceFile: ts.SourceFile
-  ): { thenNonNull: Set<string>; elseNonNull: Set<string> } {
+  ): { thenNonNull: Set<string>, elseNonNull: Set<string> } {
     const thenNonNull = new Set<string>();
     const elseNonNull = new Set<string>();
 
-    this.extractNullChecksRecursive(condition, sourceFile, true, thenNonNull, elseNonNull);
+    const extract = (expr: ts.Expression, negate: boolean) => {
+      // &&: both sides must be true
+      if (ts.isBinaryExpression(expr) && 
+          expr.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
+        extract(expr.left, negate);
+        extract(expr.right, negate);
+        return;
+      }
 
+      // ||: at least one side must be true
+      if (ts.isBinaryExpression(expr) && 
+          expr.operatorToken.kind === ts.SyntaxKind.BarBarToken) {
+        // For ||, we can't make strong assumptions about individual variables
+        return;
+      }
+
+      // !: negate the check
+      if (ts.isPrefixUnaryExpression(expr) && 
+          expr.operator === ts.SyntaxKind.ExclamationToken) {
+        extract(expr.operand, !negate);
+        return;
+      }
+
+      // Extract single null check
+      const nullCheck = this.extractNullCheck(expr, sourceFile);
+      if (nullCheck) {
+        const isNonNull = negate ? !nullCheck.isNonNull : nullCheck.isNonNull;
+        if (isNonNull) {
+          thenNonNull.add(nullCheck.variable);
+        } else {
+          elseNonNull.add(nullCheck.variable);
+        }
+      }
+    };
+
+    extract(condition, false);
     return { thenNonNull, elseNonNull };
   }
 
   /**
-   * Recursively extract null checks from nested expressions
+   * Check weak<T> variable declaration
    */
-  private extractNullChecksRecursive(
-    condition: ts.Expression,
+  private checkWeakVariableDeclaration(
+    node: ts.VariableDeclaration,
     sourceFile: ts.SourceFile,
-    positive: boolean,  // true = then branch, false = else branch
-    thenNonNull: Set<string>,
-    elseNonNull: Set<string>
+    checker: ts.TypeChecker
   ): void {
-    // Handle parenthesized expressions
-    if (ts.isParenthesizedExpression(condition)) {
-      this.extractNullChecksRecursive(condition.expression, sourceFile, positive, thenNonNull, elseNonNull);
-      return;
-    }
+    // Check if the variable has weak<T> type annotation
+    if (!node.type || !ts.isTypeReferenceNode(node.type)) return;
     
-    // Handle negation: !x or !(x === null)
-    if (ts.isPrefixUnaryExpression(condition) && 
-        condition.operator === ts.SyntaxKind.ExclamationToken) {
-      // Flip the polarity
-      this.extractNullChecksRecursive(condition.operand, sourceFile, !positive, thenNonNull, elseNonNull);
-      return;
-    }
+    const typeName = node.type.typeName.getText(sourceFile);
+    if (typeName !== 'weak') return;
 
-    // Handle logical AND: x && y
-    if (ts.isBinaryExpression(condition) && 
-        condition.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
-      if (positive) {
-        // x && y: both must be true in then branch
-        this.extractNullChecksRecursive(condition.left, sourceFile, true, thenNonNull, elseNonNull);
-        this.extractNullChecksRecursive(condition.right, sourceFile, true, thenNonNull, elseNonNull);
-      } else {
-        // !(x && y) = !x || !y: at least one is false
-        // In else branch (where x && y is true), both are true
-        this.extractNullChecksRecursive(condition.left, sourceFile, false, elseNonNull, thenNonNull);
-        this.extractNullChecksRecursive(condition.right, sourceFile, false, elseNonNull, thenNonNull);
-      }
-      return;
-    }
-
-    // Handle logical OR: x || y
-    if (ts.isBinaryExpression(condition) && 
-        condition.operatorToken.kind === ts.SyntaxKind.BarBarToken) {
-      if (positive) {
-        // x || y: at least one is true in then branch - can't determine which
-        // In else branch, both are false
-        this.extractNullChecksRecursive(condition.left, sourceFile, true, elseNonNull, thenNonNull);
-        this.extractNullChecksRecursive(condition.right, sourceFile, true, elseNonNull, thenNonNull);
-      } else {
-        // !(x || y) = !x && !y: both are false
-        // In then branch (where !(x || y) is true), both are false
-        this.extractNullChecksRecursive(condition.left, sourceFile, false, thenNonNull, elseNonNull);
-        this.extractNullChecksRecursive(condition.right, sourceFile, false, thenNonNull, elseNonNull);
-      }
-      return;
-    }
-
-    // Handle simple null check
-    const nullCheck = this.extractNullCheck(condition, sourceFile);
-    if (nullCheck) {
-      const targetSet = positive ? thenNonNull : elseNonNull;
-      const oppositeSet = positive ? elseNonNull : thenNonNull;
-      
-      if (nullCheck.isNonNull) {
-        // x !== null: then gets x, else doesn't
-        targetSet.add(nullCheck.variable);
-      } else {
-        // x === null: else gets x, then doesn't
-        oppositeSet.add(nullCheck.variable);
-      }
-    }
+    // weak<T> variables should either:
+    // 1. Be initialized with null/undefined
+    // 2. Be initialized with a value (which we'll track for null checks)
+    // 3. Have no initializer (default to undefined)
+    // All cases are valid - we just track usage
   }
 
   /**
-   * Check property access for null safety
+   * Check property access for weak<T> null-safety
    */
   private checkPropertyAccess(
     node: ts.PropertyAccessExpression,
     sourceFile: ts.SourceFile,
-    _checker: ts.TypeChecker,
+    checker: ts.TypeChecker,
     checkedVars: Set<string>
   ): void {
-    // Skip check if using optional chaining (?.)
-    if (node.questionDotToken) {
-      return;
-    }
-    
-    // Get the expression being accessed (e.g., 'user' in 'user.name' or 'this.data' in 'this.data.value')
-    const expr = node.expression;
-    
-    // Handle simple identifiers (user.name)
-    if (ts.isIdentifier(expr)) {
-      const varName = expr.getText(sourceFile);
-      this.checkIdentifierAccess(varName, node, sourceFile, checkedVars);
-      return;
-    }
+    const baseExpr = node.expression;
+    const baseText = baseExpr.getText(sourceFile);
 
-    // Handle property access chains (this.data.value)
-    if (ts.isPropertyAccessExpression(expr)) {
-      // Get the full path (e.g., "this.data")
-      const fullPath = expr.getText(sourceFile);
-      this.checkIdentifierAccess(fullPath, node, sourceFile, checkedVars);
-      return;
+    // Skip if already checked
+    if (checkedVars.has(baseText)) return;
+
+    // Check if base expression has weak<T> type
+    const baseType = checker.getTypeAtLocation(baseExpr);
+    if (!baseType) return;
+
+    // Try to detect weak<T> through type node
+    const baseTypeNode = checker.typeToTypeNode(baseType, baseExpr, ts.NodeBuilderFlags.None);
+    if (!baseTypeNode) return;
+
+    const isWeak = this.hasWeakAnnotation(baseTypeNode, sourceFile);
+    if (isWeak) {
+      this.reportNullCheckRequired(node, baseText, sourceFile);
     }
   }
 
   /**
-   * Check if an identifier access is safe
-   */
-  private checkIdentifierAccess(
-    varName: string,
-    node: ts.PropertyAccessExpression,
-    sourceFile: ts.SourceFile,
-    checkedVars: Set<string>
-  ): void {
-    const expr = node.expression;
-    
-    // Check if this is a weak reference
-    let ownershipInfo = this.ownershipAnalyzer.getOwnershipInfo(varName);
-    
-    // If not found and it's a property access chain, check if it's a field access
-    if (!ownershipInfo && ts.isPropertyAccessExpression(expr)) {
-      // For this.field, we need to look up field ownership differently
-      // For now, we'll check the type annotation on the node itself
-      ownershipInfo = this.inferOwnershipFromType(expr, sourceFile);
-    }
-    
-    // ALL weak references need null checks
-    // Only owned references (unique<T> or shared<T>) don't need checks
-    if (!ownershipInfo || ownershipInfo.kind !== OwnershipKind.Weak) {
-      // Not a weak reference (must be owned), no check needed
-      return;
-    }
-
-    // Check if variable has been null-checked in this scope
-    if (checkedVars.has(varName)) {
-      // Already checked, safe to access
-      return;
-    }
-
-    // Check if using optional chaining (user?.name)
-    if (node.questionDotToken) {
-      // Optional chaining is safe
-      return;
-    }
-
-    // ERROR: Accessing weak reference without null check
-    const location = Parser.getLocation(node, sourceFile);
-    const propertyName = node.name.getText(sourceFile);
-
-    this.addError(
-      `Cannot access property '${propertyName}' on weak reference '${varName}' without null check`,
-      location,
-      'GS301',
-      varName,
-      ownershipInfo
-    );
-  }
-
-  /**
-   * Infer ownership from a type annotation
-   */
-  private inferOwnershipFromType(
-    node: ts.Expression,
-    sourceFile: ts.SourceFile
-  ): OwnershipInfo | undefined {
-    // Look up in ownership analyzer first
-    const nodeName = node.getText(sourceFile);
-    const info = this.ownershipAnalyzer.getOwnershipInfo(nodeName);
-    if (info) {
-      return info;
-    }
-
-    // For property access expressions like "this.field", we need to find the field
-    if (ts.isPropertyAccessExpression(node)) {
-      const propertyName = node.name.getText(sourceFile);
-      
-      // Try to find the field declaration
-      const expr = node.expression;
-      if (expr.kind === ts.SyntaxKind.ThisKeyword) {
-        // Find containing class and check field
-        const classDecl = this.findContainingClass(node);
-        if (classDecl) {
-          const className = classDecl.name?.getText(sourceFile);
-          if (className) {
-            // Look up field ownership (className.fieldName)
-            const fieldInfo = this.ownershipAnalyzer.getOwnershipInfo(`${className}.${propertyName}`);
-            if (fieldInfo) {
-              return fieldInfo;
-            }
-            
-            // Also try just the field name
-            const fieldInfo2 = this.ownershipAnalyzer.getOwnershipInfo(propertyName);
-            if (fieldInfo2) {
-              return fieldInfo2;
-            }
-          }
-        }
-      }
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Find the containing class declaration
-   */
-  private findContainingClass(node: ts.Node): ts.ClassDeclaration | undefined {
-    let current = node.parent;
-    while (current) {
-      if (ts.isClassDeclaration(current)) {
-        return current;
-      }
-      current = current.parent;
-    }
-    return undefined;
-  }
-
-  /**
-   * Check element access for null safety
+   * Check element access for weak<T> null-safety
    */
   private checkElementAccess(
     node: ts.ElementAccessExpression,
     sourceFile: ts.SourceFile,
-    _checker: ts.TypeChecker,
+    checker: ts.TypeChecker,
     checkedVars: Set<string>
   ): void {
-    const expr = node.expression;
-    
-    if (!ts.isIdentifier(expr)) {
-      return;
+    const baseExpr = node.expression;
+    const baseText = baseExpr.getText(sourceFile);
+
+    // Skip if already checked
+    if (checkedVars.has(baseText)) return;
+
+    // Check if base expression has weak<T> type
+    const baseType = checker.getTypeAtLocation(baseExpr);
+    if (!baseType) return;
+
+    const baseTypeNode = checker.typeToTypeNode(baseType, baseExpr, ts.NodeBuilderFlags.None);
+    if (!baseTypeNode) return;
+
+    const isWeak = this.hasWeakAnnotation(baseTypeNode, sourceFile);
+    if (isWeak) {
+      this.reportNullCheckRequired(node, baseText, sourceFile);
     }
-
-    const varName = expr.getText(sourceFile);
-    
-    // Check if this is a weak reference (needs check)
-    const ownershipInfo = this.ownershipAnalyzer.getOwnershipInfo(varName);
-    if (!ownershipInfo || ownershipInfo.kind !== OwnershipKind.Weak) {
-      return;
-    }
-
-    // Check if variable has been null-checked
-    if (checkedVars.has(varName)) {
-      return;
-    }
-
-    // ERROR: Accessing weak reference without null check
-    const location = Parser.getLocation(node, sourceFile);
-
-    this.addError(
-      `Cannot access element on weak reference '${varName}' without null check`,
-      location,
-      'GS301',
-      varName,
-      ownershipInfo
-    );
   }
 
   /**
-   * Add an error diagnostic with helpful suggestions
+   * Report that a null check is required
    */
-  private addError(
-    message: string,
-    location: SourceLocation,
-    code: string,
+  private reportNullCheckRequired(
+    node: ts.Node,
     varName: string,
-    ownershipInfo: any
+    sourceFile: ts.SourceFile
   ): void {
-    // Build helpful error message with suggestions (Phase 2 syntax)
-    const fullMessage = `${message}
-  │
-  = note: '${varName}' is a weak reference (implicitly nullable) and requires null check
-  = help: bare types (without ownership wrappers) are weak references that may become null
-  = fix: add null check: if (${varName} !== null) { ... } or if (${varName} !== undefined) { ... }
-      or use optional chaining: ${varName}?.property
-      ${ownershipInfo.symbol === varName ? `or take ownership: unique<T> or shared<T> parameter` : ''}`;
-
     this.diagnostics.push({
       severity: 'error',
-      message: fullMessage,
-      location,
-      code,
+      code: 'GS302',
+      message: `Variable '${varName}' must be checked for null before use. ` +
+               `Use 'if (${varName} !== null)' or optional chaining '${varName}?.'`,
+      location: Parser.getLocation(node, sourceFile),
     });
   }
 }

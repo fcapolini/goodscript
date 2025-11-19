@@ -42,7 +42,7 @@ export class Compiler {
   constructor() {
     this.parser = new Parser();
     this.ownershipAnalyzer = new OwnershipAnalyzer();
-    this.nullCheckAnalyzer = new NullCheckAnalyzer(this.ownershipAnalyzer);
+    this.nullCheckAnalyzer = new NullCheckAnalyzer();
     this.validator = new Validator();
     this.tsCodegen = new TypeScriptCodegen();
   }

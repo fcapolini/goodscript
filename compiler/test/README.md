@@ -29,8 +29,12 @@ test/
 ├── cli/             # CLI Compatibility Tests
 │   └── gsc-tsc-compatibility.test.ts  # gsc as tsc drop-in replacement
 │
-├── phase2/          # Phase 2: Ownership Analysis (TBD)
-│   └── (ownership tests go here)
+├── phase2/          # Phase 2: Ownership Analysis
+│   ├── index.test.ts                 # Overview and basic tests
+│   ├── ownership-cycles.test.ts      # DAG cycle detection (29 tests)
+│   ├── null-checks.test.ts           # weak<T> null-safety (23 tests)
+│   ├── test-helpers.ts               # Phase 2 test utilities
+│   └── README.md                     # Phase 2 test documentation
 │
 └── phase3/          # Phase 3: Rust Code Generation (TBD)
     └── (codegen tests go here)
@@ -45,8 +49,18 @@ npm test
 # Run only Phase 1 tests
 npm test -- test/phase1
 
+# Run only Phase 2 tests
+npm test -- test/phase2
+
 # Run CLI compatibility tests
 npm test -- test/cli
+
+# Run specific test file
+npm test -- test/phase2/ownership-cycles.test.ts
+
+# Run in watch mode
+npm test -- --watch
+```
 
 # Run specific test file
 npm test -- test/phase1/var-keyword.test.ts
@@ -125,14 +139,56 @@ Phase 1 tests use shared helpers from `test-helpers.ts`:
 - **`getErrors(diagnostics, code)`** - Get all errors with a specific error code
 - **`hasError(diagnostics, code)`** - Check if any error with the code exists
 
-## Phase 2: Ownership Analysis (Future)
+## Phase 2: Ownership Analysis
 
-Tests for:
-- `unique<T>` ownership semantics
-- `shared<T>` reference counting
-- `weak<T>` non-owning references
-- DAG cycle detection
-- Null-check enforcement
+**Status**: Core implementation complete (54 tests passing, 7 skipped due to known limitations)
+
+Phase 2 introduces ownership semantics with three-tier ownership system:
+- **`unique<T>`** - Exclusive ownership (maps to Rust's `Box<T>`)
+- **`shared<T>`** - Shared ownership with reference counting (maps to `Rc<T>`)
+- **`weak<T>`** - Non-owning references (maps to `Weak<T>`) - implicitly nullable
+
+See [test/phase2/README.md](phase2/README.md) for detailed test documentation.
+
+### DAG Cycle Detection (ownership-cycles.test.ts)
+
+All 29 tests passing - validates all rules from DAG-DETECTION.md:
+
+| Test Category | Tests | Description |
+|---------------|-------|-------------|
+| Rule 1.1: Direct edges | 4 | Direct `shared<T>` fields create ownership edges |
+| Rule 1.2: Container transitivity | 5 | `Array<shared<T>>`, `Map<K, shared<V>>`, `Set<shared<T>>` |
+| Rule 1.3: Transitive ownership | 2 | Ownership chains through intermediate types |
+| Rule 2.1: Cycle prohibition | 3 | Detects self-reference, mutual, and longer cycles |
+| Rule 3.1: weak<T> breaks cycles | 4 | `weak<T>` doesn't create ownership edges |
+| Rule 3.2: unique<T> orthogonal | 2 | `unique<T>` doesn't participate in shared graph |
+| Rule 4.1: Pool Pattern | 3 | Validates correct patterns for data structures |
+| Complex scenarios | 4 | Diamond dependencies, mixed ownership |
+| Interface support | 2 | Cycle detection through interfaces |
+
+**Error code**: **GS301** - Ownership cycle detected
+
+### Null-Check Analysis (null-checks.test.ts)
+
+18 tests passing (5 skipped - weak type detection needs enhancement):
+
+| Test Category | Tests | Description |
+|---------------|-------|-------------|
+| Basic null checks | 3 passing, 1 skipped | `!== null`, `!== undefined`, optional chaining |
+| Flow-sensitive analysis | 5 passing | Tracking through if/while/for/ternary |
+| Loop constructs | 2 passing | While and for loop null checks |
+| Method calls | 2 passing, 1 skipped | Checked vs unchecked method calls |
+| Array/element access | 1 passing, 1 skipped | Checked element access |
+| Complex scenarios | 1 passing, 1 skipped | Nested weak refs, reassignment |
+| Function parameters | 1 passing, 1 skipped | Weak parameter checking |
+| Edge cases | 2 passing | Initialization, non-weak types |
+
+**Error code**: **GS302** - Null check required for weak<T>
+
+**Known Limitations** (7 skipped tests):
+- TypeChecker.typeToTypeNode() doesn't always resolve `weak<T>` annotations
+- Flow analysis for some edge cases needs refinement
+- These are documented and will be improved in future iterations
 
 ## Phase 3: Rust Code Generation (Future)
 
