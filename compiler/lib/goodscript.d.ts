@@ -6,20 +6,20 @@
 /**
  * Exclusive Ownership type - indicates a variable exclusively owns a value
  */
-declare type unique<T> = T;
+declare type Unique<T> = T;
 
 /**
  * Shared Ownership type - indicates a variable potentially shares a value
  * This contributes to reference counting
  */
-declare type shared<T> = T;
+declare type Shared<T> = T;
 
 /**
  * Weak Reference type - indicates a variable uses a value it doesn't own
  * Weak references are implicitly nullable (can be null or undefined)
  * GoodScript treats null and undefined as synonyms
  */
-declare type weak<T> = T | null | undefined;
+declare type Weak<T> = T | null | undefined;
 
 /**
  * Console interface for output

@@ -116,7 +116,37 @@ export class Parser {
     const compilerHost = ts.createCompilerHost(defaultOptions);
     const originalGetSourceFile = compilerHost.getSourceFile;
     
+    // GoodScript built-in type definitions (injected as virtual file)
+    const goodscriptTypes = `
+/**
+ * GoodScript built-in type definitions
+ */
+
+/**
+ * Exclusive Ownership type - indicates a variable exclusively owns a value
+ */
+declare type Unique<T> = T;
+
+/**
+ * Shared Ownership type - indicates a variable potentially shares a value
+ * This contributes to reference counting
+ */
+declare type Shared<T> = T;
+
+/**
+ * Weak Reference type - indicates a variable uses a value it doesn't own
+ * Weak references are implicitly nullable (can be null or undefined)
+ * GoodScript treats null and undefined as synonyms
+ */
+declare type Weak<T> = T | null | undefined;
+`;
+    
     compilerHost.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+      // Inject GoodScript type definitions as a virtual file
+      if (fileName === libPath) {
+        return ts.createSourceFile(fileName, goodscriptTypes, languageVersion, true);
+      }
+      
       // Treat .gs.ts, .gs.tsx and .gs files as TypeScript files
       if (fileName.endsWith('.gs.ts') || fileName.endsWith('.gs.tsx') || fileName.endsWith('.gs')) {
         const fs = require('fs');

@@ -23,7 +23,7 @@ describe('Phase 2: Ownership Analysis Overview', () => {
   it('should skip ownership checks with level="clean"', () => {
     const source = `
       class Node {
-        next: shared<Node> | null = null;  // Would be error in dag mode
+        next: Shared<Node> | null = null;  // Would be error in dag mode
       }
     `;
     
@@ -34,9 +34,9 @@ describe('Phase 2: Ownership Analysis Overview', () => {
   it('should validate ownership types are recognized', () => {
     const source = `
       class Container {
-        unique_item: unique<Item> | null = null;
-        shared_item: shared<Item> | null = null;
-        weak_item: weak<Item> = null;
+        unique_item: Unique<Item> | null = null;
+        shared_item: Shared<Item> | null = null;
+        weak_item: Weak<Item> = null;
       }
       
       class Item {
@@ -53,10 +53,10 @@ describe('Phase 2: Ownership Analysis Overview', () => {
     it('should report GS301 for ownership cycles', () => {
       const source = `
         class A {
-          b: shared<B> | null = null;
+          b: Shared<B> | null = null;
         }
         class B {
-          a: shared<A> | null = null;
+          a: Shared<A> | null = null;
         }
       `;
       
@@ -67,7 +67,7 @@ describe('Phase 2: Ownership Analysis Overview', () => {
     it('should report GS302 for missing null checks', () => {
       const source = `
         class Container {
-          item: weak<Item> = null;
+          item: Weak<Item> = null;
           
           getValue(): number {
             return this.item.value;
@@ -86,33 +86,39 @@ describe('Phase 2: Ownership Analysis Overview', () => {
   
   describe('Real-world patterns', () => {
     
-    // TODO: TypeScript errors for array of unique<T> - type compatibility issue
-    it.skip('should accept Pool Pattern for data structures', () => {
+    it('should accept Pool Pattern for data structures', () => {
       const source = `
         // Pool Pattern: centralized ownership
-        class NodePool {
-          nodes: unique<Node>[] = [];
+        class TreeNode {
+          next: Weak<TreeNode> = null;
+          prev: Weak<TreeNode> = null;
+          value: number = 0;
         }
         
-        class Node {
-          next: weak<Node> = null;
-          prev: weak<Node> = null;
-          value: number = 0;
+        class NodePool {
+          nodes: Unique<TreeNode>[] = [];
         }
       `;
       
       const result = compileWithOwnership(source);
+      if (!isSuccess(result)) {
+        console.log('Failed:');
+        result.diagnostics.forEach(d => {
+          console.log(`  [${d.code}] ${d.message}`);
+          console.log(`    at ${d.location.fileName}:${d.location.line}:${d.location.column}`);
+        });
+      }
       expect(isSuccess(result)).toBe(true);
     });
     
     it('should accept parent-child with weak back-reference', () => {
       const source = `
         class Parent {
-          children: shared<Child>[] = [];
+          children: Shared<Child>[] = [];
         }
         
         class Child {
-          parent: weak<Parent> = null;
+          parent: Weak<Parent> = null;
           value: string = '';
         }
       `;
@@ -124,7 +130,7 @@ describe('Phase 2: Ownership Analysis Overview', () => {
     it('should accept observer pattern with weak references', () => {
       const source = `
         class Subject {
-          observers: weak<Observer>[] = [];
+          observers: Weak<Observer>[] = [];
           
           notify(): void {
             for (const obs of this.observers) {
@@ -148,7 +154,7 @@ describe('Phase 2: Ownership Analysis Overview', () => {
     it('should enforce ownership rules only in dag/rust level', () => {
       const source = `
         class Node {
-          next: shared<Node> | null = null;
+          next: Shared<Node> | null = null;
         }
       `;
       

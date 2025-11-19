@@ -4,17 +4,17 @@
  * Implements the DAG (Directed Acyclic Graph) check as specified in DAG-DETECTION.md.
  * 
  * Core Principles:
- * 1. Types are Nodes, shared<T> relationships are Edges
- * 2. Only shared<T> creates ownership edges (unique<T> and weak<T> do NOT)
+ * 1. Types are Nodes, Shared<T> relationships are Edges
+ * 2. Only Shared<T> creates ownership edges (Unique<T> and Weak<T> do NOT)
  * 3. The entire type graph must be acyclic (DAG)
  * 
  * Rules:
- * - Rule 1.1: Direct shared<T> field creates edge (A -> B)
- * - Rule 1.2: Container transitivity (Array<shared<B>>, Map<K, shared<D>>)
+ * - Rule 1.1: Direct Shared<T> field creates edge (A -> B)
+ * - Rule 1.2: Container transitivity (Array<Shared<B>>, Map<K, Shared<D>>)
  * - Rule 1.3: Intermediate wrapper transitivity (transitive ownership)
  * - Rule 2.1: Self-ownership prohibition (no cycles allowed)
- * - Rule 3.1: weak<T> is NOT an edge (breaks cycles)
- * - Rule 3.2: unique<T> is NOT an edge (orthogonal graph)
+ * - Rule 3.1: Weak<T> is NOT an edge (breaks cycles)
+ * - Rule 3.2: Unique<T> is NOT an edge (orthogonal graph)
  * - Rule 4.1: Pool Pattern enforcement (reject potentially cyclic structures)
  */
 
@@ -198,12 +198,12 @@ export class OwnershipAnalyzer {
     if (ts.isTypeReferenceNode(typeNode)) {
       const typeName = typeNode.typeName.getText(sourceFile);
       
-      if (typeName === 'weak' || typeName === 'unique') {
+      if (typeName === 'Weak' || typeName === 'Unique') {
         return ownedTypes; // Empty set - these don't create ownership edges
       }
       
-      // Rule 1.1: Direct shared<T> field
-      if (typeName === 'shared' && typeNode.typeArguments && typeNode.typeArguments.length > 0) {
+      // Rule 1.1: Direct Shared<T> field
+      if (typeName === 'Shared' && typeNode.typeArguments && typeNode.typeArguments.length > 0) {
         const targetType = this.getTypeNameFromTypeNode(typeNode.typeArguments[0], sourceFile);
         if (targetType) {
           ownedTypes.add(targetType);
@@ -212,14 +212,14 @@ export class OwnershipAnalyzer {
       }
       
       // Rule 1.2: Container transitivity
-      // Array<shared<T>> or Set<shared<T>>
+      // Array<Shared<T>> or Set<Shared<T>>
       if ((typeName === 'Array' || typeName === 'Set') && 
           typeNode.typeArguments && typeNode.typeArguments.length > 0) {
         const elementType = typeNode.typeArguments[0];
-        // Check if element is shared<T>
+        // Check if element is Shared<T>
         if (ts.isTypeReferenceNode(elementType)) {
           const elementTypeName = elementType.typeName.getText(sourceFile);
-          if (elementTypeName === 'shared' && 
+          if (elementTypeName === 'Shared' && 
               elementType.typeArguments && elementType.typeArguments.length > 0) {
             const targetType = this.getTypeNameFromTypeNode(elementType.typeArguments[0], sourceFile);
             if (targetType) {
@@ -230,13 +230,13 @@ export class OwnershipAnalyzer {
         return ownedTypes;
       }
       
-      // Rule 1.2: Map<K, shared<V>>
+      // Rule 1.2: Map<K, Shared<V>>
       if (typeName === 'Map' && typeNode.typeArguments && typeNode.typeArguments.length === 2) {
         const valueType = typeNode.typeArguments[1];
-        // Check if value is shared<T>
+        // Check if value is Shared<T>
         if (ts.isTypeReferenceNode(valueType)) {
           const valueTypeName = valueType.typeName.getText(sourceFile);
-          if (valueTypeName === 'shared' && 
+          if (valueTypeName === 'Shared' && 
               valueType.typeArguments && valueType.typeArguments.length > 0) {
             const targetType = this.getTypeNameFromTypeNode(valueType.typeArguments[0], sourceFile);
             if (targetType) {
@@ -248,12 +248,12 @@ export class OwnershipAnalyzer {
       }
     }
 
-    // Rule 1.2: Array type syntax (shared<T>[])
+    // Rule 1.2: Array type syntax (Shared<T>[])
     if (ts.isArrayTypeNode(typeNode)) {
       const elementType = typeNode.elementType;
       if (ts.isTypeReferenceNode(elementType)) {
         const elementTypeName = elementType.typeName.getText(sourceFile);
-        if (elementTypeName === 'shared' && 
+        if (elementTypeName === 'Shared' && 
             elementType.typeArguments && elementType.typeArguments.length > 0) {
           const targetType = this.getTypeNameFromTypeNode(elementType.typeArguments[0], sourceFile);
           if (targetType) {

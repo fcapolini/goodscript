@@ -1,7 +1,7 @@
 /**
- * Phase 2 Tests: Null-Check Analysis for weak<T>
+ * Phase 2 Tests: Null-Check Analysis for Weak<T>
  * 
- * Tests for weak<T> null-safety enforcement:
+ * Tests for Weak<T> null-safety enforcement:
  * - Flow-sensitive null checking
  * - Various check patterns (===, !==, &&, ?., etc.)
  * - Control flow (if, while, for, ternary)
@@ -13,12 +13,12 @@ import { compileWithOwnership, hasError, getErrors } from './test-helpers';
 
 describe('Phase 2: Null-Check Analysis', () => {
   
-  describe('Basic weak<T> null checks', () => {
+  describe('Basic Weak<T> null checks', () => {
     
     it('should require null check before property access', () => {
       const source = `
         class Container {
-          item: weak<Item> = null;
+          item: Weak<Item> = null;
           
           getValue(): number {
             return this.item.value;  // Error: no null check
@@ -38,7 +38,7 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should accept !== null check', () => {
       const source = `
         class Container {
-          item: weak<Item> = null;
+          item: Weak<Item> = null;
           
           getValue(): number {
             if (this.item !== null) {
@@ -60,7 +60,7 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should accept !== undefined check', () => {
       const source = `
         class Container {
-          item: weak<Item> = null;
+          item: Weak<Item> = null;
           
           getValue(): number {
             if (this.item !== undefined) {
@@ -82,7 +82,7 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should accept optional chaining without explicit check', () => {
       const source = `
         class Container {
-          item: weak<Item> = null;
+          item: Weak<Item> = null;
           
           getValue(): number | undefined {
             return this.item?.value;  // OK: optional chaining
@@ -104,7 +104,7 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should track null check through if statement', () => {
       const source = `
         class Container {
-          item: weak<Item> = null;
+          item: Weak<Item> = null;
           
           process(): void {
             if (this.item !== null) {
@@ -127,7 +127,7 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should not allow access in else branch without check', () => {
       const source = `
         class Container {
-          item: weak<Item> = null;
+          item: Weak<Item> = null;
           
           process(): number {
             if (this.item === null) {
@@ -151,7 +151,7 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should track early return pattern', () => {
       const source = `
         class Container {
-          item: weak<Item> = null;
+          item: Weak<Item> = null;
           
           getValue(): number {
             if (this.item === null) {
@@ -175,7 +175,7 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should support && short-circuit pattern', () => {
       const source = `
         class Container {
-          item: weak<Item> = null;
+          item: Weak<Item> = null;
           
           getValue(): number {
             return this.item !== null && this.item.value || 0;
@@ -194,7 +194,7 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should support ternary conditional', () => {
       const source = `
         class Container {
-          item: weak<Item> = null;
+          item: Weak<Item> = null;
           
           getValue(): number {
             return this.item !== null ? this.item.value : 0;
@@ -216,7 +216,7 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should track null check in while loop', () => {
       const source = `
         class LinkedList {
-          head: weak<Node> = null;
+          head: Weak<Node> = null;
           
           traverse(): void {
             let current = this.head;
@@ -229,7 +229,7 @@ describe('Phase 2: Null-Check Analysis', () => {
         
         class Node {
           value: number = 0;
-          next: weak<Node> = null;
+          next: Weak<Node> = null;
         }
       `;
       
@@ -240,7 +240,7 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should track null check in for loop', () => {
       const source = `
         class Container {
-          item: weak<Item> = null;
+          item: Weak<Item> = null;
           
           process(): void {
             for (let i = 0; this.item !== null && i < 10; i++) {
@@ -264,7 +264,7 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should require null check before method call', () => {
       const source = `
         class Container {
-          item: weak<Item> = null;
+          item: Weak<Item> = null;
           
           process(): void {
             this.item.doSomething();  // Error: no null check
@@ -283,7 +283,7 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should accept checked method call', () => {
       const source = `
         class Container {
-          item: weak<Item> = null;
+          item: Weak<Item> = null;
           
           process(): void {
             if (this.item !== null) {
@@ -304,7 +304,7 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should accept optional chaining for method call', () => {
       const source = `
         class Container {
-          item: weak<Item> = null;
+          item: Weak<Item> = null;
           
           process(): void {
             this.item?.doSomething();  // OK: optional chaining
@@ -326,7 +326,7 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should require null check before element access', () => {
       const source = `
         class Container {
-          items: weak<ItemList> = null;
+          items: Weak<ItemList> = null;
           
           getFirst(): number {
             return this.items[0];  // Error: no null check
@@ -345,7 +345,7 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should accept checked element access', () => {
       const source = `
         class Container {
-          items: weak<number[]> = null;
+          items: Weak<number[]> = null;
           
           getFirst(): number {
             if (this.items !== null) {
@@ -366,9 +366,9 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should invalidate check on reassignment', () => {
       const source = `
         class Container {
-          item: weak<Item> = null;
+          item: Weak<Item> = null;
           
-          process(newItem: weak<Item>): number {
+          process(newItem: Weak<Item>): number {
             if (this.item !== null) {
               this.item = newItem;  // Reassignment
               return this.item.value;  // Error: check invalidated
@@ -389,7 +389,7 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should handle nested weak references', () => {
       const source = `
         class Root {
-          child: weak<Child> = null;
+          child: Weak<Child> = null;
           
           getValue(): number {
             if (this.child !== null) {
@@ -402,7 +402,7 @@ describe('Phase 2: Null-Check Analysis', () => {
         }
         
         class Child {
-          grandchild: weak<Grandchild> = null;
+          grandchild: Weak<Grandchild> = null;
         }
         
         class Grandchild {
@@ -417,8 +417,8 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should handle multiple weak references', () => {
       const source = `
         class Container {
-          item1: weak<Item> = null;
-          item2: weak<Item> = null;
+          item1: Weak<Item> = null;
+          item2: Weak<Item> = null;
           
           process(): void {
             if (this.item1 !== null && this.item2 !== null) {
@@ -439,10 +439,10 @@ describe('Phase 2: Null-Check Analysis', () => {
   
   describe('Function parameters', () => {
     
-    it('should require null check for weak<T> parameters', () => {
+    it('should require null check for Weak<T> parameters', () => {
       const source = `
         class Processor {
-          process(item: weak<Item>): number {
+          process(item: Weak<Item>): number {
             return item.value;  // Error: parameter not checked
           }
         }
@@ -456,10 +456,10 @@ describe('Phase 2: Null-Check Analysis', () => {
       expect(hasError(result.diagnostics, 'GS302')).toBe(true);
     });
     
-    it('should accept checked weak<T> parameters', () => {
+    it('should accept checked Weak<T> parameters', () => {
       const source = `
         class Processor {
-          process(item: weak<Item>): number {
+          process(item: Weak<Item>): number {
             if (item !== null) {
               return item.value;  // OK: parameter checked
             }
@@ -479,11 +479,11 @@ describe('Phase 2: Null-Check Analysis', () => {
   
   describe('Edge cases', () => {
     
-    it('should allow weak<T> initialization', () => {
+    it('should allow Weak<T> initialization', () => {
       const source = `
         class Container {
-          item: weak<Item> = null;
-          other: weak<Item> = undefined;
+          item: Weak<Item> = null;
+          other: Weak<Item> = undefined;
         }
         
         class Item {
@@ -498,10 +498,10 @@ describe('Phase 2: Null-Check Analysis', () => {
     it('should not require check for non-weak references', () => {
       const source = `
         class Container {
-          item: shared<Item> | null = null;
+          item: Shared<Item> | null = null;
           
           getValue(): number {
-            // No GS302 error expected - this is not weak<T>
+            // No GS302 error expected - this is not Weak<T>
             // (might get TypeScript error though)
             return this.item.value;
           }
@@ -513,7 +513,7 @@ describe('Phase 2: Null-Check Analysis', () => {
       `;
       
       const result = compileWithOwnership(source);
-      // Should not have GS302 error (our null-check is only for weak<T>)
+      // Should not have GS302 error (our null-check is only for Weak<T>)
       expect(hasError(result.diagnostics, 'GS302')).toBe(false);
     });
   });

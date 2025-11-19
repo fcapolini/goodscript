@@ -21,7 +21,7 @@ export function compileWithOwnership(
   fileName: string = 'test.gs.ts',
   level: 'dag' | 'rust' = 'dag'
 ): CompileSourceResult {
-  // Create a temporary directory
+    // Create a temporary directory
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goodscript-phase2-'));
   const filePath = path.join(tmpDir, fileName);
   const tsconfigPath = path.join(tmpDir, 'tsconfig.json');

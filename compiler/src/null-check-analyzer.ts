@@ -1,12 +1,12 @@
 /**
  * Null-Check Analyzer
  * 
- * Enforces null-safety for weak<T> references based on DAG-DETECTION.md principles.
+ * Enforces null-safety for Weak<T> references based on DAG-DETECTION.md principles.
  * 
  * Key Concepts:
- * 1. weak<T> is implicitly nullable (equivalent to T | null | undefined)
+ * 1. Weak<T> is implicitly nullable (equivalent to T | null | undefined)
  * 2. Both null and undefined are treated as synonyms in GoodScript
- * 3. weak<T> references must be checked before dereferencing
+ * 3. Weak<T> references must be checked before dereferencing
  * 4. Flow-sensitive analysis tracks null checks through control flow
  * 
  * Checking Patterns:
@@ -112,18 +112,18 @@ export class NullCheckAnalyzer {
   }
 
   /**
-   * Check if a type node has weak<T> annotation
+   * Check if a type node has Weak<T> annotation
    */
   private hasWeakAnnotation(typeNode: ts.TypeNode, sourceFile: ts.SourceFile): boolean {
-    // Direct weak<T> reference
+    // Direct Weak<T> reference
     if (ts.isTypeReferenceNode(typeNode)) {
       const typeName = typeNode.typeName.getText(sourceFile);
-      if (typeName === 'weak') {
+      if (typeName === 'Weak') {
         return true;
       }
     }
 
-    // Union type containing weak<T>
+    // Union type containing Weak<T>
     if (ts.isUnionTypeNode(typeNode)) {
       for (const member of typeNode.types) {
         if (this.hasWeakAnnotation(member, sourceFile)) {
