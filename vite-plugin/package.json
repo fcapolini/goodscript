@@ -1,7 +1,8 @@
 {
   "name": "vite-plugin-goodscript",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Vite plugin for GoodScript - compile .gs.ts files on-the-fly with full HMR support",
+  "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
