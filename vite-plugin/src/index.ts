@@ -190,12 +190,12 @@ export default function goodscriptPlugin(
  * Supports ** (multi-level) and * (single-level) wildcards
  */
 function matchGlob(filepath: string, pattern: string): boolean {
-  // Convert glob pattern to regex
+  // Escape special regex characters except * and /
   const regexPattern = pattern
-    .replace(/\*\*/g, '§DOUBLESTAR§')
-    .replace(/\*/g, '[^/]*')
-    .replace(/§DOUBLESTAR§/g, '.*')
-    .replace(/\./g, '\\.');
+    .replace(/\./g, '\\.')  // Escape dots first
+    .replace(/\*\*/g, '§DOUBLESTAR§')  // Temporarily mark **
+    .replace(/\*/g, '[^/]*')  // Single * matches anything except /
+    .replace(/§DOUBLESTAR§/g, '.*');  // ** matches anything including /
   
   const regex = new RegExp(`^${regexPattern}$`);
   return regex.test(filepath);
