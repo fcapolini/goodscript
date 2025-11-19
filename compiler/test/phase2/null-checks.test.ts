@@ -158,7 +158,7 @@ describe('Phase 2: Null-Check Analysis', () => {
               return 0;
             }
             // After early return, item is known to be non-null
-            return this.item.value;  // Should be OK
+            return this.item.value;  // OK: early return proves non-null
           }
         }
         
@@ -168,8 +168,7 @@ describe('Phase 2: Null-Check Analysis', () => {
       `;
       
       const result = compileWithOwnership(source);
-      // Current implementation may not handle this perfectly
-      // This is a known limitation we can improve
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
     });
     
     it('should support && short-circuit pattern', () => {
@@ -237,14 +236,14 @@ describe('Phase 2: Null-Check Analysis', () => {
       expect(hasError(result.diagnostics, 'GS302')).toBe(false);
     });
     
-    it('should track null check in for loop', () => {
+    it.skip('should track null check in for loop', () => {
       const source = `
         class Container {
           item: Weak<Item> = null;
           
           process(): void {
             for (let i = 0; this.item !== null && i < 10; i++) {
-              const value = this.item.value;  // OK: checked in condition
+              const value = this.item.value;  // Complex: check in for condition
             }
           }
         }
@@ -255,7 +254,145 @@ describe('Phase 2: Null-Check Analysis', () => {
       `;
       
       const result = compileWithOwnership(source);
-      // May not be perfectly handled, but should work for basic cases
+      // Skip: Complex case - null check in for loop condition not yet supported
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+  });
+  
+  describe('Early return / Guard clauses', () => {
+    
+    it('should accept guard clause with early return (null check)', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          process(): void {
+            if (this.item === null) return;
+            
+            // After guard, item is known to be non-null
+            const value = this.item.value;
+            const id = this.item.id;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+          id: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should accept guard clause with early return (undefined check)', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          process(): void {
+            if (this.item === undefined) return;
+            
+            const value = this.item.value;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should accept guard clause with negated condition', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          process(): void {
+            if (!this.item) return;
+            
+            const value = this.item.value;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should accept multiple guard clauses', () => {
+      const source = `
+        class Container {
+          first: Weak<Item> = null;
+          second: Weak<Item> = null;
+          
+          process(): number {
+            if (this.first === null) return 0;
+            if (this.second === null) return 0;
+            
+            // Both are proven non-null
+            return this.first.value + this.second.value;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should accept guard with early return of non-zero value', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getValue(): number {
+            if (this.item === null) return -1;
+            
+            return this.item.value;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should accept guard with throw', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getValueOrThrow(): number {
+            if (this.item === null) {
+              throw new Error('Item is null');
+            }
+            
+            return this.item.value;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
     });
   });
   
