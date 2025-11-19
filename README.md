@@ -221,6 +221,32 @@ The extension provides:
 - Configurable validation settings
 - Client-side checking (no compiler required for basic validation)
 
+### Vite Plugin
+
+For Vite-based projects (React, Vue, vanilla TypeScript), use the official plugin:
+
+```bash
+npm install --save-dev vite-plugin-goodscript
+```
+
+```typescript
+// vite.config.ts
+import { defineConfig } from 'vite';
+import goodscript from 'vite-plugin-goodscript';
+
+export default defineConfig({
+  plugins: [goodscript()],
+});
+```
+
+The plugin provides:
+- Automatic compilation of `.gs.ts` and `.gs.tsx` files
+- Hot module replacement (HMR) support
+- Error overlay with GoodScript diagnostics
+- Works with React, Vue, and vanilla TypeScript projects
+
+**NPM**: [`vite-plugin-goodscript@0.1.2`](https://www.npmjs.com/package/vite-plugin-goodscript)
+
 ## JSX/TSX Support
 
 GoodScript supports React and JSX syntax via `.gs.tsx` files:
