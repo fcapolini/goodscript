@@ -28,7 +28,7 @@ Write clean TypeScript. Get native performance. No borrow checker required.
 
 The first part gets rid of JS baggage and results in a more robust, cleaner language overall. It can serve as a stricter replacement for TypeScript, offering better maintainability.
 
-> The name GoodScript is a reference to "JavaScript: The Good Parts" by Douglas Crockford, from which this phylosophy was taken.
+> The name GoodScript is a reference to "JavaScript: The Good Parts" by Douglas Crockford, from which this philosophy was taken.
 
 The secont part leverages what is now an enterprise level, fully statically typed language to add deterministic and efficient memory handling and making it compilable to self-contained binary executables.
 
