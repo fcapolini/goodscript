@@ -325,6 +325,60 @@ describe('Phase 2: Null-Check Analysis', () => {
       const result = compileWithOwnership(source);
       expect(hasError(result.diagnostics, 'GS302')).toBe(false);
     });
+
+    it('should accept break in switch statement', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          process(mode: number): number {
+            switch (mode) {
+              case 0:
+                if (this.item === null) break;
+                return this.item.value;  // Safe after null check
+              case 1:
+                return 0;
+              default:
+                return -1;
+            }
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+
+    it('should handle fallthrough in switch', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          process(mode: number): number {
+            switch (mode) {
+              case 0:
+                if (this.item === null) return -1;
+                // Falls through to case 1
+              case 1:
+                return this.item.value;  // Safe - checked in case 0
+              default:
+                return 0;
+            }
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
   });
   
   describe('Early return / Guard clauses', () => {
