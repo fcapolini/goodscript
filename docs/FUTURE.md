@@ -302,16 +302,21 @@ const [first, ...rest]: unique<Array<T>> = items // Partial moves?
 
 **Critical for React/web development adoption.** Without build tool integration, the developer experience is poor (manual pre-compilation, no HMR).
 
-#### Vite Plugin (High Priority)
+#### Vite Plugin ✅ PUBLISHED
 
-**Package**: `@goodscript/vite-plugin` or `vite-plugin-goodscript`
+**Package**: `vite-plugin-goodscript` (published on npm)
+
+**Installation**:
+```bash
+npm install --save-dev vite-plugin-goodscript goodscript
+```
 
 **Usage**:
 ```typescript
 // vite.config.ts
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import goodscript from '@goodscript/vite-plugin';
+import goodscript from 'vite-plugin-goodscript';
 
 export default defineConfig({
   plugins: [
@@ -411,13 +416,18 @@ export default function goodscriptPlugin(options: GoodScriptPluginOptions = {}):
 ```
 
 **Features**:
-- ✅ Real-time compilation during dev
-- ✅ Full HMR support
-- ✅ Proper error reporting in Vite overlay
+- ✅ Real-time compilation during dev (IMPLEMENTED)
+- ✅ Full HMR support (IMPLEMENTED)
+- ✅ Proper error reporting in Vite overlay (IMPLEMENTED)
+- ✅ File caching based on modification time (IMPLEMENTED)
+- ✅ Framework-agnostic (React, Vue, Svelte, vanilla TS) (IMPLEMENTED)
 - ⚠️ Source maps (TODO)
-- ⚠️ Caching for performance (TODO)
 
-**Complexity**: LOW - Vite plugins are straightforward
+**Status**: ✅ Published as `vite-plugin-goodscript@0.1.1`
+
+**Links**:
+- npm: https://www.npmjs.com/package/vite-plugin-goodscript
+- Source: https://github.com/fcapolini/goodscript/tree/main/vite-plugin
 
 #### Webpack Loader (Medium Priority)
 

@@ -10,6 +10,9 @@
 		{
 			"path": "extension"
 		},
+		{
+			"path": "vite-plugin"
+		}
 	],
 	"settings": {
 		"files.exclude": {
@@ -19,7 +22,8 @@
 			"**/.DS_Store": true,
 			"**/Thumbs.db": true,
 			"compiler": true,
-			"extension": true
+			"extension": true,
+			"vite-plugin": true
 		},
 		"explorerExclude.backup": {}
 	}

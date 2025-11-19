@@ -90,9 +90,15 @@ src/**/*.tsx
 !src/**/*.gs.tsx
 ```
 
-### Option 2: Vite Plugin (Recommended - Coming Soon)
+### Option 2: Vite Plugin (Recommended) ✅
 
 Real-time compilation during development with full hot reload support.
+
+**Installation:**
+
+```bash
+npm install --save-dev vite-plugin-goodscript goodscript
+```
 
 **Setup:**
 
@@ -100,7 +106,7 @@ Real-time compilation during development with full hot reload support.
 // vite.config.ts
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import goodscript from '@goodscript/vite-plugin';
+import goodscript from 'vite-plugin-goodscript';
 
 export default defineConfig({
   plugins: [
@@ -129,7 +135,11 @@ export default defineConfig({
 - Requires plugin installation
 - Vite-specific (other plugins needed for webpack/etc)
 
-**Status:** 🚧 Plugin not yet implemented - see [Future Roadmap](#future-roadmap)
+**Status:** ✅ Available on npm as `vite-plugin-goodscript`
+
+**Links:**
+- npm: https://www.npmjs.com/package/vite-plugin-goodscript
+- Source: https://github.com/fcapolini/goodscript/tree/main/vite-plugin
 
 ### Option 3: Webpack Loader (Coming Soon)
 
@@ -403,7 +413,7 @@ Similar to Next.js, use pre-compilation until a Remix-specific plugin is availab
 ### Short Term
 - ✅ JSX/TSX syntax support (Complete)
 - ✅ Language level configuration (Complete)
-- 🚧 Vite plugin for seamless integration
+- ✅ Vite plugin for seamless integration (published)
 - 🚧 Watch mode for development
 
 ### Medium Term
