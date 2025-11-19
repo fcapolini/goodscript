@@ -7,8 +7,15 @@ Tests are organized by implementation phase to match the language development ro
 ```
 test/
 ├── phase1/          # Phase 1: Strict TypeScript Semantics
+│   ├── fixtures/                  # Phase 1 compliant source files
+│   │   ├── basic-functions.gs.ts  # Arrow functions, rest parameters
+│   │   ├── control-flow.gs.ts     # if/else, for-of, switch
+│   │   ├── classes.gs.ts          # Class declarations and methods
+│   │   ├── types.gs.ts            # Interfaces, generics, type unions
+│   │   └── null-handling.gs.ts    # null/undefined semantics
 │   ├── index.test.ts              # Test suite entry point
 │   ├── test-helpers.ts            # Shared test utilities
+│   ├── codegen-comparison.test.ts # Fixture validation tests
 │   ├── var-keyword.test.ts        # GS105: No var keyword
 │   ├── strict-equality.test.ts    # GS106/107: === and !== only
 │   ├── arrow-functions.test.ts    # GS108: Arrow functions only
@@ -17,6 +24,9 @@ test/
 │   ├── no-with.test.ts            # GS101: No with statement
 │   ├── no-eval.test.ts            # GS102: No eval function
 │   └── no-type-coercion.test.ts   # GS201: No implicit type coercion
+│
+├── cli/             # CLI Compatibility Tests
+│   └── gsc-tsc-compatibility.test.ts  # gsc as tsc drop-in replacement
 │
 ├── phase2/          # Phase 2: Ownership Analysis (TBD)
 │   └── (ownership tests go here)
@@ -33,6 +43,9 @@ npm test
 
 # Run only Phase 1 tests
 npm test -- test/phase1
+
+# Run CLI compatibility tests
+npm test -- test/cli
 
 # Run specific test file
 npm test -- test/phase1/var-keyword.test.ts
@@ -59,6 +72,34 @@ Phase 1 tests verify that GoodScript correctly enforces the "Good Parts" restric
 | `no-type-coercion.test.ts` | GS201 | No mixing string and number types |
 
 See [docs/GOOD-PARTS.md](../../docs/GOOD-PARTS.md) for detailed rationale and examples.
+
+## Test Fixtures
+
+Phase 1 includes realistic fixture files demonstrating Phase 1 compliant code:
+
+- **`basic-functions.gs.ts`** - Arrow functions, rest parameters, nested functions
+- **`control-flow.gs.ts`** - if/else, for-of loops, switch statements
+- **`classes.gs.ts`** - Class declarations, methods, constructors, private/readonly
+- **`types.gs.ts`** - Interfaces, type aliases, generics, union types
+- **`null-handling.gs.ts`** - null/undefined as synonyms, optional chaining patterns
+
+These fixtures are validated to:
+1. Be valid TypeScript (compile without errors)
+2. Have no GoodScript Phase 1 violations
+3. Not contain any forbidden constructs (var, ==, function keyword, etc.)
+4. Generate identical JavaScript when compiled via GoodScript vs TypeScript
+
+## CLI Compatibility Tests
+
+The CLI test suite (`test/cli/`) validates that `gsc` can be used as a drop-in replacement for `tsc`:
+
+- **Command-line arguments** - All tsc-compatible flags (--help, --version, --out-dir, --project, etc.)
+- **tsconfig.json handling** - Auto-discovery, respect for settings, CLI overrides
+- **Mixed projects** - Handles both .ts and .gs.ts files correctly
+- **Exit codes** - Returns 0 on success, non-zero on errors
+- **File resolution** - Absolute and relative paths
+
+The CLI tests use real subprocess execution to validate end-to-end behavior.
 
 ## Test Helpers
 

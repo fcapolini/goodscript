@@ -1,151 +1,189 @@
-# GoodScript
+# GoodScript Compiler
 
-> **Rust performance for the rest of us**
+The GoodScript compiler (`gsc`) transforms GoodScript (`.gs.ts`) files into JavaScript/TypeScript or Rust, enforcing ownership semantics and memory safety guarantees.
 
-Write clean TypeScript. Get native performance. No borrow checker required.
+## Overview
 
----
+The compiler implements GoodScript in three phases:
 
-> ⚠️ **ALPHA STAGE**: GoodScript is under active development. Phase 1 (parsing, validation, JS target) is underway. Phase 2 (ownership analysis, implicit nullability) is next. Phase 3 (Rust code generation) will follow. APIs and language features may change.
-
----
-
-**GoodScript** is two things:
-
-- **A TypeScript variant with the "Good Parts" only**
-  - Fully statically typed (no `any` type, no `eval`, no dynamic runtime types)
-  - No type coercion, no `var`, no truthiness, no `this` surprises
-  - Strict equality operators only (`===`, `!==`)
-  - GoodScript sources use the `*.gs.ts` extension
-
-- **A TypeScript to Rust transpiler**
-  - Reference counting with ownership tracking (no GC, no borrow checker)
-  - Static cycle detection prevents memory leaks
-  - Compiles to Rust source code for native performance
-  - Leverages Rust's `Rc`/`Weak` types for ownership semantics
-  - Targets native executables and WASM via Rust toolchain
-  - 1.05-1.15x overhead vs C/Rust, deterministic performance
-
-The first part gets rid of JS baggage and results in a more robust, cleaner language overall. It can serve as a stricter replacement for TypeScript, offering better maintainability.
-
-> The name GoodScript is a reference to "JavaScript: The Good Parts" by Crockford, from which this phylosophy was taken.
-
-The secont part leverages what is now an enterprise level, fully statically typed language to add deterministic and efficient memory handling and making it compilable to self-contained binary executables.
-
-> GoodScript handles compilation using the Rust toolchain, which allows excellent performance, native binaries, and WASM modules generation.
-
-## Language Overview
-
-GoodScript combines TypeScript's familiar syntax with Rust's memory safety through a **Three-Tiered Ownership System**:
-
-- **`unique<T>`** - Exclusive ownership (maps to Rust's `Box<T>`)
-- **`shared<T>`** - Shared ownership with reference counting (maps to `Rc<T>`)  
-- **`weak<T>`** - Non-owning references that break cycles (maps to `Weak<T>`)
-
-The compiler enforces that `shared<T>` references form a **Directed Acyclic Graph (DAG)**, preventing memory leaks from reference cycles at compile time.
-
-**Null handling:** GoodScript treats `null` and `undefined` as synonyms. All `weak<T>` references are implicitly nullable (`T | null | undefined`), and checking for either satisfies null-safety requirements.
-
-**📖 See [docs/LANGUAGE.md](docs/LANGUAGE.md) for complete language specification**
-
-## Implementation Phases
-
-| Phase | Goal | Output | Status |
-|-------|------|--------|--------|
-| **Phase 1** | Strict TypeScript semantics | JavaScript/TypeScript | ✅ In Progress |
-| **Phase 2** | Ownership analysis & DAG validation | JavaScript/TypeScript | 🚧 In Progress |
-| **Phase 3** | Rust code generation | Native binaries via Rust | 📋 Planned |
-
-See [docs/DAG-DETECTION.md](docs/DAG-DETECTION.md) for cycle detection implementation details.
+- **Phase 1** (✅ In Progress): Strict TypeScript semantics - eliminates JavaScript "bad parts"
+- **Phase 2** (🚧 In Progress): Ownership analysis and DAG validation  
+- **Phase 3** (📋 Planned): Rust code generation for native performance
 
 ## Installation
 
-# Language description
+```bash
+npm install goodscript
+```
 
-> A Strongly Typed, Memory-Safe Language
+Or install globally:
 
-GoodScript is a specialized dialect of TypeScript designed for **systems programming** and **large-scale enterprise applications**. Its primary goal is to combine the **developer productivity and syntax familiarity of TypeScript** with the **deterministic performance and memory safety guarantees of Rust**.
+```bash
+npm install -g goodscript
+```
 
-It achieves this by removing the unsafe, dynamic features of JavaScript and replacing implicit memory management with an explicit, compiler-enforced **Three-Tiered Ownership System**.
+## Usage
 
-## Core Design Principles
+### Command Line
 
-The language is founded on the following strict rules:
+Compile a single file:
 
-1.  **Strict Static Typing:** All dynamic, runtime-changing aspects of standard JavaScript (like implicit coercion, `any`, and runtime type changes) are forbidden. All types must be known and fixed at compile time.
-2.  **Explicit Ownership:** All complex, heap-allocated types (Objects, Arrays, Strings) must explicitly declare their lifetime management via an ownership qualifier.
-3.  **Compile-Time Safety:** The language guarantees the elimination of memory leaks caused by ownership cycles by strictly enforcing that the graph of shared objects ($\text{shared}<T>$) is a **Directed Acyclic Graph (DAG)**.
-4.  **Zero-Cost Abstraction:** When possible, the language maps ownership concepts to **zero-overhead Rust primitives** (like `Box<T>`), deferring to slower reference counting only when necessary.
+```bash
+gsc myfile.gs.ts
+```
 
-***
+Compile with options:
 
-## The Three-Tiered Ownership System
+```bash
+gsc --outDir dist --target ES2020 src/**/*.gs.ts
+```
 
-The core innovation is the requirement that all heap-allocated reference types (excluding primitives like `integer`, `number`, and `boolean`) must use one of these three ownership qualifiers.
+Run a GoodScript file directly:
 
-### 1. Unique Ownership: $\text{unique}<T>$
+```bash
+gs myfile.gs.ts
+```
 
-* **Syntax Example:** `config: unique<Settings>`
-* **Purpose:** Denotes **exclusive ownership**. The variable is the sole owner of the data on the heap.
-* **Rust Mapping (Phase 3):** `std::boxed::Box<T>`
-* **Memory Guarantee:** **Zero-Cost Abstraction.** The data is deallocated immediately when the `unique<T>` variable goes out of scope. Sharing or cloning is forbidden.
+### Programmatic API
 
----
+```typescript
+import { compile } from 'goodscript';
 
-### 2. Shared Ownership: $\text{shared}<T>$
+const result = compile({
+  filePath: 'src/main.gs.ts',
+  outDir: 'dist',
+  target: 'ES2020'
+});
 
-* **Syntax Example:** `nodes: shared<TreeNode>[]`
-* **Purpose:** Denotes **co-ownership** where multiple variables may access and manage the lifetime of the same data. The data is only deallocated when the last co-owner is dropped.
-* **Rust Mapping (Phase 3):** `std::rc::Rc<T>`
-* **Memory Guarantee:** **Requires Static Analysis.** The compiler must verify that no path of `shared<T>` references leads back to itself (the **DAG Check**). If a cycle is detected, the definition is forbidden, and the developer must break the cycle using $\text{weak}<T>$. This is the foundation of the language's memory safety.
+if (result.diagnostics.length > 0) {
+  console.error('Compilation errors:', result.diagnostics);
+}
+```
 
----
+## Project Structure
 
-### 3. Non-Owning Reference: $\text{weak}<T>$
+```
+compiler/
+├── src/
+│   ├── compiler.ts           # Main compilation orchestrator
+│   ├── parser.ts              # TypeScript AST parser
+│   ├── validator.ts           # Phase 1 restrictions enforcer
+│   ├── ownership-analyzer.ts  # Phase 2 ownership tracking
+│   ├── null-check-analyzer.ts # Null safety enforcement
+│   ├── ts-codegen.ts          # TypeScript code generator
+│   ├── gsc.ts                 # CLI compiler entry point
+│   └── gs.ts                  # CLI runner entry point
+│
+├── test/
+│   ├── phase1/                # Phase 1 restriction tests
+│   ├── phase2/                # Phase 2 ownership tests (TBD)
+│   └── phase3/                # Phase 3 codegen tests (TBD)
+│
+├── docs/
+│   ├── LANGUAGE.md            # Complete language specification
+│   ├── GOOD-PARTS.md          # Phase 1 restrictions & rationale
+│   └── DAG-DETECTION.md       # Cycle detection algorithm
+│
+└── lib/
+    └── goodscript.d.ts        # Type definitions for ownership wrappers
+```
 
-* **Syntax Example:** `parent: weak<TreeNode>`
-* **Purpose:** Denotes a non-owning pointer used only for access. It does **not** contribute to the shared reference count.
-* **Rust Mapping (Phase 3):** `std::rc::Weak<T>`
-* **Memory Guarantee:** **Cycle Breaking.** Because it does not count towards the lifetime, it is used for back-pointers (e.g., Child $\to$ Parent) in complex structures, ensuring that shared ownership cycles cannot form. The reference must always be **conditionally dereferenced** (checked for existence) before use.
-* **Null Semantics:** Weak references are implicitly nullable. GoodScript treats `null` and `undefined` as synonyms - both represent the absence of a value, and checking for either satisfies the compiler's null-safety requirements.
+## Development
 
-> [DAG-DETECTION.md](docs/DAG-DETECTION.md) contains a description of the DAG Check as it's implemented by the GoodScript compiler
+### Building
 
-***
+```bash
+npm run build        # Compile TypeScript to JavaScript
+npm run watch        # Watch mode for development
+npm run clean        # Remove build artifacts
+```
 
-## Null and Undefined Handling
+### Testing
 
-GoodScript treats `null` and `undefined` as **synonyms** for developer ergonomics:
+```bash
+npm test             # Run all tests
+npm test -- phase1   # Run only Phase 1 tests
+npm run test:watch   # Watch mode for tests
+npm run test:coverage # Generate coverage report
+```
 
-- **Type equivalence:** `T | null` and `T | undefined` are identical types
-- **Equality:** Both `==` and `===` treat `null` and `undefined` as equal
-- **Null checks:** Checking `if (x !== null)` or `if (x !== undefined)` both satisfy null-safety
-- **Weak references:** All `weak<T>` types are implicitly `T | null | undefined`
+### Linting
 
-This eliminates conversion boilerplate when using TypeScript's standard library (like `Map.get()` which returns `T | undefined`) while maintaining type safety.
+```bash
+npm run lint         # Run ESLint
+```
 
-See [docs/LANGUAGE.md](docs/LANGUAGE.md) for detailed null/undefined semantics.
+## Phase 1: Strict TypeScript
 
-***
+Phase 1 enforces "The Good Parts" - a subset of TypeScript that eliminates error-prone features:
 
-## Implementation Strategy (Phased Approach)
+| Error Code | Restriction | Rationale |
+|------------|-------------|-----------|
+| GS101 | No `with` statement | Unpredictable scope, deprecated |
+| GS102 | No `eval` or `Function` constructor | Security risk, prevents optimization |
+| GS103 | No `arguments` object | Use rest parameters instead |
+| GS104 | No `for-in` loops | Use `for-of` or explicit iteration |
+| GS105 | No `var` keyword | Use `let` or `const` for block scope |
+| GS106 | No `==` operator | Use `===` for strict equality |
+| GS107 | No `!=` operator | Use `!==` for strict inequality |
+| GS108 | No function declarations/expressions | Use arrow functions for lexical `this` |
+| GS201 | No implicit type coercion | Explicit string/number conversion |
 
-The language will be implemented incrementally, focusing on safety and correctness before optimization.
+See [docs/GOOD-PARTS.md](docs/GOOD-PARTS.md) for detailed rationale and examples.
 
-| Phase | Core Goal | Output Target | Primary Value Delivered |
-| :--- | :--- | :--- | :--- |
-| **Phase 1: Strict Semantics** | Remove all dynamic/unsafe JS features. | Standard JavaScript/TypeScript | **Enterprise Safety.** Provides a cleaner, bug-resistant syntax and a valid value proposition immediately. |
-| **Phase 2: Ownership Analysis** | Enforce explicit ownership syntax; implement the **DAG Check** on $\text{shared}<T>$ links within the TypeScript AST. | Standard JavaScript/TypeScript | **Compile-Time Safety.** Proves the memory model is sound before code generation. |
-| **Phase 3: Rust Code Generation** | Transpile the verified AST to optimized Rust source code. | Rust | **Performance & Final Safety.** Delivers the zero-cost binary using `Box<T>`, `Rc<T>`, and `Weak<T>`. |
+## Phase 2: Ownership System
 
-***
+Phase 2 introduces a three-tier ownership system:
 
-## 🔢 Primitive vs. Reference Types
+- **`unique<T>`** - Exclusive ownership (Box)
+- **`shared<T>`** - Shared ownership with reference counting (Rc)
+- **`weak<T>`** - Non-owning references (Weak, implicitly nullable)
 
-Only the following **Value Types** can be used without an explicit qualifier:
+The compiler enforces that `shared<T>` references form a **Directed Acyclic Graph (DAG)**, preventing memory leaks at compile time.
 
-* `number` (mapped to `f64`)
-* `integer` (mapped to a safe default like `i64` in Phase 1)
-* `boolean`
+**Null semantics:** `null` and `undefined` are synonyms in GoodScript. All `weak<T>` types are implicitly `T | null | undefined`.
 
-All other complex types, including **Strings** and **Arrays**, are treated as heap-allocated **Reference Types** and **must** be qualified (e.g., `let s: unique<string>`).
+See [docs/LANGUAGE.md](docs/LANGUAGE.md) for the complete ownership specification.
+
+## Phase 3: Rust Code Generation
+
+Phase 3 (planned) will transpile GoodScript to Rust, mapping ownership types to native Rust primitives:
+
+- `unique<T>` → `Box<T>`
+- `shared<T>` → `Rc<T>`
+- `weak<T>` → `Weak<T>`
+
+The result: native performance (1.05-1.15x overhead vs. pure Rust) with deterministic memory management and no garbage collection.
+
+## Contributing
+
+Contributions are welcome! Please see the main [repository README](../README.md) for contribution guidelines.
+
+## Testing Infrastructure
+
+The test suite uses:
+- **Vitest** for test execution
+- **Phase-based organization** matching implementation roadmap
+- **Helper utilities** in `test/phase1/test-helpers.ts` for compilation testing
+
+Example test:
+```typescript
+import { compileSource, hasError } from './test-helpers';
+
+it('should reject var keyword', () => {
+  const result = compileSource('var x = 42;');
+  expect(hasError(result.diagnostics, 'GS105')).toBe(true);
+});
+```
+
+## License
+
+MIT - See [LICENSE](LICENSE) file for details.
+
+## Links
+
+- 📖 [Language Documentation](docs/LANGUAGE.md)
+- 📋 [Good Parts Rationale](docs/GOOD-PARTS.md)
+- 🔍 [DAG Detection Algorithm](docs/DAG-DETECTION.md)
+- 🐛 [Issue Tracker](https://github.com/fcapolini/goodscript/issues)
+- 💬 [Discussions](https://github.com/fcapolini/goodscript/discussions)

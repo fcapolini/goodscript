@@ -14,3 +14,4 @@ import './no-for-in.test';
 import './no-with.test';
 import './no-eval.test';
 import './no-type-coercion.test';
+import './codegen-comparison.test';

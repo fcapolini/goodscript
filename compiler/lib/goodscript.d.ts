@@ -24,8 +24,8 @@ declare type weak<T> = T | null | undefined;
 /**
  * Console interface for output
  */
-declare const console: {
-  log(...args: any[]): void;
-  error(...args: any[]): void;
-  warn(...args: any[]): void;
-};
+// declare const console: {
+//   log(...args: any[]): void;
+//   error(...args: any[]): void;
+//   warn(...args: any[]): void;
+// };

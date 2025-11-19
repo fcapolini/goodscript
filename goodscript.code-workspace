@@ -1,15 +1,15 @@
 {
 	"folders": [
 		{
+			"name": "goodscript",
+			"path": "."
+		},
+		{
 			"path": "compiler"
 		},
 		{
 			"path": "extension"
 		},
-		{
-			"name": "goodscript",
-			"path": "."
-		}
 	],
 	"settings": {}
 }

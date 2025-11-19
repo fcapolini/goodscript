@@ -36,7 +36,7 @@ export class Validator {
     // Check for var keyword
     this.checkVarKeyword(node, sourceFile);
 
-    // Check for === operator (should use ==)
+    // Check for == operator (should use ===)
     this.checkStrictEquality(node, sourceFile);
 
     // Recurse into children
