@@ -372,6 +372,117 @@ if (false) { }      // false (only legitimate one)
 
 ---
 
+### 11. No `delete` Operator (GS111)
+
+**Restriction:** The `delete` operator is forbidden.
+
+**Rationale:**
+- Changes object shape at runtime, violating type contracts
+- Defeats V8's hidden class optimization - severe performance penalty
+- Property exists in TypeScript type but might not exist at runtime
+- Makes objects unpredictable and hard to reason about
+- Modern alternatives (destructuring, new objects) are clearer
+
+**Example:**
+```typescript
+// ❌ Not allowed
+const obj = { a: 1, b: 2, c: 3 };
+delete obj.b;  // Runtime shape change!
+
+// ✅ Correct - use optional properties
+interface Config {
+  a: number;
+  b?: number;  // Optional
+  c: number;
+}
+
+// ✅ Correct - create new object without property
+const obj = { a: 1, b: 2, c: 3 };
+const { b, ...newObj } = obj;  // newObj is { a: 1, c: 3 }
+
+// ✅ Correct - destructuring to omit properties
+const filtered = { a: obj.a, c: obj.c };
+```
+
+**Why this matters:** JavaScript engines optimize objects based on their shape. Using `delete` forces the engine to de-optimize, making code potentially 10-100x slower. It also breaks the contract between TypeScript types and runtime reality.
+
+---
+
+### 12. No Comma Operator (GS112)
+
+**Restriction:** The comma operator is forbidden in expressions. Comma in arrays, parameters, declarations is allowed.
+
+**Rationale:**
+- Confusing - evaluates all expressions but returns only the last
+- Easily confused with comma in function parameters or arrays
+- Makes code hard to read and understand
+- Usually indicates code that should be multiple statements
+- No legitimate use case in modern JavaScript
+
+**Example:**
+```typescript
+// ❌ Not allowed
+let x = 0, y = 0;
+x = (y = 1, y + 1);  // Returns 2, but why?
+
+let a = 1, b = 2;
+const result = (a++, b++, a + b);  // What is result?
+
+// ✅ Correct - use separate statements
+let x = 0;
+let y = 0;
+y = 1;
+x = y + 1;
+
+// ✅ Allowed - comma in arrays
+const arr = [1, 2, 3];
+
+// ✅ Allowed - comma in parameters
+const add = (a: number, b: number): number => a + b;
+
+// ✅ Allowed - comma in declarations
+let a = 1, b = 2, c = 3;
+```
+
+**Why this matters:** The comma operator is almost never used intentionally in modern code. When it appears, it's usually a mistake (missing semicolon) or obfuscated code. Separate statements are always clearer.
+
+---
+
+### 13. No `void` Operator (GS115)
+
+**Restriction:** The `void` operator is forbidden. The `void` type annotation is allowed.
+
+**Rationale:**
+- Archaic JavaScript feature from pre-ES5 era
+- Originally used as `void 0` to get `undefined` (before it was a keyword)
+- Confusing - looks like the `void` type but is actually an operator
+- Modern code doesn't need it - just use `undefined`
+- One less JavaScript quirk to remember
+
+**Example:**
+```typescript
+// ❌ Not allowed
+const x = void 0;  // Old way to get undefined
+const y = void (1 + 2);  // Always returns undefined
+
+// ✅ Correct - use undefined directly
+const x: number | undefined = undefined;
+
+// ✅ Allowed - void as a type annotation
+const log = (message: string): void => {
+  console.log(message);
+};
+
+// ✅ Correct - explicit return
+const getValue = (): undefined => {
+  return undefined;
+};
+```
+
+**Historical note:** Before ES5, `undefined` was not a reserved keyword and could be reassigned. `void 0` was a guaranteed way to get the undefined value. This hasn't been relevant since 2009.
+
+---
+
 ## Additional Type System Requirements
 
 GoodScript enforces strict static typing through the restrictions above. Additional best practices include:
@@ -422,6 +533,9 @@ These restrictions transform TypeScript from a gradually-typed superset of JavaS
 | GS108 | Function declarations/expressions | Use arrow functions or class methods |
 | GS109 | `any` type | Use explicit types, generics, or `unknown` |
 | GS110 | Implicit truthy/falsy checks | Use explicit comparisons |
+| GS111 | `delete` operator | Use optional properties or destructuring |
+| GS112 | Comma operator | Use separate statements |
+| GS115 | `void` operator | Use `undefined` directly |
 | GS201 | Implicit type coercion | Use template literals or explicit conversion |
 
 ---

@@ -267,6 +267,54 @@ function validateForbiddenOperators(document: vscode.TextDocument): vscode.Diagn
       diagnostic.source = 'GoodScript';
       diagnostics.push(diagnostic);
     }
+
+    // Check for delete operator (GS111)
+    const deletePattern = /\bdelete\s+/g;
+    deletePattern.lastIndex = 0;
+    let deleteMatch;
+    
+    while ((deleteMatch = deletePattern.exec(lineToCheck)) !== null) {
+      const startPos = new vscode.Position(lineIndex, deleteMatch.index);
+      const endPos = new vscode.Position(lineIndex, deleteMatch.index + 'delete'.length);
+      const range = new vscode.Range(startPos, endPos);
+      
+      const diagnostic = new vscode.Diagnostic(
+        range,
+        `'delete' operator is forbidden in GoodScript. Use optional properties or destructuring instead`,
+        vscode.DiagnosticSeverity.Error
+      );
+      
+      diagnostic.code = 'GS111';
+      diagnostic.source = 'GoodScript';
+      diagnostics.push(diagnostic);
+    }
+
+    // Check for void operator (GS115)
+    const voidPattern = /\bvoid\s+/g;
+    voidPattern.lastIndex = 0;
+    let voidMatch;
+    
+    while ((voidMatch = voidPattern.exec(lineToCheck)) !== null) {
+      // Make sure it's not ": void" (return type annotation)
+      const beforeVoid = lineToCheck.substring(0, voidMatch.index).trim();
+      if (beforeVoid.endsWith(':')) {
+        continue; // It's a type annotation, which is okay
+      }
+      
+      const startPos = new vscode.Position(lineIndex, voidMatch.index);
+      const endPos = new vscode.Position(lineIndex, voidMatch.index + 'void'.length);
+      const range = new vscode.Range(startPos, endPos);
+      
+      const diagnostic = new vscode.Diagnostic(
+        range,
+        `'void' operator is forbidden in GoodScript. Use 'undefined' directly if needed`,
+        vscode.DiagnosticSeverity.Error
+      );
+      
+      diagnostic.code = 'GS115';
+      diagnostic.source = 'GoodScript';
+      diagnostics.push(diagnostic);
+    }
   }
 
   return diagnostics;

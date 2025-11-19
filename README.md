@@ -6,7 +6,7 @@ Write clean TypeScript. Get native performance. No borrow checker required.
 
 ---
 
-> ⚠️ **ALPHA STAGE**: GoodScript is under active development. Phase 1 (parsing, validation, JS target) is underway. Phase 2 (ownership analysis, implicit nullability) is next. Phase 3 (Rust code generation) will follow. APIs and language features may change.
+> ⚠️ **BETA STAGE**: GoodScript is under active development. Phase 1 (parsing, validation, JS target) is complete. Phase 2 (ownership analysis, implicit nullability) is underway. Phase 3 (Rust code generation) will follow. APIs and language features may change.
 
 ---
 

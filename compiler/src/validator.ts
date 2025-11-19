@@ -98,6 +98,33 @@ export class Validator {
       );
     }
 
+    // No delete operator (GS111)
+    if (ts.isDeleteExpression(node)) {
+      this.addError(
+        'The "delete" operator is not allowed. Use optional properties or create new objects without the property',
+        location,
+        'GS111'
+      );
+    }
+
+    // No comma operator (GS112) - but allow comma in array literals, parameters, etc.
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.CommaToken) {
+      this.addError(
+        'The comma operator is not allowed. Use separate statements instead',
+        location,
+        'GS112'
+      );
+    }
+
+    // No void operator (GS115)
+    if (ts.isVoidExpression(node)) {
+      this.addError(
+        'The "void" operator is not allowed. Use "undefined" directly if needed',
+        location,
+        'GS115'
+      );
+    }
+
     // No function declarations/expressions (lexical 'this' only - use arrow functions)
     if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) {
       // Allow if it's a class method, constructor, or function signature
