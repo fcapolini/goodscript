@@ -141,7 +141,7 @@ export class OwnershipAnalyzer {
     // Phase 2: Determine ownership kind
     // 1. Variables with `new` expression: Shared (not nullable)
     // 2. Variables with literal initializers ([], {}, etc.): Shared (not nullable)
-    // 3. Variables with unique<T> or shared<T> annotation: Unique/Shared (not nullable)
+    // 3. Variables with Unique<T> or Shared<T> annotation: Unique/Shared (not nullable)
     // 4. Variables assigned from other variables: Weak (implicitly nullable)
     // 5. Variables with bare type annotation and no initializer: Weak (implicitly nullable)
     
@@ -162,7 +162,7 @@ export class OwnershipAnalyzer {
     );
     const hasOwningInitializer = hasNewInitializer || hasLiteralInitializer;
 
-    // Check for 'unique<T>' or 'shared<T>' type annotation - explicit ownership
+    // Check for 'Unique<T>' or 'Shared<T>' type annotation - explicit ownership
     if (node.type && ts.isTypeReferenceNode(node.type)) {
       const typeName = node.type.typeName.getText(sourceFile);
       if (typeName === 'unique') {
@@ -180,7 +180,7 @@ export class OwnershipAnalyzer {
         isNullable = true; // Phase 2: implicitly nullable
       }
     }
-    // No explicit unique<T>/shared<T>/weak<T>, check context
+    // No explicit Unique<T>/Shared<T>/Weak<T>, check context
     else if (!hasOwningInitializer) {
       // Phase 2: Assignment from another variable or bare type = weak reference
       if (node.type || (node.initializer && ts.isIdentifier(node.initializer))) {
@@ -240,7 +240,7 @@ export class OwnershipAnalyzer {
       const location = Parser.getLocation(param, sourceFile);
 
       // Phase 2: Parameters default to weak (implicitly nullable)
-      // Unless marked with unique<T> or shared<T> (which are not nullable)
+      // Unless marked with Unique<T> or Shared<T> (which are not nullable)
       let kind = OwnershipKind.Weak;
       let isNullable = true; // Phase 2: implicit nullability for weak references
 
@@ -305,7 +305,7 @@ export class OwnershipAnalyzer {
 
     // Phase 2: Determine ownership based on type annotation
     // Bare types are weak references (implicitly nullable)
-    // unique<T>/shared<T> types are ownership references (not nullable)
+    // Unique<T>/Shared<T> types are ownership references (not nullable)
     let kind = OwnershipKind.Weak; // Default to weak reference
     let isNullable = true; // Phase 2: implicit nullability for weak
 
@@ -341,7 +341,7 @@ export class OwnershipAnalyzer {
         });
         isNullable = hasNull || true; // Phase 2: always nullable for weak
         
-        // Check if any type in the union is unique<T> or shared<T>
+        // Check if any type in the union is Unique<T> or Shared<T>
         const ownershipType = node.type.types.find(t => {
           if (ts.isTypeReferenceNode(t)) {
             const name = t.typeName.getText(sourceFile);
@@ -578,7 +578,7 @@ export class OwnershipAnalyzer {
         }
 
         // Check for multiple ownership fields of the same type
-        // This can also create cycles (e.g., headers: shared<Map>, params: shared<Map>)
+        // This can also create cycles (e.g., headers: Shared<Map>, params: Shared<Map>)
         const typeCounts = new Map<string, number>();
         for (const type of owningFields) {
           typeCounts.set(type, (typeCounts.get(type) || 0) + 1);
@@ -673,12 +673,12 @@ export class OwnershipAnalyzer {
     const ownedTypes: string[] = [];
 
     const extractRecursive = (node: ts.TypeNode, typeSubstitution?: Map<string, ts.TypeNode>): void => {
-      // Handle unique<T>, shared<T>, weak<T>
+      // Handle Unique<T>, Shared<T>, Weak<T>
       if (ts.isTypeReferenceNode(node)) {
         const typeName = node.typeName.getText(sourceFile);
         
         if ((typeName === 'unique' || typeName === 'shared' || typeName === 'weak') && node.typeArguments && node.typeArguments.length > 0) {
-          // Extract the type from unique<T>, shared<T>, or weak<T>
+          // Extract the type from Unique<T>, Shared<T>, or Weak<T>
           const innerType = node.typeArguments[0];
           extractRecursive(innerType, typeSubstitution);
         } else if (typeName !== 'unique' && typeName !== 'shared' && typeName !== 'weak') {
@@ -702,7 +702,7 @@ export class OwnershipAnalyzer {
         }
       }
       
-      // Handle union types: unique<T> | null, shared<T> | null, or T | null
+      // Handle union types: Unique<T> | null, Shared<T> | null, or T | null
       else if (ts.isUnionTypeNode(node)) {
         for (const type of node.types) {
           // Skip null/undefined
@@ -713,12 +713,12 @@ export class OwnershipAnalyzer {
         }
       }
 
-      // Handle array types: unique<T>[], shared<T>[], weak<T>[], or T[]
+      // Handle array types: Unique<T>[], Shared<T>[], Weak<T>[], or T[]
       else if (ts.isArrayTypeNode(node)) {
         extractRecursive(node.elementType, typeSubstitution);
       }
 
-      // Handle tuple types: [unique<A>, B, shared<C>]
+      // Handle tuple types: [Unique<A>, B, Shared<C>]
       else if (ts.isTupleTypeNode(node)) {
         node.elements.forEach(elem => extractRecursive(elem, typeSubstitution));
       }
@@ -882,12 +882,12 @@ export class OwnershipAnalyzer {
     const ownedTypes: string[] = [];
 
     const extractRecursive = (node: ts.TypeNode): void => {
-      // Handle unique<T>, shared<T>, weak<T>
+      // Handle Unique<T>, Shared<T>, Weak<T>
       if (ts.isTypeReferenceNode(node)) {
         const typeName = node.typeName.getText(sourceFile);
         
         if ((typeName === 'unique' || typeName === 'shared' || typeName === 'weak') && node.typeArguments && node.typeArguments.length > 0) {
-          // Extract the type from unique<T>, shared<T>, or weak<T>
+          // Extract the type from Unique<T>, Shared<T>, or Weak<T>
           const innerType = node.typeArguments[0];
           extractRecursive(innerType);
         } else if (typeName !== 'unique' && typeName !== 'shared' && typeName !== 'weak') {

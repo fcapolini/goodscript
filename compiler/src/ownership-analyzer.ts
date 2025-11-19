@@ -31,7 +31,7 @@ interface TypeNode {
 }
 
 /**
- * Represents an ownership edge in the graph (A owns B via shared<T>)
+ * Represents an ownership edge in the graph (A owns B via Shared<T>)
  */
 interface OwnershipEdge {
   from: string;              // Source type name
@@ -45,7 +45,7 @@ interface OwnershipEdge {
  */
 interface OwnershipGraph {
   nodes: Map<string, TypeNode>;      // Type name -> node info
-  edges: OwnershipEdge[];            // All shared<T> ownership edges
+  edges: OwnershipEdge[];            // All Shared<T> ownership edges
   adjacencyList: Map<string, Set<string>>;  // Type name -> set of owned types
 }
 
@@ -74,7 +74,7 @@ export class OwnershipAnalyzer {
 
   /**
    * Analyze a source file for ownership relationships
-   * Builds the ownership graph by extracting shared<T> edges
+   * Builds the ownership graph by extracting Shared<T> edges
    */
   analyze(sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
     this.sourceFiles.push(sourceFile);
@@ -135,7 +135,7 @@ export class OwnershipAnalyzer {
   }
 
   /**
-   * Collect ownership edges by analyzing shared<T> fields
+   * Collect ownership edges by analyzing Shared<T> fields
    * Implements Rules 1.1, 1.2, and 1.3 from DAG-DETECTION.md
    */
   private collectOwnershipEdges(sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
@@ -152,7 +152,7 @@ export class OwnershipAnalyzer {
   }
 
   /**
-   * Analyze a property declaration/signature for shared<T> ownership
+   * Analyze a property declaration/signature for Shared<T> ownership
    */
   private analyzePropertyForOwnership(
     node: ts.PropertyDeclaration | ts.PropertySignature,
@@ -168,7 +168,7 @@ export class OwnershipAnalyzer {
     const fieldName = node.name.getText(sourceFile);
     const location = Parser.getLocation(node, sourceFile);
 
-    // Extract all shared<T> ownership relationships from the field type
+    // Extract all Shared<T> ownership relationships from the field type
     const ownedTypes = this.extractSharedOwnership(node.type, sourceFile, checker);
     
     // Create edges for each owned type
@@ -178,14 +178,14 @@ export class OwnershipAnalyzer {
   }
 
   /**
-   * Extract shared<T> ownership from a type annotation
+   * Extract Shared<T> ownership from a type annotation
    * Handles:
-   * - Direct shared<T>: Rule 1.1
-   * - Array<shared<T>>, shared<T>[]: Rule 1.2
-   * - Map<K, shared<T>>, Set<shared<T>>: Rule 1.2
+   * - Direct Shared<T>: Rule 1.1
+   * - Array<Shared<T>>, Shared<T>[]: Rule 1.2
+   * - Map<K, Shared<T>>, Set<Shared<T>>: Rule 1.2
    * - Nested types: Rule 1.3
    * 
-   * Returns the set of type names that are owned via shared<T>
+   * Returns the set of type names that are owned via Shared<T>
    */
   private extractSharedOwnership(
     typeNode: ts.TypeNode,
@@ -194,7 +194,7 @@ export class OwnershipAnalyzer {
   ): Set<string> {
     const ownedTypes = new Set<string>();
 
-    // Rule 3.1 & 3.2: weak<T> and unique<T> do NOT create edges
+    // Rule 3.1 & 3.2: Weak<T> and Unique<T> do NOT create edges
     if (ts.isTypeReferenceNode(typeNode)) {
       const typeName = typeNode.typeName.getText(sourceFile);
       
@@ -425,21 +425,21 @@ export class OwnershipAnalyzer {
       // Direct cycle (self-reference)
       cycleType = 'Direct Cycle';
       message = `Ownership cycle detected: ${cycleDescription}. ` +
-                `Type '${cycleNode}' cannot own itself via shared<T>. ` +
-                `Use the Pool Pattern: create a container type that owns all instances with unique<T>[], ` +
-                `and use weak<T>[] for references within '${cycleNode}'.`;
+                `Type '${cycleNode}' cannot own itself via Shared<T>. ` +
+                `Use the Pool Pattern: create a container type that owns all instances with Unique<T>[], ` +
+                `and use Weak<T>[] for references within '${cycleNode}'.`;
     } else if (cycleLength === 2) {
       // Mutual cycle
       cycleType = 'Mutual Cycle';
       message = `Ownership cycle detected: ${cycleDescription}. ` +
-                `Types '${cyclePath[0]}' and '${cyclePath[1]}' cannot own each other via shared<T>. ` +
-                `Use weak<T> for at least one direction to break the cycle.`;
+                `Types '${cyclePath[0]}' and '${cyclePath[1]}' cannot own each other via Shared<T>. ` +
+                `Use Weak<T> for at least one direction to break the cycle.`;
     } else {
       // Longer cycle
       cycleType = `Cycle (length ${cycleLength})`;
       message = `Ownership cycle detected: ${cycleDescription}. ` +
-                `No type can transitively own itself via shared<T>. ` +
-                `Break the cycle by changing at least one field to weak<T>.`;
+                `No type can transitively own itself via Shared<T>. ` +
+                `Break the cycle by changing at least one field to Weak<T>.`;
     }
 
     this.diagnostics.push({

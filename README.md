@@ -148,17 +148,17 @@ GoodScript supports three **language levels**:
 
 GoodScript combines TypeScript's familiar syntax with Rust's memory safety through a **Three-Tiered Ownership System**:
 
-- **`unique<T>`** - Exclusive ownership (maps to Rust's `Box<T>`)
-- **`shared<T>`** - Shared ownership with reference counting (maps to `Rc<T>`)  
-- **`weak<T>`** - Non-owning references that break cycles (maps to `Weak<T>`)
+- **`Unique<T>`** - Exclusive ownership (maps to Rust's `Box<T>`)
+- **`Shared<T>`** - Shared ownership with reference counting (maps to `Rc<T>`)  
+- **`Weak<T>`** - Non-owning references that break cycles (maps to `Weak<T>`)
 
 **Note**: Ownership types are optional annotations at level "clean". They're only validated at levels "dag" and "rust", where they provide compile-time safety guarantees.
 
-The compiler enforces that `shared<T>` references form a **Directed Acyclic Graph (DAG)**, preventing memory leaks from reference cycles at compile time (levels 2 & 3 only).
+The compiler enforces that `Shared<T>` references form a **Directed Acyclic Graph (DAG)**, preventing memory leaks from reference cycles at compile time (levels 2 & 3 only).
 
 **Avoiding cycles:** For complex data structures like trees, graphs, and linked lists that would naturally create ownership cycles, use the **pool pattern** to centralize ownership. See [docs/POOL-PATTERN.md](docs/POOL-PATTERN.md) for detailed examples.
 
-**Null handling:** GoodScript treats `null` and `undefined` as synonyms. All `weak<T>` references are implicitly nullable (`T | null | undefined`), and checking for either satisfies null-safety requirements.
+**Null handling:** GoodScript treats `null` and `undefined` as synonyms. All `Weak<T>` references are implicitly nullable (`T | null | undefined`), and checking for either satisfies null-safety requirements.
 
 **📖 See [docs/LANGUAGE.md](docs/LANGUAGE.md) for complete language specification**
 

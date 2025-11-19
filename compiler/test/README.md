@@ -32,7 +32,7 @@ test/
 ├── phase2/          # Phase 2: Ownership Analysis
 │   ├── index.test.ts                 # Overview and basic tests
 │   ├── ownership-cycles.test.ts      # DAG cycle detection (29 tests)
-│   ├── null-checks.test.ts           # weak<T> null-safety (23 tests)
+│   ├── null-checks.test.ts           # Weak<T> null-safety (23 tests)
 │   ├── test-helpers.ts               # Phase 2 test utilities
 │   └── README.md                     # Phase 2 test documentation
 │
@@ -144,9 +144,9 @@ Phase 1 tests use shared helpers from `test-helpers.ts`:
 **Status**: Core implementation complete (54 tests passing, 7 skipped due to known limitations)
 
 Phase 2 introduces ownership semantics with three-tier ownership system:
-- **`unique<T>`** - Exclusive ownership (maps to Rust's `Box<T>`)
-- **`shared<T>`** - Shared ownership with reference counting (maps to `Rc<T>`)
-- **`weak<T>`** - Non-owning references (maps to `Weak<T>`) - implicitly nullable
+- **`Unique<T>`** - Exclusive ownership (maps to Rust's `Box<T>`)
+- **`Shared<T>`** - Shared ownership with reference counting (maps to `Rc<T>`)
+- **`Weak<T>`** - Non-owning references (maps to `Weak<T>`) - implicitly nullable
 
 See [test/phase2/README.md](phase2/README.md) for detailed test documentation.
 
@@ -156,12 +156,12 @@ All 29 tests passing - validates all rules from DAG-DETECTION.md:
 
 | Test Category | Tests | Description |
 |---------------|-------|-------------|
-| Rule 1.1: Direct edges | 4 | Direct `shared<T>` fields create ownership edges |
-| Rule 1.2: Container transitivity | 5 | `Array<shared<T>>`, `Map<K, shared<V>>`, `Set<shared<T>>` |
+| Rule 1.1: Direct edges | 4 | Direct `Shared<T>` fields create ownership edges |
+| Rule 1.2: Container transitivity | 5 | `Array<Shared<T>>`, `Map<K, Shared<V>>`, `Set<Shared<T>>` |
 | Rule 1.3: Transitive ownership | 2 | Ownership chains through intermediate types |
 | Rule 2.1: Cycle prohibition | 3 | Detects self-reference, mutual, and longer cycles |
-| Rule 3.1: weak<T> breaks cycles | 4 | `weak<T>` doesn't create ownership edges |
-| Rule 3.2: unique<T> orthogonal | 2 | `unique<T>` doesn't participate in shared graph |
+| Rule 3.1: Weak<T> breaks cycles | 4 | `Weak<T>` doesn't create ownership edges |
+| Rule 3.2: Unique<T> orthogonal | 2 | `Unique<T>` doesn't participate in shared graph |
 | Rule 4.1: Pool Pattern | 3 | Validates correct patterns for data structures |
 | Complex scenarios | 4 | Diamond dependencies, mixed ownership |
 | Interface support | 2 | Cycle detection through interfaces |
@@ -183,11 +183,11 @@ All 23 tests passing:
 | Function parameters | 2 passing | Weak parameter checking |
 | Edge cases | 2 passing | Initialization, non-weak types |
 
-**Error code**: **GS302** - Null check required for weak<T>
+**Error code**: **GS302** - Null check required for Weak<T>
 
 **Previous limitations resolved**:
 - Fixed `undefined` detection (identifier vs keyword in TypeScript AST)
-- Improved `weak<T>` type detection via symbol declarations
+- Improved `Weak<T>` type detection via symbol declarations
 - Fixed control flow analysis double-recursion issue
 
 ## Phase 3: Rust Code Generation (Future)

@@ -598,7 +598,7 @@ export class NullCheckAnalyzer {
     }
     
     // ALL weak references need null checks
-    // Only owned references (unique<T> or shared<T>) don't need checks
+    // Only owned references (Unique<T> or Shared<T>) don't need checks
     if (!ownershipInfo || ownershipInfo.kind !== OwnershipKind.Weak) {
       // Not a weak reference (must be owned), no check needed
       return;
@@ -745,7 +745,7 @@ export class NullCheckAnalyzer {
   = help: bare types (without ownership wrappers) are weak references that may become null
   = fix: add null check: if (${varName} !== null) { ... } or if (${varName} !== undefined) { ... }
       or use optional chaining: ${varName}?.property
-      ${ownershipInfo.symbol === varName ? `or take ownership: unique<T> or shared<T> parameter` : ''}`;
+      ${ownershipInfo.symbol === varName ? `or take ownership: Unique<T> or Shared<T> parameter` : ''}`;
 
     this.diagnostics.push({
       severity: 'error',

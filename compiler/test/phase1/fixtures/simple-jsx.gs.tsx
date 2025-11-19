@@ -12,12 +12,12 @@ declare namespace JSX {
 }
 
 // Simple component with unique ownership
-const Greeting = (props: unique<{ name: string }>) => {
+const Greeting = (props: Unique<{ name: string }>) => {
   return <h1>Hello, {props.name}!</h1>;
 };
 
 // Component with event handler
-const Button = (props: unique<{ onClick: () => void; label: string }>) => {
+const Button = (props: Unique<{ onClick: () => void; label: string }>) => {
   return <button onClick={props.onClick}>{props.label}</button>;
 };
 

@@ -33,7 +33,7 @@ export class NullCheckAnalyzer {
   private diagnostics: Diagnostic[] = [];
 
   /**
-   * Analyze a source file for weak<T> null-safety violations
+   * Analyze a source file for Weak<T> null-safety violations
    */
   analyze(sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
     this.diagnostics = [];
@@ -66,7 +66,7 @@ export class NullCheckAnalyzer {
   }
 
   /**
-   * Check if a type is weak<T> (implicitly nullable)
+   * Check if a type is Weak<T> (implicitly nullable)
    */
   private isWeakType(node: ts.Node, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
     // First, try to get the symbol and check its declaration
@@ -90,7 +90,7 @@ export class NullCheckAnalyzer {
   }
 
   /**
-   * Check if a declaration has weak<T> type
+   * Check if a declaration has Weak<T> type
    */
   private hasWeakTypeInDeclaration(decl: ts.Declaration, sourceFile: ts.SourceFile): boolean {
     if (ts.isPropertyDeclaration(decl) || ts.isPropertySignature(decl)) {
@@ -181,12 +181,12 @@ export class NullCheckAnalyzer {
       return;
     }
 
-    // Handle variable declarations with weak<T> type
+    // Handle variable declarations with Weak<T> type
     if (ts.isVariableDeclaration(node)) {
       this.checkWeakVariableDeclaration(node, sourceFile, checker);
     }
 
-    // Handle parameter declarations with weak<T> type
+    // Handle parameter declarations with Weak<T> type
     if (ts.isParameter(node)) {
       // Parameters are checked at usage sites
     }
@@ -514,20 +514,20 @@ export class NullCheckAnalyzer {
   }
 
   /**
-   * Check weak<T> variable declaration
+   * Check Weak<T> variable declaration
    */
   private checkWeakVariableDeclaration(
     node: ts.VariableDeclaration,
     sourceFile: ts.SourceFile,
     checker: ts.TypeChecker
   ): void {
-    // Check if the variable has weak<T> type annotation
+    // Check if the variable has Weak<T> type annotation
     if (!node.type || !ts.isTypeReferenceNode(node.type)) return;
     
     const typeName = node.type.typeName.getText(sourceFile);
     if (typeName !== 'weak') return;
 
-    // weak<T> variables should either:
+    // Weak<T> variables should either:
     // 1. Be initialized with null/undefined
     // 2. Be initialized with a value (which we'll track for null checks)
     // 3. Have no initializer (default to undefined)
@@ -535,7 +535,7 @@ export class NullCheckAnalyzer {
   }
 
   /**
-   * Check property access for weak<T> null-safety
+   * Check property access for Weak<T> null-safety
    */
   private checkPropertyAccess(
     node: ts.PropertyAccessExpression,
@@ -554,14 +554,14 @@ export class NullCheckAnalyzer {
     // Skip if already checked
     if (checkedVars.has(baseText)) return;
 
-    // Check if base expression has weak<T> type
+    // Check if base expression has Weak<T> type
     if (this.isWeakType(baseExpr, sourceFile, checker)) {
       this.reportNullCheckRequired(node, baseText, sourceFile);
     }
   }
 
   /**
-   * Check element access for weak<T> null-safety
+   * Check element access for Weak<T> null-safety
    */
   private checkElementAccess(
     node: ts.ElementAccessExpression,
@@ -575,7 +575,7 @@ export class NullCheckAnalyzer {
     // Skip if already checked
     if (checkedVars.has(baseText)) return;
 
-    // Check if base expression has weak<T> type
+    // Check if base expression has Weak<T> type
     if (this.isWeakType(baseExpr, sourceFile, checker)) {
       this.reportNullCheckRequired(node, baseText, sourceFile);
     }

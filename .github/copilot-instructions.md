@@ -19,13 +19,13 @@
 - **Phase 3** implements level "rust"
 
 ### Three-Tier Ownership System (Levels 2 & 3)
-- **`unique<T>`** - Exclusive ownership (maps to Rust's `Box<T>`)
-- **`shared<T>`** - Shared ownership with reference counting (maps to `Rc<T>`)
-- **`weak<T>`** - Non-owning references (maps to `Weak<T>`) - implicitly nullable
+- **`Unique<T>`** - Exclusive ownership (maps to Rust's `Box<T>`)
+- **`Shared<T>`** - Shared ownership with reference counting (maps to `Rc<T>`)
+- **`Weak<T>`** - Non-owning references (maps to `Weak<T>`) - implicitly nullable
 
 ### Null/Undefined Semantics
 - `null` and `undefined` are **synonyms** in GoodScript
-- `weak<T>` = `T | null | undefined` (implicitly nullable)
+- `Weak<T>` = `T | null | undefined` (implicitly nullable)
 - Checking for either `null` or `undefined` satisfies null-safety requirements
 
 ### Level "clean" Restrictions (All Levels)
@@ -91,8 +91,8 @@ goodscript/
   - Returns diagnostics with GS error codes
 
 - **ownership-analyzer.ts**: Phase 2 ownership tracking (1012 lines)
-  - Tracks `unique<T>`, `shared<T>`, `weak<T>` references
-  - DAG cycle detection for `shared<T>` references
+  - Tracks `Unique<T>`, `Shared<T>`, `Weak<T>` references
+  - DAG cycle detection for `Shared<T>` references
   - Currently functional but Phase 2 tests not yet complete
 
 - **null-check-analyzer.ts**: Enforces null checks on weak references (758 lines)
@@ -101,8 +101,8 @@ goodscript/
 
 - **ts-codegen.ts**: Generates TypeScript by removing ownership annotations
   - `generate(sourceFile: ts.SourceFile): string`
-  - Transforms `weak<T>` → `T | null | undefined`
-  - Removes `unique<T>` and `shared<T>` wrappers
+  - Transforms `Weak<T>` → `T | null | undefined`
+  - Removes `Unique<T>` and `Shared<T>` wrappers
 
 ### CLI
 - **gsc.ts**: Command-line compiler (`gsc`)
@@ -160,7 +160,7 @@ npm run test:watch          # Watch mode
 ### Null/Undefined Handling
 - TypeScript's strict null checking produces errors we suppress
 - Our null-check analyzer enforces safety instead
-- `weak<T>` is the only nullable type (by design)
+- `Weak<T>` is the only nullable type (by design)
 - Both `=== null` and `=== undefined` checks are valid
 
 ### Function Constructor Detection
