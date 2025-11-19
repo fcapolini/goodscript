@@ -25,7 +25,7 @@ Write clean TypeScript. Get native performance. No borrow checker required.
   - Compiles to Rust source code for native performance
   - Leverages Rust's `Rc`/`Weak` types for ownership semantics
   - Targets native executables and WASM via Rust toolchain
-  - 1.05-1.15x overhead vs C/Rust, deterministic performance
+  - Rust-level performance with deterministic memory management
 
 The first part gets rid of JS baggage and results in a more robust, cleaner language overall. It can serve as a stricter replacement for TypeScript, offering better maintainability.
 
@@ -96,7 +96,7 @@ Configure in `tsconfig.json`:
 
 In **Phase 3**, GoodScript will transpile to **optimized Rust source code**, delivering:
 
-- **Native Performance:** 1.05-1.15x overhead vs hand-written C/Rust
+- **Native Performance:** Rust-level speed with minimal overhead
 - **Self-Contained Binaries:** No runtime dependencies, no garbage collector
 - **WASM Support:** Compile to WebAssembly via Rust's `wasm32` target
 - **Memory Safety:** Ownership system maps directly to Rust's `Box<T>`, `Rc<T>`, and `Weak<T>`
@@ -114,6 +114,27 @@ cargo build --release
 ```
 
 The Rust backend will support both server-side applications and browser WASM modules, making GoodScript suitable for performance-critical full-stack development.
+
+### Development Workflow: Validate with JavaScript, Deploy with Rust
+
+A powerful GoodScript workflow is to **develop and test with the TypeScript/JavaScript target**, then **compile to Rust for production deployment**:
+
+1. **Rapid Development** - Use the JS target for fast iteration cycles
+   - Instant compilation and hot reload
+   - Familiar debugging tools (Chrome DevTools, VS Code debugger)
+   - Access to the entire npm ecosystem for testing and development tools
+
+2. **Validate Correctness** - Prove your application logic works in JavaScript
+   - Run comprehensive test suites with Jest, Vitest, or Mocha
+   - Use level "dag" to validate ownership semantics compile-time
+   - Catch logic errors before dealing with Rust compilation
+
+3. **Deploy to Rust** - Compile the validated codebase for production
+   - Same source code, two targets (no platform-specific code needed)
+   - Native performance with deterministic memory management
+   - Self-contained binaries with no runtime dependencies
+
+This dual-target strategy combines JavaScript's developer ergonomics with Rust's production performance, enabling teams to move fast during development while delivering optimized native applications to users.
 
 ## Language Overview
 
@@ -205,115 +226,44 @@ The extension provides:
 GoodScript supports React and JSX syntax via `.gs.tsx` files:
 
 ```tsx
-// UserCard.gs.tsx - GoodScript React component
-const UserCard = (props: unique<{ name: string; email: string }>) => {
+// Button.gs.tsx - GoodScript React component
+interface ButtonProps {
+  onClick: () => void;
+  label: string;
+  disabled?: boolean;
+}
+
+const Button = (props: ButtonProps) => {
+  const isDisabled = props.disabled ?? false;
+  
+  const handleClick = () => {
+    if (isDisabled === false) {  // ✅ Explicit check, strict equality
+      props.onClick();
+    }
+  };
+  
   return (
-    <div className="user-card">
-      <h2>{props.name}</h2>
-      <p>{props.email}</p>
-    </div>
+    <button onClick={handleClick} disabled={isDisabled}>
+      {props.label}
+    </button>
   );
 };
 
-export { UserCard };
+export { Button };
 ```
+
+**Benefits for React development:**
+- **Arrow functions only** - Eliminates `this` binding issues entirely
+- **Strict equality** (`===`, `!==`) - No accidental type coercion bugs
+- **Explicit boolean checks** - No confusing truthy/falsy behavior
+- **No `var`** - Block-scoped variables only (`const`, `let`)
+- **No `any` type** - Full type safety across your component tree
+
+These restrictions enforce cleaner, more maintainable code that's easier to understand and refactor. Perfect for large React codebases where consistency and readability matter. This support also removes the burden of mentally switching "language level" mode in full-stack projects using GoodScript for the backend. Level 2 ownership types are also supported in `.gs.tsx` files for consistency in full-stack projects, though they provide no runtime benefit when compiling to JavaScript.
 
 **Key points:**
 - Use `.gs.tsx` extension for JSX/React components
-- All Phase 1 restrictions apply (arrow functions, `===` only, etc.)
-- Ownership types work with component props
-- **TypeScript output only** - `.gs.tsx` files don't compile to Rust
-- Perfect for web development with strict coding standards
-
-JSX support is designed for frontend development workflows, while the Rust compilation target serves systems programming use cases.
-
-## Language description
-
-> A Strongly Typed, Memory-Safe Language
-
-GoodScript is a specialized dialect of TypeScript designed for **systems programming** and **large-scale enterprise applications**. Its primary goal is to combine the **developer productivity and syntax familiarity of TypeScript** with the **deterministic performance and memory safety guarantees of Rust**.
-
-It achieves this by removing the unsafe, dynamic features of JavaScript and replacing implicit memory management with an explicit, compiler-enforced **Three-Tiered Ownership System**.
-
-## Core Design Principles
-
-The language is founded on the following strict rules:
-
-1.  **Strict Static Typing:** All dynamic, runtime-changing aspects of standard JavaScript (like implicit coercion, `any`, and runtime type changes) are forbidden. All types must be known and fixed at compile time.
-2.  **Explicit Ownership:** All complex, heap-allocated types (Objects, Arrays, Strings) must explicitly declare their lifetime management via an ownership qualifier.
-3.  **Compile-Time Safety:** The language guarantees the elimination of memory leaks caused by ownership cycles by strictly enforcing that the graph of shared objects ($\text{shared}<T>$) is a **Directed Acyclic Graph (DAG)**.
-4.  **Zero-Cost Abstraction:** When possible, the language maps ownership concepts to **zero-overhead Rust primitives** (like `Box<T>`), deferring to slower reference counting only when necessary.
-
-***
-
-## The Three-Tiered Ownership System
-
-The core innovation is the requirement that all heap-allocated reference types (excluding primitives like `number` and `boolean`) must use one of these three ownership qualifiers.
-
-### 1. Unique Ownership: $\text{unique}<T>$
-
-* **Syntax Example:** `config: unique<Settings>`
-* **Purpose:** Denotes **exclusive ownership**. The variable is the sole owner of the data on the heap.
-* **Rust Mapping (Phase 3):** `std::boxed::Box<T>`
-* **Memory Guarantee:** **Zero-Cost Abstraction.** The data is deallocated immediately when the `unique<T>` variable goes out of scope. Sharing or cloning is forbidden.
-
----
-
-### 2. Shared Ownership: $\text{shared}<T>$
-
-* **Syntax Example:** `nodes: shared<TreeNode>[]`
-* **Purpose:** Denotes **co-ownership** where multiple variables may access and manage the lifetime of the same data. The data is only deallocated when the last co-owner is dropped.
-* **Rust Mapping (Phase 3):** `std::rc::Rc<T>`
-* **Memory Guarantee:** **Requires Static Analysis.** The compiler must verify that no path of `shared<T>` references leads back to itself (the **DAG Check**). If a cycle is detected, the definition is forbidden, and the developer must break the cycle using $\text{weak}<T>$. This is the foundation of the language's memory safety.
-
----
-
-### 3. Non-Owning Reference: $\text{weak}<T>$
-
-* **Syntax Example:** `parent: weak<TreeNode>`
-* **Purpose:** Denotes a non-owning pointer used only for access. It does **not** contribute to the shared reference count.
-* **Rust Mapping (Phase 3):** `std::rc::Weak<T>`
-* **Memory Guarantee:** **Cycle Breaking.** Because it does not count towards the lifetime, it is used for back-pointers (e.g., Child $\to$ Parent) in complex structures, ensuring that shared ownership cycles cannot form. The reference must always be **conditionally dereferenced** (checked for existence) before use.
-* **Null Semantics:** Weak references are implicitly nullable. GoodScript treats `null` and `undefined` as synonyms - both represent the absence of a value, and checking for either satisfies the compiler's null-safety requirements.
-
-> [DAG-DETECTION.md](docs/DAG-DETECTION.md) contains a description of the DAG Check as it's implemented by the GoodScript compiler
-
-***
-
-## Null and Undefined Handling
-
-GoodScript treats `null` and `undefined` as **synonyms** for developer ergonomics:
-
-- **Type equivalence:** `T | null` and `T | undefined` are identical types
-- **Equality:** Both `==` and `===` treat `null` and `undefined` as equal
-- **Null checks:** Checking `if (x !== null)` or `if (x !== undefined)` both satisfy null-safety
-- **Weak references:** All `weak<T>` types are implicitly `T | null | undefined`
-
-This eliminates conversion boilerplate when using TypeScript's standard library (like `Map.get()` which returns `T | undefined`) while maintaining type safety.
-
-See [docs/LANGUAGE.md](docs/LANGUAGE.md) for detailed null/undefined semantics.
-
-***
-
-## Implementation Strategy (Phased Approach)
-
-The language will be implemented incrementally, focusing on safety and correctness before optimization.
-
-| Phase | Core Goal | Output Target | Primary Value Delivered |
-| :--- | :--- | :--- | :--- |
-| **Phase 1: Strict Semantics** | Remove all dynamic/unsafe JS features. | Standard JavaScript/TypeScript | **Enterprise Safety.** Provides a cleaner, bug-resistant syntax and a valid value proposition immediately. |
-| **Phase 2: Ownership Analysis** | Enforce explicit ownership syntax; implement the **DAG Check** on $\text{shared}<T>$ links within the TypeScript AST. | Standard JavaScript/TypeScript | **Compile-Time Safety.** Proves the memory model is sound before code generation. |
-| **Phase 3: Rust Code Generation** | Transpile the verified AST to optimized Rust source code. | Rust | **Performance & Final Safety.** Delivers the zero-cost binary using `Box<T>`, `Rc<T>`, and `Weak<T>`. |
-
-***
-
-## 🔢 Primitive vs. Reference Types
-
-Only the following **Value Types** can be used without an explicit qualifier:
-
-* `number` (mapped to `f64` in Rust)
-* `boolean`
-
-All other complex types, including **Strings** and **Arrays**, are treated as heap-allocated **Reference Types** and **must** be qualified (e.g., `let s: unique<string>`).
-
-> **Future Evolution**: Additional numeric types (like dedicated integer types) may be added in post-Phase 3 releases.
+- Level "clean" restrictions apply (the good parts only)
+- **TypeScript/JavaScript output only** - designed for web development
+- Mix freely with regular `.tsx` files for gradual adoption
+- See [docs/REACT.md](docs/REACT.md) for integration guide

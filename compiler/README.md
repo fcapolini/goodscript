@@ -155,7 +155,7 @@ Phase 3 (planned) will transpile GoodScript to Rust, mapping ownership types to 
 - `shared<T>` → `Rc<T>`
 - `weak<T>` → `Weak<T>`
 
-The result: native performance (1.05-1.15x overhead vs. pure Rust) with deterministic memory management and no garbage collection.
+The result: Rust-level performance with deterministic memory management and no garbage collection.
 
 ## Contributing
 

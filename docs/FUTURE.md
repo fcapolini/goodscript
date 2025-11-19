@@ -16,6 +16,30 @@ This document explores potential future evolutions and enhancements to GoodScrip
 - **Phase 2** - Implements level "dag"  
 - **Phase 3** - Implements level "rust"
 
+### Dual-Target Validation Strategy (Phase 3)
+
+When implementing the Rust code generator (Phase 3), a critical quality assurance strategy will be **dual-target validation**: compiling the same GoodScript source to both JavaScript and Rust, then executing both versions in parallel to verify they produce identical behavior.
+
+**Testing Approach:**
+1. **Compile once, run twice** - Same `.gs.ts` source → both JS and Rust executables
+2. **Parallel execution** - Run identical test suites against both targets
+3. **Output comparison** - Verify both targets produce identical results
+4. **Performance benchmarking** - Measure Rust's performance gains vs JS baseline
+
+**Benefits:**
+- **Correctness validation** - JS target serves as reference implementation
+- **Regression detection** - Catch Rust codegen bugs immediately  
+- **Continuous verification** - Run on every compiler change in CI/CD
+- **Confidence** - Prove the Rust output is semantically equivalent to JS
+
+**Implementation:**
+- Shared test suite runs against both compiled outputs
+- Deterministic test cases (no randomness, fixed inputs)
+- Compare stdout, file outputs, and return codes
+- Flag any divergence as a compiler bug
+
+This strategy leverages the fact that we already have a working JavaScript target - it becomes the "golden reference" for validating Rust code generation correctness.
+
 ### Compilation Targets and Language Levels
 
 **TypeScript/JavaScript Target**: 
