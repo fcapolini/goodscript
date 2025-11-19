@@ -2,7 +2,7 @@
   "name": "goodscript",
   "displayName": "GoodScript",
   "description": "Language support for GoodScript - TypeScript without the bad parts",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "goodscript",
   "repository": {
     "type": "git",
@@ -23,7 +23,8 @@
     "good-parts"
   ],
   "activationEvents": [
-    "onLanguage:typescript"
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact"
   ],
   "main": "./out/extension.js",
   "contributes": {

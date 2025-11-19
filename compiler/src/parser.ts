@@ -13,6 +13,13 @@ export class Parser {
   private compilerOptions: ts.CompilerOptions = {};
 
   /**
+   * Check if a file should have JSX enabled
+   */
+  private isJsxFile(fileName: string): boolean {
+    return fileName.endsWith('.tsx') || fileName.endsWith('.gs.tsx');
+  }
+
+  /**
    * Parse a GoodScript source file
    */
   parseFile(fileName: string, sourceCode: string): ts.SourceFile {
@@ -86,6 +93,9 @@ export class Parser {
     }
     // If configPath === null, auto-detection is explicitly disabled
     
+    // Check if any file requires JSX support
+    const needsJsx = allFiles.some(f => this.isJsxFile(f));
+    
     const defaultOptions: ts.CompilerOptions = {
       target: ts.ScriptTarget.ES2020,
       module: ts.ModuleKind.CommonJS,
@@ -95,18 +105,20 @@ export class Parser {
       lib: [],                    // Don't include DOM libs
       ...tsConfigOptions,         // Load from tsconfig.json
       ...options,                 // Override with explicit options
+      // Enable JSX if needed
+      ...(needsJsx ? { jsx: ts.JsxEmit.Preserve } : {}),
       // These must be preserved for GoodScript to work correctly
       allowNonTsExtensions: true,
       skipLibCheck: true,
     };
 
-    // Custom compiler host to handle .gs.ts and .gs files
+    // Custom compiler host to handle .gs.ts, .gs.tsx and .gs files
     const compilerHost = ts.createCompilerHost(defaultOptions);
     const originalGetSourceFile = compilerHost.getSourceFile;
     
     compilerHost.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
-      // Treat .gs.ts and .gs files as .ts files
-      if (fileName.endsWith('.gs.ts') || fileName.endsWith('.gs')) {
+      // Treat .gs.ts, .gs.tsx and .gs files as TypeScript files
+      if (fileName.endsWith('.gs.ts') || fileName.endsWith('.gs.tsx') || fileName.endsWith('.gs')) {
         const fs = require('fs');
         if (fs.existsSync(fileName)) {
           const sourceCode = fs.readFileSync(fileName, 'utf8');

@@ -1,6 +1,6 @@
 {
   "name": "goodscript",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "TypeScript without the bad parts - strict, ownership-aware compiler with tsc compatibility",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

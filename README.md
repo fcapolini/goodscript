@@ -16,7 +16,8 @@ Write clean TypeScript. Get native performance. No borrow checker required.
   - Fully statically typed (no `any` type, no `eval`, no dynamic runtime types)
   - No type coercion, no `var`, no truthiness, no `this` surprises
   - Strict equality operators only (`===`, `!==`)
-  - GoodScript sources use the `*.gs.ts` extension
+  - GoodScript sources use the `*.gs.ts` extension (or `*.gs.tsx` for React/JSX)
+  - JSX/TSX support for web development (TypeScript output only)
 
 - **A TypeScript to Rust transpiler**
   - Reference counting with ownership tracking (no GC, no borrow checker)
@@ -36,7 +37,7 @@ The second part leverages what is now an enterprise level, fully statically type
 
 ## Clean TypeScript
 
-GoodScript can be **incrementally adopted** in existing TypeScript projects. Use the `.gs.ts` file extension for GoodScript sources and continue using `.ts` for standard TypeScript files—they work side by side seamlessly.
+GoodScript can be **incrementally adopted** in existing TypeScript projects. Use the `.gs.ts` file extension for GoodScript sources (or `.gs.tsx` for React/JSX components) and continue using `.ts` for standard TypeScript files—they work side by side seamlessly.
 
 Simply replace `tsc` with `gsc` in your build process:
 
@@ -57,6 +58,39 @@ import { logger } from './logger';     // Import from TypeScript
 ```
 
 The `gsc` compiler enforces Phase 1 restrictions (no `var`, no `==`, arrow functions only, etc.) on `.gs.ts` files while treating `.ts` files as standard TypeScript. This allows you to introduce stricter coding standards incrementally without requiring a full codebase rewrite.
+
+## Language Levels
+
+GoodScript supports three language levels, configurable in `tsconfig.json`:
+
+**Level 1: `"clean"` (Default for TypeScript target)**
+- Enforces "The Good Parts" - strict TypeScript subset
+- No ownership analysis (JavaScript uses GC)
+- Fast compilation, immediate value
+- Perfect for web development
+
+**Level 2: `"dag"`**
+- Level 1 + ownership/DAG validation
+- Ensures memory safety guarantees
+- Useful for validating designs before Rust compilation
+- Optional for TypeScript target
+
+**Level 3: `"rust"`** (Default for Rust target, Phase 3)
+- Full validation for Rust code generation
+- Ownership + DAG + null-checks
+- Required for native compilation
+
+Configure in `tsconfig.json`:
+```json
+{
+  "compilerOptions": { "..." },
+  "goodscript": {
+    "level": "clean"  // "clean" | "dag" | "rust"
+  }
+}
+```
+
+**Note**: For TypeScript/JavaScript compilation (the default), level defaults to `"clean"` since ownership analysis provides no runtime benefit in garbage-collected environments.
 
 ## Rust transpiler
 
@@ -83,13 +117,23 @@ The Rust backend will support both server-side applications and browser WASM mod
 
 ## Language Overview
 
+GoodScript supports three **language levels**:
+
+1. **Level 1 "clean"** - TypeScript without the bad parts (default for TS target)
+2. **Level 2 "dag"** - Level 1 + ownership/DAG validation
+3. **Level 3 "rust"** - Full validation for native compilation (default for Rust target)
+
+### Ownership System (Levels 2 & 3)
+
 GoodScript combines TypeScript's familiar syntax with Rust's memory safety through a **Three-Tiered Ownership System**:
 
 - **`unique<T>`** - Exclusive ownership (maps to Rust's `Box<T>`)
 - **`shared<T>`** - Shared ownership with reference counting (maps to `Rc<T>`)  
 - **`weak<T>`** - Non-owning references that break cycles (maps to `Weak<T>`)
 
-The compiler enforces that `shared<T>` references form a **Directed Acyclic Graph (DAG)**, preventing memory leaks from reference cycles at compile time.
+**Note**: Ownership types are optional annotations at level "clean". They're only validated at levels "dag" and "rust", where they provide compile-time safety guarantees.
+
+The compiler enforces that `shared<T>` references form a **Directed Acyclic Graph (DAG)**, preventing memory leaks from reference cycles at compile time (levels 2 & 3 only).
 
 **Avoiding cycles:** For complex data structures like trees, graphs, and linked lists that would naturally create ownership cycles, use the **pool pattern** to centralize ownership. See [docs/POOL-PATTERN.md](docs/POOL-PATTERN.md) for detailed examples.
 
@@ -97,21 +141,25 @@ The compiler enforces that `shared<T>` references form a **Directed Acyclic Grap
 
 **📖 See [docs/LANGUAGE.md](docs/LANGUAGE.md) for complete language specification**
 
-## Implementation Phases
+## Implementation Status
 
-| Phase | Goal | Output | Status |
-|-------|------|--------|--------|
-| **Phase 1** | Strict TypeScript semantics<br/>(13 restrictions, 234 tests) | JavaScript/TypeScript | ✅ **Complete** |
-| **Phase 2** | Ownership analysis & DAG validation | JavaScript/TypeScript | 🚧 In Progress |
-| **Phase 3** | Rust code generation | Native binaries via Rust | 📋 Planned |
+GoodScript is being developed in phases, with each phase corresponding to a language level:
 
-**Phase 1 Restrictions** (see [docs/GOOD-PARTS.md](docs/GOOD-PARTS.md) for details):
+| Phase | Language Level | Features | Status |
+|-------|----------------|----------|--------|
+| **Phase 1** | Level 1 "clean" | Strict TypeScript semantics<br/>(13 restrictions, 244 tests) | ✅ **Complete** |
+| **Phase 2** | Level 2 "dag" | Ownership analysis & DAG validation | 🚧 In Progress |
+| **Phase 3** | Level 3 "rust" | Rust code generation | 📋 Planned |
+
+**Phase 1 Restrictions** (enforced at all levels, see [docs/GOOD-PARTS.md](docs/GOOD-PARTS.md)):
 - GS101-GS108: Language features (`with`, `eval`, `arguments`, `for-in`, `var`, `==`, `!=`, function declarations)
 - GS109-GS112: Type safety (`any` type, truthy/falsy, `delete`, comma operator)
 - GS115: `void` operator
 - GS201: Implicit type coercion
 
-See [docs/DAG-DETECTION.md](docs/DAG-DETECTION.md) for cycle detection implementation details.
+**Phase 2** adds ownership tracking and cycle detection (see [docs/DAG-DETECTION.md](docs/DAG-DETECTION.md))
+
+**Phase 3** will generate optimized Rust code for native performance
 
 ## Installation
 
@@ -147,9 +195,37 @@ Or install from the [Visual Studio Marketplace](https://marketplace.visualstudio
 
 The extension provides:
 - Real-time Phase 1 restriction validation
-- Syntax highlighting for `.gs.ts` files
+- Syntax highlighting for `.gs.ts` and `.gs.tsx` files
+- JSX/TSX support for React development
 - Configurable validation settings
 - Client-side checking (no compiler required for basic validation)
+
+## JSX/TSX Support
+
+GoodScript supports React and JSX syntax via `.gs.tsx` files:
+
+```tsx
+// UserCard.gs.tsx - GoodScript React component
+const UserCard = (props: unique<{ name: string; email: string }>) => {
+  return (
+    <div className="user-card">
+      <h2>{props.name}</h2>
+      <p>{props.email}</p>
+    </div>
+  );
+};
+
+export { UserCard };
+```
+
+**Key points:**
+- Use `.gs.tsx` extension for JSX/React components
+- All Phase 1 restrictions apply (arrow functions, `===` only, etc.)
+- Ownership types work with component props
+- **TypeScript output only** - `.gs.tsx` files don't compile to Rust
+- Perfect for web development with strict coding standards
+
+JSX support is designed for frontend development workflows, while the Rust compilation target serves systems programming use cases.
 
 ## Language description
 

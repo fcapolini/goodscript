@@ -51,7 +51,7 @@ export class Compiler {
    * Determine if a file is a GoodScript file based on extension
    */
   private isGoodScriptFile(fileName: string): boolean {
-    return fileName.endsWith('.gs.ts') || fileName.endsWith('.gs');
+    return fileName.endsWith('.gs.ts') || fileName.endsWith('.gs.tsx') || fileName.endsWith('.gs');
   }
 
   /**
@@ -73,7 +73,23 @@ export class Compiler {
     // Merge goodscript config from tsconfig.json with CLI options
     // CLI options take precedence over tsconfig.json
     const goodscriptConfig = this.parser.getGoodScriptConfig();
-    const effectiveSkipOwnership = options.skipOwnershipChecks ?? goodscriptConfig?.skipOwnership ?? false;
+    const target = options.target || 'typescript';
+    
+    // Determine language level
+    // - For TypeScript target: default to 'clean' (Phase 1 only)
+    // - For Rust target: default to 'rust' (full validation)
+    const defaultLevel = target === 'rust' ? 'rust' : 'clean';
+    const level = goodscriptConfig?.level ?? defaultLevel;
+    
+    // For backwards compatibility, check deprecated skipOwnership flag
+    const explicitSkipOwnership = options.skipOwnershipChecks ?? goodscriptConfig?.skipOwnership;
+    
+    // Determine if ownership analysis should run based on level
+    // - 'clean': no ownership analysis (Phase 1 only)
+    // - 'dag': ownership + DAG validation (Phase 2)
+    // - 'rust': full validation (Phase 3)
+    const shouldAnalyzeOwnership = level === 'dag' || level === 'rust';
+    const effectiveSkipOwnership = explicitSkipOwnership ?? !shouldAnalyzeOwnership;
 
     // Get TypeScript diagnostics
     const tsDiagnostics = ts.getPreEmitDiagnostics(program);
@@ -141,7 +157,6 @@ export class Compiler {
 
     // If successful and outDir specified, generate code
     if (!hasErrors && options.outDir) {
-      const target = options.target || 'typescript';
       const emit = options.emit || 'js';  // Default to JS output
       
       if (target === 'typescript') {

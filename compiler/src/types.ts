@@ -71,16 +71,32 @@ export interface ValidationResult {
 }
 
 /**
+ * GoodScript language level
+ */
+export type LanguageLevel = 'clean' | 'dag' | 'rust';
+
+/**
  * GoodScript-specific configuration from tsconfig.json
  */
 export interface GoodScriptConfig {
   /**
+   * Language level (determines which features are enabled)
+   * - 'clean': Phase 1 restrictions only (TypeScript "good parts")
+   * - 'dag': Phase 1 + ownership/DAG validation
+   * - 'rust': Full validation for Rust compilation
+   * Default: 'clean'
+   */
+  level?: LanguageLevel;
+  
+  /**
+   * @deprecated Use 'level' instead
    * Skip ownership analysis for all files
    * Default: false
    */
   skipOwnership?: boolean;
   
   /**
+   * @deprecated Use 'level' instead
    * Skip null-check analysis for all files
    * Default: false
    */

@@ -4,11 +4,12 @@ Language support for GoodScript - TypeScript without the bad parts.
 
 ## Features
 
-- **Full TypeScript Integration**: `.gs.ts` files work as TypeScript files with all IDE features
-- **Zero Configuration**: Automatic setup - just open a `.gs.ts` file and start coding
+- **Full TypeScript Integration**: `.gs.ts` and `.gs.tsx` files work as TypeScript files with all IDE features
+- **JSX/TSX Support**: Use `.gs.tsx` for React components with Phase 1 enforcement
+- **Zero Configuration**: Automatic setup - just open a `.gs.ts` or `.gs.tsx` file and start coding
 - **Real-time Validation**: Instant feedback on Phase 1 violations (var, ==, function keyword, etc.)
 - **Error Squiggles**: All GoodScript diagnostics shown as VS Code problems
-- **Incremental Adoption**: Mix `.gs.ts` and `.ts` files in the same project
+- **Incremental Adoption**: Mix `.gs.ts`, `.gs.tsx`, and `.ts` files in the same project
 
 ## What is Phase 1?
 
@@ -45,25 +46,28 @@ Alternatively, configure a custom compiler path in VS Code settings.
 ## Quick Start
 
 1. Install the extension
-2. Create a file with `.gs.ts` extension
+2. Create a file with `.gs.ts` (or `.gs.tsx` for React) extension
 3. Start coding - the extension will:
    - Auto-generate `tsconfig.json` if needed
    - Provide full TypeScript IntelliSense
    - Show GoodScript Phase 1 errors in real-time
 
-## File Extension
+## File Extensions
 
-**Use `.gs.ts` for all GoodScript files.**
+**Use `.gs.ts` for GoodScript files, `.gs.tsx` for React/JSX.**
 
 This provides:
 - ✅ Full TypeScript language server support
 - ✅ Go to definition, rename, refactoring
 - ✅ Import/export works seamlessly
+- ✅ JSX syntax highlighting and auto-completion (`.gs.tsx` only)
 - ✅ All IDE features work out of the box
+
+**Note**: `.gs.tsx` files compile to TypeScript/JavaScript only (not Rust). They're for web development workflows.
 
 ## Automatic Configuration
 
-When you open a folder with `.gs.ts` files, the extension automatically creates:
+When you open a folder with `.gs.ts` or `.gs.tsx` files, the extension automatically creates:
 
 **`tsconfig.json`** - TypeScript configuration (if not present):
 ```json
@@ -72,9 +76,10 @@ When you open a folder with `.gs.ts` files, the extension automatically creates:
     "target": "ES2020",
     "module": "commonjs",
     "lib": ["ES2020"],
-    "strict": true
+    "strict": true,
+    "jsx": "preserve"
   },
-  "include": ["**/*.gs.ts"]
+  "include": ["**/*.gs.ts", "**/*.gs.tsx"]
 }
 ```
 

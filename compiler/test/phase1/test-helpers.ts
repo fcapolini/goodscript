@@ -8,11 +8,17 @@ import * as os from 'os';
 import * as fs from 'fs';
 import { Compiler, CompileResult } from '../../src/compiler';
 import { Diagnostic } from '../../src/types';
+import { Parser } from '../../src/parser';
+import { TypeScriptCodegen } from '../../src/ts-codegen';
+
+interface CompileSourceResult extends CompileResult {
+  output?: string;
+}
 
 /**
  * Compile source code string for testing
  */
-export function compileSource(source: string, fileName: string = 'test.gs.ts'): CompileResult {
+export function compileSource(source: string, fileName: string = 'test.gs.ts'): CompileSourceResult {
   // Create a temporary file
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goodscript-test-'));
   const filePath = path.join(tmpDir, fileName);
@@ -26,7 +32,24 @@ export function compileSource(source: string, fileName: string = 'test.gs.ts'): 
       skipOwnershipChecks: true  // Phase 1 tests don't care about ownership
     });
     
-    return result;
+    // Generate TypeScript output for testing
+    let output: string | undefined;
+    if (fileName.endsWith('.gs.ts') || fileName.endsWith('.gs.tsx') || fileName.endsWith('.gs')) {
+      const parser = new Parser();
+      parser.createProgram([filePath], undefined, null);
+      const program = parser.getProgram();
+      const sourceFile = program.getSourceFile(filePath);
+      
+      if (sourceFile) {
+        const codegen = new TypeScriptCodegen();
+        output = codegen.generate(sourceFile);
+      }
+    }
+    
+    return {
+      ...result,
+      output
+    };
   } finally {
     // Cleanup
     try {

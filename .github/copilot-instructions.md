@@ -4,11 +4,21 @@
 
 **GoodScript** is a TypeScript variant with ownership semantics that compiles to both TypeScript/JavaScript and (eventually) Rust. It eliminates JavaScript's "bad parts" and adds a three-tier ownership system for deterministic memory management.
 
-**Current Status**: Phase 1 (Strict TypeScript) complete with 162 tests passing. Phase 2 (Ownership analysis) in progress.
+**Current Status**: Language level "clean" (Phase 1) complete with 244 tests passing. Language level "dag" (Phase 2) in progress.
 
 ## Core Concepts
 
-### Three-Tier Ownership System
+### Language Levels (User-Facing)
+- **Level 1 "clean"** - TypeScript "good parts" only (default for TS/JS target)
+- **Level 2 "dag"** - Level 1 + ownership/DAG validation
+- **Level 3 "rust"** - Full validation for native compilation (default for Rust target)
+
+**Implementation Phases** (internal development milestones):
+- **Phase 1** implements level "clean"
+- **Phase 2** implements level "dag"
+- **Phase 3** implements level "rust"
+
+### Three-Tier Ownership System (Levels 2 & 3)
 - **`unique<T>`** - Exclusive ownership (maps to Rust's `Box<T>`)
 - **`shared<T>`** - Shared ownership with reference counting (maps to `Rc<T>`)
 - **`weak<T>`** - Non-owning references (maps to `Weak<T>`) - implicitly nullable
@@ -18,7 +28,7 @@
 - `weak<T>` = `T | null | undefined` (implicitly nullable)
 - Checking for either `null` or `undefined` satisfies null-safety requirements
 
-### Phase 1: Strict TypeScript ("The Good Parts")
+### Level "clean" Restrictions (All Levels)
 Enforces compile-time restrictions (error codes GS101-GS108, GS201):
 
 | Code | Restriction | Why |
@@ -33,7 +43,7 @@ Enforces compile-time restrictions (error codes GS101-GS108, GS201):
 | GS108 | No function declarations/expressions | Use arrow functions (lexical `this`) |
 | GS201 | No implicit type coercion | Explicit string/number conversion |
 
-**Important**: Phase 1 restrictions apply **only to `.gs.ts` files**. Regular `.ts` files are compiled like TypeScript (tsc-compatible).
+**Important**: These restrictions apply **only to `.gs.ts` and `.gs.tsx` files**. Regular `.ts` files are compiled like TypeScript (tsc-compatible).
 
 ## Project Structure
 

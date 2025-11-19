@@ -81,7 +81,7 @@ export function deactivate() {
 }
 
 function isGoodScriptFile(document: vscode.TextDocument): boolean {
-  return document.fileName.endsWith('.gs.ts');
+  return document.fileName.endsWith('.gs.ts') || document.fileName.endsWith('.gs.tsx');
 }
 
 async function validateDocument(document: vscode.TextDocument): Promise<void> {

@@ -1,6 +1,6 @@
 # GoodScript Compiler
 
-The GoodScript compiler (`gsc`) transforms GoodScript (`.gs.ts`) files into JavaScript/TypeScript or Rust, enforcing ownership semantics and memory safety guarantees.
+The GoodScript compiler (`gsc`) transforms GoodScript (`.gs.ts` and `.gs.tsx`) files into JavaScript/TypeScript or Rust, enforcing ownership semantics and memory safety guarantees.
 
 ## Overview
 
@@ -30,6 +30,8 @@ Compile a single file:
 
 ```bash
 gsc myfile.gs.ts
+# or for React/JSX:
+gsc mycomponent.gs.tsx
 ```
 
 Compile with options:
