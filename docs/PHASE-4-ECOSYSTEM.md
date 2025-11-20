@@ -837,6 +837,52 @@ gsc init my-lib --template=wasm-lib
 gsc init my-gui --template=rust-tauri
 ```
 
+### Type Extraction Tool
+
+**Automatically generate `.d.ts` bindings from Rust crates:**
+
+```bash
+# Extract TypeScript declarations from a Rust crate
+gsc extract-types serde_json --output bindings/serde-json.d.ts
+
+# Output: bindings/serde-json.d.ts
+declare module '@rust/serde_json' {
+  export const from_str: <T>(s: string) => T;
+  export const to_string: <T>(value: T) => string;
+  export const to_string_pretty: <T>(value: T) => string;
+}
+```
+
+**How it works:**
+1. Parse `rustdoc` JSON output for the crate
+2. Extract public function signatures, structs, and enums
+3. Map Rust types to TypeScript equivalents
+4. Generate `.d.ts` file with proper exports
+
+**Type mappings:**
+- `String` → `string`
+- `i32`, `i64`, `f64` → `number`
+- `bool` → `boolean`
+- `Vec<T>` → `Array<T>`
+- `Option<T>` → `T | null`
+- `Result<T, E>` → `T` (throws on error)
+- `Box<T>` → `Unique<T>`
+- `Rc<T>` → `Shared<T>`
+
+**Batch extraction for multiple crates:**
+```bash
+# Generate bindings for common crates
+gsc extract-types tokio reqwest serde_json diesel --output bindings/
+
+# Creates:
+# bindings/tokio.d.ts
+# bindings/reqwest.d.ts
+# bindings/serde-json.d.ts
+# bindings/diesel.d.ts
+```
+
+This tool dramatically reduces the manual work needed to expose Rust libraries to GoodScript. Since the all-Result pattern handles error propagation automatically, you just need the type signatures!
+
 ### Configuration File
 
 **`goodscript.config.json`:**
@@ -1222,6 +1268,11 @@ const contents = await readFile("config.json", "utf8");
 - ✅ C library bindings
 - ✅ Type safety across boundaries
 - ✅ npm → Rust crate mapping
+- 🔧 **Type extraction tool** - Auto-generate `.d.ts` from Rust crate docs
+  - Parse rustdoc output to extract function signatures
+  - Generate TypeScript declarations automatically
+  - Map Rust types to GoodScript equivalents
+  - Dramatically reduce manual binding work
 
 ### Phase 4.5: Testing & Tooling (Month 9-10)
 - ✅ Test framework for Rust target
