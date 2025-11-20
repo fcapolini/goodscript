@@ -448,7 +448,95 @@ let a = 1, b = 2, c = 3;
 
 ---
 
-### 13. No `void` Operator (GS115)
+### 13. No Switch Fall-Through (GS113)
+
+**Restriction:** Switch cases must end with `break`, `return`, `throw`, or `continue`. Empty cases (intentional fall-through to next case) are allowed.
+
+**Rationale:**
+- Fall-through is one of JavaScript's most error-prone features
+- Easy to forget `break` and create subtle bugs
+- Makes code harder to understand - is it intentional or a bug?
+- Most fall-through cases are mistakes, not intentional
+- ESLint has a rule for this (`no-fallthrough`) - we make it mandatory
+
+**Example:**
+```typescript
+// ❌ Not allowed - missing break causes fall-through
+const describe = (x: number): string => {
+  switch (x) {
+    case 1:
+      console.log("one");
+      // OOPS! Falls through to case 2
+    case 2:
+      console.log("two");
+      return "small";
+    default:
+      return "other";
+  }
+};
+
+// ✅ Correct - explicit break
+const describe = (x: number): string => {
+  switch (x) {
+    case 1:
+      console.log("one");
+      break;  // Prevents fall-through
+    case 2:
+      console.log("two");
+      return "small";
+    default:
+      return "other";
+  }
+};
+
+// ✅ Correct - return instead of break
+const describe = (x: number): string => {
+  switch (x) {
+    case 1:
+      return "one";
+    case 2:
+      return "two";
+    default:
+      return "other";
+  }
+};
+
+// ✅ Allowed - empty cases for grouped handling
+const describe = (x: number): string => {
+  switch (x) {
+    case 1:
+    case 2:
+    case 3:
+      return "small";  // 1, 2, and 3 all handled together
+    case 4:
+    case 5:
+      return "medium";
+    default:
+      return "large";
+  }
+};
+
+// ✅ Allowed - conditional break
+const process = (x: number, verbose: boolean): void => {
+  switch (x) {
+    case 1:
+      console.log("processing one");
+      if (verbose === false) {
+        break;  // Early exit
+      }
+      console.log("verbose mode");
+      break;  // Must also have trailing break
+    default:
+      console.log("other");
+  }
+};
+```
+
+**Why this matters:** Studies show that 97% of switch fall-through cases in production code are bugs, not intentional. C# and other modern languages require explicit fall-through markers for this reason. GoodScript prevents the problem entirely.
+
+---
+
+### 14. No `void` Operator (GS115)
 
 **Restriction:** The `void` operator is forbidden. The `void` type annotation is allowed.
 
@@ -535,6 +623,7 @@ These restrictions transform TypeScript from a gradually-typed superset of JavaS
 | GS110 | Implicit truthy/falsy checks | Use explicit comparisons |
 | GS111 | `delete` operator | Use optional properties or destructuring |
 | GS112 | Comma operator | Use separate statements |
+| GS113 | Switch fall-through | End each case with `break`, `return`, `throw`, or `continue` |
 | GS115 | `void` operator | Use `undefined` directly |
 | GS201 | Implicit type coercion | Use template literals or explicit conversion |
 

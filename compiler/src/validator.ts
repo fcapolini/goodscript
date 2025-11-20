@@ -45,6 +45,9 @@ export class Validator {
     // Check for truthy/falsy conditions
     this.checkTruthyFalsy(node, sourceFile);
 
+    // Check for switch fall-through
+    this.checkSwitchFallThrough(node, sourceFile);
+
     // Recurse into children
     ts.forEachChild(node, (child: ts.Node) => this.visit(child, sourceFile, checker));
   }
@@ -357,6 +360,49 @@ export class Validator {
   private isNumberType(type: ts.Type): boolean {
     return (type.flags & ts.TypeFlags.Number) !== 0 ||
            (type.flags & ts.TypeFlags.NumberLiteral) !== 0;
+  }
+
+  /**
+   * Check for switch statement fall-through (GS113)
+   */
+  private checkSwitchFallThrough(node: ts.Node, sourceFile: ts.SourceFile): void {
+    if (!ts.isSwitchStatement(node)) {
+      return;
+    }
+
+    const clauses = node.caseBlock.clauses;
+    
+    for (let i = 0; i < clauses.length; i++) {
+      const clause = clauses[i];
+      
+      // Skip empty cases (intentional fall-through to next case is allowed for empty cases)
+      if (clause.statements.length === 0) {
+        continue;
+      }
+
+      // Skip the last clause (doesn't need a break)
+      if (i === clauses.length - 1) {
+        continue;
+      }
+
+      // Check if the clause ends with a control flow statement
+      const lastStatement = clause.statements[clause.statements.length - 1];
+      const endsWithControlFlow = 
+        ts.isBreakStatement(lastStatement) ||
+        ts.isReturnStatement(lastStatement) ||
+        ts.isThrowStatement(lastStatement) ||
+        ts.isContinueStatement(lastStatement);
+
+      if (!endsWithControlFlow) {
+        const location = Parser.getLocation(clause, sourceFile);
+        const clauseType = ts.isCaseClause(clause) ? 'case' : 'default';
+        this.addError(
+          `Switch ${clauseType} must end with break, return, throw, or continue to prevent fall-through. Fall-through is error-prone and not allowed in GoodScript`,
+          location,
+          'GS113'
+        );
+      }
+    }
   }
 
   /**

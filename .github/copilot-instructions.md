@@ -30,7 +30,7 @@
 - Checking for either `null` or `undefined` satisfies null-safety requirements
 
 ### Level "clean" Restrictions (All Levels)
-Enforces compile-time restrictions (error codes GS101-GS108, GS201):
+Enforces compile-time restrictions (error codes GS101-GS113, GS115, GS201):
 
 | Code | Restriction | Why |
 |------|-------------|-----|
@@ -42,6 +42,12 @@ Enforces compile-time restrictions (error codes GS101-GS108, GS201):
 | GS106 | No `==` operator | Use `===` |
 | GS107 | No `!=` operator | Use `!==` |
 | GS108 | No function declarations/expressions | Use arrow functions (lexical `this`) |
+| GS109 | No `any` type | Use explicit types or generics |
+| GS110 | No implicit truthy/falsy | Explicit comparisons |
+| GS111 | No `delete` operator | Optional properties or destructuring |
+| GS112 | No comma operator | Use separate statements |
+| GS113 | No switch fall-through | Cases must end with `break`/`return`/`throw`/`continue` |
+| GS115 | No `void` operator | Use `undefined` directly |
 | GS201 | No implicit type coercion | Explicit string/number conversion |
 
 **Important**: These restrictions apply **only to `.gs.ts` and `.gs.tsx` files**. Regular `.ts` files are compiled like TypeScript (tsc-compatible).

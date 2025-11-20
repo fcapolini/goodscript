@@ -174,6 +174,274 @@ describe('Phase 3 - For Loops', () => {
       
       compareOutputs(jsResult, rustResult);
     });
+
+    it('should produce same output for for loop with conditional logic', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        for (let i = 0; i < 10; i++) {
+          if (i % 2 === 0) {
+            console.log(i);
+          }
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for nested for loops', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        for (let i = 0; i < 2; i++) {
+          for (let j = 0; j < 3; j++) {
+            console.log(i * 10 + j);
+          }
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for for loop with accumulation', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        let sum = 0;
+        for (let i = 1; i <= 5; i++) {
+          sum += i;
+        }
+        console.log(sum);
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for for loop with early break', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        for (let i = 0; i < 10; i++) {
+          if (i === 5) {
+            break;
+          }
+          console.log(i);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for for loop with continue', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        for (let i = 0; i < 5; i++) {
+          if (i === 2) {
+            continue;
+          }
+          console.log(i);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for basic numeric for loop', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        for (let i = 0; i < 3; i++) {
+          console.log(i);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for for loop with step increment', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        for (let i = 0; i < 10; i += 2) {
+          console.log(i);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for for loop with decrement', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        for (let i = 5; i > 0; i--) {
+          console.log(i);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for for loop with complex condition', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        for (let i = 0; i < 5; i++) {
+          if (i > 2) {
+            console.log(i);
+          }
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for for loop with multiple operations', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        let sum = 0;
+        for (let i = 1; i <= 3; i++) {
+          sum += i;
+          console.log(sum);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for for loop with step increment', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        for (let i = 0; i < 10; i = i + 2) {
+          console.log(i);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for for loop with decrement', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        for (let i = 5; i > 0; i--) {
+          console.log(i);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
   });
 
   describe('Rust Validation', () => {
@@ -198,6 +466,29 @@ describe('Phase 3 - For Loops', () => {
         console.log('Rust errors:', validation.errors);
       }
       expect(validation.valid).toBe(true);
+    });
+
+    it('should produce same output for numeric counter for loop', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        let sum = 0;
+        for (let i = 1; i <= 10; i++) {
+          sum = sum + i;
+        }
+        console.log(sum);
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
     });
   });
 });

@@ -183,6 +183,163 @@ describe('Phase 3 - Array Methods', () => {
       
       compareOutputs(jsResult, rustResult);
     });
+
+    it('should produce same output for map with index', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const numbers = [10, 20, 30];
+        const indexed = numbers.map((x, i) => x + i);
+        for (const n of indexed) {
+          console.log(n);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for chained map and filter', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const numbers = [1, 2, 3, 4, 5];
+        const result = numbers
+          .map((x) => x * 2)
+          .filter((x) => x > 5);
+        for (const n of result) {
+          console.log(n);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for reduce-like operations', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const numbers = [1, 2, 3, 4];
+        let sum = 0;
+        numbers.forEach((x) => sum += x);
+        console.log(sum);
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for simple map', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const numbers = [1, 2, 3];
+        const doubled = numbers.map((x) => x * 2);
+        console.log(doubled.length);
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for simple filter', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const numbers = [1, 2, 3, 4, 5];
+        const evens = numbers.filter((x) => x % 2 === 0);
+        console.log(evens.length);
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for simple forEach', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const numbers = [1, 2, 3];
+        let count = 0;
+        numbers.forEach((x) => count += 1);
+        console.log(count);
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for map with index parameter', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const letters = ["a", "b", "c"];
+        const indexed = letters.map((letter, i) => i);
+        for (const idx of indexed) {
+          console.log(idx);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
   });
 
   describe('Rust Validation', () => {
@@ -228,6 +385,29 @@ describe('Phase 3 - Array Methods', () => {
         console.log('Rust errors:', validation.errors);
       }
       expect(validation.valid).toBe(true);
+    });
+
+    it('should produce same output for filter with boolean check', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const numbers = [1, 2, 3, 4, 5, 6];
+        const filtered = numbers.filter((x) => x > 3);
+        for (const n of filtered) {
+          console.log(n);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
     });
   });
 });

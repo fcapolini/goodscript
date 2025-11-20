@@ -231,5 +231,379 @@ describe('Phase 3 - Rust Code Generation - Ownership Types', () => {
       
       compareOutputs(jsResult, rustResult);
     });
+
+    it('should produce same output for Weak values', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const w: Weak<number> = 99;
+        if (w !== null && w !== undefined) {
+          console.log(w);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for null Weak values', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const getWeak = (): Weak<number> => {
+          return null;
+        };
+        
+        const w = getWeak();
+        if (w !== null && w !== undefined) {
+          console.log(w);
+        } else {
+          console.log("null");
+        }
+      `;
+
+      const result = compile(source);
+      if (!result.success) {
+        console.log('Compilation failed with errors:', result.errors);
+      }
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for mixed ownership types', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const u: Unique<number> = 10;
+        const s: Shared<number> = 20;
+        const sum = u + s;
+        console.log(sum);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for ownership types with arrays', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const arr: Shared<number[]> = [1, 2, 3];
+        for (const n of arr) {
+          console.log(n);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for class with ownership fields', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        class Container {
+          unique: Unique<number> = 42;
+          shared: Shared<string> = "test";
+        }
+        
+        const c = new Container();
+        console.log(c.unique);
+        console.log(c.shared);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for Unique with Box', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const x: Unique<number> = 100;
+        console.log(x);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for nested Unique types', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const x: Unique<Unique<number>> = 5;
+        console.log(x);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for Shared with Rc', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const s: Shared<number> = 25;
+        console.log(s);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for Shared with complex types', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const items: Shared<number[]> = [1, 2, 3];
+        for (const item of items) {
+          console.log(item);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for Weak reference', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const w: Weak<number> = 77;
+        if (w !== null && w !== undefined) {
+          console.log(w);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for multiple ownership types', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const u: Unique<number> = 1;
+        const s: Shared<number> = 2;
+        const w: Weak<number> = 3;
+        
+        console.log(u);
+        console.log(s);
+        if (w !== null && w !== undefined) {
+          console.log(w);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for nested Unique types', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const nested: Unique<number[]> = [10, 20, 30];
+        for (const item of nested) {
+          console.log(item);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for class with ownership fields', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        class Container {
+          value: Unique<number>;
+          
+          constructor(v: number) {
+            this.value = v;
+          }
+        }
+        
+        const c = new Container(42);
+        console.log(c.value);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for multiple ownership types in one file', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const u: Unique<number> = 10;
+        const s: Shared<number> = 20;
+        const w: Weak<number> = 30;
+        console.log(u);
+        console.log(s);
+        if (w !== null && w !== undefined) {
+          console.log(w);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for Shared with string type', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const msg: Shared<string> = "shared message";
+        console.log(msg);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for Weak with null check', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const w: Weak<string> = "weak value";
+        if (w !== null && w !== undefined) {
+          console.log(w);
+        } else {
+          console.log("was null");
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
   });
 });

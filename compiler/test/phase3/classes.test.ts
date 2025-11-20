@@ -240,5 +240,354 @@ describe('Phase 3 - Rust Code Generation - Classes', () => {
       
       compareOutputs(jsResult, rustResult);
     });
+
+    it('should produce same output for class with mixed field types', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        class User {
+          id: number = 123;
+          name: string = "Alice";
+          active: boolean = true;
+        }
+        
+        const user = new User();
+        console.log(user.id);
+        console.log(user.name);
+        console.log(user.active);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for method with parameters', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        class Calculator {
+          add(a: number, b: number): number {
+            return a + b;
+          }
+          
+          multiply(x: number, y: number): number {
+            return x * y;
+          }
+        }
+        
+        const calc = new Calculator();
+        console.log(calc.add(5, 3));
+        console.log(calc.multiply(4, 7));
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for method accessing fields', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        class Rectangle {
+          width: number = 10;
+          height: number = 5;
+          
+          area(): number {
+            return this.width * this.height;
+          }
+        }
+        
+        const rect = new Rectangle();
+        console.log(rect.area());
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for interface-based struct', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        interface Point {
+          x: number;
+          y: number;
+        }
+        
+        const p: Point = { x: 3, y: 7 };
+        console.log(p.x);
+        console.log(p.y);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for simple class to struct translation', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        class Point {
+          x: number = 0;
+          y: number = 0;
+        }
+        
+        const p = new Point();
+        console.log(p.x);
+        console.log(p.y);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for method that mutates state', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        class Counter {
+          count: number = 0;
+          
+          increment(): void {
+            this.count = this.count + 1;
+          }
+          
+          getCount(): number {
+            return this.count;
+          }
+        }
+        
+        const c = new Counter();
+        console.log(c.getCount());
+        c.increment();
+        console.log(c.getCount());
+        c.increment();
+        console.log(c.getCount());
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for getter method', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        class Calculator {
+          value: number = 42;
+          
+          getValue(): number {
+            return this.value;
+          }
+        }
+        
+        const calc = new Calculator();
+        console.log(calc.getValue());
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for method with multiple parameters', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        class MathHelper {
+          multiplier: number = 1;
+          
+          add(a: number, b: number): number {
+            return a + b;
+          }
+        }
+        
+        const helper = new MathHelper();
+        console.log(helper.add(10, 20));
+        console.log(helper.add(5, 15));
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for interface with object literal', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        interface Point {
+          x: number;
+          y: number;
+        }
+        
+        const origin: Point = { x: 0, y: 0 };
+        console.log(origin.x);
+        console.log(origin.y);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for interface with optional property', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        interface User {
+          id: number;
+          email: string | null;
+        }
+        
+        const user1: User = { id: 1, email: "test@example.com" };
+        const user2: User = { id: 2, email: null };
+        
+        console.log(user1.id);
+        if (user1.email !== null && user1.email !== undefined) {
+          console.log(user1.email);
+        }
+        console.log(user2.id);
+        if (user2.email === null || user2.email === undefined) {
+          console.log("no email");
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for class with mixed field types', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        class Person {
+          name: string = "Alice";
+          age: number = 30;
+          active: boolean = true;
+        }
+        
+        const p = new Person();
+        console.log(p.name);
+        console.log(p.age);
+        console.log(p.active);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for method with parameters', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        class Adder {
+          base: number = 10;
+          
+          add(x: number, y: number): number {
+            return this.base + x + y;
+          }
+        }
+        
+        const adder = new Adder();
+        console.log(adder.add(5, 3));
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
   });
 });

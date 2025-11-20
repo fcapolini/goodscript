@@ -1,16 +1,16 @@
 # Phase 3: Rust Code Generation
 
-**Status:** 🚧 In Progress (control flow and array methods complete, comprehensive runtime equivalence testing)
+**Status:** 🚧 In Progress (all core features complete, comprehensive runtime equivalence testing)
 
-**Test Coverage:** 154 tests passing with **34 runtime equivalence tests** across all 11 test files verifying functional correctness
+**Test Coverage:** 308 tests passing (1 skipped) with **192 runtime equivalence tests (68%)** verifying functional correctness
 
 ## Current Implementation Status
 
 ### ✅ Completed Features
 
 - **AST → Rust Translation** - Core transformation pipeline working
-- **Rustc Validation** - All generated Rust code compiles with rustc (22 validation tests)
-- **Runtime Equivalence Testing** - 34 tests verify JS and Rust produce identical output across all major features
+- **Rustc Validation** - All generated Rust code compiles with rustc (30 validation tests)
+- **Runtime Equivalence Testing** - 192 tests verify JS and Rust produce identical output across all major features
 - **Ownership Type Mapping** - `Unique<T>` → `Box<T>`, `Shared<T>` → `Rc<T>`, `Weak<T>` → `Weak<T>`
 - **Ownership Constructors** - Automatic wrapping in Box::new(), Rc::new(), Rc::downgrade()
 - **Primitive Types** - number→f64, string→String, boolean→bool, void→()
@@ -32,12 +32,12 @@
 - **Switch Statements** - switch/case → match expressions
 - **Template Literals** - Backtick strings → format! macro
 - **Parenthesized Expressions** - Preserved for clarity
-- **Try/Catch/Finally** - Exception handling → Result<T, E> pattern  
+- **Try/Catch/Finally** - Exception handling → Result<T, E> pattern with finally blocks in both Ok/Err branches
 - **Throw Statements** - throw → return Err()
 - **While Loops** - while condition { } preserved
 - **Do-While Loops** - do-while → loop with conditional break
 - **Break/Continue** - Preserved, including labeled variants
-- **Labeled Statements** - Labels → Rust lifetime syntax ('label)
+- **Labeled Statements** - Labels → Rust lifetime syntax ('label) applied directly to loops
 - **Element Access** - Array/map indexing with proper type inference
 - **All-Result Pattern** - Every function returns Result<T, E> for error propagation
 - **Error Propagation** - ? operator on all function calls
@@ -79,7 +79,7 @@ if (isRustcAvailable()) {
 }
 ```
 
-The test suite includes 22 comprehensive validation tests covering:
+The test suite includes 30 comprehensive validation tests covering:
 - Primitive types (number, string, boolean)
 - Arrow functions (single-expression and block bodies)
 - Collections (arrays, vec! macros)
@@ -87,8 +87,10 @@ The test suite includes 22 comprehensive validation tests covering:
 - Classes (structs, impl blocks, methods)
 - Advanced features (for-of loops, this.property, control flow)
 - Null/undefined handling
+- Try/catch/finally blocks
+- Error propagation
 
-**All 61 Phase 3 tests pass**, with every generated Rust code snippet compiling successfully with rustc.
+**All 308 Phase 3 tests pass (1 skipped)**, with every generated Rust code snippet compiling successfully with rustc. The test suite includes **192 runtime equivalence tests (68% coverage)** that execute both JavaScript and Rust versions and verify they produce identical output.
 
 ---
 

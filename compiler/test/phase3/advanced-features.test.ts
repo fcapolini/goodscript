@@ -176,7 +176,8 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('for n in &arr');
+      // Use .iter().copied() for iterating over Vec<f64> to get owned values
+      expect(result.rustCode).toMatch(/for n in (&arr|arr\.iter\(\)\.copied\(\))/);
       expect(result.rustCode).not.toContain('const n');
     });
 
@@ -190,7 +191,8 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('for item in &items');
+      // Accept both &items and .iter().copied() patterns
+      expect(result.rustCode).toMatch(/for item in (&items|items\.iter\(\)\.copied\(\))/);
       expect(result.rustCode).not.toContain('let item');
     });
   });
@@ -239,7 +241,8 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       expect(result.success).toBe(true);
       expect(result.rustCode).toContain('|numbers: Vec<f64>| -> Result<f64, String> {');
       expect(result.rustCode).toContain('let mut total = 0');
-      expect(result.rustCode).toContain('for n in &numbers');
+      // Accept both &numbers and .iter().copied() patterns
+      expect(result.rustCode).toMatch(/for n in (&numbers|numbers\.iter\(\)\.copied\(\))/);
       expect(result.rustCode).toContain('total = total + n');
     });
 
@@ -280,7 +283,8 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('for v in &self.values');
+      // Property access uses .iter().copied() to get owned values for Copy types
+      expect(result.rustCode).toContain('for v in self.values.iter().copied()');
       expect(result.rustCode).toContain('self.values = newArray');
       expect(result.rustCode).not.toContain('this.');
       expect(result.rustCode).not.toContain('const v');
@@ -362,6 +366,269 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       expect(result.jsResult.success).toBe(true);
       expect(result.rustResult.success).toBe(true);
       expect(normalizeOutput(result.jsResult.stdout)).toBe('10\n20\n30');
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for this.property access', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        class Counter {
+          count: number = 5;
+          
+          increment(): void {
+            this.count = this.count + 1;
+          }
+          
+          getValue(): number {
+            return this.count;
+          }
+        }
+        
+        const c = new Counter();
+        console.log(c.getValue());
+        c.increment();
+        console.log(c.getValue());
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for multiple this references', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        class Calculator {
+          x: number = 3;
+          y: number = 4;
+          
+          setValues(a: number, b: number): void {
+            this.x = a;
+            this.y = b;
+          }
+          
+          sum(): number {
+            return this.x + this.y;
+          }
+        }
+        
+        const calc = new Calculator();
+        console.log(calc.sum());
+        calc.setValues(10, 20);
+        console.log(calc.sum());
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for for-of with const', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const arr: number[] = [1, 2, 3, 4];
+        let total = 0;
+        for (const n of arr) {
+          total = total + n;
+        }
+        console.log(total);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for for-of with let', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const items: number[] = [5, 10, 15];
+        for (let item of items) {
+          console.log(item * 2);
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for arrow function with block body', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const add = (a: number, b: number): number => {
+          return a + b;
+        };
+        console.log(add(5, 3));
+        console.log(add(10, 20));
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for multi-statement arrow functions', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const compute = (x: number): number => {
+          const doubled = x + x;
+          const squared = doubled * doubled;
+          return squared;
+        };
+        console.log(compute(2));
+        console.log(compute(3));
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for arrow function with for loop', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const sumArray = (numbers: number[]): number => {
+          let total = 0;
+          for (const n of numbers) {
+            total = total + n;
+          }
+          return total;
+        };
+        const nums: number[] = [1, 2, 3, 4, 5];
+        console.log(sumArray(nums));
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for single-expression arrow functions', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const square = (x: number): number => x * x;
+        const double = (x: number): number => x + x;
+        console.log(square(5));
+        console.log(double(7));
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for class with methods using this and loops', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        class Accumulator {
+          total: number = 0;
+          
+          add(value: number): void {
+            this.total = this.total + value;
+          }
+          
+          getTotal(): number {
+            return this.total;
+          }
+        }
+        
+        const acc = new Accumulator();
+        const values: number[] = [1, 2, 3, 4, 5];
+        for (const v of values) {
+          acc.add(v);
+        }
+        console.log(acc.getTotal());
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for this.property access', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        class Box {
+          value: number = 100;
+          
+          getValue(): number {
+            return this.value;
+          }
+        }
+        
+        const b = new Box();
+        console.log(b.getValue());
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for method returning this.property', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        class Calculator {
+          x: number = 5;
+          y: number = 10;
+          
+          multiply(): number {
+            return this.x * this.y;
+          }
+        }
+        
+        const calc = new Calculator();
+        console.log(calc.multiply());
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
       expect(result.equivalent).toBe(true);
     });
   });

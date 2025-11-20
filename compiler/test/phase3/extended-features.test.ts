@@ -413,5 +413,661 @@ describe('Phase 3 - Rust Code Generation - Extended Features', () => {
       
       compareOutputs(jsResult, rustResult);
     });
+
+    it('should produce same output for logical AND operator', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const a = true;
+        const b = true;
+        const result = a && b;
+        console.log(result);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for logical OR operator', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const a = false;
+        const b = true;
+        const result = a || b;
+        console.log(result);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for logical NOT operator', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const a = true;
+        const result = !a;
+        console.log(result);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for unary minus', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const x = 42;
+        const y = -x;
+        console.log(y);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for prefix increment', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        let x = 5;
+        ++x;
+        console.log(x);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for prefix decrement', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        let x = 5;
+        --x;
+        console.log(x);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for nested ternary expressions', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const x = 0;
+        const result = x > 0 ? "positive" : x < 0 ? "negative" : "zero";
+        console.log(result);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for complex logical expressions', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const a = true;
+        const b = false;
+        const c = true;
+        const result = (a && b) || c;
+        console.log(result);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for parenthesized expressions', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const a = 5;
+        const b = 3;
+        const c = 2;
+        const result = (a + b) * c;
+        console.log(result);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for string concatenation', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const first = "Hello";
+        const second = "World";
+        const result = first + " " + second;
+        console.log(result);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for mixed arithmetic', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const x = 10;
+        const y = 3;
+        console.log(x + y);
+        console.log(x - y);
+        console.log(x * y);
+        console.log(x / y);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for comparison operators', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        let a = 5;
+        let b = 3;
+        console.log(a > b);
+        console.log(a < b);
+        console.log(a >= b);
+        console.log(a <= b);
+        console.log(a === b);
+        console.log(a !== b);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for multiple ternary in sequence', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const x = 5;
+        const result1 = x > 3 ? "big" : "small";
+        const result2 = x < 10 ? "yes" : "no";
+        console.log(result1);
+        console.log(result2);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for template literal with multiple substitutions', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const name = "Alice";
+        const age = 30;
+        const city = "NYC";
+        const message = \`\${name} is \${age} years old and lives in \${city}\`;
+        console.log(message);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for combined logical and comparison', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const x = 5;
+        const y = 10;
+        const z = 3;
+        const result = (x > z) && (y > x);
+        console.log(result);
+        const result2 = (x < z) || (y > x);
+        console.log(result2);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for increment in expressions', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        let x = 5;
+        ++x;
+        console.log(x);
+        --x;
+        console.log(x);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for logical AND', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const a = true;
+        const b = false;
+        console.log(a && b);
+        console.log(a && true);
+        console.log(false && b);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for logical OR', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const a = true;
+        const b = false;
+        console.log(a || b);
+        console.log(false || false);
+        console.log(true || false);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for logical NOT', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const a = true;
+        const b = false;
+        console.log(!a);
+        console.log(!b);
+        console.log(!!a);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for unary minus', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const x = 42;
+        const y = -x;
+        console.log(y);
+        console.log(-100);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for nested ternary', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const classify = (x: number): string => 
+          x > 0 ? "positive" : x < 0 ? "negative" : "zero";
+        console.log(classify(5));
+        console.log(classify(-3));
+        console.log(classify(0));
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for parenthesized expressions', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const a = 2;
+        const b = 3;
+        const c = 4;
+        const result1 = (a + b) * c;
+        const result2 = a + (b * c);
+        console.log(result1);
+        console.log(result2);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for switch with enum', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        enum Status {
+          Pending,
+          Active,
+          Done
+        }
+        
+        const describe = (status: number): string => {
+          let result = "";
+          switch (status) {
+            case 0:
+              result = "pending";
+              break;
+            case 1:
+              result = "active";
+              break;
+            case 2:
+              result = "done";
+              break;
+            default:
+              result = "unknown";
+              break;
+          }
+          return result;
+        };
+        
+        console.log(describe(0));
+        console.log(describe(1));
+        console.log(describe(2));
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for logical operators with ternary', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const check = (a: boolean, b: boolean, c: boolean): string =>
+          a && b ? "both" : c || a ? "some" : "none";
+        
+        console.log(check(true, true, false));
+        console.log(check(false, true, true));
+        console.log(check(false, false, false));
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for numeric enum usage', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        enum Color {
+          Red,
+          Green,
+          Blue
+        }
+        const c: number = 1;
+        console.log(c);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for enum with explicit values', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        enum Status {
+          Pending = 0,
+          Active = 1,
+          Completed = 100
+        }
+        const s: number = 100;
+        console.log(s);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for switch to match', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const getLabel = (value: number): string => {
+          let label = "";
+          switch (value) {
+            case 1:
+              label = "one";
+              break;
+            case 2:
+              label = "two";
+              break;
+            default:
+              label = "other";
+              break;
+          }
+          return label;
+        };
+        console.log(getLabel(1));
+        console.log(getLabel(2));
+        console.log(getLabel(99));
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
   });
 });

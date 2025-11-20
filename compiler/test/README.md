@@ -84,6 +84,7 @@ Phase 1 tests verify that GoodScript correctly enforces the "Good Parts" restric
 | `no-truthy-falsy.test.ts` | GS110 | No implicit truthy/falsy - use explicit comparisons |
 | `no-delete.test.ts` | GS111 | No `delete` operator - use optional properties or destructuring |
 | `no-comma-operator.test.ts` | GS112 | No comma operator - use separate statements |
+| `switch-fall-through.test.ts` | GS113 | No switch fall-through - cases must end with `break`/`return`/`throw`/`continue` |
 | `no-void-operator.test.ts` | GS115 | No `void` operator - use `undefined` directly |
 | `no-arguments.test.ts` | GS103 | No `arguments` object - use rest parameters |
 | `no-for-in.test.ts` | GS104 | No `for-in` loops - use `for-of` or explicit iteration |

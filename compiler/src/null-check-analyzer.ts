@@ -140,7 +140,7 @@ export class NullCheckAnalyzer {
       // Use .text property for identifiers to avoid source file issues
       const typeName = ts.isIdentifier(resolvedType.typeName)
         ? resolvedType.typeName.text
-        : resolvedType.typeName.getText(sourceFile);
+        : (resolvedType.typeName.pos >= 0 ? resolvedType.typeName.getText(sourceFile) : '');
       if (typeName === 'Weak') {
         return true;
       }
@@ -169,7 +169,7 @@ export class NullCheckAnalyzer {
       // Use the identifier text directly to avoid source file issues
       const typeNameText = ts.isIdentifier(typeNode.typeName) 
         ? typeNode.typeName.text 
-        : typeNode.typeName.getText();
+        : (typeNode.typeName.pos >= 0 ? typeNode.typeName.getText() : '');
       if (typeNameText === 'Shared' || typeNameText === 'Weak' || typeNameText === 'Unique') {
         return typeNode;
       }

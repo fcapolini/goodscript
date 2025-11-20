@@ -17,6 +17,10 @@ export class RustCodegen {
   private readonly INDENT = '    '; // 4 spaces
   private output: string[] = [];
   private imports = new Set<string>();
+  private optionVariables = new Set<string>();  // Track variables with Option<T> type
+  private integerVariables = new Set<string>();  // Track variables with integer type (from for loops)
+  private inSwitchCaseClosure = false;  // Track if we're inside a switch case closure (for break handling)
+  private currentLabel?: string;  // Track current label for labeled loops
   
   /**
    * Check if a node or its descendants contain return statements
@@ -52,6 +56,9 @@ export class RustCodegen {
     this.indentLevel = 0;
     this.output = [];
     this.imports = new Set();
+    this.optionVariables = new Set();
+    this.integerVariables = new Set();
+    this.inSwitchCaseClosure = false;
   }
   
   /**
@@ -133,6 +140,7 @@ export class RustCodegen {
           ts.isBreakStatement(statement) ||
           ts.isContinueStatement(statement) ||
           ts.isThrowStatement(statement) ||
+          ts.isLabeledStatement(statement) ||
           ts.isBlock(statement)) {
         topLevelDecls.push(statement);
       } else {
@@ -241,14 +249,37 @@ export class RustCodegen {
     
     for (const decl of declarations) {
       const name = decl.name.getText();
-      const mutability = isConst ? '' : 'mut ';
+      // Make variables mutable if they're not const, OR if they're initialized with a class instance
+      const needsMutable = !isConst || (decl.initializer && ts.isNewExpression(decl.initializer));
+      const mutability = needsMutable ? 'mut ' : '';
       const typeAnnotation = decl.type ? `: ${this.generateType(decl.type)}` : '';
       
       if (decl.initializer) {
-        let value = this.generateExpression(decl.initializer);
+        let value: string;
+        
+        // For object literals with type annotation, pass the type to the generator
+        if (ts.isObjectLiteralExpression(decl.initializer) && decl.type && ts.isTypeReferenceNode(decl.type)) {
+          const structName = decl.type.typeName.getText();
+          value = this.generateObjectLiteralWithType(decl.initializer, structName);
+        } else {
+          value = this.generateExpression(decl.initializer);
+        }
+        
+        // Check if we need to wrap in Some() for Option types
+        if (decl.type) {
+          const rustType = this.generateType(decl.type);
+          // If it's an Option type and the value isn't None, wrap in Some()
+          if (rustType.startsWith('Option<')) {
+            // Track this variable as an Option type
+            this.optionVariables.add(name);
+            if (value !== 'None') {
+              value = `Some(${value})`;
+            }
+          }
+        }
         
         // Wrap value in ownership constructor if needed (but not for arrow functions)
-        if (decl.type && !ts.isArrowFunction(decl.initializer)) {
+        if (decl.type && !ts.isArrowFunction(decl.initializer) && !ts.isObjectLiteralExpression(decl.initializer)) {
           value = this.wrapInOwnershipConstructor(value, decl.type);
         }
         
@@ -332,20 +363,44 @@ export class RustCodegen {
     this.emit('}');
     this.emit('');
     
-    // Generate impl block for methods
+    // Generate impl block for constructor and methods
     const methods = classDecl.members.filter(ts.isMethodDeclaration);
-    if (methods.length > 0) {
-      this.emit(`impl ${name} {`);
-      this.indent();
-      
-      for (const method of methods) {
-        this.generateMethodDeclaration(method);
+    this.emit(`impl ${name} {`);
+    this.indent();
+    
+    // Generate constructor (new method)
+    this.emit(`fn new() -> Self {`);
+    this.indent();
+    this.emit(`${name} {`);
+    this.indent();
+    
+    // Initialize fields with their default values
+    for (const field of fields) {
+      const fieldName = field.name.getText();
+      if (field.initializer) {
+        const initValue = this.generateExpression(field.initializer);
+        this.emit(`${fieldName}: ${initValue},`);
+      } else {
+        // Use default values
+        const fieldType = field.type ? this.generateType(field.type) : 'unknown';
+        this.emit(`${fieldName}: ${this.getDefaultValue(fieldType)},`);
       }
-      
-      this.dedent();
-      this.emit('}');
-      this.emit('');
     }
+    
+    this.dedent();
+    this.emit('}');
+    this.dedent();
+    this.emit('}');
+    this.emit('');
+    
+    // Generate methods
+    for (const method of methods) {
+      this.generateMethodDeclaration(method);
+    }
+    
+    this.dedent();
+    this.emit('}');
+    this.emit('');
   }
   
   /**
@@ -587,6 +642,9 @@ export class RustCodegen {
       // Simple range-based loop: for (let i = start; i < end; i++)
       const { variable, start, end, step, descending, inclusive } = pattern;
       
+      // Track this variable as an integer type
+      this.integerVariables.add(variable);
+      
       // For Rust ranges, we need integers, not f64
       // Strip .0 suffix from numeric literals
       const startInt = this.convertToIntegerLiteral(start);
@@ -622,6 +680,9 @@ export class RustCodegen {
       this.generateStatement(statement.statement);
       this.dedent();
       this.emit('}');
+      
+      // Remove from integer tracking after the loop scope ends
+      this.integerVariables.delete(variable);
     } else {
       // Complex loop - use traditional loop construct
       this.emit('{');
@@ -808,26 +869,49 @@ export class RustCodegen {
     
     const iterable = this.generateExpression(statement.expression);
     
-    // In Rust, we should iterate over references to avoid consuming the collection
-    // This is especially important for:
-    // 1. Property access (e.g., self.values) - we don't want to move out of self
-    // 2. Local variables (e.g., vec) - they might be used later or in nested loops
-    // 3. Any collection that implements IntoIterator but not Copy
-    // Only skip the & if iterating over an array literal or function call result
-    const needsRef = !ts.isArrayLiteralExpression(statement.expression) &&
-                     !ts.isCallExpression(statement.expression);
-    const iterableWithRef = needsRef ? `&${iterable}` : iterable;
-    
-    this.emit(`for ${variable} in ${iterableWithRef} {`);
+    // Use .iter().copied() for all iterations over Vec<T> where T: Copy
+    // This gives us owned values instead of references, avoiding &T vs T issues
+    // when passing loop variables to functions
+    // Note: This assumes we're iterating over Copy types (primitives)
+    // For non-Copy types (String, complex objects), this would need .iter().cloned()
+    // or iteration by reference with manual dereferencing
+    const label = this.currentLabel ? `'${this.currentLabel}: ` : '';
+    const savedLabel = this.currentLabel;
+    this.currentLabel = undefined;  // Clear label after using it
+    this.emit(`${label}for ${variable} in ${iterable}.iter().copied() {`);
     this.indent();
     this.generateStatement(statement.statement);
     this.dedent();
     this.emit('}');
+    this.currentLabel = savedLabel;
   }
   
   /**
    * Generate switch statement as Rust match expression
    */
+  /**
+   * Check if a node contains break statements (recursively)
+   */
+  private containsBreakStatement(node: ts.Node): boolean {
+    if (ts.isBreakStatement(node)) {
+      return true;
+    }
+    
+    let hasBreak = false;
+    ts.forEachChild(node, child => {
+      // Don't recurse into nested loops or switches - their breaks don't affect us
+      if (ts.isForStatement(child) || ts.isWhileStatement(child) || 
+          ts.isDoStatement(child) || ts.isSwitchStatement(child)) {
+        return;
+      }
+      if (this.containsBreakStatement(child)) {
+        hasBreak = true;
+      }
+    });
+    
+    return hasBreak;
+  }
+
   private generateSwitchStatement(statement: ts.SwitchStatement): void {
     const expr = this.generateExpression(statement.expression);
     
@@ -835,21 +919,71 @@ export class RustCodegen {
     this.indent();
     
     for (const clause of statement.caseBlock.clauses) {
+      const hasConditionalBreak = clause.statements.some(stmt => 
+        !ts.isBreakStatement(stmt) && this.containsBreakStatement(stmt)
+      );
+      
       if (ts.isCaseClause(clause)) {
         const pattern = this.generateExpression(clause.expression);
         this.emit(`${pattern} => {`);
         this.indent();
-        for (const stmt of clause.statements) {
-          this.generateStatement(stmt);
+        
+        if (hasConditionalBreak) {
+          // Wrap in closure to support early return for conditional breaks
+          this.emit('(|| {');
+          this.indent();
+          this.inSwitchCaseClosure = true;
         }
+        
+        for (const stmt of clause.statements) {
+          if (ts.isBreakStatement(stmt)) {
+            if (hasConditionalBreak) {
+              // This should never happen at top level when hasConditionalBreak is true
+              // but keep for safety
+              this.emit('return;');
+            }
+            // Otherwise skip - match arms don't need trailing breaks
+          } else {
+            this.generateStatement(stmt);
+          }
+        }
+        
+        if (hasConditionalBreak) {
+          this.inSwitchCaseClosure = false;
+          this.dedent();
+          this.emit('})();');
+        }
+        
         this.dedent();
         this.emit('},');
       } else if (ts.isDefaultClause(clause)) {
         this.emit('_ => {');
         this.indent();
-        for (const stmt of clause.statements) {
-          this.generateStatement(stmt);
+        
+        if (hasConditionalBreak) {
+          // Wrap in closure to support early return for conditional breaks
+          this.emit('(|| {');
+          this.indent();
+          this.inSwitchCaseClosure = true;
         }
+        
+        for (const stmt of clause.statements) {
+          if (ts.isBreakStatement(stmt)) {
+            if (hasConditionalBreak) {
+              this.emit('return;');
+            }
+            // Otherwise skip - match arms don't need trailing breaks
+          } else {
+            this.generateStatement(stmt);
+          }
+        }
+        
+        if (hasConditionalBreak) {
+          this.inSwitchCaseClosure = false;
+          this.dedent();
+          this.emit('})();');
+        }
+        
         this.dedent();
         this.emit('},');
       }
@@ -964,12 +1098,13 @@ export class RustCodegen {
   /**
    * Generate expression
    */
-  private generateExpression(expr: ts.Expression): string {
+  private generateExpression(expr: ts.Expression, useIntegerLiterals = false): string {
     if (ts.isNumericLiteral(expr)) {
       const text = expr.getText();
       // Add .0 if it's an integer literal (for f64 compatibility)
+      // Unless we're in an integer context (comparing with integer loop variables)
       if (!text.includes('.') && !text.includes('e') && !text.includes('E')) {
-        return text + '.0';
+        return useIntegerLiterals ? text : text + '.0';
       }
       return text;
     } else if (ts.isStringLiteral(expr)) {
@@ -1090,8 +1225,11 @@ export class RustCodegen {
       }
     }
     
-    const left = this.generateExpression(expr.left);
-    const right = this.generateExpression(expr.right);
+    // Check if we're comparing with an integer variable
+    const useIntegerLiterals = this.shouldUseIntegerLiterals(expr);
+    
+    const left = this.generateExpression(expr.left, useIntegerLiterals);
+    const right = this.generateExpression(expr.right, useIntegerLiterals);
     
     // Translate JavaScript operators to Rust
     if (operator === '===') {
@@ -1102,6 +1240,20 @@ export class RustCodegen {
     // Note: &&, ||, and other logical operators are the same in Rust
     
     return `${left} ${operator} ${right}`;
+  }
+  
+  /**
+   * Check if a binary expression should use integer literals
+   */
+  private shouldUseIntegerLiterals(expr: ts.BinaryExpression): boolean {
+    // Check if either operand is an integer variable
+    if (ts.isIdentifier(expr.left) && this.integerVariables.has(expr.left.getText())) {
+      return true;
+    }
+    if (ts.isIdentifier(expr.right) && this.integerVariables.has(expr.right.getText())) {
+      return true;
+    }
+    return false;
   }
   
   /**
@@ -1182,7 +1334,18 @@ export class RustCodegen {
       
       // console.log -> println! macro
       if (object === 'console' && property === 'log') {
-        const args = expr.arguments.map(arg => this.generateExpression(arg));
+        const args = expr.arguments.map(arg => {
+          let argExpr = this.generateExpression(arg);
+          // If the argument is an identifier that we know is an Option type,
+          // unwrap it (assumes it's been null-checked beforehand)
+          if (ts.isIdentifier(arg)) {
+            const varName = arg.getText();
+            if (this.optionVariables.has(varName)) {
+              argExpr = `${argExpr}.unwrap()`;
+            }
+          }
+          return argExpr;
+        });
         // Use println! macro for console.log
         // Macros don't need the ? operator
         if (args.length === 0) {
@@ -1363,6 +1526,12 @@ export class RustCodegen {
     const object = this.generateExpression(expr.expression);
     const property = expr.name.getText();
     
+    // Map JavaScript property names to Rust equivalents
+    if (property === 'length') {
+      // array.length -> vec.len() as f64 (for comparison with f64 loop variables)
+      return `${object}.len() as f64`;
+    }
+    
     return `${object}.${property}`;
   }
   
@@ -1381,6 +1550,22 @@ export class RustCodegen {
     }).filter(p => p !== '').join(', ');
     
     return `{ ${properties} }`;
+  }
+  
+  /**
+   * Generate object literal with explicit struct type name
+   */
+  private generateObjectLiteralWithType(expr: ts.ObjectLiteralExpression, structName: string): string {
+    const properties = expr.properties.map(prop => {
+      if (ts.isPropertyAssignment(prop)) {
+        const name = prop.name.getText();
+        const value = this.generateExpression(prop.initializer);
+        return `${name}: ${value}`;
+      }
+      return '';
+    }).filter(p => p !== '').join(', ');
+    
+    return `${structName} { ${properties} }`;
   }
   
   /**
@@ -1497,7 +1682,9 @@ export class RustCodegen {
   private generateTryStatement(statement: ts.TryStatement): void {
     // In Rust, we'll convert try/catch to a closure that returns Result
     // and then match on it
-    this.emit('let result = (|| -> Result<(), String> {');
+    // Use a unique variable name to avoid shadowing
+    const tryResultVar = `try_result_${Math.random().toString(36).substr(2, 9)}`;
+    this.emit(`let ${tryResultVar} = (|| -> Result<(), String> {`);
     this.indent();
     
     // Generate try block
@@ -1512,12 +1699,23 @@ export class RustCodegen {
     this.emit('})();');
     this.emit('');
     
-    // Generate catch block if present
+    // Generate catch block with finally support
     if (statement.catchClause) {
-      this.emit('match result {');
+      this.emit(`match ${tryResultVar} {`);
       this.indent();
-      this.emit('Ok(_) => {},');
       
+      // Ok branch
+      this.emit('Ok(_) => {');
+      this.indent();
+      if (statement.finallyBlock) {
+        for (const stmt of statement.finallyBlock.statements) {
+          this.generateStatement(stmt);
+        }
+      }
+      this.dedent();
+      this.emit('},');
+      
+      // Error branch
       const errorVar = statement.catchClause.variableDeclaration?.name.getText() || 'e';
       this.emit(`Err(${errorVar}) => {`);
       this.indent();
@@ -1528,15 +1726,18 @@ export class RustCodegen {
         }
       }
       
+      if (statement.finallyBlock) {
+        for (const stmt of statement.finallyBlock.statements) {
+          this.generateStatement(stmt);
+        }
+      }
+      
       this.dedent();
       this.emit('}');
       this.dedent();
       this.emit('}');
-    }
-    
-    // Generate finally block if present
-    if (statement.finallyBlock) {
-      this.emit('// Finally block');
+    } else if (statement.finallyBlock) {
+      // No catch block, just finally - execute it after the try
       for (const stmt of statement.finallyBlock.statements) {
         this.generateStatement(stmt);
       }
@@ -1589,6 +1790,12 @@ export class RustCodegen {
    * Generate break statement
    */
   private generateBreakStatement(statement: ts.BreakStatement): void {
+    // If we're inside a switch case closure, use return instead
+    if (this.inSwitchCaseClosure) {
+      this.emit('return;');
+      return;
+    }
+    
     if (statement.label) {
       const label = statement.label.getText();
       this.emit(`break '${label};`);
@@ -1614,11 +1821,26 @@ export class RustCodegen {
    */
   private generateLabeledStatement(statement: ts.LabeledStatement): void {
     const label = statement.label.getText();
-    this.emit(`'${label}: loop {`);
-    this.indent();
-    this.generateStatement(statement.statement);
-    this.dedent();
-    this.emit('}');
+    
+    // If the labeled statement is a loop (for, while, do-while), label it directly
+    if (ts.isForStatement(statement.statement) ||
+        ts.isForOfStatement(statement.statement) ||
+        ts.isWhileStatement(statement.statement) ||
+        ts.isDoStatement(statement.statement)) {
+      // Save and set the label for this loop
+      const savedLabel = this.currentLabel;
+      this.currentLabel = label;
+      this.generateStatement(statement.statement);
+      this.currentLabel = savedLabel;
+    } else {
+      // For other statements, wrap in a labeled loop
+      this.emit(`'${label}: loop {`);
+      this.indent();
+      this.generateStatement(statement.statement);
+      this.emit('break;');  // Exit the loop after one iteration unless broken earlier
+      this.dedent();
+      this.emit('}');
+    }
   }
   
   /**
@@ -1626,15 +1848,76 @@ export class RustCodegen {
    */
   private generateElementAccess(expr: ts.ElementAccessExpression): string {
     const object = this.generateExpression(expr.expression);
-    const index = this.generateExpression(expr.argumentExpression);
     
-    // For arrays, use indexing; for maps, use get()
-    // We'll use a simple heuristic: if index is a number, use [], otherwise assume it's a map
-    if (ts.isNumericLiteral(expr.argumentExpression)) {
-      return `${object}[${index} as usize]`;
-    } else {
-      // Could be a map access
+    // Check if index is a string (for HashMap/map access)
+    if (ts.isStringLiteral(expr.argumentExpression)) {
+      const index = this.generateExpression(expr.argumentExpression);
       return `${object}[&${index}]`;
+    }
+    
+    // For string identifiers (like 'key' parameter), use reference
+    // This is a heuristic - ideally we'd use type checking
+    if (ts.isIdentifier(expr.argumentExpression)) {
+      const varName = expr.argumentExpression.getText();
+      // Check if this looks like a string variable (simple heuristic)
+      // In the future, use actual type information
+      const index = this.generateExpression(expr.argumentExpression);
+      
+      // If it's clearly numeric context (in integerVariables), use usize
+      if (this.integerVariables.has(varName)) {
+        return `${object}[${index}]`;
+      }
+      
+      // Default: assume it might be f64, cast to usize for array indexing
+      // Note: This won't work for HashMap, but we don't support those yet
+      return `${object}[${index} as usize]`;
+    }
+    
+    // Numeric literal - use as integer
+    if (ts.isNumericLiteral(expr.argumentExpression)) {
+      const index = this.generateExpression(expr.argumentExpression, true);
+      return `${object}[${index}]`;
+    }
+    
+    // Complex expression - cast to usize
+    const index = this.generateExpression(expr.argumentExpression);
+    return `${object}[${index} as usize]`;
+  }
+
+  /**
+   * Get default value for a Rust type
+   */
+  private getDefaultValue(rustType: string): string {
+    switch (rustType) {
+      case 'f64':
+      case 'i32':
+      case 'i64':
+      case 'u32':
+      case 'u64':
+        return '0.0';
+      case 'bool':
+        return 'false';
+      case 'String':
+        return 'String::new()';
+      case '()':
+        return '()';
+      default:
+        // For complex types like Vec, Box, Rc, Option
+        if (rustType.startsWith('Vec<')) {
+          return 'vec![]';
+        } else if (rustType.startsWith('Box<')) {
+          const inner = rustType.slice(4, -1);
+          return `Box::new(${this.getDefaultValue(inner)})`;
+        } else if (rustType.startsWith('Rc<')) {
+          const inner = rustType.slice(3, -1);
+          return `Rc::new(${this.getDefaultValue(inner)})`;
+        } else if (rustType.startsWith('Option<')) {
+          return 'None';
+        } else if (rustType.startsWith('Weak<')) {
+          return 'Weak::new()';
+        }
+        // Default to a comment indicating manual initialization needed
+        return `/* TODO: initialize ${rustType} */`;
     }
   }
 }

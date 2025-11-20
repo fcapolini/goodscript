@@ -206,21 +206,26 @@ describe('Phase 3 - Error Propagation Through Call Chains', () => {
       }
     });
 
-    it('should generate valid Rust for error propagation with return values', () => {
+    it('should generate valid Rust for error propagation with return values (success path)', () => {
       const result = compile(`
-        const getValue = (): number => {
-          if (Math.random() > 0.5) {
-            throw "random error";
+        const getValue = (condition: boolean): number => {
+          if (condition === true) {
+            throw "error condition met";
           }
           return 42.0;
         };
 
         const compute = (): number => {
-          const value = getValue();
+          const value = getValue(false);
           return value * 2.0;
         };
+        
+        const result = compute();
       `);
       
+      if (!result.success) {
+        console.log('Compilation failed with errors:', result.errors);
+      }
       expect(result.success).toBe(true);
       
       if (result.rustValid !== undefined) {
@@ -228,13 +233,115 @@ describe('Phase 3 - Error Propagation Through Call Chains', () => {
           console.log('Rust code:', result.rustCode);
           console.log('Rust errors:', result.rustErrors);
         }
-        // Note: This may not validate because Math.random() doesn't exist in generated Rust
-        // but the error propagation mechanism itself is correct
+        expect(result.rustValid).toBe(true);
+      }
+    });
+
+    it('should generate valid Rust for error propagation with return values (error path)', () => {
+      const result = compile(`
+        const getValue = (condition: boolean): number => {
+          if (condition === true) {
+            throw "error condition met";
+          }
+          return 42.0;
+        };
+
+        const compute = (): number => {
+          const value = getValue(true);
+          return value * 2.0;
+        };
+        
+        try {
+          const result = compute();
+        } catch (e) {
+          const msg = "caught error";
+        }
+      `);
+      
+      if (!result.success) {
+        console.log('Compilation failed with errors:', result.errors);
+      }
+      expect(result.success).toBe(true);
+      
+      if (result.rustValid !== undefined) {
+        if (!result.rustValid) {
+          console.log('Rust code:', result.rustCode);
+          console.log('Rust errors:', result.rustErrors);
+        }
+        expect(result.rustValid).toBe(true);
       }
     });
   });
 
   describe('Runtime Equivalence', () => {
+    it('should produce same output for single function error propagation', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const throwsError = (): void => {
+          throw "error from function";
+        };
+
+        const caller = (): void => {
+          throwsError();
+        };
+        
+        try {
+          caller();
+          console.log("no error");
+        } catch (e) {
+          console.log("caught");
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for multiple function error propagation', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const deepFunction = (): void => {
+          throw "error from deep";
+        };
+
+        const middleFunction = (): void => {
+          deepFunction();
+        };
+
+        const topFunction = (): void => {
+          middleFunction();
+        };
+        
+        try {
+          topFunction();
+          console.log("no error");
+        } catch (e) {
+          console.log("caught deep error");
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
     it('should produce same output for try/catch with successful execution', async () => {
       if (!isRustcAvailable()) {
         console.log('⚠️  rustc not available - skipping runtime test');
@@ -283,6 +390,243 @@ describe('Phase 3 - Error Propagation Through Call Chains', () => {
         } catch (e) {
           console.log("error caught");
         }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for error propagation through call chain', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const level3 = (): number => {
+          return 100;
+        };
+        
+        const level2 = (): number => {
+          return level3() + 10;
+        };
+        
+        const level1 = (): number => {
+          return level2() + 1;
+        };
+        
+        try {
+          console.log(level1());
+        } catch (e) {
+          console.log("error");
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for function returning value with error check', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const divide = (a: number, b: number): number => {
+          if (b === 0) {
+            throw "division by zero";
+          }
+          return a / b;
+        };
+        
+        try {
+          const result = divide(10, 2);
+          console.log(result);
+        } catch (e) {
+          console.log("error");
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for nested try/catch', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const inner = (): number => {
+          return 42;
+        };
+        
+        const outer = (): number => {
+          try {
+            return inner();
+          } catch (e) {
+            return -1;
+          }
+        };
+        
+        try {
+          console.log(outer());
+        } catch (e) {
+          console.log("outer error");
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for multiple function calls in try block', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const f1 = (): number => 10;
+        const f2 = (): number => 20;
+        const f3 = (): number => 30;
+        
+        try {
+          const a = f1();
+          const b = f2();
+          const c = f3();
+          console.log(a + b + c);
+        } catch (e) {
+          console.log("error");
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for propagated error that succeeds', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const getValue = (shouldThrow: boolean): number => {
+          if (shouldThrow === true) {
+            throw "error occurred";
+          }
+          return 42;
+        };
+        
+        const compute = (): number => {
+          const value = getValue(false);
+          return value * 2;
+        };
+        
+        try {
+          console.log(compute());
+        } catch (e) {
+          console.log("error");
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for propagated error that fails', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const getValue = (shouldThrow: boolean): number => {
+          if (shouldThrow === true) {
+            throw "error occurred";
+          }
+          return 42;
+        };
+        
+        const compute = (): number => {
+          const value = getValue(true);
+          return value * 2;
+        };
+        
+        try {
+          console.log(compute());
+        } catch (e) {
+          console.log("caught");
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for catch from propagated call chain', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const deepFunction = (): void => {
+          throw "deep error";
+        };
+
+        const middleFunction = (): void => {
+          deepFunction();
+        };
+
+        const topFunction = (): void => {
+          try {
+            middleFunction();
+            console.log("no error");
+          } catch (e) {
+            console.log("caught error");
+          }
+        };
+        
+        topFunction();
       `;
 
       const result = compile(source);

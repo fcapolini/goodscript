@@ -185,6 +185,22 @@ describe('Phase 3 - Rust Code Generation - Basic Types', () => {
   });
 
   describe('Runtime Equivalence - Primitive Types', () => {
+    it('should produce equivalent output for number type', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const x: number = 42;
+        console.log(x);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
     it('should produce equivalent output for number operations', () => {
       if (!isRustcAvailable()) {
         console.log('Skipping runtime test: rustc not available');
@@ -259,6 +275,316 @@ describe('Phase 3 - Rust Code Generation - Basic Types', () => {
       expect(normalizeOutput(result.jsResult.stdout)).toBe('false\ntrue\nfalse');
       expect(result.equivalent).toBe(true);
     });
+
+    it('should produce equivalent output for string type', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const s: string = "hello";
+        console.log(s);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for boolean type', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const flag: boolean = true;
+        console.log(flag);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for arrow functions', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const add = (a: number, b: number): number => a + b;
+        console.log(add(3, 4));
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for arrow functions with block body', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const square = (x: number): number => {
+          return x * x;
+        };
+        console.log(square(5));
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for array literals', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const numbers: number[] = [1, 2, 3];
+        for (const n of numbers) {
+          console.log(n);
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for empty arrays', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const nums: number[] = [];
+        console.log(nums.length);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for null values', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const x: number | null = null;
+        if (x === null) {
+          console.log("null");
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for undefined values', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const x: number | undefined = undefined;
+        if (x === undefined) {
+          console.log("undefined");
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for nullable type with value', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const x: number | null = 42;
+        if (x !== null && x !== undefined) {
+          console.log(x);
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for void return type', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const noop = (): void => {
+          console.log("executed");
+        };
+        noop();
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for array type annotation', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const numbers: number[] = [1, 2, 3];
+        for (const n of numbers) {
+          console.log(n);
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for empty array with type', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const nums: number[] = [];
+        console.log(nums.length);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for Option with null check', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const x: number | null = 42;
+        if (x !== null) {
+          console.log(x);
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for arrow function with block body', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const multiply = (a: number, b: number): number => {
+          const result = a * b;
+          return result;
+        };
+        console.log(multiply(3, 4));
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for array literal', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const numbers: number[] = [1, 2, 3];
+        for (const n of numbers) {
+          console.log(n);
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for number type annotation', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const x: number = 42;
+        const y: number = 10;
+        console.log(x + y);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for string type annotation', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const s: string = "hello";
+        console.log(s);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for boolean type annotation', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const flag: boolean = true;
+        console.log(flag);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
   });
 
   describe('Collections', () => {
@@ -307,6 +633,42 @@ describe('Phase 3 - Rust Code Generation - Basic Types', () => {
       
       expect(result.success).toBe(true);
       expect(result.rustCode).toContain('Option<f64>');
+    });
+
+    it('should produce equivalent output for null value', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const x: number | null = null;
+        if (x === null || x === undefined) {
+          console.log("is null");
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for undefined value', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const x: number | undefined = undefined;
+        if (x === null || x === undefined) {
+          console.log("is undefined");
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
     });
   });
 });

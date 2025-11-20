@@ -130,6 +130,7 @@ Phase 1 enforces "The Good Parts" - a subset of TypeScript that eliminates error
 | GS110 | No truthy/falsy coercion | Explicit boolean conditions only |
 | GS111 | No `delete` operator | Use optional properties or immutable patterns |
 | GS112 | No comma operator | Use separate statements for clarity |
+| GS113 | No switch fall-through | Cases must end with `break`/`return`/`throw`/`continue` |
 | GS115 | No `void` operator | Use `undefined` explicitly if needed |
 | GS201 | No implicit type coercion | Explicit string/number conversion |
 
