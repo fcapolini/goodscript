@@ -4,7 +4,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { validateRustCode, isRustcAvailable } from './rust-validator';
-import { executeJS, executeRust, compareOutputs, normalizeOutput } from './runtime-helpers';
+import { executeJS, executeRust, executeRustWithCargo, compareOutputs, normalizeOutput, isCargoAvailable } from './runtime-helpers';
 
 describe('Phase 3 - Async/Await', () => {
   let tmpDir: string;
@@ -96,9 +96,9 @@ describe('Phase 3 - Async/Await', () => {
     
     // Execute both
     const jsResult = executeJS(jsCode);
-    const rustResult = isRustcAvailable() 
-      ? executeRust(rustCode)
-      : { success: false, stdout: '', stderr: 'rustc not available', exitCode: 1 };
+    const rustResult = isCargoAvailable() 
+      ? executeRustWithCargo(rustCode, true)  // Use Cargo for Tokio support
+      : { success: false, stdout: '', stderr: 'cargo not available', exitCode: 1 };
     
     const equivalent = compareOutputs(jsResult, rustResult);
     
@@ -189,8 +189,12 @@ describe('Phase 3 - Async/Await', () => {
       expect(rustCode).toContain('Ok(42.0)');
       expect(rustCode).toContain('use tokio;');
       
-      // Note: Runtime equivalence not checked for async without proper executor
-      // These tests verify code generation correctness
+      // Runtime equivalence with Cargo-based execution
+      if (isCargoAvailable()) {
+        expect(rustResult.success).toBe(true);
+        expect(jsResult.success).toBe(true);
+        expect(normalizeOutput(rustResult.stdout)).toBe(normalizeOutput(jsResult.stdout));
+      }
     });
   });
 
@@ -256,7 +260,7 @@ describe('Phase 3 - Async/Await', () => {
         };
       `);
       
-      expect(result.rustCode).toContain('fetchData()?.await');
+      expect(result.rustCode).toContain('fetchData().await?');
       expect(result.rustCode).toContain('use tokio;');
     });
 
@@ -277,8 +281,8 @@ describe('Phase 3 - Async/Await', () => {
         };
       `);
       
-      expect(result.rustCode).toContain('getFirst()?.await');
-      expect(result.rustCode).toContain('getSecond()?.await');
+      expect(result.rustCode).toContain('getFirst().await?');
+      expect(result.rustCode).toContain('getSecond().await?');
       expect(result.rustCode).toContain('use tokio;');
     });
 
@@ -293,7 +297,7 @@ describe('Phase 3 - Async/Await', () => {
         };
       `);
       
-      expect(result.rustCode).toContain('getValue()?.await');
+      expect(result.rustCode).toContain('getValue().await?');
       expect(result.rustCode).toContain('use tokio;');
     });
   });
@@ -316,7 +320,7 @@ describe('Phase 3 - Async/Await', () => {
       `);
       
       expect(result.rustCode).toContain('async ||');
-      expect(result.rustCode).toContain('loadData()?.await');
+      expect(result.rustCode).toContain('loadData().await?');
       expect(result.rustCode).toContain('match');
       expect(result.rustCode).toContain('Ok(_) =>');
       expect(result.rustCode).toContain('Err(e) =>');
@@ -389,9 +393,9 @@ describe('Phase 3 - Async/Await', () => {
       `);
       
       expect(result.rustCode).toContain('async ||');
-      expect(result.rustCode).toContain('stepOne()?.await');
-      expect(result.rustCode).toContain('stepTwo(a)?.await');
-      expect(result.rustCode).toContain('stepThree(b)?.await');
+      expect(result.rustCode).toContain('stepOne().await?');
+      expect(result.rustCode).toContain('stepTwo(a).await?');
+      expect(result.rustCode).toContain('stepThree(b).await?');
       expect(result.rustCode).toContain('use tokio;');
     });
 
@@ -409,7 +413,7 @@ describe('Phase 3 - Async/Await', () => {
       
       expect(result.rustCode).toContain('async |ms: f64|');
       expect(result.rustCode).toContain('async |data: String|');
-      expect(result.rustCode).toContain('delay(100.0)?.await');
+      expect(result.rustCode).toContain('delay(100.0).await?');
       expect(result.rustCode).toContain('use tokio;');
     });
   });

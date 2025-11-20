@@ -131,6 +131,65 @@ export const compareOutputs = (jsResult: ExecutionResult, rustResult: ExecutionR
 };
 
 /**
+ * Execute Rust code using Cargo (supports external dependencies like Tokio)
+ */
+export const executeRustWithCargo = (rustCode: string, includeTokio: boolean = false): ExecutionResult => {
+  const tmpDir = join(tmpdir(), 'rust-cargo-exec-' + Date.now() + '-' + Math.random().toString(36).substring(7));
+  mkdirSync(tmpDir, { recursive: true });
+  
+  // Create Cargo.toml
+  const cargoToml = `[package]
+name = "goodscript_test"
+version = "0.1.0"
+edition = "2021"
+
+${includeTokio ? `[dependencies]
+tokio = { version = "1", features = ["full"] }` : ''}
+`;
+  writeFileSync(join(tmpDir, 'Cargo.toml'), cargoToml, 'utf-8');
+  
+  // Create src/ directory
+  const srcDir = join(tmpDir, 'src');
+  mkdirSync(srcDir, { recursive: true });
+  
+  // Write main.rs
+  writeFileSync(join(srcDir, 'main.rs'), rustCode, 'utf-8');
+  
+  try {
+    // Build and run with Cargo
+    const output = execSync(
+      'cargo run --quiet',
+      { 
+        cwd: tmpDir,
+        encoding: 'utf-8', 
+        timeout: 30000  // Longer timeout for Cargo builds
+      }
+    );
+    
+    // Clean up
+    rmSync(tmpDir, { recursive: true, force: true });
+    
+    return {
+      success: true,
+      stdout: output,
+      stderr: '',
+      exitCode: 0,
+    };
+  } catch (error: any) {
+    // Clean up
+    rmSync(tmpDir, { recursive: true, force: true });
+    
+    return {
+      success: false,
+      stdout: error.stdout?.toString() || '',
+      stderr: error.stderr?.toString() || '',
+      exitCode: error.status || 1,
+      error: error.message,
+    };
+  }
+};
+
+/**
  * Check if rustc is available
  */
 export const isRustcAvailable = (): boolean => {
@@ -141,3 +200,16 @@ export const isRustcAvailable = (): boolean => {
     return false;
   }
 };
+
+/**
+ * Check if cargo is available
+ */
+export const isCargoAvailable = (): boolean => {
+  try {
+    execSync('cargo --version', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+};
+

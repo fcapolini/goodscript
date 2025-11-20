@@ -149,6 +149,43 @@ export class RustCodegen {
   }
 
   /**
+   * Detect if a statement or expression contains async code
+   */
+  private detectAsync(node: ts.Node): void {
+    // Check for async modifier on functions/arrow functions
+    if ('modifiers' in node) {
+      const modifiers = (node as any).modifiers;
+      if (Array.isArray(modifiers)) {
+        if (modifiers.some((m: ts.Modifier) => m.kind === ts.SyntaxKind.AsyncKeyword)) {
+          this.hasAsync = true;
+          return;
+        }
+      }
+    }
+    
+    // Check for await expressions
+    if (ts.isAwaitExpression(node)) {
+      this.hasAsync = true;
+      return;
+    }
+    
+    // Check for .then() calls (Promise chains)
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+      if (node.expression.name.getText() === 'then') {
+        this.hasAsync = true;
+        return;
+      }
+    }
+    
+    // Recursively check children
+    node.forEachChild(child => {
+      if (!this.hasAsync) {  // Short-circuit once we know we have async
+        this.detectAsync(child);
+      }
+    });
+  }
+
+  /**
    * Generate code for the entire source file
    */
   private generateSourceFile(sourceFile: ts.SourceFile): void {
@@ -264,11 +301,31 @@ export class RustCodegen {
     
     // Then wrap top-level variable declarations in a main function with root error handler
     if (topLevelDecls.length > 0) {
-      this.emit('pub fn main() {');
+      // Pre-pass: Detect if we have async code
+      for (const statement of topLevelDecls) {
+        this.detectAsync(statement);
+      }
+      
+      // Add #[tokio::main] attribute if we have async code
+      if (this.hasAsync) {
+        this.emit('#[tokio::main]');
+      }
+      
+      // Make main async if we have async code
+      if (this.hasAsync) {
+        this.emit('async fn main() {');
+      } else {
+        this.emit('pub fn main() {');
+      }
       this.indent();
       
       // Wrap all code in a Result-returning closure for root error handling
-      this.emit('let result = (|| -> Result<(), String> {');
+      // Make closure async if we have async code
+      if (this.hasAsync) {
+        this.emit('let result = (async || -> Result<(), String> {');
+      } else {
+        this.emit('let result = (|| -> Result<(), String> {');
+      }
       this.indent();
       
       for (const statement of topLevelDecls) {
@@ -277,7 +334,11 @@ export class RustCodegen {
       
       this.emit('Ok(())');
       this.dedent();
-      this.emit('})();');
+      if (this.hasAsync) {
+        this.emit('})().await;');
+      } else {
+        this.emit('})();');
+      }
       this.emit('');
       
       // Root error handler - catches all unhandled exceptions
@@ -1828,8 +1889,13 @@ export class RustCodegen {
    */
   private generateAwaitExpression(expr: ts.AwaitExpression): string {
     this.hasAsync = true;
-    const inner = this.generateExpression(expr.expression);
-    return `${inner}.await`;
+    let inner = this.generateExpression(expr.expression);
+    // Remove trailing ? if present (added by generateCallExpression)
+    // We'll add it after .await instead
+    if (inner.endsWith('?')) {
+      inner = inner.slice(0, -1);
+    }
+    return `${inner}.await?`;
   }
   
   /**
@@ -2045,6 +2111,42 @@ export class RustCodegen {
           // Multiple arguments - join with spaces
           const formatStr = args.map(() => '{}').join(' ');
           return `println!("${formatStr}", ${args.join(', ')})`;
+        }
+      }
+      
+      // Promise.then() -> .await with callback execution
+      if (property === 'then') {
+        // promise.then(callback) -> { let result = promise.await?; callback_body }
+        if (expr.arguments.length > 0 && ts.isArrowFunction(expr.arguments[0])) {
+          const callback = expr.arguments[0] as ts.ArrowFunction;
+          
+          // Generate the promise expression without the trailing ?
+          // We'll add .await? instead
+          let promiseExpr = this.generateExpression(objectExpr);
+          // Remove trailing ? if present (added by generateCallExpression)
+          if (promiseExpr.endsWith('?')) {
+            promiseExpr = promiseExpr.slice(0, -1);
+          }
+          
+          // Get the parameter name from the callback
+          let paramName = 'result';
+          if (callback.parameters.length > 0 && ts.isIdentifier(callback.parameters[0].name)) {
+            paramName = callback.parameters[0].name.getText();
+          }
+          
+          // Generate the callback body
+          let callbackBody: string;
+          if (ts.isBlock(callback.body)) {
+            // Block body - we'll just inline it (simplified for now)
+            // TODO: Handle block statements properly
+            callbackBody = 'Ok(())';
+          } else {
+            // Expression body
+            callbackBody = this.generateExpression(callback.body);
+          }
+          
+          // Return: { let param = promise.await?; callback_body; Ok(()) }
+          return `{ let ${paramName} = ${promiseExpr}.await?; ${callbackBody}; Ok::<(), String>(()) }`;
         }
       }
       
