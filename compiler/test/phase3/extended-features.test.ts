@@ -4,6 +4,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { validateRustCode, isRustcAvailable } from './rust-validator';
+import { executeJS, executeRust, compareOutputs } from './runtime-helpers';
 
 describe('Phase 3 - Rust Code Generation - Extended Features', () => {
   let tmpDir: string;
@@ -21,7 +22,7 @@ describe('Phase 3 - Rust Code Generation - Extended Features', () => {
     }
   });
 
-  const compile = (source: string): { success: boolean; rustCode: string; errors: string[]; rustValid?: boolean; rustErrors?: string[] } => {
+  const compile = (source: string): { success: boolean; rustCode: string; jsCode: string; errors: string[]; rustValid?: boolean; rustErrors?: string[] } => {
     const srcFile = join(tmpDir, 'test.gs.ts');
     const outDir = join(tmpDir, 'dist');
     
@@ -34,9 +35,15 @@ describe('Phase 3 - Rust Code Generation - Extended Features', () => {
     });
     
     let rustCode = '';
+    let jsCode = '';
     const rsFile = join(outDir, 'test.rs');
+    const jsFile = join(outDir, 'test.js');
+    
     if (existsSync(rsFile)) {
       rustCode = readFileSync(rsFile, 'utf-8');
+    }
+    if (existsSync(jsFile)) {
+      jsCode = readFileSync(jsFile, 'utf-8');
     }
     
     const errors = result.diagnostics
@@ -55,6 +62,7 @@ describe('Phase 3 - Rust Code Generation - Extended Features', () => {
     return {
       success: result.success,
       rustCode,
+      jsCode,
       errors,
       rustValid,
       rustErrors,
@@ -331,6 +339,79 @@ describe('Phase 3 - Rust Code Generation - Extended Features', () => {
       expect(result.rustCode).toContain('&&');
       expect(result.rustCode).toContain('||');
       expect(result.rustCode).toContain('if');
+    });
+  });
+
+  describe('Runtime Equivalence', () => {
+    it('should produce same output for switch statements', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const value = 2;
+        const getLabel = (v: number): string => {
+          if (v === 1) {
+            return "one";
+          } else if (v === 2) {
+            return "two";
+          } else {
+            return "other";
+          }
+        };
+        console.log(getLabel(value));
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for ternary expressions', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const x = 10;
+        const result = x > 5 ? "big" : "small";
+        console.log(result);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for template literals', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const name = "World";
+        const greeting = \`Hello, \${name}!\`;
+        console.log(greeting);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
     });
   });
 });

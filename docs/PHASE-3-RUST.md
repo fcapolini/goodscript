@@ -1,8 +1,8 @@
 # Phase 3: Rust Code Generation
 
-**Status:** 🚧 In Progress (all-Result error handling complete, runtime equivalence testing added)
+**Status:** 🚧 In Progress (control flow and array methods complete, comprehensive runtime equivalence testing)
 
-**Test Coverage:** 120 tests passing (61 core + 19 extended + 18 control flow + 7 error propagation + 15 runtime equivalence)
+**Test Coverage:** 154 tests passing with **34 runtime equivalence tests** across all 11 test files verifying functional correctness
 
 ## Current Implementation Status
 
@@ -10,6 +10,7 @@
 
 - **AST → Rust Translation** - Core transformation pipeline working
 - **Rustc Validation** - All generated Rust code compiles with rustc (22 validation tests)
+- **Runtime Equivalence Testing** - 34 tests verify JS and Rust produce identical output across all major features
 - **Ownership Type Mapping** - `Unique<T>` → `Box<T>`, `Shared<T>` → `Rc<T>`, `Weak<T>` → `Weak<T>`
 - **Ownership Constructors** - Automatic wrapping in Box::new(), Rc::new(), Rc::downgrade()
 - **Primitive Types** - number→f64, string→String, boolean→bool, void→()
@@ -20,6 +21,8 @@
 - **Interfaces** - Translate to structs
 - **This→Self** - Proper translation of `this` references to `self`
 - **For-of Loops** - Clean Rust iteration syntax with proper borrowing (&) - prevents ownership consumption
+- **For Loops** - Regular for loops (for init; condition; increment) → Rust ranges with step_by and rev()
+- **Array Methods** - map(), filter(), forEach(), reduce() → Rust iterator chains with collect()
 - **Binary Operators** - Including `===` → `==`, `!==` → `!=`
 - **Logical Operators** - &&, ||, ! (same in Rust)
 - **Unary Operators** - !, -, +, ++/-- → +=/-=
@@ -40,7 +43,6 @@
 - **Error Propagation** - ? operator on all function calls
 - **Root Error Handler** - Uncaught exceptions print message and exit(1)
 - **Automatic Imports** - use statements generated as needed (std::rc::{Rc, Weak}, std::collections::HashMap)
-- **Runtime Equivalence Testing** - All core features verified to produce identical output between JS and Rust
 
 ### 📋 Remaining Work
 
@@ -49,9 +51,8 @@
 - Module system (imports/exports)
 - Cargo.toml generation
 - Advanced generics and trait bounds
-- Regular for loops (for init; condition; increment)
 - Spread operator and destructuring
-- Object/array methods (map, filter, reduce)
+- Object literal shorthand properties
 
 ### Usage
 

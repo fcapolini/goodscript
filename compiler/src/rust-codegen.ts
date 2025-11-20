@@ -204,6 +204,8 @@ export class RustCodegen {
       this.generateReturnStatement(statement);
     } else if (ts.isIfStatement(statement)) {
       this.generateIfStatement(statement);
+    } else if (ts.isForStatement(statement)) {
+      this.generateForStatement(statement);
     } else if (ts.isForOfStatement(statement)) {
       this.generateForOfStatement(statement);
     } else if (ts.isSwitchStatement(statement)) {
@@ -571,6 +573,224 @@ export class RustCodegen {
     } else {
       this.emit('}');
     }
+  }
+  
+  /**
+   * Generate regular for statement (for init; condition; increment)
+   * Translates to Rust range-based iteration when possible
+   */
+  private generateForStatement(statement: ts.ForStatement): void {
+    // Try to detect simple counting loops and convert to Rust ranges
+    const pattern = this.tryConvertToRange(statement);
+    
+    if (pattern) {
+      // Simple range-based loop: for (let i = start; i < end; i++)
+      const { variable, start, end, step, descending, inclusive } = pattern;
+      
+      // For Rust ranges, we need integers, not f64
+      // Strip .0 suffix from numeric literals
+      const startInt = this.convertToIntegerLiteral(start);
+      const endInt = this.convertToIntegerLiteral(end);
+      const stepInt = step ? this.convertToIntegerLiteral(step) : '1';
+      
+      let range: string;
+      if (descending) {
+        // Descending: for (let i = 5; i > 0; i--)
+        // Rust: for i in (0..=5).rev() or (1..6).rev()
+        if (inclusive) {
+          range = `(${endInt}..=${startInt}).rev()`;
+        } else {
+          range = `(${endInt}..${startInt}).rev()`;
+        }
+      } else {
+        // Ascending: for (let i = 0; i < 5; i++)
+        // Rust: for i in 0..5
+        if (inclusive) {
+          range = `${startInt}..=${endInt}`;
+        } else {
+          range = `${startInt}..${endInt}`;
+        }
+      }
+      
+      // Add step if not 1
+      if (stepInt && stepInt !== '1') {
+        range = `(${range}).step_by(${stepInt})`;
+      }
+      
+      this.emit(`for ${variable} in ${range} {`);
+      this.indent();
+      this.generateStatement(statement.statement);
+      this.dedent();
+      this.emit('}');
+    } else {
+      // Complex loop - use traditional loop construct
+      this.emit('{');
+      this.indent();
+      
+      // Generate initializer
+      if (statement.initializer) {
+        if (ts.isVariableDeclarationList(statement.initializer)) {
+          for (const decl of statement.initializer.declarations) {
+            const name = decl.name.getText();
+            const value = decl.initializer ? this.generateExpression(decl.initializer) : '0';
+            this.emit(`let mut ${name} = ${value};`);
+          }
+        } else {
+          this.emit(this.generateExpression(statement.initializer) + ';');
+        }
+      }
+      
+      // Generate loop
+      if (statement.condition) {
+        const condition = this.generateExpression(statement.condition);
+        this.emit(`while ${condition} {`);
+      } else {
+        this.emit('loop {');
+      }
+      
+      this.indent();
+      this.generateStatement(statement.statement);
+      
+      // Generate incrementor at the end of the loop
+      if (statement.incrementor) {
+        this.emit(this.generateExpression(statement.incrementor) + ';');
+      }
+      
+      this.dedent();
+      this.emit('}');
+      this.dedent();
+      this.emit('}');
+    }
+  }
+  
+  /**
+   * Convert a numeric expression to an integer literal (strips .0 suffix)
+   */
+  private convertToIntegerLiteral(value: string): string {
+    // If it ends with .0, remove it
+    if (value.endsWith('.0')) {
+      return value.slice(0, -2);
+    }
+    return value;
+  }
+  
+  /**
+   * Try to convert a for loop to a simple range pattern
+   * Returns pattern info if successful, null otherwise
+   */
+  private tryConvertToRange(statement: ts.ForStatement): {
+    variable: string;
+    start: string;
+    end: string;
+    step?: string;
+    descending: boolean;
+    inclusive: boolean;
+  } | null {
+    // Check for simple initializer: let i = 0
+    if (!statement.initializer || !ts.isVariableDeclarationList(statement.initializer)) {
+      return null;
+    }
+    
+    const decls = statement.initializer.declarations;
+    if (decls.length !== 1 || !decls[0].initializer) {
+      return null;
+    }
+    
+    const variable = decls[0].name.getText();
+    const start = this.generateExpression(decls[0].initializer);
+    
+    // Check for simple condition: i < 5 or i <= 5 or i > 0 or i >= 0
+    if (!statement.condition || !ts.isBinaryExpression(statement.condition)) {
+      return null;
+    }
+    
+    const condition = statement.condition;
+    const left = condition.left.getText();
+    const right = this.generateExpression(condition.right);
+    
+    if (left !== variable) {
+      return null;
+    }
+    
+    let descending = false;
+    let inclusive = false;
+    
+    switch (condition.operatorToken.kind) {
+      case ts.SyntaxKind.LessThanToken: // i < 5
+        descending = false;
+        inclusive = false;
+        break;
+      case ts.SyntaxKind.LessThanEqualsToken: // i <= 5
+        descending = false;
+        inclusive = true;
+        break;
+      case ts.SyntaxKind.GreaterThanToken: // i > 0
+        descending = true;
+        inclusive = false;
+        break;
+      case ts.SyntaxKind.GreaterThanEqualsToken: // i >= 0
+        descending = true;
+        inclusive = true;
+        break;
+      default:
+        return null;
+    }
+    
+    // Check for simple incrementor: i++ or i-- or i += n or i -= n
+    if (!statement.incrementor) {
+      return null;
+    }
+    
+    let step: string | undefined;
+    
+    if (ts.isPostfixUnaryExpression(statement.incrementor) ||
+        ts.isPrefixUnaryExpression(statement.incrementor)) {
+      const incExpr = statement.incrementor;
+      const operand = incExpr.operand.getText();
+      
+      if (operand !== variable) {
+        return null;
+      }
+      
+      const isIncrement = incExpr.operator === ts.SyntaxKind.PlusPlusToken;
+      const isDecrement = incExpr.operator === ts.SyntaxKind.MinusMinusToken;
+      
+      if (isIncrement && descending) return null;
+      if (isDecrement && !descending) return null;
+      
+      step = '1';
+    } else if (ts.isBinaryExpression(statement.incrementor)) {
+      const incExpr = statement.incrementor;
+      const incLeft = incExpr.left.getText();
+      
+      if (incLeft !== variable) {
+        return null;
+      }
+      
+      // i += 2 or i -= 2
+      if (incExpr.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken ||
+          incExpr.operatorToken.kind === ts.SyntaxKind.MinusEqualsToken) {
+        const isAdd = incExpr.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken;
+        
+        if (isAdd && descending) return null;
+        if (!isAdd && !descending) return null;
+        
+        step = this.generateExpression(incExpr.right);
+      } else {
+        return null;
+      }
+    } else {
+      return null;
+    }
+    
+    return {
+      variable,
+      start,
+      end: right,
+      step,
+      descending,
+      inclusive,
+    };
   }
   
   /**
@@ -954,11 +1174,13 @@ export class RustCodegen {
    * All function calls use ? operator for error propagation (except macros like println!)
    */
   private generateCallExpression(expr: ts.CallExpression): string {
-    // Special handling for console.log -> println! macro
+    // Special handling for method calls on objects
     if (ts.isPropertyAccessExpression(expr.expression)) {
-      const object = expr.expression.expression.getText();
+      const objectExpr = expr.expression.expression;
+      const object = this.generateExpression(objectExpr);
       const property = expr.expression.name.getText();
       
+      // console.log -> println! macro
       if (object === 'console' && property === 'log') {
         const args = expr.arguments.map(arg => this.generateExpression(arg));
         // Use println! macro for console.log
@@ -973,12 +1195,165 @@ export class RustCodegen {
           return `println!("${formatStr}", ${args.join(', ')})`;
         }
       }
+      
+      // Array methods: map, filter, forEach, etc.
+      if (property === 'map') {
+        return this.generateArrayMap(objectExpr, expr.arguments);
+      } else if (property === 'filter') {
+        return this.generateArrayFilter(objectExpr, expr.arguments);
+      } else if (property === 'forEach') {
+        return this.generateArrayForEach(objectExpr, expr.arguments);
+      } else if (property === 'reduce') {
+        return this.generateArrayReduce(objectExpr, expr.arguments);
+      }
     }
     
     const func = this.generateExpression(expr.expression);
     const args = expr.arguments.map(arg => this.generateExpression(arg)).join(', ');
     
     return `${func}(${args})?`;
+  }
+  
+  /**
+   * Generate array.map() -> iter().map().collect()
+   */
+  private generateArrayMap(array: ts.Expression, args: readonly ts.Expression[]): string {
+    if (args.length === 0) {
+      return this.generateExpression(array);
+    }
+    
+    const arrayCode = this.generateExpression(array);
+    const callback = args[0];
+    
+    // Check if callback uses index parameter (2nd param)
+    let hasIndex = false;
+    if (ts.isArrowFunction(callback)) {
+      hasIndex = callback.parameters.length >= 2;
+    }
+    
+    if (hasIndex) {
+      // Use enumerate() for indexed map
+      const lambda = this.generateArrayMethodCallback(callback, true);
+      return `${arrayCode}.iter().enumerate().map(${lambda}).collect::<Vec<_>>()`;
+    } else {
+      const lambda = this.generateArrayMethodCallback(callback, false);
+      return `${arrayCode}.iter().map(${lambda}).collect::<Vec<_>>()`;
+    }
+  }
+  
+  /**
+   * Generate array.filter() -> iter().filter().collect()
+   */
+  private generateArrayFilter(array: ts.Expression, args: readonly ts.Expression[]): string {
+    if (args.length === 0) {
+      return this.generateExpression(array);
+    }
+    
+    const arrayCode = this.generateExpression(array);
+    const callback = args[0];
+    const lambda = this.generateArrayMethodCallback(callback, false);
+    
+    // filter returns references, we need to clone or copy them
+    return `${arrayCode}.iter().filter(${lambda}).cloned().collect::<Vec<_>>()`;
+  }
+  
+  /**
+   * Generate array.forEach() -> iter().for_each()
+   */
+  private generateArrayForEach(array: ts.Expression, args: readonly ts.Expression[]): string {
+    if (args.length === 0) {
+      return this.generateExpression(array);
+    }
+    
+    const arrayCode = this.generateExpression(array);
+    const callback = args[0];
+    const lambda = this.generateArrayMethodCallback(callback, false);
+    
+    return `${arrayCode}.iter().for_each(${lambda})`;
+  }
+  
+  /**
+   * Generate array.reduce() -> iter().fold()
+   */
+  private generateArrayReduce(array: ts.Expression, args: readonly ts.Expression[]): string {
+    if (args.length < 2) {
+      // reduce needs at least callback and initial value
+      return this.generateExpression(array);
+    }
+    
+    const arrayCode = this.generateExpression(array);
+    const callback = args[0];
+    const initial = this.generateExpression(args[1]);
+    
+    // reduce callback has (acc, item) parameters
+    let lambda = '';
+    if (ts.isArrowFunction(callback)) {
+      const params = callback.parameters.map(p => p.name.getText());
+      const body = ts.isBlock(callback.body) 
+        ? `{ ${callback.body.statements.map(s => this.generateStatementInline(s)).join('; ')} }`
+        : this.generateExpression(callback.body);
+      lambda = `|${params.join(', ')}| ${body}`;
+    }
+    
+    return `${arrayCode}.iter().fold(${initial}, ${lambda})`;
+  }
+  
+  /**
+   * Generate callback function for array methods
+   */
+  private generateArrayMethodCallback(callback: ts.Expression, withIndex: boolean): string {
+    if (!ts.isArrowFunction(callback)) {
+      return this.generateExpression(callback);
+    }
+    
+    const params = callback.parameters;
+    let paramList: string;
+    
+    if (withIndex) {
+      // enumerate() gives (index, &item)
+      const indexParam = params[1]?.name.getText() || '_i';
+      const itemParam = params[0]?.name.getText() || 'x';
+      paramList = `(${indexParam}, &${itemParam})`;
+    } else {
+      // Regular iterator gives &item
+      const itemParam = params[0]?.name.getText() || 'x';
+      paramList = `&${itemParam}`;
+    }
+    
+    // Generate body
+    let body: string;
+    if (ts.isBlock(callback.body)) {
+      // Multi-line callback
+      const statements = callback.body.statements.map(s => this.generateStatementInline(s)).join('; ');
+      body = `{ ${statements} }`;
+    } else {
+      // Single expression
+      body = this.generateExpression(callback.body);
+    }
+    
+    return `|${paramList}| ${body}`;
+  }
+  
+  /**
+   * Generate a statement inline (for use in lambda bodies)
+   */
+  private generateStatementInline(statement: ts.Statement): string {
+    if (ts.isReturnStatement(statement)) {
+      if (statement.expression) {
+        return this.generateExpression(statement.expression);
+      }
+      return '';
+    } else if (ts.isExpressionStatement(statement)) {
+      return this.generateExpression(statement.expression);
+    } else {
+      // For other statements, generate normally but strip newlines
+      const saved = this.output;
+      this.output = [];
+      this.generateStatement(statement);
+      const result = this.output.join(' ');
+      this.output = saved;
+      return result;
+    }
   }
   
   /**

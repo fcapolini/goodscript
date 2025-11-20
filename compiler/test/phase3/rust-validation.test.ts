@@ -4,6 +4,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { validateRustCode, isRustcAvailable } from './rust-validator';
+import { executeJS, executeRust, compareOutputs } from './runtime-helpers';
 
 describe('Phase 3 - Rust Code Validation with rustc', () => {
   let tmpDir: string;
@@ -25,6 +26,7 @@ describe('Phase 3 - Rust Code Validation with rustc', () => {
   const compileAndValidate = (source: string): { 
     compileSuccess: boolean; 
     rustCode: string; 
+    jsCode: string;
     rustValid: boolean; 
     rustErrors: string[];
     compileErrors: string[];
@@ -41,9 +43,15 @@ describe('Phase 3 - Rust Code Validation with rustc', () => {
     });
     
     let rustCode = '';
+    let jsCode = '';
     const rsFile = join(outDir, 'test.rs');
+    const jsFile = join(outDir, 'test.js');
+    
     if (existsSync(rsFile)) {
       rustCode = readFileSync(rsFile, 'utf-8');
+    }
+    if (existsSync(jsFile)) {
+      jsCode = readFileSync(jsFile, 'utf-8');
     }
     
     const compileErrors = result.diagnostics
@@ -63,6 +71,7 @@ describe('Phase 3 - Rust Code Validation with rustc', () => {
     return {
       compileSuccess: result.success,
       rustCode,
+      jsCode,
       rustValid,
       rustErrors,
       compileErrors,
@@ -364,5 +373,156 @@ describe('Phase 3 - Rust Code Validation with rustc', () => {
     }
     // Always pass, this is just informational
     expect(true).toBe(true);
+  });
+
+  describe('Runtime Equivalence - Core Features', () => {
+    testOrSkip('should produce same output for primitive types', async () => {
+      const source = `
+        const x = 42;
+        const s = "hello";
+        const b = true;
+        console.log(x);
+        console.log(s);
+        console.log(b);
+      `;
+
+      const result = compileAndValidate(source);
+      expect(result.compileSuccess).toBe(true);
+      expect(result.rustValid).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    testOrSkip('should produce same output for arrow functions', async () => {
+      const source = `
+        const double = (x: number): number => x * 2;
+        const result = double(21);
+        console.log(result);
+      `;
+
+      const result = compileAndValidate(source);
+      expect(result.compileSuccess).toBe(true);
+      expect(result.rustValid).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    testOrSkip('should produce same output for arrays', async () => {
+      const source = `
+        const nums = [1, 2, 3];
+        for (const n of nums) {
+          console.log(n);
+        }
+      `;
+
+      const result = compileAndValidate(source);
+      expect(result.compileSuccess).toBe(true);
+      expect(result.rustValid).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    testOrSkip('should produce same output for function calls', async () => {
+      const source = `
+        const greet = (name: string): string => "Hello, " + name;
+        const message = greet("World");
+        console.log(message);
+      `;
+
+      const result = compileAndValidate(source);
+      expect(result.compileSuccess).toBe(true);
+      expect(result.rustValid).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    testOrSkip('should produce same output for arithmetic operations', async () => {
+      const source = `
+        const a = 10;
+        const b = 5;
+        console.log(a + b);
+        console.log(a - b);
+        console.log(a * b);
+        console.log(a / b);
+      `;
+
+      const result = compileAndValidate(source);
+      expect(result.compileSuccess).toBe(true);
+      expect(result.rustValid).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    testOrSkip('should produce same output for comparison operations', async () => {
+      const source = `
+        const x: number = 5;
+        const y: number = 3;
+        console.log(x === 5);
+        console.log(x !== y);
+        console.log(x > y);
+        console.log(x < 10);
+      `;
+
+      const result = compileAndValidate(source);
+      expect(result.compileSuccess).toBe(true);
+      expect(result.rustValid).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    testOrSkip('should produce same output for logical operations', async () => {
+      const source = `
+        const a = true;
+        const b = false;
+        console.log(a && b);
+        console.log(a || b);
+        console.log(!a);
+      `;
+
+      const result = compileAndValidate(source);
+      expect(result.compileSuccess).toBe(true);
+      expect(result.rustValid).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    testOrSkip('should produce same output for nested function calls', async () => {
+      const source = `
+        const add = (a: number, b: number): number => a + b;
+        const multiply = (x: number, y: number): number => x * y;
+        const result = multiply(add(2, 3), 4);
+        console.log(result);
+      `;
+
+      const result = compileAndValidate(source);
+      expect(result.compileSuccess).toBe(true);
+      expect(result.rustValid).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
   });
 });

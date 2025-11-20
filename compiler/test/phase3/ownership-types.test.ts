@@ -4,6 +4,7 @@ import { writeFileSync, unlinkSync, mkdirSync, existsSync, readFileSync, rmSync 
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { validateRustCode, isRustcAvailable } from './rust-validator';
+import { executeJS, executeRust, compareOutputs } from './runtime-helpers';
 
 describe('Phase 3 - Rust Code Generation - Ownership Types', () => {
   let tmpDir: string;
@@ -21,7 +22,7 @@ describe('Phase 3 - Rust Code Generation - Ownership Types', () => {
     }
   });
 
-  const compile = (source: string): { success: boolean; rustCode: string; errors: string[]; rustValid?: boolean; rustErrors?: string[] } => {
+  const compile = (source: string): { success: boolean; rustCode: string; jsCode: string; errors: string[]; rustValid?: boolean; rustErrors?: string[] } => {
     const srcFile = join(tmpDir, 'test.gs.ts');
     const outDir = join(tmpDir, 'dist');
     
@@ -34,9 +35,15 @@ describe('Phase 3 - Rust Code Generation - Ownership Types', () => {
     });
     
     let rustCode = '';
+    let jsCode = '';
     const rsFile = join(outDir, 'test.rs');
+    const jsFile = join(outDir, 'test.js');
+    
     if (existsSync(rsFile)) {
       rustCode = readFileSync(rsFile, 'utf-8');
+    }
+    if (existsSync(jsFile)) {
+      jsCode = readFileSync(jsFile, 'utf-8');
     }
     
     const errors = result.diagnostics
@@ -55,6 +62,7 @@ describe('Phase 3 - Rust Code Generation - Ownership Types', () => {
     return {
       success: result.success,
       rustCode,
+      jsCode,
       errors,
       rustValid,
       rustErrors,
@@ -180,6 +188,48 @@ describe('Phase 3 - Rust Code Generation - Ownership Types', () => {
       expect(result.rustCode).toContain('unique: Box<f64>');
       expect(result.rustCode).toContain('shared: Rc<String>');
       expect(result.rustCode).toContain('weak: Weak<bool>');
+    });
+  });
+
+  describe('Runtime Equivalence', () => {
+    it('should produce same output for Unique values', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const x: Unique<number> = 42;
+        console.log(x);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for Shared values', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const s: Shared<string> = "hello";
+        console.log(s);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
     });
   });
 });

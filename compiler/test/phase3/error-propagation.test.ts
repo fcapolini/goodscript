@@ -4,6 +4,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { validateRustCode, isRustcAvailable } from './rust-validator';
+import { executeJS, executeRust, compareOutputs } from './runtime-helpers';
 
 describe('Phase 3 - Error Propagation Through Call Chains', () => {
   let tmpDir: string;
@@ -21,7 +22,7 @@ describe('Phase 3 - Error Propagation Through Call Chains', () => {
     }
   });
 
-  const compile = (source: string): { success: boolean; rustCode: string; errors: string[]; rustValid?: boolean; rustErrors?: string[] } => {
+  const compile = (source: string): { success: boolean; rustCode: string; jsCode: string; errors: string[]; rustValid?: boolean; rustErrors?: string[] } => {
     const srcFile = join(tmpDir, 'test.gs.ts');
     const outDir = join(tmpDir, 'dist');
     
@@ -34,9 +35,15 @@ describe('Phase 3 - Error Propagation Through Call Chains', () => {
     });
     
     let rustCode = '';
+    let jsCode = '';
     const rsFile = join(outDir, 'test.rs');
+    const jsFile = join(outDir, 'test.js');
+    
     if (existsSync(rsFile)) {
       rustCode = readFileSync(rsFile, 'utf-8');
+    }
+    if (existsSync(jsFile)) {
+      jsCode = readFileSync(jsFile, 'utf-8');
     }
     
     const errors = result.diagnostics
@@ -55,6 +62,7 @@ describe('Phase 3 - Error Propagation Through Call Chains', () => {
     return {
       success: result.success,
       rustCode,
+      jsCode,
       errors,
       rustValid,
       rustErrors,
@@ -223,6 +231,67 @@ describe('Phase 3 - Error Propagation Through Call Chains', () => {
         // Note: This may not validate because Math.random() doesn't exist in generated Rust
         // but the error propagation mechanism itself is correct
       }
+    });
+  });
+
+  describe('Runtime Equivalence', () => {
+    it('should produce same output for try/catch with successful execution', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const safeFunction = (): number => {
+          return 42;
+        };
+        
+        try {
+          const result = safeFunction();
+          console.log(result);
+        } catch (e) {
+          console.log("error");
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for conditional error handling', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const checkValue = (x: number): string => {
+          if (x < 0) {
+            throw "negative value";
+          }
+          return "positive";
+        };
+        
+        try {
+          const result = checkValue(5);
+          console.log(result);
+        } catch (e) {
+          console.log("error caught");
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
     });
   });
 });
