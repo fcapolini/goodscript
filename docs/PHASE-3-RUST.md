@@ -2,7 +2,7 @@
 
 **Status:** 🚧 In Progress (all core features complete, comprehensive runtime equivalence testing)
 
-**Test Coverage:** 875 tests total (865 passing, 10 skipped)
+**Test Coverage:** 875 tests total (869 passing, 6 skipped)
 
 ## Current Implementation Status
 
@@ -60,6 +60,12 @@
 - **Function Parameter Destructuring (Arrays)** - `([a, b]: number[]) => ...` → temp parameter + destructuring at function start
 - **Function Parameter Destructuring (Objects)** - `({ x, y }: Point) => ...` → temp parameter + destructuring with type inference
 - **Module Exports** - Named exports with `pub` visibility, default exports for arrow functions
+- **Module Imports** - Import statements → Rust `use` declarations:
+  - Named imports: `import { add, subtract } from './math'` → `use crate::math::{add, subtract};`
+  - Default imports: `import Calculator from './calc'` → `use crate::calc::Calculator;`
+  - Namespace imports: `import * as Math from './math'` → `use crate::math as Math;`
+  - Path conversion: `./` → `crate::`, `../` → `super::`, `../../` → `super::super::`
+  - Export-from: `export { add } from './math'` → `pub use crate::math::add;`
 - **Generics** - Generic functions, classes, interfaces with full type parameter support
   - Generic arrow functions: `<T>(value: T): T` → `fn name<T>(value: T) -> Result<T, String>`
   - Generic classes: `class Box<T>` → `struct Box<T>` with `impl<T> Box<T>`
@@ -73,8 +79,8 @@
 
 ### 📋 Remaining Work
 
-- Module imports (import statements) - requires multi-file compilation support
 - Trait bounds for generic constraints (e.g., `T extends Named` → `T: Named`)
+- Multi-file compilation and module system integration
 
 ### Usage
 

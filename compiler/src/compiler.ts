@@ -159,7 +159,19 @@ export class Compiler {
     const hasErrors = allDiagnostics.some(d => d.severity === 'error');
 
     // If successful and outDir specified, generate code
-    if (!hasErrors && options.outDir) {
+    // For Rust target, emit code even if there are TypeScript module resolution errors
+    // (we're not actually running the code, just generating it)
+    const shouldEmit = options.outDir && (
+      !hasErrors || 
+      (target === 'rust' && allDiagnostics.every(d => 
+        d.severity !== 'error' || 
+        d.code === 'TS2307' ||  // Module not found
+        d.code === 'TS2792' ||  // Cannot find module (ESM)
+        d.code === 'TS2305'     // Module has no exported member
+      ))
+    );
+    
+    if (shouldEmit && options.outDir) {
       const emit = options.emit || 'js';  // Default to JS output
       
       if (target === 'typescript') {

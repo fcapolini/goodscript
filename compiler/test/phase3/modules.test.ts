@@ -187,8 +187,7 @@ describe('Phase 3 - Module System', () => {
   });
 
   describe('Import Statements', () => {
-    it.skip('should handle named imports', () => {
-      // TODO: Requires multi-file compilation
+    it('should handle named imports', () => {
       const source = `
         import { add, subtract } from './math';
         
@@ -199,11 +198,10 @@ describe('Phase 3 - Module System', () => {
       const { rustCode } = compile(source);
       
       // Verify Rust generates use statement
-      expect(rustCode).toContain('use');
+      expect(rustCode).toContain('use crate::math::{add, subtract}');
     });
 
-    it.skip('should handle default imports', () => {
-      // TODO: Requires multi-file compilation
+    it('should handle default imports', () => {
       const source = `
         import Calculator from './calculator';
         
@@ -213,11 +211,10 @@ describe('Phase 3 - Module System', () => {
       const { rustCode } = compile(source);
       
       // Verify Rust generates use statement
-      expect(rustCode).toContain('use');
+      expect(rustCode).toContain('use crate::calculator::Calculator');
     });
 
-    it.skip('should handle namespace imports', () => {
-      // TODO: Requires multi-file compilation
+    it('should handle namespace imports', () => {
       const source = `
         import * as Math from './math';
         
@@ -227,13 +224,12 @@ describe('Phase 3 - Module System', () => {
       const { rustCode } = compile(source);
       
       // Verify Rust generates use statement
-      expect(rustCode).toContain('use');
+      expect(rustCode).toContain('use crate::math as Math');
     });
   });
 
   describe('Re-exports', () => {
-    it.skip('should handle export from statements', () => {
-      // TODO: Requires multi-file compilation
+    it('should handle export from statements', () => {
       const source = `
         export { add, subtract } from './math';
       `;
@@ -241,7 +237,7 @@ describe('Phase 3 - Module System', () => {
       const { rustCode } = compile(source);
       
       // Verify Rust generates pub use
-      expect(rustCode).toContain('pub use');
+      expect(rustCode).toContain('pub use crate::math::{add, subtract}');
     });
   });
 });

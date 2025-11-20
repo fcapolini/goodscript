@@ -166,10 +166,23 @@ export class RustCodegen {
     const topLevelDecls: ts.Statement[] = [];
     const typeDecls: ts.Statement[] = [];
     const exportedDecls: ts.Statement[] = [];
+    const importDecls: ts.Statement[] = [];
     const defaultExportedFunctions: Array<{name: string, func: ts.ArrowFunction, typeParams?: ts.NodeArray<ts.TypeParameterDeclaration>}> = [];
     const genericFunctions: Array<{name: string, func: ts.ArrowFunction, typeParams: ts.NodeArray<ts.TypeParameterDeclaration>}> = [];
     
     for (const statement of sourceFile.statements) {
+      // Handle import declarations separately
+      if (ts.isImportDeclaration(statement)) {
+        importDecls.push(statement);
+        continue;
+      }
+      
+      // Handle re-export declarations (export from)
+      if (ts.isExportDeclaration(statement) && statement.moduleSpecifier) {
+        importDecls.push(statement);  // Treat export-from similar to imports
+        continue;
+      }
+      
       // Check if this is a variable statement with an arrow function (generic or default-exported)
       if (ts.isVariableStatement(statement)) {
         const decl = statement.declarationList.declarations[0];
@@ -221,7 +234,15 @@ export class RustCodegen {
       }
     }
     
-    // First emit exported declarations with pub visibility
+    // First emit user import declarations (module dependencies)
+    for (const statement of importDecls) {
+      this.generateStatement(statement);
+    }
+    if (importDecls.length > 0) {
+      this.emit('');  // Blank line after imports
+    }
+    
+    // Then emit exported declarations with pub visibility
     for (const statement of exportedDecls) {
       this.generateExportedStatement(statement);
     }
@@ -321,6 +342,10 @@ export class RustCodegen {
       this.generateLabeledStatement(statement);
     } else if (ts.isBlock(statement)) {
       this.generateBlock(statement);
+    } else if (ts.isImportDeclaration(statement)) {
+      this.generateImportDeclaration(statement);
+    } else if (ts.isExportDeclaration(statement)) {
+      this.generateExportDeclaration(statement);
     } else if (ts.isExportAssignment(statement)) {
       // Export default - skip in Rust (the actual item is already defined)
       // In TypeScript: export default foo; just assigns exports.default = foo
@@ -450,6 +475,156 @@ export class RustCodegen {
     this.dedent();
     this.emit('}');
     this.emit('');
+  }
+  
+  /**
+   * Convert TypeScript module path to Rust module path
+   * './math' -> 'crate::math'
+   * '../utils' -> 'super::utils'
+   * '../../lib' -> 'super::super::lib'
+   */
+  private convertModulePath(modulePath: string): string {
+    let rustModulePath = modulePath;
+    
+    if (rustModulePath.startsWith('./')) {
+      // Same directory: './math' -> 'crate::math'
+      rustModulePath = 'crate::' + rustModulePath.substring(2).replace(/\//g, '::');
+    } else if (rustModulePath.startsWith('../')) {
+      // Parent directory: '../utils' -> 'super::utils'
+      const parts = rustModulePath.split('/');
+      let superCount = 0;
+      let pathParts: string[] = [];
+      
+      for (const part of parts) {
+        if (part === '..') {
+          superCount++;
+        } else if (part !== '.') {
+          pathParts.push(part);
+        }
+      }
+      
+      const superPrefix = Array(superCount).fill('super').join('::');
+      rustModulePath = superPrefix + (pathParts.length > 0 ? '::' + pathParts.join('::') : '');
+    } else {
+      // External crate or absolute path
+      rustModulePath = rustModulePath.replace(/\//g, '::').replace(/@/g, '');
+    }
+    
+    // Remove file extensions
+    rustModulePath = rustModulePath.replace(/\.(ts|js|gs)$/, '');
+    
+    return rustModulePath;
+  }
+  
+  /**
+   * Generate import declaration
+   * Converts TypeScript/ES6 imports to Rust use statements
+   */
+  private generateImportDeclaration(statement: ts.ImportDeclaration): void {
+    const moduleSpecifier = statement.moduleSpecifier;
+    
+    // Get the module path (remove quotes)
+    if (!ts.isStringLiteral(moduleSpecifier)) {
+      this.emit('// TODO: Dynamic import not supported');
+      return;
+    }
+    
+    const modulePath = moduleSpecifier.text;
+    
+    // Convert TypeScript module path to Rust module path
+    const rustModulePath = this.convertModulePath(modulePath);
+    
+    if (!statement.importClause) {
+      // Side-effect import: import './module'
+      this.emit(`// use ${rustModulePath}; // side-effect import`);
+      return;
+    }
+    
+    const importClause = statement.importClause;
+    const imports: string[] = [];
+    
+    // Handle default import: import Foo from './foo'
+    if (importClause.name) {
+      const defaultName = importClause.name.getText();
+      imports.push(defaultName);
+    }
+    
+    // Handle named imports: import { a, b } from './foo'
+    if (importClause.namedBindings) {
+      if (ts.isNamedImports(importClause.namedBindings)) {
+        for (const element of importClause.namedBindings.elements) {
+          const name = element.name.getText();
+          const propertyName = element.propertyName?.getText();
+          
+          if (propertyName) {
+            // import { foo as bar } -> use module::foo as bar
+            imports.push(`${propertyName} as ${name}`);
+          } else {
+            imports.push(name);
+          }
+        }
+      } else if (ts.isNamespaceImport(importClause.namedBindings)) {
+        // import * as Foo from './foo'
+        const namespaceName = importClause.namedBindings.name.getText();
+        this.emit(`use ${rustModulePath} as ${namespaceName};`);
+        return;
+      }
+    }
+    
+    if (imports.length > 0) {
+      if (imports.length === 1) {
+        this.emit(`use ${rustModulePath}::${imports[0]};`);
+      } else {
+        this.emit(`use ${rustModulePath}::{${imports.join(', ')}};`);
+      }
+    }
+  }
+  
+  /**
+   * Generate export declaration (export from)
+   * e.g. export { add, subtract } from './math'
+   */
+  private generateExportDeclaration(statement: ts.ExportDeclaration): void {
+    // If there's no module specifier, this is a re-export of local declarations
+    // which we don't need to handle specially in Rust
+    if (!statement.moduleSpecifier || !ts.isStringLiteral(statement.moduleSpecifier)) {
+      return;
+    }
+    
+    const modulePath = statement.moduleSpecifier.text;
+    const rustModulePath = this.convertModulePath(modulePath);
+    
+    // Handle export clause
+    if (statement.exportClause) {
+      if (ts.isNamedExports(statement.exportClause)) {
+        const exports: string[] = [];
+        
+        for (const element of statement.exportClause.elements) {
+          const name = element.name.getText();
+          const propertyName = element.propertyName?.getText();
+          
+          if (propertyName) {
+            // export { foo as bar } -> pub use module::foo as bar
+            exports.push(`${propertyName} as ${name}`);
+          } else {
+            exports.push(name);
+          }
+        }
+        
+        if (exports.length === 1) {
+          this.emit(`pub use ${rustModulePath}::${exports[0]};`);
+        } else {
+          this.emit(`pub use ${rustModulePath}::{${exports.join(', ')}};`);
+        }
+      } else if (ts.isNamespaceExport(statement.exportClause)) {
+        // export * as Foo from './foo'
+        const namespaceName = statement.exportClause.name.getText();
+        this.emit(`pub use ${rustModulePath} as ${namespaceName};`);
+      }
+    } else {
+      // export * from './foo'
+      this.emit(`pub use ${rustModulePath}::*;`);
+    }
   }
   
   /**
