@@ -775,6 +775,220 @@ describe('Phase 2: Null-Check Analysis', () => {
       const result = compileWithOwnership(source);
       expect(hasError(result.diagnostics, 'GS302')).toBe(false);
     });
+    
+    it('should work with arrow function parameters', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          map = (item: Weak<Item>): number => {
+            if (item !== null) {
+              return item.value;  // OK: parameter checked
+            }
+            return 0;
+          };
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should handle multiple Weak<T> parameters', () => {
+      const source = `
+        class Processor {
+          process(a: Weak<Item>, b: Weak<Item>): number {
+            if (a !== null && b !== null) {
+              return a.value + b.value;  // OK: both checked
+            }
+            return 0;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should error when only one of multiple parameters is checked', () => {
+      const source = `
+        class Processor {
+          process(a: Weak<Item>, b: Weak<Item>): number {
+            if (a !== null) {
+              return a.value + b.value;  // Error: b not checked
+            }
+            return 0;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(true);
+    });
+    
+    it('should allow non-weak parameters without checks', () => {
+      const source = `
+        class Processor {
+          process(unique: Unique<Item>, shared: Shared<Item>): number {
+            return unique.value + shared.value;  // OK: not weak
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+  });
+  
+  describe('Function return types', () => {
+    
+    it('should allow returning null for Weak<T> return type', () => {
+      const source = `
+        class Container {
+          getItem(): Weak<Item> {
+            return null;  // OK: Weak<T> is nullable
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should allow returning checked weak reference', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getItem(): Weak<Item> {
+            return this.item;  // OK: Weak<T> return type accepts weak references
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should allow arrow functions with Weak<T> return type', () => {
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getItem = (): Weak<Item> => {
+            return this.item;  // OK
+          };
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it.skip('should error when dereferencing returned weak reference without check', () => {
+      // TODO: This requires type inference for call expressions
+      // The analyzer currently only checks explicit Weak<T> type annotations,
+      // not inferred types from function return values
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getItem(): Weak<Item> {
+            return this.item;
+          }
+          
+          getValue(): number {
+            const item = this.getItem();
+            return item.value;  // Should error: returned weak not checked
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(true);
+    });
+    
+    it('should accept checked returned weak reference', () => {
+      // This test requires explicit type annotation to work with current analyzer
+      const source = `
+        class Container {
+          item: Weak<Item> = null;
+          
+          getItem(): Weak<Item> {
+            return this.item;
+          }
+          
+          getValue(): number {
+            const item: Weak<Item> = this.getItem();  // Explicit type annotation
+            if (item !== null) {
+              return item.value;  // OK: checked after return
+            }
+            return 0;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should handle Unique<T> return types', () => {
+      const source = `
+        class Container {
+          createItem(): Unique<Item> {
+            return { value: 42 };  // OK: returning new unique
+          }
+          
+          useItem(): number {
+            const item = this.createItem();
+            return item.value;  // OK: Unique<T> not nullable
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
   });
   
   describe('Short-circuit operators', () => {
@@ -1036,4 +1250,241 @@ describe('Phase 2: Null-Check Analysis', () => {
       expect(hasError(result.diagnostics, 'GS302')).toBe(false);
     });
   });
+  
+  describe('Nested property access', () => {
+    
+    it.skip('should error on unchecked nested weak reference', () => {
+      // TODO: Nested property tracking not yet implemented
+      // Would require tracking weak references through multiple levels
+      const source = `
+        class Container {
+          inner: Weak<Inner> = null;
+          
+          getValue(): number {
+            if (this.inner !== null) {
+              return this.inner.item.value;  // Should error: inner.item not checked
+            }
+            return 0;
+          }
+        }
+        
+        class Inner {
+          item: Weak<Item> = null;
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(true);
+    });
+    
+    it.skip('should accept fully checked nested weak reference', () => {
+      // TODO: Nested property tracking not yet implemented
+      const source = `
+        class Container {
+          inner: Weak<Inner> = null;
+          
+          getValue(): number {
+            if (this.inner !== null) {
+              if (this.inner.item !== null) {
+                return this.inner.item.value;  // OK: both levels checked
+              }
+            }
+            return 0;
+          }
+        }
+        
+        class Inner {
+          item: Weak<Item> = null;
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should handle non-weak intermediate properties', () => {
+      const source = `
+        class Container {
+          inner: Inner | null = null;
+          
+          getValue(): number {
+            if (this.inner !== null && this.inner.item !== null) {
+              return this.inner.item.value;  // OK: item is checked
+            }
+            return 0;
+          }
+        }
+        
+        class Inner {
+          item: Weak<Item> = null;
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it.skip('should handle weak references in nested objects', () => {
+      // TODO: Complex nested weak tracking not yet implemented
+      const source = `
+        class Graph {
+          root: Weak<Node> = null;
+          
+          findDepth(): number {
+            if (this.root !== null) {
+              if (this.root.left !== null) {
+                if (this.root.left.left !== null) {
+                  return 3;  // OK: all levels checked
+                }
+                return 2;
+              }
+              return 1;
+            }
+            return 0;
+          }
+        }
+        
+        class Node {
+          left: Weak<Node> = null;
+          right: Weak<Node> = null;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+  });
+  
+  describe('Array element null-checking', () => {
+    
+    it.skip('should error on unchecked array element access', () => {
+      // TODO: Array element tracking not yet implemented
+      // Would require tracking individual array indices
+      const source = `
+        class Container {
+          items: Weak<Item>[] = [];
+          
+          getValue(): number {
+            return this.items[0].value;  // Should error: items[0] not checked
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(true);
+    });
+    
+    it.skip('should accept checked array element', () => {
+      // TODO: Array element tracking not yet implemented
+      const source = `
+        class Container {
+          items: Weak<Item>[] = [];
+          
+          getValue(): number {
+            const first = this.items[0];
+            if (first !== null) {
+              return first.value;  // OK: checked via variable
+            }
+            return 0;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it('should work with array iteration and checks', () => {
+      const source = `
+        class Container {
+          items: Weak<Item>[] = [];
+          
+          sumValues(): number {
+            let sum = 0;
+            for (const item of this.items) {
+              if (item !== null) {
+                sum = sum + item.value;  // OK: checked in loop
+              }
+            }
+            return sum;
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it.skip('should handle array map with weak elements', () => {
+      // TODO: Callback function tracking not yet implemented
+      const source = `
+        class Container {
+          items: Weak<Item>[] = [];
+          
+          getValues(): number[] {
+            return this.items.map((item: Weak<Item>): number => {
+              if (item !== null) {
+                return item.value;  // OK: checked in callback
+              }
+              return 0;
+            });
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+    
+    it.skip('should handle array filter with weak elements', () => {
+      // TODO: Callback function tracking not yet implemented
+      const source = `
+        class Container {
+          items: Weak<Item>[] = [];
+          
+          getNonNull(): Weak<Item>[] {
+            return this.items.filter((item: Weak<Item>): boolean => {
+              return item !== null;  // OK: type guard
+            });
+          }
+        }
+        
+        class Item {
+          value: number = 0;
+        }
+      `;
+      
+      const result = compileWithOwnership(source);
+      expect(hasError(result.diagnostics, 'GS302')).toBe(false);
+    });
+  });
 });
+
