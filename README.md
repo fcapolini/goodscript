@@ -6,7 +6,7 @@ Write clean TypeScript. Get native performance. No borrow checker required.
 
 ---
 
-> ⚠️ **BETA STAGE**: GoodScript is under active development. Phase 1 (parsing, validation, JS target) is complete. Phase 2 (ownership analysis, implicit nullability) is underway. Phase 3 (Rust code generation) will follow. APIs and language features may change.
+> ⚠️ **BETA STAGE**: GoodScript is under active development. Phase 1 (parsing, validation, JS target) is complete. Phase 2 (ownership analysis, DAG validation) is complete with 100% test coverage. Phase 3 (Rust code generation) will follow. APIs and language features may change.
 
 ---
 
@@ -169,7 +169,7 @@ GoodScript is being developed in phases, with each phase corresponding to a lang
 | Phase | Language Level | Features | Status |
 |-------|----------------|----------|--------|
 | **Phase 1** | Level 1 "clean" | Strict TypeScript semantics<br/>(13 restrictions, 244 tests) | ✅ **Complete** |
-| **Phase 2** | Level 2 "dag" | Ownership analysis & DAG validation | 🚧 In Progress |
+| **Phase 2** | Level 2 "dag" | Ownership analysis & DAG validation<br/>(425 tests, 100% coverage) | ✅ **Complete** |
 | **Phase 3** | Level 3 "rust" | Rust code generation | 📋 Planned |
 
 **Phase 1 Restrictions** (enforced at all levels, see [docs/GOOD-PARTS.md](docs/GOOD-PARTS.md)):
@@ -178,7 +178,11 @@ GoodScript is being developed in phases, with each phase corresponding to a lang
 - GS115: `void` operator
 - GS201: Implicit type coercion
 
-**Phase 2** adds ownership tracking and cycle detection (see [docs/DAG-DETECTION.md](docs/DAG-DETECTION.md))
+**Phase 2** adds ownership tracking and cycle detection (see [docs/DAG-DETECTION.md](docs/DAG-DETECTION.md)):
+- GS301: Ownership cycle detection (DAG enforcement)
+- GS302: Null-check enforcement for `Weak<T>` references
+- Type alias resolution, inheritance tracking, generic type instantiation
+- Nested generic analysis, call argument validation, type inference
 
 **Phase 3** will generate optimized Rust code for native performance
 

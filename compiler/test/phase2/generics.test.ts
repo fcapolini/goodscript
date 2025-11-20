@@ -11,8 +11,7 @@ describe('Phase 2: Generics with Ownership', () => {
   
   describe('Generic classes with Shared<T>', () => {
     
-    it.skip('should detect cycles through generic Shared<T>', () => {
-      // TODO: Need generic type parameter resolution
+    it('should detect cycles through generic Shared<T>', () => {
       const source = `
         class Box<T> {
           item: Shared<T> | null = null;
@@ -58,8 +57,7 @@ describe('Phase 2: Generics with Ownership', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(false);
     });
     
-    it.skip('should handle multiple type parameters', () => {
-      // TODO: Need generic type parameter resolution
+    it('should handle multiple type parameters', () => {
       const source = `
         class Pair<T, U> {
           first: Shared<T> | null = null;
@@ -127,8 +125,7 @@ describe('Phase 2: Generics with Ownership', () => {
   
   describe('Generic constraints', () => {
     
-    it.skip('should handle extends constraints', () => {
-      // TODO: Need generic type parameter resolution with constraints
+    it('should handle extends constraints', () => {
       const source = `
         interface Named {
           name: string;
@@ -239,8 +236,7 @@ describe('Phase 2: Generics with Ownership', () => {
   
   describe('Generic null-check enforcement', () => {
     
-    it.skip('should enforce null-checks on generic Weak<T>', () => {
-      // TODO: Null-check analyzer needs to recognize Weak<T> through generics
+    it('should enforce null-checks on generic Weak<T>', () => {
       const source = `
         class Box<T> {
           item: Weak<T> = null;
@@ -282,8 +278,7 @@ describe('Phase 2: Generics with Ownership', () => {
   
   describe('Complex generic scenarios', () => {
     
-    it.skip('should handle nested generics', () => {
-      // TODO: Need deep generic type parameter resolution
+    it('should handle nested generics', () => {
       const source = `
         class Outer<T> {
           inner: Inner<T> | null = null;

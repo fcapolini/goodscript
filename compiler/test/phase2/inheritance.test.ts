@@ -11,8 +11,7 @@ describe('Phase 2: Inheritance with Ownership', () => {
   
   describe('Basic inheritance', () => {
     
-    it.skip('should detect cycles through inherited Shared<T> fields', () => {
-      // TODO: Ownership analyzer needs to track inherited fields
+    it('should detect cycles through inherited Shared<T> fields', () => {
       const source = `
         class Base {
           item: Shared<Item> | null = null;
@@ -72,8 +71,7 @@ describe('Phase 2: Inheritance with Ownership', () => {
   
   describe('Multi-level inheritance', () => {
     
-    it.skip('should track ownership through multiple inheritance levels', () => {
-      // TODO: Ownership analyzer needs to track multi-level inherited fields
+    it('should track ownership through multiple inheritance levels', () => {
       const source = `
         class GrandParent {
           root: Shared<Root> | null = null;
@@ -96,8 +94,7 @@ describe('Phase 2: Inheritance with Ownership', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(true);
     });
     
-    it.skip('should handle mixed ownership types in hierarchy', () => {
-      // TODO: Ownership analyzer needs to track inherited fields
+    it('should handle mixed ownership types in hierarchy', () => {
       const source = `
         class Base {
           shared: Shared<Item> | null = null;

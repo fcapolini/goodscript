@@ -72,7 +72,7 @@ export class NullCheckAnalyzer {
     // First, try to get the symbol and check its declaration
     const symbol = checker.getSymbolAtLocation(node);
     if (symbol && symbol.valueDeclaration) {
-      if (this.hasWeakTypeInDeclaration(symbol.valueDeclaration, sourceFile)) {
+      if (this.hasWeakTypeInDeclaration(symbol.valueDeclaration, sourceFile, checker)) {
         return true;
       }
     }
@@ -81,7 +81,7 @@ export class NullCheckAnalyzer {
     const type = checker.getTypeAtLocation(node);
     if (type) {
       const typeNode = checker.typeToTypeNode(type, node, ts.NodeBuilderFlags.None);
-      if (typeNode && this.hasWeakAnnotation(typeNode, sourceFile)) {
+      if (typeNode && this.hasWeakAnnotation(typeNode, sourceFile, checker)) {
         return true;
       }
     }
@@ -92,20 +92,28 @@ export class NullCheckAnalyzer {
   /**
    * Check if a declaration has Weak<T> type
    */
-  private hasWeakTypeInDeclaration(decl: ts.Declaration, sourceFile: ts.SourceFile): boolean {
+  private hasWeakTypeInDeclaration(decl: ts.Declaration, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
     if (ts.isPropertyDeclaration(decl) || ts.isPropertySignature(decl)) {
       if (decl.type) {
-        return this.hasWeakAnnotation(decl.type, sourceFile);
+        return this.hasWeakAnnotation(decl.type, sourceFile, checker);
       }
     }
     if (ts.isVariableDeclaration(decl)) {
       if (decl.type) {
-        return this.hasWeakAnnotation(decl.type, sourceFile);
+        return this.hasWeakAnnotation(decl.type, sourceFile, checker);
+      }
+      // Check inferred type from initializer
+      if (decl.initializer) {
+        const type = checker.getTypeAtLocation(decl.initializer);
+        const typeNode = checker.typeToTypeNode(type, decl, ts.NodeBuilderFlags.None);
+        if (typeNode && this.hasWeakAnnotation(typeNode, sourceFile, checker)) {
+          return true;
+        }
       }
     }
     if (ts.isParameter(decl)) {
       if (decl.type) {
-        return this.hasWeakAnnotation(decl.type, sourceFile);
+        return this.hasWeakAnnotation(decl.type, sourceFile, checker);
       }
     }
     return false;
@@ -114,25 +122,69 @@ export class NullCheckAnalyzer {
   /**
    * Check if a type node has Weak<T> annotation
    */
-  private hasWeakAnnotation(typeNode: ts.TypeNode, sourceFile: ts.SourceFile): boolean {
-    // Direct Weak<T> reference
-    if (ts.isTypeReferenceNode(typeNode)) {
-      const typeName = typeNode.typeName.getText(sourceFile);
-      if (typeName === 'Weak') {
-        return true;
-      }
-    }
-
+  private hasWeakAnnotation(typeNode: ts.TypeNode, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
     // Union type containing Weak<T>
     if (ts.isUnionTypeNode(typeNode)) {
       for (const member of typeNode.types) {
-        if (this.hasWeakAnnotation(member, sourceFile)) {
+        if (this.hasWeakAnnotation(member, sourceFile, checker)) {
           return true;
         }
       }
     }
 
+    // Resolve type aliases (but not Weak/Shared/Unique themselves)
+    const resolvedType = this.resolveTypeAlias(typeNode, checker);
+    
+    // Direct Weak<T> reference
+    if (ts.isTypeReferenceNode(resolvedType)) {
+      // Use .text property for identifiers to avoid source file issues
+      const typeName = ts.isIdentifier(resolvedType.typeName)
+        ? resolvedType.typeName.text
+        : resolvedType.typeName.getText(sourceFile);
+      if (typeName === 'Weak') {
+        return true;
+      }
+    }
+
     return false;
+  }
+
+  /**
+   * Resolve type aliases to get the underlying type node
+   * Does NOT resolve Shared/Weak/Unique - these are ownership wrappers, not aliases
+   */
+  private resolveTypeAlias(
+    typeNode: ts.TypeNode,
+    checker: ts.TypeChecker,
+    visited: Set<ts.TypeNode> = new Set()
+  ): ts.TypeNode {
+    // Prevent infinite recursion
+    if (visited.has(typeNode)) {
+      return typeNode;
+    }
+    visited.add(typeNode);
+
+    if (ts.isTypeReferenceNode(typeNode)) {
+      // Don't resolve ownership wrappers - they are not aliases
+      // Use the identifier text directly to avoid source file issues
+      const typeNameText = ts.isIdentifier(typeNode.typeName) 
+        ? typeNode.typeName.text 
+        : typeNode.typeName.getText();
+      if (typeNameText === 'Shared' || typeNameText === 'Weak' || typeNameText === 'Unique') {
+        return typeNode;
+      }
+      
+      // Get the symbol from the type name (this works for type aliases)
+      const symbol = checker.getSymbolAtLocation(typeNode.typeName);
+      if (symbol?.declarations?.[0]) {
+        const declaration = symbol.declarations[0];
+        if (ts.isTypeAliasDeclaration(declaration)) {
+          // Recursively resolve nested aliases
+          return this.resolveTypeAlias(declaration.type, checker, visited);
+        }
+      }
+    }
+    return typeNode;
   }
 
   /**
@@ -209,10 +261,9 @@ export class NullCheckAnalyzer {
       }
     }
 
-    // Handle reassignments - invalidate null checks
-    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
-      const leftText = node.left.getText(sourceFile);
-      checkedVars.delete(leftText);  // Invalidate null check on reassignment
+    // Handle call expression arguments - check for Weak<T> passed to non-nullable params
+    if (ts.isCallExpression(node)) {
+      this.checkCallArguments(node, sourceFile, checker, checkedVars);
     }
 
     // Recurse into children (unless we've already handled them specially above)
@@ -233,6 +284,13 @@ export class NullCheckAnalyzer {
       ts.forEachChild(node, (child: ts.Node) => 
         this.visit(child, sourceFile, checker, checkedVars)
       );
+    }
+
+    // Handle reassignments - invalidate null checks AFTER visiting children
+    // This ensures we check the RHS before invalidating the LHS
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+      const leftText = node.left.getText(sourceFile);
+      checkedVars.delete(leftText);  // Invalidate null check on reassignment
     }
   }
 
@@ -547,7 +605,7 @@ export class NullCheckAnalyzer {
     if (!propertySymbol || !propertySymbol.valueDeclaration) {
       return false;
     }
-    return this.hasWeakTypeInDeclaration(propertySymbol.valueDeclaration, sourceFile);
+    return this.hasWeakTypeInDeclaration(propertySymbol.valueDeclaration, sourceFile, checker);
   }
 
   /**
@@ -606,6 +664,64 @@ export class NullCheckAnalyzer {
     if (this.isWeakType(baseExpr, sourceFile, checker)) {
       this.reportNullCheckRequired(node, baseText, sourceFile);
     }
+  }
+
+  /**
+   * Check call expression arguments for Weak<T> values passed to non-nullable parameters
+   */
+  private checkCallArguments(
+    node: ts.CallExpression,
+    sourceFile: ts.SourceFile,
+    checker: ts.TypeChecker,
+    checkedVars: Set<string>
+  ): void {
+    // Get the signature of the called function
+    const signature = checker.getResolvedSignature(node);
+    if (!signature) return;
+
+    const parameters = signature.getParameters();
+    
+    // Check each argument
+    for (let i = 0; i < node.arguments.length && i < parameters.length; i++) {
+      const arg = node.arguments[i];
+      const param = parameters[i];
+      
+      // Get parameter declaration to check its type
+      const paramDecl = param.valueDeclaration;
+      if (!paramDecl || !ts.isParameter(paramDecl)) continue;
+      
+      // Check if argument is a weak expression being passed to non-nullable param
+      const argText = arg.getText(sourceFile);
+      
+      // If the argument is weak and not checked, report error
+      if (!checkedVars.has(argText) && this.isWeakType(arg, sourceFile, checker)) {
+        // Check if the parameter accepts nullable (has | null | undefined)
+        const paramAcceptsNull = this.parameterAcceptsNull(paramDecl, checker);
+        
+        if (!paramAcceptsNull) {
+          this.reportNullCheckRequired(arg, argText, sourceFile);
+        }
+      }
+    }
+  }
+
+  /**
+   * Check if a parameter type accepts null/undefined
+   */
+  private parameterAcceptsNull(param: ts.ParameterDeclaration, checker: ts.TypeChecker): boolean {
+    if (!param.type) return false;
+    
+    const type = checker.getTypeFromTypeNode(param.type);
+    
+    // Check if type includes null or undefined
+    if (type.isUnion()) {
+      return type.types.some(t => 
+        (t.flags & ts.TypeFlags.Null) !== 0 || 
+        (t.flags & ts.TypeFlags.Undefined) !== 0
+      );
+    }
+    
+    return false;
   }
 
   /**

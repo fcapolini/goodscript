@@ -913,10 +913,7 @@ describe('Phase 2: Null-Check Analysis', () => {
       expect(hasError(result.diagnostics, 'GS302')).toBe(false);
     });
     
-    it.skip('should error when dereferencing returned weak reference without check', () => {
-      // TODO: This requires type inference for call expressions
-      // The analyzer currently only checks explicit Weak<T> type annotations,
-      // not inferred types from function return values
+    it('should error when dereferencing returned weak reference without check', () => {
       const source = `
         class Container {
           item: Weak<Item> = null;
@@ -1365,9 +1362,7 @@ describe('Phase 2: Null-Check Analysis', () => {
   
   describe('Array element null-checking', () => {
     
-    it.skip('should error on unchecked array element access', () => {
-      // TODO: Array element tracking not yet implemented
-      // Would require tracking individual array indices
+    it('should error on unchecked array element access', () => {
       const source = `
         class Container {
           items: Weak<Item>[] = [];
@@ -1386,8 +1381,7 @@ describe('Phase 2: Null-Check Analysis', () => {
       expect(hasError(result.diagnostics, 'GS302')).toBe(true);
     });
     
-    it.skip('should accept checked array element', () => {
-      // TODO: Array element tracking not yet implemented
+    it('should accept checked array element', () => {
       const source = `
         class Container {
           items: Weak<Item>[] = [];
@@ -1435,8 +1429,7 @@ describe('Phase 2: Null-Check Analysis', () => {
       expect(hasError(result.diagnostics, 'GS302')).toBe(false);
     });
     
-    it.skip('should handle array map with weak elements', () => {
-      // TODO: Callback function tracking not yet implemented
+    it('should handle array map with weak elements', () => {
       const source = `
         class Container {
           items: Weak<Item>[] = [];
@@ -1460,8 +1453,7 @@ describe('Phase 2: Null-Check Analysis', () => {
       expect(hasError(result.diagnostics, 'GS302')).toBe(false);
     });
     
-    it.skip('should handle array filter with weak elements', () => {
-      // TODO: Callback function tracking not yet implemented
+    it('should handle array filter with weak elements', () => {
       const source = `
         class Container {
           items: Weak<Item>[] = [];

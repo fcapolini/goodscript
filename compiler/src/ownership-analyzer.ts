@@ -137,18 +137,94 @@ export class OwnershipAnalyzer {
   /**
    * Collect ownership edges by analyzing Shared<T> fields
    * Implements Rules 1.1, 1.2, and 1.3 from DAG-DETECTION.md
+   * Also tracks inherited fields from base classes/interfaces
    */
   private collectOwnershipEdges(sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
     const visit = (node: ts.Node) => {
-      // Only analyze class and interface property declarations
-      if (ts.isPropertyDeclaration(node) || ts.isPropertySignature(node)) {
+      // Analyze class declarations to include inherited fields
+      if (ts.isClassDeclaration(node) && node.name) {
+        this.analyzeClassWithInheritance(node, sourceFile, checker);
+      }
+      // Analyze interface declarations for their own properties
+      else if (ts.isInterfaceDeclaration(node)) {
+        // Interfaces are analyzed through their properties
+        ts.forEachChild(node, visit);
+      }
+      // Only analyze property declarations/signatures
+      else if (ts.isPropertyDeclaration(node) || ts.isPropertySignature(node)) {
         this.analyzePropertyForOwnership(node, sourceFile, checker);
       }
-      
-      ts.forEachChild(node, visit);
+      else {
+        ts.forEachChild(node, visit);
+      }
     };
     
     visit(sourceFile);
+  }
+
+  /**
+   * Analyze a class including its inherited fields
+   */
+  private analyzeClassWithInheritance(
+    classDecl: ts.ClassDeclaration,
+    sourceFile: ts.SourceFile,
+    checker: ts.TypeChecker
+  ): void {
+    const className = this.getFullyQualifiedName(classDecl.name!, sourceFile);
+    
+    // Analyze own properties
+    for (const member of classDecl.members) {
+      if (ts.isPropertyDeclaration(member)) {
+        this.analyzePropertyForOwnership(member, sourceFile, checker);
+      }
+    }
+    
+    // Analyze inherited properties from base classes
+    this.analyzeInheritedProperties(classDecl, className, sourceFile, checker);
+  }
+
+  /**
+   * Analyze properties inherited from base classes/interfaces
+   */
+  private analyzeInheritedProperties(
+    classDecl: ts.ClassDeclaration,
+    derivedClassName: string,
+    sourceFile: ts.SourceFile,
+    checker: ts.TypeChecker
+  ): void {
+    const type = checker.getTypeAtLocation(classDecl);
+    const baseTypes = type.getBaseTypes() || [];
+    
+    for (const baseType of baseTypes) {
+      // Get all properties from the base type
+      const properties = baseType.getProperties();
+      
+      for (const property of properties) {
+        // Skip constructor and methods
+        if (property.name === 'constructor') continue;
+        
+        const declarations = property.declarations;
+        if (!declarations || declarations.length === 0) continue;
+        
+        const decl = declarations[0];
+        
+        // Only process property declarations/signatures
+        if (ts.isPropertyDeclaration(decl) || ts.isPropertySignature(decl)) {
+          if (!decl.type) continue;
+          
+          const fieldName = property.name;
+          const location = Parser.getLocation(classDecl.name!, sourceFile);
+          
+          // Extract ownership edges from inherited property
+          const ownedTypes = this.extractSharedOwnership(decl.type, decl.getSourceFile(), checker);
+          
+          // Create edges from the derived class (not the base class)
+          for (const ownedType of ownedTypes) {
+            this.addEdge(derivedClassName, ownedType, `${fieldName} (inherited)`, location);
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -179,6 +255,8 @@ export class OwnershipAnalyzer {
 
   /**
    * Resolve type aliases to get the underlying type node
+   * Does NOT resolve Shared/Weak/Unique - these are ownership wrappers, not aliases
+   * Handles generic type aliases by substituting type arguments
    */
   private resolveTypeAlias(
     typeNode: ts.TypeNode,
@@ -192,13 +270,46 @@ export class OwnershipAnalyzer {
     visited.add(typeNode);
 
     if (ts.isTypeReferenceNode(typeNode)) {
-      const type = checker.getTypeAtLocation(typeNode);
-      if (type.aliasSymbol) {
-        // This is a type alias - get the underlying type declaration
-        const aliasDeclaration = type.aliasSymbol.declarations?.[0];
-        if (aliasDeclaration && ts.isTypeAliasDeclaration(aliasDeclaration)) {
-          // Recursively resolve nested aliases
-          return this.resolveTypeAlias(aliasDeclaration.type, checker, visited);
+      // Don't resolve ownership wrappers - they are not aliases
+      // Use the identifier text directly to avoid source file issues
+      const typeNameText = ts.isIdentifier(typeNode.typeName) 
+        ? typeNode.typeName.text 
+        : typeNode.typeName.getText();
+      if (typeNameText === 'Shared' || typeNameText === 'Weak' || typeNameText === 'Unique') {
+        return typeNode;
+      }
+      
+      // Get the symbol from the type name (this works for type aliases)
+      const symbol = checker.getSymbolAtLocation(typeNode.typeName);
+      if (symbol?.declarations?.[0]) {
+        const declaration = symbol.declarations[0];
+        if (ts.isTypeAliasDeclaration(declaration)) {
+          const resolvedType = declaration.type;
+          
+          // Handle generic type aliases: Ref<Item> where Ref<T> = Shared<T>
+          // If the original has type arguments and the resolved type is a type reference with type parameters,
+          // we need to substitute
+          if (typeNode.typeArguments && 
+              ts.isTypeReferenceNode(resolvedType) && 
+              resolvedType.typeArguments &&
+              typeNode.typeArguments.length === resolvedType.typeArguments.length) {
+            // Check if all the resolved type arguments are type parameters (like T, U, etc.)
+            const allTypeParams = resolvedType.typeArguments.every(arg => 
+              ts.isTypeReferenceNode(arg) && ts.isIdentifier(arg.typeName)
+            );
+            
+            if (allTypeParams) {
+              // Create a new type reference with substituted arguments
+              // For example: Ref<Item> where Ref<T> = Shared<T> becomes Shared<Item>
+              return ts.factory.createTypeReferenceNode(
+                resolvedType.typeName,
+                typeNode.typeArguments
+              );
+            }
+          }
+          
+          // Recursively resolve nested aliases (non-generic case)
+          return this.resolveTypeAlias(resolvedType, checker, visited);
         }
       }
     }
@@ -242,6 +353,12 @@ export class OwnershipAnalyzer {
 
     // Resolve type aliases
     const resolvedType = this.resolveTypeAlias(typeNode, checker);
+    
+    // If the resolved type is different from the original (i.e., we resolved an alias),
+    // recursively process it (it might be a union, intersection, etc.)
+    if (resolvedType !== typeNode) {
+      return this.extractSharedOwnership(resolvedType, sourceFile, checker);
+    }
 
     // Rule 3.1 & 3.2: Weak<T> and Unique<T> do NOT create edges
     if (ts.isTypeReferenceNode(resolvedType)) {
@@ -253,7 +370,7 @@ export class OwnershipAnalyzer {
       
       // Rule 1.1: Direct Shared<T> field
       if (typeName === 'Shared' && resolvedType.typeArguments && resolvedType.typeArguments.length > 0) {
-        const targetType = this.getTypeNameFromTypeNode(resolvedType.typeArguments[0], sourceFile);
+        const targetType = this.getTypeNameFromTypeNode(resolvedType.typeArguments[0], sourceFile, checker);
         if (targetType) {
           ownedTypes.add(targetType);
         }
@@ -271,7 +388,7 @@ export class OwnershipAnalyzer {
           const elementTypeName = resolvedElement.typeName.getText(sourceFile);
           if (elementTypeName === 'Shared' && 
               resolvedElement.typeArguments && resolvedElement.typeArguments.length > 0) {
-            const targetType = this.getTypeNameFromTypeNode(resolvedElement.typeArguments[0], sourceFile);
+            const targetType = this.getTypeNameFromTypeNode(resolvedElement.typeArguments[0], sourceFile, checker);
             if (targetType) {
               ownedTypes.add(targetType);
             }
@@ -289,13 +406,34 @@ export class OwnershipAnalyzer {
           const valueTypeName = resolvedValue.typeName.getText(sourceFile);
           if (valueTypeName === 'Shared' && 
               resolvedValue.typeArguments && resolvedValue.typeArguments.length > 0) {
-            const targetType = this.getTypeNameFromTypeNode(resolvedValue.typeArguments[0], sourceFile);
+            const targetType = this.getTypeNameFromTypeNode(resolvedValue.typeArguments[0], sourceFile, checker);
             if (targetType) {
               ownedTypes.add(targetType);
             }
           }
         }
         return ownedTypes;
+      }
+      
+      // Handle generic class instantiations (e.g., Box<Node>)
+      // If this is a class type with type arguments, we need to check its fields
+      // with type parameter substitution
+      if (resolvedType.typeArguments && resolvedType.typeArguments.length > 0) {
+        const symbol = checker.getSymbolAtLocation(resolvedType.typeName);
+        if (symbol?.declarations?.[0]) {
+          const declaration = symbol.declarations[0];
+          if (ts.isClassDeclaration(declaration)) {
+            // This is a generic class instantiation
+            const genericOwnedTypes = this.extractOwnershipFromGenericClass(
+              declaration,
+              resolvedType.typeArguments,
+              sourceFile,
+              checker
+            );
+            genericOwnedTypes.forEach(t => ownedTypes.add(t));
+            return ownedTypes;
+          }
+        }
       }
     }
 
@@ -306,7 +444,7 @@ export class OwnershipAnalyzer {
         const elementTypeName = elementType.typeName.getText(sourceFile);
         if (elementTypeName === 'Shared' && 
             elementType.typeArguments && elementType.typeArguments.length > 0) {
-          const targetType = this.getTypeNameFromTypeNode(elementType.typeArguments[0], sourceFile);
+          const targetType = this.getTypeNameFromTypeNode(elementType.typeArguments[0], sourceFile, checker);
           if (targetType) {
             ownedTypes.add(targetType);
           }
@@ -319,12 +457,173 @@ export class OwnershipAnalyzer {
   }
 
   /**
+   * Extract ownership from a generic class instantiation
+   * For example, when we have Box<Node> and Box<T> contains Shared<T>,
+   * we substitute Node for T and find that it owns Node
+   */
+  private extractOwnershipFromGenericClass(
+    classDecl: ts.ClassDeclaration,
+    typeArguments: ts.NodeArray<ts.TypeNode>,
+    sourceFile: ts.SourceFile,
+    checker: ts.TypeChecker
+  ): Set<string> {
+    const ownedTypes = new Set<string>();
+    
+    // Get type parameters from the class declaration
+    const typeParameters = classDecl.typeParameters;
+    if (!typeParameters || typeParameters.length !== typeArguments.length) {
+      return ownedTypes;
+    }
+    
+    // Build a substitution map: T -> Node, U -> Item, etc.
+    const substitutionMap = new Map<string, ts.TypeNode>();
+    for (let i = 0; i < typeParameters.length; i++) {
+      const paramName = typeParameters[i].name.text;
+      substitutionMap.set(paramName, typeArguments[i]);
+    }
+    
+    // Analyze each field in the generic class
+    for (const member of classDecl.members) {
+      if (ts.isPropertyDeclaration(member) && member.type) {
+        // Extract ownership with type parameter substitution
+        const fieldOwnedTypes = this.extractSharedOwnershipWithSubstitution(
+          member.type,
+          member.getSourceFile(),
+          checker,
+          substitutionMap
+        );
+        fieldOwnedTypes.forEach(t => ownedTypes.add(t));
+      }
+    }
+    
+    return ownedTypes;
+  }
+
+  /**
+   * Extract Shared<T> ownership with type parameter substitution
+   * This is like extractSharedOwnership but applies generic type parameter substitution
+   */
+  private extractSharedOwnershipWithSubstitution(
+    typeNode: ts.TypeNode,
+    sourceFile: ts.SourceFile,
+    checker: ts.TypeChecker,
+    substitutionMap: Map<string, ts.TypeNode>
+  ): Set<string> {
+    const ownedTypes = new Set<string>();
+    
+    // Handle unions
+    if (ts.isUnionTypeNode(typeNode)) {
+      for (const member of typeNode.types) {
+        const memberOwned = this.extractSharedOwnershipWithSubstitution(member, sourceFile, checker, substitutionMap);
+        memberOwned.forEach(t => ownedTypes.add(t));
+      }
+      return ownedTypes;
+    }
+    
+    // Handle intersections
+    if (ts.isIntersectionTypeNode(typeNode)) {
+      for (const member of typeNode.types) {
+        const memberOwned = this.extractSharedOwnershipWithSubstitution(member, sourceFile, checker, substitutionMap);
+        memberOwned.forEach(t => ownedTypes.add(t));
+      }
+      return ownedTypes;
+    }
+    
+    // Handle type references
+    if (ts.isTypeReferenceNode(typeNode)) {
+      const typeNameText = ts.isIdentifier(typeNode.typeName) 
+        ? typeNode.typeName.text 
+        : typeNode.typeName.getText();
+      
+      // Weak and Unique don't create edges
+      if (typeNameText === 'Weak' || typeNameText === 'Unique') {
+        return ownedTypes;
+      }
+      
+      // Shared<T> - check if T is a type parameter that needs substitution
+      if (typeNameText === 'Shared' && typeNode.typeArguments && typeNode.typeArguments.length > 0) {
+        const targetTypeNode = typeNode.typeArguments[0];
+        
+        // Check if it's a type parameter reference (e.g., T)
+        if (ts.isTypeReferenceNode(targetTypeNode) && ts.isIdentifier(targetTypeNode.typeName)) {
+          const paramName = targetTypeNode.typeName.text;
+          
+          // Substitute if we have a mapping
+          if (substitutionMap.has(paramName)) {
+            const substituted = substitutionMap.get(paramName)!;
+            const targetType = this.getTypeNameFromTypeNode(substituted, sourceFile, checker);
+            if (targetType) {
+              ownedTypes.add(targetType);
+            }
+          }
+        } else {
+          // Not a type parameter, just a regular type
+          const targetType = this.getTypeNameFromTypeNode(targetTypeNode, sourceFile, checker);
+          if (targetType) {
+            ownedTypes.add(targetType);
+          }
+        }
+        return ownedTypes;
+      }
+      
+      // For other generic types (e.g., Inner<T>), recursively analyze
+      // This handles nested generics like Outer<T> containing Inner<T>
+      if (typeNode.typeArguments && typeNode.typeArguments.length > 0) {
+        // Substitute type arguments
+        const substitutedArgs: ts.TypeNode[] = [];
+        for (const arg of typeNode.typeArguments) {
+          if (ts.isTypeReferenceNode(arg) && ts.isIdentifier(arg.typeName)) {
+            const paramName = arg.typeName.text;
+            if (substitutionMap.has(paramName)) {
+              substitutedArgs.push(substitutionMap.get(paramName)!);
+            } else {
+              substitutedArgs.push(arg);
+            }
+          } else {
+            substitutedArgs.push(arg);
+          }
+        }
+        
+        // Find the generic class declaration
+        const symbol = checker.getSymbolAtLocation(typeNode.typeName);
+        if (symbol && symbol.declarations && symbol.declarations.length > 0) {
+          const decl = symbol.declarations[0];
+          if (ts.isClassDeclaration(decl)) {
+            // Recursively analyze the nested generic class
+            const nestedOwned = this.extractOwnershipFromGenericClass(
+              decl,
+              ts.factory.createNodeArray(substitutedArgs),
+              sourceFile,
+              checker
+            );
+            nestedOwned.forEach(t => ownedTypes.add(t));
+          }
+        }
+      }
+    }
+    
+    return ownedTypes;
+  }
+
+  /**
    * Get the type name from a type node
    */
-  private getTypeNameFromTypeNode(typeNode: ts.TypeNode, sourceFile: ts.SourceFile): string | null {
-    if (ts.isTypeReferenceNode(typeNode)) {
-      return this.getFullyQualifiedName(typeNode.typeName, sourceFile);
+  /**
+   * Extract the type name from a type node (resolving type aliases)
+   */
+  private getTypeNameFromTypeNode(typeNode: ts.TypeNode, sourceFile: ts.SourceFile, checker: ts.TypeChecker): string | null {
+    // Resolve type aliases first
+    const resolvedType = this.resolveTypeAlias(typeNode, checker);
+    
+    if (ts.isTypeReferenceNode(resolvedType)) {
+      return this.getFullyQualifiedName(resolvedType.typeName, sourceFile);
     }
+    
+    // Handle intersection types - use the first type as the base
+    if (ts.isIntersectionTypeNode(resolvedType) && resolvedType.types.length > 0) {
+      return this.getTypeNameFromTypeNode(resolvedType.types[0], sourceFile, checker);
+    }
+    
     return null;
   }
 
