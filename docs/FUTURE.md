@@ -12,9 +12,10 @@ This document explores potential future evolutions and enhancements to GoodScrip
 - **Level 3 "rust"** - Full validation for native compilation (default for Rust target)
 
 **Implementation Phases** (internal development):
-- **Phase 1** - Implements level "clean"
-- **Phase 2** - Implements level "dag"  
-- **Phase 3** - Implements level "rust"
+- **Phase 1** - Implements level "clean" - [Details](./PHASE-1-CLEAN.md)
+- **Phase 2** - Implements level "dag" - [Details](./PHASE-2-DAG.md)
+- **Phase 3** - Implements level "rust" - [Details](./PHASE-3-RUST.md)
+- **Phase 4** - Ecosystem integration for production readiness - [Details](./PHASE-4-ECOSYSTEM.md)
 
 ### Dual-Target Validation Strategy (Phase 3)
 
@@ -619,14 +620,18 @@ module.exports = withGoodScript({
 *This section will be updated as the project evolves.*
 
 **Near-term (2024-2025):**
-- Complete Phase 2 (Ownership analysis)
+- Complete Phase 2 (Ownership analysis) ✅ **COMPLETE**
 - Complete Phase 3 (Rust codegen)
 - Improve error messages and developer experience
 - Build core tooling (LSP, build plugins)
 
 **Mid-term (2025-2026):**
+- Complete Phase 4 (Ecosystem integration) 📋 **NEW**
+  - Cargo integration and build tooling
+  - Standard library development
+  - WebAssembly compilation target
+  - FFI support and deployment tools
 - JSX/TSX support (if community demand exists)
-- Standard library development
 - Framework integrations
 - Migration tooling
 

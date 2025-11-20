@@ -52,9 +52,10 @@ The language will be implemented incrementally, focusing on safety and correctne
 
 | Phase | Core Goal | Output Target | Primary Value Delivered |
 | :--- | :--- | :--- | :--- |
-| **Phase 1: Strict Semantics** | Remove all dynamic/unsafe JS features; enforce explicit ownership syntax. | Standard JavaScript/TypeScript | **Enterprise Safety.** Provides a cleaner, bug-resistant syntax and a valid value proposition immediately. |
-| **Phase 2: Ownership Analysis** | Implement the **DAG Check** on $\text{shared}<T>$ links within the TypeScript AST. | Standard JavaScript/TypeScript | **Compile-Time Safety.** Proves the memory model is sound before code generation. |
-| **Phase 3: Rust Code Generation** | Transpile the verified AST to optimized Rust source code. | Rust | **Performance & Final Safety.** Delivers the zero-cost binary using `Box<T>`, `Rc<T>`, and `Weak<T>`. |
+| **[Phase 1: Strict Semantics](./PHASE-1-CLEAN.md)** | Remove all dynamic/unsafe JS features; enforce explicit ownership syntax. | Standard JavaScript/TypeScript | **Enterprise Safety.** Provides a cleaner, bug-resistant syntax and a valid value proposition immediately. |
+| **[Phase 2: Ownership Analysis](./PHASE-2-DAG.md)** | Implement the **DAG Check** on $\text{shared}<T>$ links within the TypeScript AST. | Standard JavaScript/TypeScript | **Compile-Time Safety.** Proves the memory model is sound before code generation. |
+| **[Phase 3: Rust Code Generation](./PHASE-3-RUST.md)** | Transpile the verified AST to optimized Rust source code. | Rust | **Performance & Final Safety.** Delivers the zero-cost binary using `Box<T>`, `Rc<T>`, and `Weak<T>`. |
+| **[Phase 4: Ecosystem Integration](./PHASE-4-ECOSYSTEM.md)** | Build tooling, standard library, and deployment support for Rust target. | Production-ready Rust | **Real-World Usability.** Makes Rust compilation practical for production applications. |
 
 ***
 

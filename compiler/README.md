@@ -4,11 +4,12 @@ The GoodScript compiler (`gsc`) transforms GoodScript (`.gs.ts` and `.gs.tsx`) f
 
 ## Overview
 
-The compiler implements GoodScript in three phases:
+The compiler implements GoodScript in four phases:
 
-- **Phase 1** (✅ In Progress): Strict TypeScript semantics - eliminates JavaScript "bad parts"
-- **Phase 2** (🚧 In Progress): Ownership analysis and DAG validation  
-- **Phase 3** (📋 Planned): Rust code generation for native performance
+- **Phase 1** (✅ Complete): Strict TypeScript semantics - eliminates JavaScript "bad parts" (244 tests) - [Details](../docs/PHASE-1-CLEAN.md)
+- **Phase 2** (✅ Complete): Ownership analysis and DAG validation (425 tests, 100% coverage) - [Details](../docs/PHASE-2-DAG.md)
+- **Phase 3** (📋 Planned): Rust code generation for native performance - [Details](../docs/PHASE-3-RUST.md)
+- **Phase 4** (📋 Planned): Ecosystem integration - Cargo, standard library, WASM, deployment tools - [Details](../docs/PHASE-4-ECOSYSTEM.md)
 
 ## Installation
 

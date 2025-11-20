@@ -4,7 +4,7 @@
 
 **GoodScript** is a TypeScript variant with ownership semantics that compiles to both TypeScript/JavaScript and (eventually) Rust. It eliminates JavaScript's "bad parts" and adds a three-tier ownership system for deterministic memory management.
 
-**Current Status**: Language level "clean" (Phase 1) complete with 244 tests passing. Language level "dag" (Phase 2) in progress.
+**Current Status**: Language level "clean" (Phase 1) complete with 244 tests passing. Language level "dag" (Phase 2) complete with 425 tests passing and 100% coverage. Phase 3 (Rust code generation) and Phase 4 (ecosystem integration) are planned.
 
 ## Core Concepts
 
@@ -17,6 +17,7 @@
 - **Phase 1** implements level "clean"
 - **Phase 2** implements level "dag"
 - **Phase 3** implements level "rust"
+- **Phase 4** ecosystem integration for production readiness (Cargo, standard library, WASM, FFI, deployment)
 
 ### Three-Tier Ownership System (Levels 2 & 3)
 - **`Unique<T>`** - Exclusive ownership (maps to Rust's `Box<T>`)
@@ -65,12 +66,17 @@ goodscript/
 │   │   │   ├── test-helpers.ts # Testing utilities
 │   │   │   └── *.test.ts       # Restriction tests
 │   │   ├── cli/                # CLI compatibility (20 tests)
-│   │   ├── phase2/             # Phase 2 tests (TBD)
+│   │   ├── phase2/             # Phase 2 tests (425 tests, 100% coverage)
 │   │   └── phase3/             # Phase 3 tests (TBD)
 │   ├── docs/
 │   │   ├── LANGUAGE.md         # Complete language spec
-│   │   ├── GOOD-PARTS.md       # Phase 1 restrictions & rationale
-│   │   └── DAG-DETECTION.md    # Cycle detection algorithm
+│   │   ├── PHASE-1-CLEAN.md    # Phase 1 documentation
+│   │   ├── PHASE-2-DAG.md      # Phase 2 documentation
+│   │   ├── PHASE-3-RUST.md     # Phase 3 documentation (planned)
+│   │   ├── PHASE-4-ECOSYSTEM.md # Phase 4 documentation (planned)
+│   │   ├── GOOD-PARTS.md       # Detailed Phase 1 rationale
+│   │   ├── DAG-DETECTION.md    # Formal DAG detection rules
+│   │   └── POOL-PATTERN.md     # Pool pattern guide
 │   └── lib/
 │       └── goodscript.d.ts     # Type definitions for ownership wrappers
 ├── extension/                   # VS Code extension
@@ -202,20 +208,19 @@ npm run test:watch          # Watch mode
 - **Fixture tests failing**: Ensure fixtures are truly Phase 1 compliant
 - **Null checks**: Remember to use `isNullOrUndefined()` helper for both forms
 
-## Next Steps (Phase 2)
+## Next Steps (Phase 3)
 
-1. Complete Phase 2 test suite
-   - Ownership semantics validation
-   - DAG cycle detection tests
-   - Null-check enforcement tests
+1. Rust code generation
+   - AST → Rust source transformation
+   - Ownership type mapping (`Unique<T>` → `Box<T>`, etc.)
+   - Type system translation
 
-2. Improve error messages
-   - More specific ownership violation messages
-   - Suggest fixes for common mistakes
+2. Phase 4 planning
+   - See `docs/PHASE-4-ECOSYSTEM.md` for ecosystem integration
+   - Cargo integration, standard library, WASM support
+   - FFI, testing framework, deployment tooling
 
-3. Phase 3 preparation
-   - Rust code generation infrastructure
-   - Ownership type mapping tests
+3. Improve error messages
 
 ## Quick Reference
 

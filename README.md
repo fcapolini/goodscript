@@ -168,9 +168,10 @@ GoodScript is being developed in phases, with each phase corresponding to a lang
 
 | Phase | Language Level | Features | Status |
 |-------|----------------|----------|--------|
-| **Phase 1** | Level 1 "clean" | Strict TypeScript semantics<br/>(13 restrictions, 244 tests) | ✅ **Complete** |
-| **Phase 2** | Level 2 "dag" | Ownership analysis & DAG validation<br/>(425 tests, 100% coverage) | ✅ **Complete** |
-| **Phase 3** | Level 3 "rust" | Rust code generation | 📋 Planned |
+| **Phase 1** | Level 1 "clean" | Strict TypeScript semantics<br/>(13 restrictions, 244 tests)<br/>[📖 Details](docs/PHASE-1-CLEAN.md) | ✅ **Complete** |
+| **Phase 2** | Level 2 "dag" | Ownership analysis & DAG validation<br/>(425 tests, 100% coverage)<br/>[📖 Details](docs/PHASE-2-DAG.md) | ✅ **Complete** |
+| **Phase 3** | Level 3 "rust" | Rust code generation<br/>[📖 Details](docs/PHASE-3-RUST.md) | 📋 Planned |
+| **Phase 4** | — | Ecosystem integration<br/>[📖 Details](docs/PHASE-4-ECOSYSTEM.md) | 📋 Planned |
 
 **Phase 1 Restrictions** (enforced at all levels, see [docs/GOOD-PARTS.md](docs/GOOD-PARTS.md)):
 - GS101-GS108: Language features (`with`, `eval`, `arguments`, `for-in`, `var`, `==`, `!=`, function declarations)
@@ -185,6 +186,14 @@ GoodScript is being developed in phases, with each phase corresponding to a lang
 - Nested generic analysis, call argument validation, type inference
 
 **Phase 3** will generate optimized Rust code for native performance
+
+**Phase 4** makes Rust compilation production-ready (see [docs/PHASE-4-ECOSYSTEM.md](docs/PHASE-4-ECOSYSTEM.md)):
+- Cargo integration and build tooling
+- Standard library (collections, I/O, networking)
+- WebAssembly compilation target
+- FFI support for Rust crates and C libraries
+- Testing framework and dual-target validation
+- Deployment tools and cross-platform builds
 
 ## Installation
 
