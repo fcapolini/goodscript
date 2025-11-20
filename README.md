@@ -101,6 +101,7 @@ In **Phase 3** (now in progress), GoodScript transpiles to **optimized Rust sour
 - **WASM Support:** Compile to WebAssembly via Rust's `wasm32` target
 - **Memory Safety:** Ownership system maps directly to Rust's `Box<T>`, `Rc<T>`, and `Weak<T>`
 - **Deterministic Performance:** No GC pauses, predictable memory usage
+- **🎯 Rust Ecosystem Access:** Call any Rust library (90,000+ crates) and catch errors with try/catch (see [ERROR-HANDLING.md](docs/ERROR-HANDLING.md))
 
 The compiler's **DAG validation** (Phase 2) ensures that generated Rust code is memory-leak-free by preventing reference cycles at compile time. Complex data structures use the [pool pattern](docs/POOL-PATTERN.md) to maintain DAG invariants while supporting natural graph/tree topologies.
 

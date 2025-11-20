@@ -24,7 +24,7 @@ Phase 4 focuses on making GoodScript's Rust compilation target **production-read
 | **Dependency Management** | Handle external Rust crates and npm packages | Critical |
 | **Standard Library** | Provide common utilities (collections, I/O, etc.) | High |
 | **WebAssembly Target** | Compile to WASM for browser/edge deployment | High |
-| **FFI Support** | Interop with Rust crates and C libraries | High |
+| **FFI Support** | Interop with Rust crates and C libraries | ✅ Basic (via Result<T,E>) |
 | **Build Tooling** | CLI commands for build/run/test workflows | High |
 | **npm/Cargo Bridge** | Use npm packages in Rust builds | Medium |
 | **Deployment Tools** | Package binaries, create containers, etc. | Medium |
@@ -692,6 +692,8 @@ export { processData };
 ---
 
 ## 5. FFI (Foreign Function Interface)
+
+> **🎯 KILLER FEATURE ALREADY AVAILABLE:** Thanks to GoodScript's all-Result error handling pattern (Phase 3), you can **already call any Rust library** and catch errors using familiar try/catch syntax. The Result<T, E> pattern provides seamless interoperability with the entire Rust ecosystem (90,000+ crates). See [ERROR-HANDLING.md](ERROR-HANDLING.md) for comprehensive documentation and examples including file I/O, HTTP requests, databases, JSON parsing, and more.
 
 ### Calling Rust from GoodScript
 
