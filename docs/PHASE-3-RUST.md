@@ -1,8 +1,8 @@
 # Phase 3: Rust Code Generation
 
-**Status:** 🚧 In Progress (control flow & error handling complete)
+**Status:** 🚧 In Progress (all-Result error handling complete)
 
-**Test Coverage:** 98 tests passing (61 core + 19 extended + 18 control flow)
+**Test Coverage:** 105 tests passing (61 core + 19 extended + 18 control flow + 7 error propagation)
 
 ## Current Implementation Status
 
@@ -29,13 +29,16 @@
 - **Switch Statements** - switch/case → match expressions
 - **Template Literals** - Backtick strings → format! macro
 - **Parenthesized Expressions** - Preserved for clarity
-- **Try/Catch/Finally** - Exception handling → Result<T, E> pattern
+- **Try/Catch/Finally** - Exception handling → Result<T, E> pattern  
 - **Throw Statements** - throw → return Err()
 - **While Loops** - while condition { } preserved
 - **Do-While Loops** - do-while → loop with conditional break
 - **Break/Continue** - Preserved, including labeled variants
 - **Labeled Statements** - Labels → Rust lifetime syntax ('label)
 - **Element Access** - Array/map indexing with proper type inference
+- **All-Result Pattern** - Every function returns Result<T, E> for error propagation
+- **Error Propagation** - ? operator on all function calls
+- **Root Error Handler** - Uncaught exceptions print message and exit(1)
 - **Automatic Imports** - use statements generated as needed (std::rc::{Rc, Weak}, std::collections::HashMap)
 
 ### 📋 Remaining Work

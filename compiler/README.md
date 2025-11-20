@@ -81,7 +81,7 @@ compiler/
 ├── test/
 │   ├── phase1/                # Phase 1 restriction tests (142 tests)
 │   ├── phase2/                # Phase 2 ownership tests (283 tests)
-│   └── phase3/                # Phase 3 codegen + validation (98 tests)
+│   └── phase3/                # Phase 3 codegen + validation (105 tests)
 │
 └── lib/
     └── goodscript.d.ts        # Type definitions for ownership wrappers

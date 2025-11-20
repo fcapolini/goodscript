@@ -107,7 +107,7 @@ describe('Phase 3 - Rust Code Generation - Basic Types', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('-> ()');
+      expect(result.rustCode).toContain('-> Result<(), String>');
     });
   });
 
@@ -118,7 +118,7 @@ describe('Phase 3 - Rust Code Generation - Basic Types', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('let add = |a: f64, b: f64| -> f64 { a + b }');
+      expect(result.rustCode).toContain('let add = |a: f64, b: f64| -> Result<f64, String> { Ok(a + b) }');
     });
 
     it('should translate arrow function with block body', () => {
@@ -129,8 +129,8 @@ describe('Phase 3 - Rust Code Generation - Basic Types', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('let square = |x: f64| -> f64');
-      expect(result.rustCode).toContain('return x * x;');
+      expect(result.rustCode).toContain('let square = |x: f64| -> Result<f64, String>');
+      expect(result.rustCode).toContain('return Ok(x * x);');
     });
   });
 

@@ -19,6 +19,24 @@ export class RustCodegen {
   private imports = new Set<string>();
   
   /**
+   * Check if a node or its descendants contain return statements
+   */
+  private containsReturnStatement(node: ts.Node): boolean {
+    if (ts.isReturnStatement(node)) {
+      return true;
+    }
+    
+    let found = false;
+    ts.forEachChild(node, child => {
+      if (this.containsReturnStatement(child)) {
+        found = true;
+      }
+    });
+    
+    return found;
+  }
+  
+  /**
    * Generate Rust code from a GoodScript AST
    */
   generate(sourceFile: ts.SourceFile): string {
@@ -112,13 +130,37 @@ export class RustCodegen {
       this.generateStatement(statement);
     }
     
-    // Then wrap top-level variable declarations in a main function
+    // Then wrap top-level variable declarations in a main function with root error handler
     if (topLevelDecls.length > 0) {
       this.emit('pub fn main() {');
       this.indent();
+      
+      // Wrap all code in a Result-returning closure for root error handling
+      this.emit('let result = (|| -> Result<(), String> {');
+      this.indent();
+      
       for (const statement of topLevelDecls) {
         this.generateStatement(statement);
       }
+      
+      this.emit('Ok(())');
+      this.dedent();
+      this.emit('})();');
+      this.emit('');
+      
+      // Root error handler - catches all unhandled exceptions
+      this.emit('match result {');
+      this.indent();
+      this.emit('Ok(_) => {},');
+      this.emit('Err(e) => {');
+      this.indent();
+      this.emit('eprintln!("Uncaught exception: {}", e);');
+      this.emit('std::process::exit(1);');
+      this.dedent();
+      this.emit('}');
+      this.dedent();
+      this.emit('}');
+      
       this.dedent();
       this.emit('}');
     }
@@ -224,17 +266,26 @@ export class RustCodegen {
   
   /**
    * Generate function declaration (legacy, should be arrow functions in GoodScript)
+   * All functions return Result<T, E> for error propagation
    */
   private generateFunctionDeclaration(func: ts.FunctionDeclaration): void {
     const name = func.name?.getText() || 'anonymous';
     const params = this.generateParameters(func.parameters);
     const returnType = func.type ? this.generateType(func.type) : '()';
+    // Wrap return type in Result<T, String>
+    const resultType = `Result<${returnType}, String>`;
     
-    this.emit(`fn ${name}(${params}) -> ${returnType} {`);
+    this.emit(`fn ${name}(${params}) -> ${resultType} {`);
     this.indent();
     
     if (func.body) {
       this.generateBlock(func.body);
+      
+      // Auto-add Ok(()) if function doesn't have any return statements
+      const hasReturnStatement = this.containsReturnStatement(func.body);
+      if (!hasReturnStatement) {
+        this.emit('Ok(())');
+      }
     }
     
     this.dedent();
@@ -281,6 +332,7 @@ export class RustCodegen {
   
   /**
    * Generate method declaration
+   * All methods return Result<T, E> for error propagation
    */
   private generateMethodDeclaration(method: ts.MethodDeclaration): void {
     const name = method.name.getText();
@@ -294,12 +346,20 @@ export class RustCodegen {
     
     const params = this.generateParameters(method.parameters, true, modifiesSelf);
     const returnType = method.type ? this.generateType(method.type) : '()';
+    // Wrap return type in Result<T, String>
+    const resultType = `Result<${returnType}, String>`;
     
-    this.emit(`fn ${name}(${params}) -> ${returnType} {`);
+    this.emit(`fn ${name}(${params}) -> ${resultType} {`);
     this.indent();
     
     if (method.body) {
       this.generateBlock(method.body);
+      
+      // Auto-add Ok(()) if method doesn't have any return statements
+      const hasReturnStatement = this.containsReturnStatement(method.body);
+      if (!hasReturnStatement) {
+        this.emit('Ok(())');
+      }
     }
     
     this.dedent();
@@ -447,18 +507,20 @@ export class RustCodegen {
    */
   private generateExpressionStatement(statement: ts.ExpressionStatement): void {
     const expr = this.generateExpression(statement.expression);
+    // Function calls already have ? added, so we just emit with semicolon
     this.emit(`${expr};`);
   }
   
   /**
    * Generate return statement
+   * All returns are wrapped in Ok() for Result<T, E> pattern
    */
   private generateReturnStatement(statement: ts.ReturnStatement): void {
     if (statement.expression) {
       const expr = this.generateExpression(statement.expression);
-      this.emit(`return ${expr};`);
+      this.emit(`return Ok(${expr});`);
     } else {
-      this.emit('return;');
+      this.emit('return Ok(());');
     }
   }
   
@@ -724,11 +786,13 @@ export class RustCodegen {
   
   /**
    * Generate arrow function
+   * All functions return Result<T, E> for error propagation
    */
   private generateArrowFunction(func: ts.ArrowFunction): string {
     const params = this.generateParameters(func.parameters);
-    const returnType = func.type ? this.generateType(func.type) : '';
-    const returnAnnotation = returnType ? ` -> ${returnType}` : '';
+    const returnType = func.type ? this.generateType(func.type) : '()';
+    // Wrap return type in Result<T, String>
+    const resultType = `Result<${returnType}, String>`;
     
     if (ts.isBlock(func.body)) {
       // Multi-line function - we need to capture the body statements separately
@@ -740,6 +804,14 @@ export class RustCodegen {
       for (const statement of func.body.statements) {
         this.generateStatement(statement);
       }
+      
+      // Auto-add Ok(()) if function doesn't have any return statements
+      // Check recursively through the entire block
+      const hasReturnStatement = this.containsReturnStatement(func.body);
+      if (!hasReturnStatement) {
+        this.emit('Ok(())');
+      }
+      
       this.dedent();
       
       // Get the generated body
@@ -748,19 +820,15 @@ export class RustCodegen {
       
       // Build the closure with proper formatting
       if (bodyLines.length === 0) {
-        return `|${params}|${returnAnnotation} {}`;
+        return `|${params}| -> ${resultType} { Ok(()) }`;
       } else {
         const bodyCode = bodyLines.join('\n');
-        return `|${params}|${returnAnnotation} {\n${bodyCode}\n${this.INDENT.repeat(this.indentLevel)}}`;
+        return `|${params}| -> ${resultType} {\n${bodyCode}\n${this.INDENT.repeat(this.indentLevel)}}`;
       }
     } else {
-      // Single expression
+      // Single expression - wrap in Ok()
       const body = this.generateExpression(func.body);
-      // In Rust, closures with explicit return types need braces
-      if (returnAnnotation) {
-        return `|${params}|${returnAnnotation} { ${body} }`;
-      }
-      return `|${params}|${returnAnnotation} ${body}`;
+      return `|${params}| -> ${resultType} { Ok(${body}) }`;
     }
   }
   
@@ -785,12 +853,13 @@ export class RustCodegen {
   
   /**
    * Generate call expression
+   * All function calls use ? operator for error propagation
    */
   private generateCallExpression(expr: ts.CallExpression): string {
     const func = this.generateExpression(expr.expression);
     const args = expr.arguments.map(arg => this.generateExpression(arg)).join(', ');
     
-    return `${func}(${args})`;
+    return `${func}(${args})?`;
   }
   
   /**

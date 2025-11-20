@@ -90,7 +90,7 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('return self.value');
+      expect(result.rustCode).toContain('return Ok(self.value)');
       expect(result.rustCode).not.toContain('this.');
     });
 
@@ -154,8 +154,8 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('let add = |a: f64, b: f64| -> f64 {');
-      expect(result.rustCode).toContain('    return a + b;');
+      expect(result.rustCode).toContain('let add = |a: f64, b: f64| -> Result<f64, String> {');
+      expect(result.rustCode).toContain('    return Ok(a + b);');
       expect(result.rustCode).toContain('};');
     });
 
@@ -169,10 +169,10 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('|x: f64| -> f64 {');
+      expect(result.rustCode).toContain('|x: f64| -> Result<f64, String> {');
       expect(result.rustCode).toContain('let doubled');
       expect(result.rustCode).toContain('let squared');
-      expect(result.rustCode).toContain('return squared');
+      expect(result.rustCode).toContain('return Ok(squared)');
     });
 
     it('should handle arrow function with for loop', () => {
@@ -187,7 +187,7 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('|numbers: Vec<f64>| -> f64 {');
+      expect(result.rustCode).toContain('|numbers: Vec<f64>| -> Result<f64, String> {');
       expect(result.rustCode).toContain('let mut total = 0');
       expect(result.rustCode).toContain('for n in numbers');
       expect(result.rustCode).toContain('total = total + n');
@@ -200,8 +200,8 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('let square = |x: f64| -> f64 { x * x }');
-      expect(result.rustCode).toContain('let double = |x: f64| -> f64 { x + x }');
+      expect(result.rustCode).toContain('let square = |x: f64| -> Result<f64, String> { Ok(x * x) }');
+      expect(result.rustCode).toContain('let double = |x: f64| -> Result<f64, String> { Ok(x + x) }');
     });
   });
 

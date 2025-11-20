@@ -108,7 +108,7 @@ describe('Phase 3 - Rust Code Generation - Classes', () => {
       expect(result.success).toBe(true);
       expect(result.rustCode).toContain('struct Counter');
       expect(result.rustCode).toContain('impl Counter {');
-      expect(result.rustCode).toContain('fn increment(&mut self) -> ()');
+      expect(result.rustCode).toContain('fn increment(&mut self) -> Result<(), String>');
     });
 
     it('should add self parameter to methods', () => {
@@ -123,7 +123,7 @@ describe('Phase 3 - Rust Code Generation - Classes', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('fn getValue(&self) -> f64');
+      expect(result.rustCode).toContain('fn getValue(&self) -> Result<f64, String>');
     });
 
     it('should handle methods with parameters', () => {
@@ -138,7 +138,7 @@ describe('Phase 3 - Rust Code Generation - Classes', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('fn add(&self, a: f64, b: f64) -> f64');
+      expect(result.rustCode).toContain('fn add(&self, a: f64, b: f64) -> Result<f64, String>');
     });
   });
 
