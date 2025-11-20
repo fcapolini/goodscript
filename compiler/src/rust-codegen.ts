@@ -138,6 +138,8 @@ export class RustCodegen {
       this.generateInterfaceDeclaration(statement);
     } else if (ts.isTypeAliasDeclaration(statement)) {
       this.generateTypeAliasDeclaration(statement);
+    } else if (ts.isEnumDeclaration(statement)) {
+      this.generateEnumDeclaration(statement);
     } else if (ts.isExpressionStatement(statement)) {
       this.generateExpressionStatement(statement);
     } else if (ts.isReturnStatement(statement)) {
@@ -146,6 +148,8 @@ export class RustCodegen {
       this.generateIfStatement(statement);
     } else if (ts.isForOfStatement(statement)) {
       this.generateForOfStatement(statement);
+    } else if (ts.isSwitchStatement(statement)) {
+      this.generateSwitchStatement(statement);
     } else if (ts.isBlock(statement)) {
       this.generateBlock(statement);
     } else {
@@ -316,9 +320,112 @@ export class RustCodegen {
    */
   private generateTypeAliasDeclaration(typeAlias: ts.TypeAliasDeclaration): void {
     const name = typeAlias.name.getText();
+    
+    // Check if this is a discriminated union type
+    if (ts.isUnionTypeNode(typeAlias.type)) {
+      const isDiscriminatedUnion = typeAlias.type.types.every(t => 
+        ts.isTypeLiteralNode(t) && 
+        t.members.some(m => 
+          ts.isPropertySignature(m) && 
+          m.name?.getText() === 'type' &&
+          m.type && ts.isLiteralTypeNode(m.type)
+        )
+      );
+      
+      if (isDiscriminatedUnion) {
+        // Generate as Rust enum
+        this.emit(`enum ${name} {`);
+        this.indent();
+        
+        for (const variant of typeAlias.type.types) {
+          if (ts.isTypeLiteralNode(variant)) {
+            // Extract variant name from 'type' field
+            const typeField = variant.members.find(m => 
+              ts.isPropertySignature(m) && m.name?.getText() === 'type'
+            );
+            if (typeField && ts.isPropertySignature(typeField) && 
+                typeField.type && ts.isLiteralTypeNode(typeField.type)) {
+              const variantName = typeField.type.literal.getText().replace(/["\']/g, '');
+              const capitalizedName = variantName.charAt(0).toUpperCase() + variantName.slice(1);
+              
+              // Collect other fields
+              const fields = variant.members
+                .filter(m => ts.isPropertySignature(m) && m.name?.getText() !== 'type')
+                .map(m => {
+                  const fieldName = (m as ts.PropertySignature).name?.getText() || 'unknown';
+                  const fieldType = (m as ts.PropertySignature).type ? 
+                    this.generateType((m as ts.PropertySignature).type!) : 'unknown';
+                  return `${fieldName}: ${fieldType}`;
+                });
+              
+              if (fields.length > 0) {
+                this.emit(`${capitalizedName} { ${fields.join(', ')} },`);
+              } else {
+                this.emit(`${capitalizedName},`);
+              }
+            }
+          }
+        }
+        
+        this.dedent();
+        this.emit('}');
+        this.emit('');
+        return;
+      }
+    }
+    
+    // Regular type alias
     const type = this.generateType(typeAlias.type);
     this.emit(`type ${name} = ${type};`);
     this.emit('');
+  }
+  
+  /**
+   * Generate enum declaration
+   */
+  private generateEnumDeclaration(enumDecl: ts.EnumDeclaration): void {
+    const name = enumDecl.name.getText();
+    
+    // Check if it's a numeric or string enum
+    const hasStringValues = enumDecl.members.some(m => 
+      m.initializer && ts.isStringLiteral(m.initializer)
+    );
+    
+    if (hasStringValues) {
+      // String enum - generate as regular enum
+      this.emit(`enum ${name} {`);
+      this.indent();
+      
+      for (const member of enumDecl.members) {
+        const memberName = member.name.getText();
+        this.emit(`${memberName},`);
+      }
+      
+      this.dedent();
+      this.emit('}');
+      this.emit('');
+    } else {
+      // Numeric enum - generate with discriminant values
+      this.emit(`enum ${name} {`);
+      this.indent();
+      
+      let currentValue = 0;
+      for (const member of enumDecl.members) {
+        const memberName = member.name.getText();
+        if (member.initializer) {
+          const value = member.initializer.getText();
+          this.emit(`${memberName} = ${value},`);
+          currentValue = parseInt(value) + 1;
+        } else {
+          this.emit(`${memberName} = ${currentValue},`);
+          currentValue++;
+        }
+      }
+      
+      this.dedent();
+      this.emit('}');
+      this.emit('');
+    }
   }
   
   /**
@@ -397,6 +504,40 @@ export class RustCodegen {
     this.emit(`for ${variable} in ${iterableWithRef} {`);
     this.indent();
     this.generateStatement(statement.statement);
+    this.dedent();
+    this.emit('}');
+  }
+  
+  /**
+   * Generate switch statement as Rust match expression
+   */
+  private generateSwitchStatement(statement: ts.SwitchStatement): void {
+    const expr = this.generateExpression(statement.expression);
+    
+    this.emit(`match ${expr} {`);
+    this.indent();
+    
+    for (const clause of statement.caseBlock.clauses) {
+      if (ts.isCaseClause(clause)) {
+        const pattern = this.generateExpression(clause.expression);
+        this.emit(`${pattern} => {`);
+        this.indent();
+        for (const stmt of clause.statements) {
+          this.generateStatement(stmt);
+        }
+        this.dedent();
+        this.emit('},');
+      } else if (ts.isDefaultClause(clause)) {
+        this.emit('_ => {');
+        this.indent();
+        for (const stmt of clause.statements) {
+          this.generateStatement(stmt);
+        }
+        this.dedent();
+        this.emit('},');
+      }
+    }
+    
     this.dedent();
     this.emit('}');
   }
@@ -550,6 +691,16 @@ export class RustCodegen {
       return this.generateArrayLiteral(expr);
     } else if (ts.isNewExpression(expr)) {
       return this.generateNewExpression(expr);
+    } else if (ts.isPrefixUnaryExpression(expr)) {
+      return this.generatePrefixUnaryExpression(expr);
+    } else if (ts.isPostfixUnaryExpression(expr)) {
+      return this.generatePostfixUnaryExpression(expr);
+    } else if (ts.isConditionalExpression(expr)) {
+      return this.generateConditionalExpression(expr);
+    } else if (ts.isTemplateExpression(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) {
+      return this.generateTemplateLiteral(expr);
+    } else if (ts.isParenthesizedExpression(expr)) {
+      return `(${this.generateExpression(expr.expression)})`;
     } else {
       return `/* TODO: ${ts.SyntaxKind[expr.kind]} */`;
     }
@@ -611,6 +762,7 @@ export class RustCodegen {
     } else if (operator === '!==') {
       operator = '!=';
     }
+    // Note: &&, ||, and other logical operators are the same in Rust
     
     return `${left} ${operator} ${right}`;
   }
@@ -679,5 +831,84 @@ export class RustCodegen {
     }
     
     return `${type}::new(${args})`;
+  }
+  
+  /**
+   * Generate prefix unary expression (!, -, +, ++, --)
+   */
+  private generatePrefixUnaryExpression(expr: ts.PrefixUnaryExpression): string {
+    const operand = this.generateExpression(expr.operand);
+    const operator = ts.tokenToString(expr.operator);
+    
+    // Translate operators
+    if (operator === '++' || operator === '--') {
+      // Rust doesn't have ++ or --, use += 1 or -= 1
+      const op = operator === '++' ? '+=' : '-=';
+      return `${operand} ${op} 1.0`;
+    }
+    
+    return `${operator}${operand}`;
+  }
+  
+  /**
+   * Generate postfix unary expression (++, --)
+   */
+  private generatePostfixUnaryExpression(expr: ts.PostfixUnaryExpression): string {
+    const operand = this.generateExpression(expr.operand);
+    const operator = ts.tokenToString(expr.operator);
+    
+    // Rust doesn't have postfix ++ or --, use += 1 or -= 1
+    const op = operator === '++' ? '+=' : '-=';
+    return `${operand} ${op} 1.0`;
+  }
+  
+  /**
+   * Generate conditional (ternary) expression
+   */
+  private generateConditionalExpression(expr: ts.ConditionalExpression): string {
+    const condition = this.generateExpression(expr.condition);
+    const whenTrue = this.generateExpression(expr.whenTrue);
+    const whenFalse = this.generateExpression(expr.whenFalse);
+    
+    return `if ${condition} { ${whenTrue} } else { ${whenFalse} }`;
+  }
+  
+  /**
+   * Generate template literal
+   */
+  private generateTemplateLiteral(expr: ts.TemplateExpression | ts.NoSubstitutionTemplateLiteral): string {
+    if (ts.isNoSubstitutionTemplateLiteral(expr)) {
+      // Simple template literal without substitutions
+      const text = expr.getText().slice(1, -1); // Remove backticks
+      return `String::from(\"${text}\")`;
+    }
+    
+    // Template literal with substitutions
+    const parts: string[] = [];
+    
+    // Head
+    const head = expr.head.getText().slice(1); // Remove opening backtick
+    if (head) {
+      parts.push(`\"${head}\"`);
+    }
+    
+    // Template spans
+    for (const span of expr.templateSpans) {
+      const exprText = this.generateExpression(span.expression);
+      parts.push(`${exprText}`);
+      
+      const literal = span.literal.getText();
+      const text = literal.slice(0, -1); // Remove closing marker
+      if (text) {
+        parts.push(`\"${text}\"`);
+      }
+    }
+    
+    if (parts.length === 0) {
+      return 'String::new()';
+    } else {
+      // Use format! macro for templates
+      return `format!(${parts.map((p, i) => i % 2 === 0 ? p : '{}').join('')}, ${parts.filter((_, i) => i % 2 === 1).join(', ')})`;
+    }
   }
 }

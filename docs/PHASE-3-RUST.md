@@ -1,8 +1,8 @@
 # Phase 3: Rust Code Generation
 
-**Status:** 🚧 In Progress (rustc validation infrastructure complete)
+**Status:** 🚧 In Progress (extended features complete)
 
-**Test Coverage:** 61 tests passing (39 AST translation tests + 22 rustc validation tests)
+**Test Coverage:** 80 tests passing (61 core features + 19 extended features)
 
 ## Current Implementation Status
 
@@ -21,18 +21,26 @@
 - **This→Self** - Proper translation of `this` references to `self`
 - **For-of Loops** - Clean Rust iteration syntax with proper borrowing (&)
 - **Binary Operators** - Including `===` → `==`, `!==` → `!=`
+- **Logical Operators** - &&, ||, ! (same in Rust)
+- **Unary Operators** - !, -, +, ++/-- → +=/-=
+- **Conditional (Ternary) Expressions** - `a ? b : c` → `if a { b } else { c }`
+- **Enums** - TypeScript enums → Rust enums with discriminant values
+- **Discriminated Unions** - Type unions → Rust enums with struct variants
+- **Switch Statements** - switch/case → match expressions
+- **Template Literals** - Backtick strings → format! macro
+- **Parenthesized Expressions** - Preserved for clarity
 - **Automatic Imports** - use statements generated as needed (std::rc::{Rc, Weak}, std::collections::HashMap)
 
 ### 📋 Remaining Work
 
 - Exception → `Result<T, E>` translation
+- Try/catch → Result<T, E> with ? operator
 - Async/await → Tokio futures
 - Standard library mappings (fs, http, etc.)
 - Module system (imports/exports)
 - Cargo.toml generation
-- Type aliases and enums
-- Match expressions for discriminated unions
-- Advanced control flow
+- Advanced generics and trait bounds
+- Advanced control flow (labeled loops, continue, break)
 
 ### Usage
 
