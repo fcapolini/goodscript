@@ -298,6 +298,57 @@ const buffer = file.read_to_end()?;
 │
 └── core/          # Shared utilities (both targets)
     ├── collections/
+```
+
+### 🚀 Creating Bindings (Dramatically Simplified!)
+
+**Key insight:** Thanks to the all-Result error handling pattern, exposing Rust libraries to GoodScript just requires writing TypeScript `.d.ts` declaration files!
+
+**The Process:**
+
+1. **Write `.d.ts` file** with function signatures:
+   ```typescript
+   // @goodscript/rust/std/fs.d.ts
+   declare module '@goodscript/rust/std/fs' {
+     export const readToString: (path: string) => string;  // throws
+     export const write: (path: string, contents: string) => void;
+   }
+   ```
+
+2. **Import and use in GoodScript:**
+   ```typescript
+   import { readToString, write } from '@goodscript/rust/std/fs';
+   
+   try {
+     const content = readToString('/etc/hosts');
+     write('/tmp/copy.txt', content);
+   } catch (e) {
+     console.log(`Error: ${e}`);
+   }
+   ```
+
+3. **Compiler automatically generates correct Rust:**
+   ```rust
+   use std::fs;
+   
+   let content = fs::read_to_string("/etc/hosts")
+     .map_err(|e| e.to_string())?;
+   fs::write("/tmp/copy.txt", &content)
+     .map_err(|e| e.to_string())?;
+   ```
+
+**What the compiler handles automatically:**
+- ✅ Adds `?` operator to propagate errors
+- ✅ Wraps returns in `Ok()`
+- ✅ Converts `Result<T, E>` to throwing behavior
+- ✅ Maps Rust errors to strings with `.map_err()`
+
+**This means creating a standard library is just:**
+1. Choose popular Rust crates
+2. Write `.d.ts` type declarations
+3. Done! No C wrappers, no unsafe code, no manual marshaling
+
+See [ERROR-HANDLING.md](ERROR-HANDLING.md) for detailed examples including type mappings, explicit Result types, and HTTP client bindings.
     ├── error/
     └── result/
 ```

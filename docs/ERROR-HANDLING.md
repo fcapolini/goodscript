@@ -571,10 +571,148 @@ Currently uses `String` for all errors. Future enhancements could:
    - Future optimization: static analysis to detect non-throwing functions
 3. **Generated code verbosity** - More verbose than hand-written (but hidden from users)
 
+## Creating GoodScript Bindings for Rust Libraries
+
+The all-Result pattern makes it **trivial to expose Rust libraries to GoodScript**. You just need TypeScript declaration files (`.d.ts`) that declare the function signatures:
+
+### Simple Approach
+
+**1. Create `.d.ts` file with function declarations:**
+
+```typescript
+// bindings/std-fs.d.ts
+declare module '@rust/std/fs' {
+  // Maps to std::fs::read_to_string() -> Result<String, std::io::Error>
+  export const readToString: (path: string) => string;  // throws on error
+  
+  // Maps to std::fs::write() -> Result<(), std::io::Error>
+  export const write: (path: string, contents: string) => void;  // throws on error
+}
+```
+
+**2. Import and use in GoodScript:**
+
+```typescript
+import { readToString, write } from '@rust/std/fs';
+
+try {
+  const content = readToString('/etc/hosts');  // Compiler adds ?
+  write('/tmp/copy.txt', content);             // Compiler adds ?
+} catch (e) {
+  console.log(`File error: ${e}`);
+}
+```
+
+**3. Compiler generates Rust:**
+
+```rust
+use std::fs;
+
+fn main() -> Result<(), String> {
+  let content = fs::read_to_string("/etc/hosts")
+    .map_err(|e| e.to_string())?;
+  
+  fs::write("/tmp/copy.txt", &content)
+    .map_err(|e| e.to_string())?;
+  
+  Ok(())
+}
+```
+
+### Type Mappings
+
+| TypeScript | Rust | Notes |
+|------------|------|-------|
+| `string` | `String` | Owned string |
+| `number` | `f64` | Default numeric type |
+| `boolean` | `bool` | Direct mapping |
+| `void` | `()` | Unit type |
+| `Array<T>` | `Vec<T>` | Owned vector |
+| `Unique<T>` | `Box<T>` | Heap allocation |
+| `Shared<T>` | `Rc<T>` | Reference counted |
+| `Weak<T>` | `Weak<T>` | Non-owning reference |
+
+### Advanced: Explicit Result Types
+
+For APIs where developers may want to handle errors without try/catch:
+
+```typescript
+// bindings/std-fs.d.ts
+declare module '@rust/std/fs' {
+  // Throwing version (for try/catch)
+  export const readToString: (path: string) => string;
+  
+  // Result version (for explicit error handling)
+  export const readToStringResult: (path: string) => Result<string, string>;
+}
+```
+
+Usage:
+
+```typescript
+// Option 1: try/catch
+try {
+  const content = readToString('/etc/hosts');
+} catch (e) {
+  console.log(e);
+}
+
+// Option 2: explicit Result
+const result = readToStringResult('/etc/hosts');
+if (result.isOk()) {
+  const content = result.unwrap();
+} else {
+  const error = result.unwrapErr();
+}
+```
+
+### Building a Standard Library
+
+Creating a GoodScript standard library is now straightforward:
+
+1. **Choose popular Rust crates** (serde, tokio, reqwest, etc.)
+2. **Write `.d.ts` files** with TypeScript signatures
+3. **Map types** according to the table above
+4. **Document** usage patterns
+
+**That's it!** The compiler handles:
+- ✅ Adding `?` operators to function calls
+- ✅ Converting `Result<T, E>` to throwing/catching behavior
+- ✅ Error type conversion with `.map_err(|e| e.to_string())`
+- ✅ Propagating errors through call chains
+
+This is **dramatically simpler** than traditional FFI systems because:
+- No C ABI wrappers needed
+- No manual marshaling code
+- No unsafe blocks (compiler generates those)
+- Just TypeScript type declarations!
+
+### Example: HTTP Client Bindings
+
+```typescript
+// bindings/reqwest.d.ts
+declare module '@rust/reqwest' {
+  export class Client {
+    constructor();
+    get(url: string): Promise<Response>;
+    post(url: string, body: string): Promise<Response>;
+  }
+  
+  export class Response {
+    text(): Promise<string>;
+    json<T>(): Promise<T>;
+    status(): number;
+  }
+}
+```
+
+Now GoodScript developers can use `reqwest` (Rust's popular HTTP client) with familiar async/await syntax, and all errors propagate through the Result pattern automatically!
+
 ## Future Enhancements
 
-- [ ] Typed error hierarchies
+- [ ] Typed error hierarchies (preserve Rust error types)
 - [ ] Static analysis to optimize away Result for non-throwing functions
 - [ ] Better error messages with stack traces
 - [ ] Source maps for debugging generated Rust
 - [ ] Custom error types per function
+- [ ] Auto-generate `.d.ts` files from Rust crate documentation
