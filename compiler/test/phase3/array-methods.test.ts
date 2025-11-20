@@ -409,5 +409,50 @@ describe('Phase 3 - Array Methods', () => {
       
       compareOutputs(jsResult, rustResult);
     });
+
+    it('should produce same output for nested map operations', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const numbers = [1, 2, 3];
+        const doubled = numbers.map((x) => x * 2);
+        const tripled = doubled.map((x) => x + x / 2);
+        for (const n of tripled) {
+          console.log(n);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for filter then forEach', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const nums = [1, 2, 3, 4, 5, 6];
+        const evens = nums.filter((x) => x % 2 === 0);
+        evens.forEach((x) => console.log(x));
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
   });
 });

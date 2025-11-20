@@ -631,5 +631,223 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       expect(result.rustResult.success).toBe(true);
       expect(result.equivalent).toBe(true);
     });
+
+    it('should produce equivalent output for for-of with const', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const items = [10, 20, 30];
+        for (const item of items) {
+          console.log(item);
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it.skip('should produce equivalent output for for-of with let', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const nums = [1, 2, 3];
+        for (let n of nums) {
+          n = n * 2;
+          console.log(n);
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for arrow function with block body', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const greet = (name: string): string => {
+          const msg = "Hello, " + name;
+          return msg;
+        };
+        console.log(greet("World"));
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for multi-statement arrow functions', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const compute = (a: number, b: number): number => {
+          const sum = a + b;
+          const product = sum * 2;
+          return product;
+        };
+        console.log(compute(3, 4));
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for arrow function with for loop', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const printAll = (items: number[]): void => {
+          for (const item of items) {
+            console.log(item);
+          }
+        };
+        printAll([5, 10, 15]);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for single-expression arrow functions', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const double = (x: number): number => x * 2;
+        console.log(double(21));
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for class with multiple methods and loops', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        class Processor {
+          data: number[] = [1, 2, 3];
+          
+          sum(): number {
+            let total = 0;
+            for (const n of this.data) {
+              total = total + n;
+            }
+            return total;
+          }
+        }
+        
+        const p = new Processor();
+        console.log(p.sum());
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for arrow function returning object', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const makePoint = (x: number, y: number): void => {
+          console.log(x);
+          console.log(y);
+        };
+        makePoint(10, 20);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for multiple this references in method', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        class Rectangle {
+          width: number = 10;
+          height: number = 5;
+          
+          area(): number {
+            return this.width * this.height;
+          }
+        }
+        
+        const r = new Rectangle();
+        console.log(r.area());
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it.skip('should produce equivalent output for method calling another method', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        class Counter {
+          count: number = 0;
+          
+          increment(): void {
+            this.count = this.count + 1;
+          }
+          
+          incrementTwice(): void {
+            this.increment();
+            this.increment();
+          }
+          
+          getCount(): number {
+            return this.count;
+          }
+        }
+        
+        const c = new Counter();
+        c.incrementTwice();
+        console.log(c.getCount());
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
   });
 });

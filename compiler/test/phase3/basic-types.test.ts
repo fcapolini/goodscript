@@ -670,5 +670,154 @@ describe('Phase 3 - Rust Code Generation - Basic Types', () => {
       expect(result.rustResult.success).toBe(true);
       expect(result.equivalent).toBe(true);
     });
+
+    it('should produce equivalent output for complex number operations', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const a: number = 10;
+        const b: number = 3;
+        console.log(a + b);
+        console.log(a - b);
+        console.log(a * b);
+        console.log(a / b);
+        console.log(a % b);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for multiple string variables', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const a: string = "Hello";
+        const b: string = "World";
+        console.log(a);
+        console.log(b);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for mixed type operations', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const num: number = 42;
+        const str: string = "The answer is ";
+        const bool: boolean = true;
+        console.log(num);
+        console.log(str);
+        console.log(bool);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for void function', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const doNothing = (): void => {
+          console.log("executed");
+        };
+        doNothing();
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for array with mixed operations', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const nums: number[] = [10, 20, 30];
+        console.log(nums[0]);
+        console.log(nums[1]);
+        console.log(nums[2]);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for negative numbers', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const x: number = -42;
+        const y: number = -3.14;
+        console.log(x);
+        console.log(y);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for boolean negation', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const a: boolean = true;
+        const b: boolean = !a;
+        console.log(a);
+        console.log(b);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for string concatenation with variables', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const first: string = "Hello";
+        const second: string = "World";
+        const combined = first + " " + second;
+        console.log(combined);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
   });
 });

@@ -637,5 +637,60 @@ describe('Phase 3 - Error Propagation Through Call Chains', () => {
       
       compareOutputs(jsResult, rustResult);
     });
+
+    it('should produce same output for try/catch with finally', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        try {
+          console.log("try");
+        } catch (e) {
+          console.log("catch");
+        } finally {
+          console.log("finally");
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for conditional throw', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const checkValue = (n: number): string => {
+          if (n < 0) {
+            throw "negative value";
+          }
+          return "positive";
+        };
+        
+        try {
+          console.log(checkValue(5));
+        } catch (e) {
+          console.log("error");
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
   });
 });

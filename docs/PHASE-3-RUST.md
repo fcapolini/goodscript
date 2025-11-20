@@ -2,7 +2,7 @@
 
 **Status:** 🚧 In Progress (all core features complete, comprehensive runtime equivalence testing)
 
-**Test Coverage:** 308 tests passing (1 skipped) with **192 runtime equivalence tests (68%)** verifying functional correctness
+**Test Coverage:** 377 tests passing (6 skipped) with **264 runtime equivalence tests (76%)** verifying functional correctness
 
 ## Current Implementation Status
 
@@ -90,7 +90,7 @@ The test suite includes 30 comprehensive validation tests covering:
 - Try/catch/finally blocks
 - Error propagation
 
-**All 308 Phase 3 tests pass (1 skipped)**, with every generated Rust code snippet compiling successfully with rustc. The test suite includes **192 runtime equivalence tests (68% coverage)** that execute both JavaScript and Rust versions and verify they produce identical output.
+**All 377 Phase 3 tests pass (6 skipped)**, with every generated Rust code snippet compiling successfully with rustc. The test suite includes **264 runtime equivalence tests (76% coverage)** that execute both JavaScript and Rust versions and verify they produce identical output.
 
 ---
 

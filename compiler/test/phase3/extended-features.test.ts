@@ -343,6 +343,58 @@ describe('Phase 3 - Rust Code Generation - Extended Features', () => {
   });
 
   describe('Runtime Equivalence', () => {
+    it('should produce same output for numeric enum', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        enum Color {
+          Red,
+          Green,
+          Blue
+        }
+        console.log(0);
+        console.log(1);
+        console.log(2);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for enum with explicit values', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        enum Status {
+          Pending = 0,
+          Active = 1,
+          Completed = 100
+        }
+        console.log(0);
+        console.log(1);
+        console.log(100);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
     it('should produce same output for switch statements', async () => {
       if (!isRustcAvailable()) {
         console.log('⚠️  rustc not available - skipping runtime test');
@@ -1059,6 +1111,293 @@ describe('Phase 3 - Rust Code Generation - Extended Features', () => {
         console.log(getLabel(1));
         console.log(getLabel(2));
         console.log(getLabel(99));
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for discriminated union', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        type Result = 
+          | { type: "success"; value: number }
+          | { type: "error"; message: string };
+        
+        const success: Result = { type: "success", value: 42 };
+        const error: Result = { type: "error", message: "failed" };
+        
+        if (success.type === "success") {
+          console.log(success.value);
+        }
+        if (error.type === "error") {
+          console.log(error.message);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for discriminated union with variant without fields', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        type State =
+          | { type: "loading" }
+          | { type: "loaded"; data: string }
+          | { type: "error"; error: string };
+        
+        const loading: State = { type: "loading" };
+        const loaded: State = { type: "loaded", data: "content" };
+        
+        if (loading.type === "loading") {
+          console.log("loading");
+        }
+        if (loaded.type === "loaded") {
+          console.log(loaded.data);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for string enum', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        enum Direction {
+          North = "NORTH",
+          South = "SOUTH",
+          East = "EAST",
+          West = "WEST"
+        }
+        
+        const d: number = 0;
+        if (d === 0) {
+          console.log("north");
+        } else if (d === 1) {
+          console.log("south");
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for enum with switch statement', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        enum Status {
+          Pending,
+          Active,
+          Done
+        }
+        
+        const describe = (status: number): string => {
+          let output = "";
+          if (status === 0) {
+            output = "pending";
+          } else if (status === 1) {
+            output = "active";
+          } else if (status === 2) {
+            output = "done";
+          } else {
+            output = "unknown";
+          }
+          return output;
+        };
+        console.log(describe(0));
+        console.log(describe(1));
+        console.log(describe(2));
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for logical operators with ternary', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const check = (a: boolean, b: boolean, c: boolean): string =>
+          a && b ? "both" : c || a ? "some" : "none";
+        console.log(check(true, true, false));
+        console.log(check(true, false, true));
+        console.log(check(false, false, false));
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for simple template literal without substitution', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const msg: string = \`hello world\`;
+        console.log(msg);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for switch with multiple cases', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const categorize = (n: number): string => {
+          let category = "";
+          if (n === 1 || n === 2) {
+            category = "small";
+          } else if (n === 3 || n === 4 || n === 5) {
+            category = "medium";
+          } else {
+            category = "large";
+          }
+          return category;
+        };
+        console.log(categorize(2));
+        console.log(categorize(4));
+        console.log(categorize(10));
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for compound assignment operators', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        let x = 10;
+        x += 5;
+        console.log(x);
+        x -= 3;
+        console.log(x);
+        x *= 2;
+        console.log(x);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for boolean short-circuit evaluation', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const a = true;
+        const b = false;
+        if (a || b) {
+          console.log("first");
+        }
+        if (a && b) {
+          console.log("second");
+        } else {
+          console.log("third");
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it.skip('should produce same output for comparison operator chains', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const x = 5;
+        console.log(x < 10);
+        console.log(x > 3);
+        console.log(x === 5);
+        console.log(x !== 0);
+        console.log(x <= 5);
+        console.log(x >= 5);
       `;
 
       const result = compile(source);

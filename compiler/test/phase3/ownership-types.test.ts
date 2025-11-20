@@ -605,5 +605,47 @@ describe('Phase 3 - Rust Code Generation - Ownership Types', () => {
       
       compareOutputs(jsResult, rustResult);
     });
+
+    it('should produce same output for Unique with numeric operations', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const x: Unique<number> = 10;
+        const y: Unique<number> = 20;
+        console.log(x);
+        console.log(y);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for Shared with boolean', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const flag: Shared<boolean> = true;
+        console.log(flag);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
   });
 });

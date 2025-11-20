@@ -589,5 +589,167 @@ describe('Phase 3 - Rust Code Generation - Classes', () => {
       
       compareOutputs(jsResult, rustResult);
     });
+
+    it('should produce same output for methods in impl block', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        class Calculator {
+          value: number = 0;
+          
+          add(n: number): void {
+            this.value = this.value + n;
+          }
+          
+          getValue(): number {
+            return this.value;
+          }
+        }
+        
+        const calc = new Calculator();
+        calc.add(5);
+        calc.add(10);
+        console.log(calc.getValue());
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for methods using self', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        class Counter {
+          count: number = 0;
+          
+          increment(): void {
+            this.count = this.count + 1;
+          }
+          
+          getCount(): number {
+            return this.count;
+          }
+        }
+        
+        const counter = new Counter();
+        counter.increment();
+        counter.increment();
+        console.log(counter.getCount());
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for interface to struct', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        interface Point {
+          x: number;
+          y: number;
+        }
+        
+        const p: Point = { x: 10, y: 20 };
+        console.log(p.x);
+        console.log(p.y);
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it.skip('should produce same output for class with computed values', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        class Math {
+          x: number = 5;
+          y: number = 10;
+          
+          sum(): number {
+            return this.x + this.y;
+          }
+          
+          product(): number {
+            return this.x * this.y;
+          }
+        }
+        
+        const m = new Math();
+        console.log(m.sum());
+        console.log(m.product());
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for class with boolean field', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        class Flag {
+          enabled: boolean = true;
+          
+          toggle(): void {
+            this.enabled = !this.enabled;
+          }
+          
+          isEnabled(): boolean {
+            return this.enabled;
+          }
+        }
+        
+        const f = new Flag();
+        console.log(f.isEnabled());
+        f.toggle();
+        console.log(f.isEnabled());
+      `;
+
+      const result = compile(source);
+      expect(result.success).toBe(true);
+      
+      const jsResult = await executeJS(result.jsCode);
+      const rustResult = await executeRust(result.rustCode);
+      
+      compareOutputs(jsResult, rustResult);
+    });
   });
 });

@@ -490,5 +490,116 @@ describe('Phase 3 - For Loops', () => {
       
       compareOutputs(jsResult, rustResult);
     });
+
+    it('should produce same output for for loop with step increment', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        for (let i = 0; i < 10; i += 2) {
+          console.log(i);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for for loop with decrement', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        for (let i = 5; i > 0; i--) {
+          console.log(i);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for nested for loops', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        for (let i = 1; i <= 3; i++) {
+          for (let j = 1; j <= 2; j++) {
+            console.log(i * j);
+          }
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for for loop with array access', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        const arr = [10, 20, 30, 40, 50];
+        for (let i = 0; i < 3; i++) {
+          console.log(arr[i]);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
+
+    it('should produce same output for for loop with break condition', async () => {
+      if (!isRustcAvailable()) {
+        console.log('⚠️  rustc not available - skipping runtime test');
+        return;
+      }
+
+      const source = `
+        for (let i = 0; i < 10; i++) {
+          if (i === 5) {
+            break;
+          }
+          console.log(i);
+        }
+      `;
+
+      const result = compile(source);
+      expect(result.diagnostics).toHaveLength(0);
+      
+      const jsResult = await executeJS(result.jsCode!);
+      const rustResult = await executeRust(result.rustCode!);
+      
+      compareOutputs(jsResult, rustResult);
+    });
   });
 });

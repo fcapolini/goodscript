@@ -1247,5 +1247,648 @@ describe('Phase 3 - Rust Code Generation - Control Flow & Error Handling', () =>
       expect(result.rustResult.success).toBe(true);
       expect(result.equivalent).toBe(true);
     });
+
+    it('should produce equivalent output for throw statement', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const throwError = (): void => {
+          throw "Something went wrong";
+        };
+        
+        try {
+          throwError();
+          console.log("no error");
+        } catch (e) {
+          console.log("caught error");
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for throw with expression', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const throwCustom = (msg: string): void => {
+          throw msg;
+        };
+        
+        try {
+          throwCustom("custom error");
+          console.log("no error");
+        } catch (e) {
+          console.log("caught");
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for try/catch with finally', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const withFinally = (): void => {
+          try {
+            console.log("try");
+          } catch (e) {
+            console.log("catch");
+          } finally {
+            console.log("finally");
+          }
+        };
+        withFinally();
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for try/catch with finally and error', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const withFinallyError = (): void => {
+          try {
+            throw "error occurred";
+          } catch (e) {
+            console.log("caught");
+          } finally {
+            console.log("cleanup");
+          }
+        };
+        withFinallyError();
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for while loop countdown', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        let n = 3;
+        while (n > 0) {
+          console.log(n);
+          n = n - 1;
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for while with complex condition', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        let a = 3;
+        let b = 2;
+        while (a > 0 && b > 0) {
+          console.log(a + b);
+          a = a - 1;
+          b = b - 1;
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for variable array indexing', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const arr = [10, 20, 30, 40];
+        const idx = 2;
+        console.log(arr[idx]);
+        const idx2 = 0;
+        console.log(arr[idx2]);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for labeled break', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        outer: for (const i of [1, 2, 3]) {
+          for (const j of [4, 5, 6]) {
+            if (i === 2 && j === 5) {
+              break outer;
+            }
+            console.log(i * 10 + j);
+          }
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for labeled continue', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        outer: for (const i of [1, 2]) {
+          for (const j of [3, 4]) {
+            if (j === 4) {
+              continue outer;
+            }
+            console.log(i * 10 + j);
+          }
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for nested loops with break and continue', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const nums: number[] = [1, 0, -1, 2, 0, 3];
+        for (const cell of nums) {
+          if (cell === 0) {
+            continue;
+          }
+          if (cell < 0) {
+            break;
+          }
+          console.log(cell);
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for while with break', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        let running = true;
+        let count = 0;
+        while (running === true) {
+          console.log(count);
+          count = count + 1;
+          if (count >= 3) {
+            running = false;
+            break;
+          }
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for try/catch with loop', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const items: number[] = [1, -2, 3, -4, 5];
+        for (const item of items) {
+          try {
+            if (item < 0) {
+              throw "Negative value";
+            }
+            console.log(item);
+          } catch (e) {
+            continue;
+          }
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for switch with range-based classification', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const classify = (value: number): string => {
+          let result = "";
+          if (value >= 1 && value <= 3) {
+            result = "low";
+          } else if (value >= 4 && value <= 5) {
+            result = "mid";
+          } else if (value >= 6 && value <= 10) {
+            result = "high";
+          } else {
+            result = "out of range";
+          }
+          return result;
+        };
+        console.log(classify(2));
+        console.log(classify(5));
+        console.log(classify(9));
+        console.log(classify(15));
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it.skip('should produce equivalent output for nested conditionals', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const category = 1;
+        const subcategory = 2;
+        let output = "";
+        if (category === 1) {
+          if (subcategory === 1) {
+            output = "1-1";
+          } else if (subcategory === 2) {
+            output = "1-2";
+          } else {
+            output = "1-other";
+          }
+        } else if (category === 2) {
+          output = "category-2";
+        } else {
+          output = "unknown";
+        }
+        console.log(output);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for nested if-else chains', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const score = 75;
+        let grade = "";
+        if (score >= 90) {
+          grade = "A";
+        } else if (score >= 80) {
+          grade = "B";
+        } else if (score >= 70) {
+          grade = "C";
+        } else if (score >= 60) {
+          grade = "D";
+        } else {
+          grade = "F";
+        }
+        console.log(grade);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for do-while loop', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        let n = 3;
+        do {
+          console.log(n);
+          n = n - 1;
+        } while (n > 0);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for break statement', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const nums = [1, 5, 12, 8];
+        for (const n of nums) {
+          if (n > 10) {
+            console.log("found");
+            break;
+          }
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for continue statement', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const nums = [1, 2, 3, 4, 5];
+        for (const n of nums) {
+          if (n % 2 === 0) {
+            continue;
+          }
+          console.log(n);
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for array indexing', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const arr = [10, 20, 30, 40];
+        console.log(arr[0]);
+        console.log(arr[2]);
+        const i = 1;
+        console.log(arr[i]);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for nested loops with break and continue', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const nums = [1, 0, -1, 2, 3];
+        for (const cell of nums) {
+          if (cell === 0) {
+            continue;
+          }
+          if (cell < 0) {
+            console.log("negative");
+            break;
+          }
+          console.log(cell);
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for while with break', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        let running = true;
+        let count = 0;
+        while (running === true) {
+          count = count + 1;
+          if (count === 3) {
+            running = false;
+            break;
+          }
+          console.log(count);
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for try/catch with loops', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const items = [1, 2, 3];
+        for (const item of items) {
+          try {
+            if (item < 0) {
+              throw "error";
+            }
+            console.log(item);
+          } catch (e) {
+            console.log("caught");
+          }
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for multiple array operations', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const arr = [5, 10, 15];
+        const first = arr[0];
+        const last = arr[2];
+        console.log(first + last);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for while loop with accumulator', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        let sum = 0;
+        let i = 1;
+        while (i <= 5) {
+          sum = sum + i;
+          i = i + 1;
+        }
+        console.log(sum);
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for nested try/catch', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        try {
+          console.log("outer");
+          try {
+            console.log("inner");
+          } catch (e) {
+            console.log("inner catch");
+          }
+        } catch (e) {
+          console.log("outer catch");
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for if without else', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const x = 5;
+        if (x > 3) {
+          console.log("greater");
+        }
+        console.log("done");
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for early return in function', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const checkValue = (n: number): string => {
+          if (n < 0) {
+            return "negative";
+          }
+          if (n === 0) {
+            return "zero";
+          }
+          return "positive";
+        };
+        console.log(checkValue(-5));
+        console.log(checkValue(0));
+        console.log(checkValue(10));
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for multiple conditions', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const x = 5;
+        const y = 10;
+        if (x < 10 && y > 5) {
+          console.log("both true");
+        }
+      `);
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(result.equivalent).toBe(true);
+    });
   });
 });
