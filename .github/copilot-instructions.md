@@ -2,9 +2,9 @@
 
 ## Project Overview
 
-**GoodScript** is a TypeScript variant with ownership semantics that compiles to both TypeScript/JavaScript and (eventually) Rust. It eliminates JavaScript's "bad parts" and adds a three-tier ownership system for deterministic memory management.
+**GoodScript** is a TypeScript variant with ownership semantics that compiles to both TypeScript/JavaScript and Rust. It eliminates JavaScript's "bad parts" and adds a three-tier ownership system for deterministic memory management.
 
-**Current Status**: Language level "clean" (Phase 1) complete with 244 tests passing. Language level "dag" (Phase 2) complete with 425 tests passing and 100% coverage. Phase 3 (Rust code generation) and Phase 4 (ecosystem integration) are planned.
+**Current Status**: Language level "clean" (Phase 1) complete with 244 tests passing. Language level "dag" (Phase 2) complete with 425 tests passing and 100% coverage. Phase 3 (Rust code generation) is in progress with 39 tests passing - basic AST translation, ownership type mapping, and core features working. Phase 4 (ecosystem integration) is planned.
 
 ## Core Concepts
 
@@ -58,6 +58,7 @@ goodscript/
 │   │   ├── ownership-analyzer.ts   # Phase 2 ownership tracking
 │   │   ├── null-check-analyzer.ts  # Null safety enforcement
 │   │   ├── ts-codegen.ts       # TypeScript code generator
+│   │   ├── rust-codegen.ts     # Rust code generator (Phase 3)
 │   │   ├── gsc.ts              # CLI compiler entry point
 │   │   └── gs.ts               # CLI runner entry point
 │   ├── test/
@@ -66,13 +67,13 @@ goodscript/
 │   │   │   ├── test-helpers.ts # Testing utilities
 │   │   │   └── *.test.ts       # Restriction tests
 │   │   ├── cli/                # CLI compatibility (20 tests)
-│   │   ├── phase2/             # Phase 2 tests (425 tests, 100% coverage)
-│   │   └── phase3/             # Phase 3 tests (TBD)
+│   │   ├── phase2/             # Phase 2 tests (283 tests, 100% coverage)
+│   │   └── phase3/             # Phase 3 tests (39 tests)
 │   ├── docs/
 │   │   ├── LANGUAGE.md         # Complete language spec
 │   │   ├── PHASE-1-CLEAN.md    # Phase 1 documentation
 │   │   ├── PHASE-2-DAG.md      # Phase 2 documentation
-│   │   ├── PHASE-3-RUST.md     # Phase 3 documentation (planned)
+│   │   ├── PHASE-3-RUST.md     # Phase 3 documentation (in progress)
 │   │   ├── PHASE-4-ECOSYSTEM.md # Phase 4 documentation (planned)
 │   │   ├── GOOD-PARTS.md       # Detailed Phase 1 rationale
 │   │   ├── DAG-DETECTION.md    # Formal DAG detection rules
@@ -81,7 +82,6 @@ goodscript/
 │       └── goodscript.d.ts     # Type definitions for ownership wrappers
 ├── extension/                   # VS Code extension
 └── notes/                       # Development session notes
-    └── SESSION-1.md
 ```
 
 ## Key Files & Their Roles
@@ -99,7 +99,7 @@ goodscript/
 - **ownership-analyzer.ts**: Phase 2 ownership tracking (1012 lines)
   - Tracks `Unique<T>`, `Shared<T>`, `Weak<T>` references
   - DAG cycle detection for `Shared<T>` references
-  - Currently functional but Phase 2 tests not yet complete
+  - Currently functional with 100% test coverage
 
 - **null-check-analyzer.ts**: Enforces null checks on weak references (758 lines)
   - Uses `isNullOrUndefined()` helper (accepts both `null` and `undefined`)
@@ -109,6 +109,12 @@ goodscript/
   - `generate(sourceFile: ts.SourceFile): string`
   - Transforms `Weak<T>` → `T | null | undefined`
   - Removes `Unique<T>` and `Shared<T>` wrappers
+
+- **rust-codegen.ts**: Generates Rust code from GoodScript (Phase 3, 650 lines)
+  - `generate(sourceFile: ts.SourceFile): string`
+  - Translates ownership types: `Unique<T>` → `Box<T>`, `Shared<T>` → `Rc<T>`, `Weak<T>` → `Weak<T>`
+  - Converts TypeScript constructs to Rust: classes → struct + impl, arrow functions → closures
+  - Handles `this` → `self`, for-of loops, binary operators, etc.
 
 ### CLI
 - **gsc.ts**: Command-line compiler (`gsc`)
@@ -208,19 +214,24 @@ npm run test:watch          # Watch mode
 - **Fixture tests failing**: Ensure fixtures are truly Phase 1 compliant
 - **Null checks**: Remember to use `isNullOrUndefined()` helper for both forms
 
-## Next Steps (Phase 3)
+## Next Steps
 
-1. Rust code generation
-   - AST → Rust source transformation
-   - Ownership type mapping (`Unique<T>` → `Box<T>`, etc.)
-   - Type system translation
+### Phase 3 (In Progress)
+- ✅ Basic AST → Rust source transformation
+- ✅ Ownership type mapping (`Unique<T>` → `Box<T>`, `Shared<T>` → `Rc<T>`, `Weak<T>` → `Weak<T>`)
+- ✅ Type system translation (primitives, classes, interfaces)
+- ✅ Core language features (this→self, for-of loops, arrow functions)
+- 🚧 Advanced features (generics, async/await, pattern matching)
+- 🚧 Standard library bindings
 
-2. Phase 4 planning
-   - See `docs/PHASE-4-ECOSYSTEM.md` for ecosystem integration
-   - Cargo integration, standard library, WASM support
-   - FFI, testing framework, deployment tooling
+### Phase 4 (Planned)
+- See `docs/PHASE-4-ECOSYSTEM.md` for ecosystem integration
+- Cargo integration, standard library, WASM support
+- FFI, testing framework, deployment tooling
 
-3. Improve error messages
+### Ongoing
+- Improve error messages
+- Expand test coverage
 
 ## Quick Reference
 

@@ -11,6 +11,7 @@ import { OwnershipAnalyzer } from './ownership-analyzer';
 import { Validator } from './validator';
 import { NullCheckAnalyzer } from './null-check-analyzer';
 import { TypeScriptCodegen } from './ts-codegen';
+import { RustCodegen } from './rust-codegen';
 import { Diagnostic } from './types';
 
 export interface CompileOptions {
@@ -38,6 +39,7 @@ export class Compiler {
   private nullCheckAnalyzer: NullCheckAnalyzer;
   private validator: Validator;
   private tsCodegen: TypeScriptCodegen;
+  private rustCodegen: RustCodegen;
 
   constructor() {
     this.parser = new Parser();
@@ -45,6 +47,7 @@ export class Compiler {
     this.nullCheckAnalyzer = new NullCheckAnalyzer();
     this.validator = new Validator();
     this.tsCodegen = new TypeScriptCodegen();
+    this.rustCodegen = new RustCodegen();
   }
 
   /**
@@ -162,12 +165,7 @@ export class Compiler {
       if (target === 'typescript') {
         this.emitTypeScript(program, options.outDir, emit);
       } else if (target === 'rust') {
-        // TODO: Implement Rust codegen in Phase 2
-        allDiagnostics.push({
-          severity: 'error',
-          message: 'Rust code generation not yet implemented',
-          location: { fileName: '', line: 0, column: 0 },
-        });
+        this.emitRust(program, options.outDir);
       }
     }
 
@@ -352,6 +350,53 @@ export class Compiler {
       };
       const message = ts.formatDiagnosticsWithColorAndContext(jsDiagnostics, formatHost);
       console.error('TypeScript compilation errors:\n', message);
+    }
+  }
+
+  /**
+   * Emit Rust code from GoodScript source files
+   */
+  private emitRust(program: ts.Program, outDir: string): void {
+    // Create output directory if it doesn't exist
+    if (!fs.existsSync(outDir)) {
+      fs.mkdirSync(outDir, { recursive: true });
+    }
+
+    const compilerOptions = program.getCompilerOptions();
+    const rootDir = compilerOptions.rootDir || this.getCommonSourceDirectory(program);
+
+    // Process each GoodScript source file
+    for (const sourceFile of program.getSourceFiles()) {
+      if (!sourceFile.isDeclarationFile && this.isGoodScriptFile(sourceFile.fileName)) {
+        const sourceFilePath = path.resolve(sourceFile.fileName);
+        
+        // Generate Rust code
+        const rustCode = this.rustCodegen.generate(sourceFile);
+        
+        // Compute relative path from root directory
+        const relativePath = path.relative(rootDir, sourceFilePath);
+        
+        // Convert .gs.ts or .gs to .rs extension
+        let outputPath = relativePath;
+        if (outputPath.endsWith('.gs.ts')) {
+          outputPath = outputPath.slice(0, -6) + '.rs';  // .gs.ts -> .rs
+        } else if (outputPath.endsWith('.gs.tsx')) {
+          outputPath = outputPath.slice(0, -7) + '.rs';  // .gs.tsx -> .rs
+        } else if (outputPath.endsWith('.gs')) {
+          outputPath = outputPath.slice(0, -3) + '.rs';  // .gs -> .rs
+        }
+        
+        const rsPath = path.join(outDir, outputPath);
+        
+        // Create directory structure if needed
+        const rsDir = path.dirname(rsPath);
+        if (!fs.existsSync(rsDir)) {
+          fs.mkdirSync(rsDir, { recursive: true });
+        }
+        
+        // Write Rust file
+        fs.writeFileSync(rsPath, rustCode, 'utf-8');
+      }
     }
   }
 }

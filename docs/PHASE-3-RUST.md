@@ -1,6 +1,48 @@
 # Phase 3: Rust Code Generation
 
-**Status:** 📋 Planned (Follows Phase 2 completion)
+**Status:** 🚧 In Progress (Basic AST translation working)
+
+**Test Coverage:** 39 tests passing (basic types, ownership types, classes, advanced features)
+
+## Current Implementation Status
+
+### ✅ Completed Features
+
+- **AST → Rust Translation** - Core transformation pipeline working
+- **Ownership Type Mapping** - `Unique<T>` → `Box<T>`, `Shared<T>` → `Rc<T>`, `Weak<T>` → `Weak<T>`
+- **Primitive Types** - number→f64, string→String, boolean→bool, void→()
+- **Nullable Types** - `T | null | undefined` → `Option<T>`
+- **Collections** - Arrays→Vec, array literals→vec!
+- **Arrow Functions** - Both single-expression and block bodies
+- **Classes** - Translate to struct + impl blocks
+- **Interfaces** - Translate to structs
+- **This→Self** - Proper translation of `this` references to `self`
+- **For-of Loops** - Clean Rust iteration syntax
+- **Binary Operators** - Including `===` → `==`, `!==` → `!=`
+- **Automatic Imports** - use statements generated as needed
+
+### 📋 Remaining Work
+
+- Exception → `Result<T, E>` translation
+- Async/await → Tokio futures
+- Standard library mappings (fs, http, etc.)
+- Module system (imports/exports)
+- Cargo.toml generation
+- Type aliases and enums
+- Match expressions for discriminated unions
+- Advanced control flow
+
+### Usage
+
+Compile GoodScript to Rust:
+
+```bash
+gsc --target rust -o dist/rust src/main.gs.ts
+```
+
+This generates `.rs` files in the output directory with proper ownership types and idiomatic Rust code.
+
+---
 
 ## Overview
 

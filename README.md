@@ -6,7 +6,7 @@ Write clean TypeScript. Get native performance. No borrow checker required.
 
 ---
 
-> ⚠️ **BETA STAGE**: GoodScript is under active development. Phase 1 (parsing, validation, JS target) is complete. Phase 2 (ownership analysis, DAG validation) is complete with 100% test coverage. Phase 3 (Rust code generation) will follow. APIs and language features may change.
+> ⚠️ **BETA STAGE**: GoodScript is under active development. Phase 1 (parsing, validation, JS target) is complete. Phase 2 (ownership analysis, DAG validation) is complete with 100% test coverage. Phase 3 (Rust code generation) is in progress with basic AST translation working. APIs and language features may change.
 
 ---
 
@@ -94,7 +94,7 @@ Configure in `tsconfig.json`:
 
 ## Rust transpiler
 
-In **Phase 3**, GoodScript will transpile to **optimized Rust source code**, delivering:
+In **Phase 3** (now in progress), GoodScript transpiles to **optimized Rust source code**, delivering:
 
 - **Native Performance:** Rust-level speed with minimal overhead
 - **Self-Contained Binaries:** No runtime dependencies, no garbage collector

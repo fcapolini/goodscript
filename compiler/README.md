@@ -8,7 +8,7 @@ The compiler implements GoodScript in four phases:
 
 - **Phase 1** (✅ Complete): Strict TypeScript semantics - eliminates JavaScript "bad parts" (244 tests) - [Details](../docs/PHASE-1-CLEAN.md)
 - **Phase 2** (✅ Complete): Ownership analysis and DAG validation (425 tests, 100% coverage) - [Details](../docs/PHASE-2-DAG.md)
-- **Phase 3** (📋 Planned): Rust code generation for native performance - [Details](../docs/PHASE-3-RUST.md)
+- **Phase 3** (🚧 In Progress): Rust code generation for native performance (39 tests) - [Details](../docs/PHASE-3-RUST.md)
 - **Phase 4** (📋 Planned): Ecosystem integration - Cargo, standard library, WASM, deployment tools - [Details](../docs/PHASE-4-ECOSYSTEM.md)
 
 ## Installation
@@ -74,13 +74,14 @@ compiler/
 │   ├── ownership-analyzer.ts  # Phase 2 ownership tracking
 │   ├── null-check-analyzer.ts # Null safety enforcement
 │   ├── ts-codegen.ts          # TypeScript code generator
+│   ├── rust-codegen.ts        # Rust code generator (Phase 3)
 │   ├── gsc.ts                 # CLI compiler entry point
 │   └── gs.ts                  # CLI runner entry point
 │
 ├── test/
-│   ├── phase1/                # Phase 1 restriction tests
-│   ├── phase2/                # Phase 2 ownership tests (TBD)
-│   └── phase3/                # Phase 3 codegen tests (TBD)
+│   ├── phase1/                # Phase 1 restriction tests (142 tests)
+│   ├── phase2/                # Phase 2 ownership tests (283 tests)
+│   └── phase3/                # Phase 3 codegen tests (39 tests)
 │
 └── lib/
     └── goodscript.d.ts        # Type definitions for ownership wrappers
