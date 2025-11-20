@@ -2,63 +2,56 @@
 
 Tests for Rust code generation (Phase 3).
 
+## Rust Validation with `rustc`
+
+All Phase 3 tests now include **automatic Rust validation** using `rustc`. When `rustc` is available on the system:
+
+- Generated Rust code is compiled with `rustc --crate-type lib`
+- Compilation errors and warnings are captured and reported
+- Tests automatically validate that generated Rust is syntactically correct
+
+This ensures the GoodScript compiler generates valid, compilable Rust code.
+
+### Running Tests
+
+```bash
+# Run all Phase 3 tests (includes rustc validation if available)
+npm test -- test/phase3
+
+# Run only validation tests
+npm test -- test/phase3/rust-validation.test.ts
+
+# If rustc is not available, validation tests will be skipped
+```
+
 ## Test Structure
 
 - `basic-types.test.ts` - Primitive type translation
 - `ownership-types.test.ts` - Unique/Shared/Weak type translation
-- `functions.test.ts` - Function and arrow function translation
 - `classes.test.ts` - Class to struct+impl translation
-- `control-flow.test.ts` - If/else, loops, etc.
-- `collections.test.ts` - Array, Map, Set translation
-- `expressions.test.ts` - Binary expressions, literals, etc.
+- `advanced-features.test.ts` - This→self, for-of loops, arrow functions
+- `rust-validation.test.ts` - Comprehensive rustc validation suite
+- `rust-validator.ts` - Rust compilation utilities
 
 ## Testing Strategy
 
 Each test:
 1. Compiles GoodScript source to Rust
 2. Verifies Rust code is syntactically correct
-3. Optionally compiles with rustc to ensure it's valid
+3. **Validates with rustc** (if available) - compiles generated Rust code
 4. Checks for expected ownership type mappings
 5. Verifies imports are generated correctly
 
-## Example Test Pattern
+## Known Rust Validation Issues
 
-```typescript
-import { describe, it, expect } from 'vitest';
-import { Compiler } from '../src/compiler';
-import { writeFileSync, unlinkSync, mkdirSync, existsSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+Current known issues (tracked for future fixes):
 
-describe('Rust Code Generation - Basic Types', () => {
-  const compile = (source: string): string => {
-    const tmpDir = join(tmpdir(), 'goodscript-test-' + Date.now());
-    const srcFile = join(tmpDir, 'test.gs.ts');
-    const outDir = join(tmpDir, 'dist');
-    
-    mkdirSync(tmpDir, { recursive: true });
-    writeFileSync(srcFile, source, 'utf-8');
-    
-    const compiler = new Compiler();
-    const result = compiler.compile({
-      files: [srcFile],
-      outDir,
-      target: 'rust',
-    });
-    
-    // Clean up
-    unlinkSync(srcFile);
-    
-    return result;
-  };
-  
-  it('should translate number to f64', () => {
-    const result = compile(`
-      const x: number = 42;
-    `);
-    
-    expect(result.success).toBe(true);
-    expect(result.output).toContain('let x: f64 = 42.0;');
-  });
-});
-```
+1. **Ownership type construction** - `Rc<T>`, `Box<T>`, `Weak<T>` need proper constructors:
+   - Current: `let x: Rc<f64> = 42.0;`
+   - Should be: `let x: Rc<f64> = Rc::new(42.0);`
+
+2. **For-loop iterators** - Need to iterate by reference for borrowed data:
+   - Current: `for v in self.values`
+   - Should be: `for v in &self.values` or `&mut self.values`
+
+These issues are detected by the rustc validation and will be addressed in future iterations.

@@ -3,6 +3,7 @@ import { Compiler } from '../../src/compiler';
 import { writeFileSync, unlinkSync, mkdirSync, existsSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { validateRustCode, isRustcAvailable } from './rust-validator';
 
 describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
   let tmpDir: string;
@@ -20,7 +21,7 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
     }
   });
 
-  const compile = (source: string): { success: boolean; rustCode: string; errors: string[] } => {
+  const compile = (source: string): { success: boolean; rustCode: string; errors: string[]; rustValid?: boolean; rustErrors?: string[] } => {
     const srcFile = join(tmpDir, 'test.gs.ts');
     const outDir = join(tmpDir, 'dist');
     
@@ -42,10 +43,21 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       .filter(d => d.severity === 'error')
       .map(d => d.message);
     
+    // Validate Rust code with rustc if available
+    let rustValid = undefined;
+    let rustErrors = undefined;
+    if (isRustcAvailable() && rustCode) {
+      const validation = validateRustCode(rustCode);
+      rustValid = validation.valid;
+      rustErrors = validation.errors;
+    }
+    
     return {
       success: result.success,
       rustCode,
       errors,
+      rustValid,
+      rustErrors,
     };
   };
 

@@ -95,8 +95,32 @@ export class RustCodegen {
    * Generate code for the entire source file
    */
   private generateSourceFile(sourceFile: ts.SourceFile): void {
+    // Separate declarations from classes/interfaces/types
+    const topLevelDecls: ts.Statement[] = [];
+    const typeDecls: ts.Statement[] = [];
+    
     for (const statement of sourceFile.statements) {
+      if (ts.isVariableStatement(statement)) {
+        topLevelDecls.push(statement);
+      } else {
+        typeDecls.push(statement);
+      }
+    }
+    
+    // First emit type declarations (classes, interfaces, type aliases)
+    for (const statement of typeDecls) {
       this.generateStatement(statement);
+    }
+    
+    // Then wrap top-level variable declarations in a main function
+    if (topLevelDecls.length > 0) {
+      this.emit('pub fn main() {');
+      this.indent();
+      for (const statement of topLevelDecls) {
+        this.generateStatement(statement);
+      }
+      this.dedent();
+      this.emit('}');
     }
   }
   
@@ -213,7 +237,15 @@ export class RustCodegen {
    */
   private generateMethodDeclaration(method: ts.MethodDeclaration): void {
     const name = method.name.getText();
-    const params = this.generateParameters(method.parameters, true);
+    
+    // Determine if method modifies self (simple heuristic: check for assignments to this.*)
+    let modifiesSelf = false;
+    if (method.body) {
+      const bodyText = method.body.getText();
+      modifiesSelf = /this\.\w+\s*=/.test(bodyText);
+    }
+    
+    const params = this.generateParameters(method.parameters, true, modifiesSelf);
     const returnType = method.type ? this.generateType(method.type) : '()';
     
     this.emit(`fn ${name}(${params}) -> ${returnType} {`);
@@ -347,12 +379,12 @@ export class RustCodegen {
   /**
    * Generate function parameters
    */
-  private generateParameters(parameters: ts.NodeArray<ts.ParameterDeclaration>, isMethod: boolean = false): string {
+  private generateParameters(parameters: ts.NodeArray<ts.ParameterDeclaration>, isMethod: boolean = false, mutableSelf: boolean = false): string {
     const params: string[] = [];
     
     // Add self parameter for methods
     if (isMethod) {
-      params.push('&self');
+      params.push(mutableSelf ? '&mut self' : '&self');
     }
     
     for (const param of parameters) {
@@ -442,7 +474,12 @@ export class RustCodegen {
    */
   private generateExpression(expr: ts.Expression): string {
     if (ts.isNumericLiteral(expr)) {
-      return expr.getText();
+      const text = expr.getText();
+      // Add .0 if it's an integer literal (for f64 compatibility)
+      if (!text.includes('.') && !text.includes('e') && !text.includes('E')) {
+        return text + '.0';
+      }
+      return text;
     } else if (ts.isStringLiteral(expr)) {
       // Convert to Rust string literal
       return `String::from(${expr.getText()})`;
