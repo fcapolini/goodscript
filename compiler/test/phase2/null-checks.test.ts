@@ -1253,16 +1253,14 @@ describe('Phase 2: Null-Check Analysis', () => {
   
   describe('Nested property access', () => {
     
-    it.skip('should error on unchecked nested weak reference', () => {
-      // TODO: Nested property tracking not yet implemented
-      // Would require tracking weak references through multiple levels
+    it('should error on unchecked nested weak reference', () => {
       const source = `
         class Container {
           inner: Weak<Inner> = null;
           
           getValue(): number {
             if (this.inner !== null) {
-              return this.inner.item.value;  // Should error: inner.item not checked
+              return this.inner.item.value;  // Error: inner.item not checked
             }
             return 0;
           }
@@ -1281,8 +1279,7 @@ describe('Phase 2: Null-Check Analysis', () => {
       expect(hasError(result.diagnostics, 'GS302')).toBe(true);
     });
     
-    it.skip('should accept fully checked nested weak reference', () => {
-      // TODO: Nested property tracking not yet implemented
+    it('should accept fully checked nested weak reference', () => {
       const source = `
         class Container {
           inner: Weak<Inner> = null;
@@ -1336,8 +1333,7 @@ describe('Phase 2: Null-Check Analysis', () => {
       expect(hasError(result.diagnostics, 'GS302')).toBe(false);
     });
     
-    it.skip('should handle weak references in nested objects', () => {
-      // TODO: Complex nested weak tracking not yet implemented
+    it('should handle weak references in nested objects', () => {
       const source = `
         class Graph {
           root: Weak<Node> = null;

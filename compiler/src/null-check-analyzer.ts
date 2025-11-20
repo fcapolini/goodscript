@@ -536,6 +536,21 @@ export class NullCheckAnalyzer {
   }
 
   /**
+   * Check if a property access results in a Weak<T> type
+   */
+  private isPropertyAccessWeak(
+    node: ts.PropertyAccessExpression,
+    sourceFile: ts.SourceFile,
+    checker: ts.TypeChecker
+  ): boolean {
+    const propertySymbol = checker.getSymbolAtLocation(node.name);
+    if (!propertySymbol || !propertySymbol.valueDeclaration) {
+      return false;
+    }
+    return this.hasWeakTypeInDeclaration(propertySymbol.valueDeclaration, sourceFile);
+  }
+
+  /**
    * Check property access for Weak<T> null-safety
    */
   private checkPropertyAccess(
@@ -546,17 +561,28 @@ export class NullCheckAnalyzer {
   ): void {
     const baseExpr = node.expression;
     const baseText = baseExpr.getText(sourceFile);
+    const fullText = node.getText(sourceFile);
 
     // Debug logging
-    // console.log(`Checking property access: ${baseText}.${node.name.text}`);
+    // console.log(`Checking property access: ${fullText}`);
+    // console.log(`Base: ${baseText}, Property: ${node.name.text}`);
     // console.log(`Checked vars: ${Array.from(checkedVars).join(', ')}`);
-    // console.log(`Is checked: ${checkedVars.has(baseText)}`);
 
-    // Skip if already checked
-    if (checkedVars.has(baseText)) return;
+    // First, check if the base expression is weak and unchecked
+    if (!checkedVars.has(baseText) && this.isWeakType(baseExpr, sourceFile, checker)) {
+      this.reportNullCheckRequired(node, baseText, sourceFile);
+      return;
+    }
 
-    // Check if base expression has Weak<T> type
-    if (this.isWeakType(baseExpr, sourceFile, checker)) {
+    // Second, for nested property access (e.g., this.inner.item.value):
+    // Check if the intermediate property (e.g., this.inner.item) is weak and being dereferenced
+    // We only care if:
+    // 1. The base expression is itself a property access (nested case)
+    // 2. That property access results in a weak type
+    // 3. It's not already checked
+    if (ts.isPropertyAccessExpression(baseExpr) && 
+        !checkedVars.has(baseText) && 
+        this.isPropertyAccessWeak(baseExpr, sourceFile, checker)) {
       this.reportNullCheckRequired(node, baseText, sourceFile);
     }
   }
