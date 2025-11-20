@@ -4,6 +4,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { validateRustCode, isRustcAvailable } from './rust-validator';
+import { executeJS, executeRust, compareOutputs, normalizeOutput } from './runtime-helpers';
 
 describe('Phase 3 - Rust Code Generation - Control Flow & Error Handling', () => {
   let tmpDir: string;
@@ -47,6 +48,55 @@ describe('Phase 3 - Rust Code Generation - Control Flow & Error Handling', () =>
       success: result.success,
       rustCode,
       errors,
+    };
+  };
+
+  const compileAndExecute = (source: string): {
+    jsCode: string;
+    rustCode: string;
+    jsResult: ReturnType<typeof executeJS>;
+    rustResult: ReturnType<typeof executeRust>;
+    equivalent: boolean;
+  } => {
+    const srcFile = join(tmpDir, 'test.gs.ts');
+    const outDir = join(tmpDir, 'dist');
+    
+    writeFileSync(srcFile, source, 'utf-8');
+    
+    // Compile to JavaScript
+    compiler.compile({
+      files: [srcFile],
+      outDir,
+      target: 'typescript',
+    });
+    
+    const jsFile = join(outDir, 'test.js');
+    const jsCode = existsSync(jsFile) ? readFileSync(jsFile, 'utf-8') : '';
+    
+    // Compile to Rust
+    compiler.compile({
+      files: [srcFile],
+      outDir,
+      target: 'rust',
+    });
+    
+    const rsFile = join(outDir, 'test.rs');
+    const rustCode = existsSync(rsFile) ? readFileSync(rsFile, 'utf-8') : '';
+    
+    // Execute both
+    const jsResult = executeJS(jsCode);
+    const rustResult = isRustcAvailable() 
+      ? executeRust(rustCode)
+      : { success: false, stdout: '', stderr: 'rustc not available', exitCode: 1 };
+    
+    const equivalent = compareOutputs(jsResult, rustResult);
+    
+    return {
+      jsCode,
+      rustCode,
+      jsResult,
+      rustResult,
+      equivalent,
     };
   };
 
@@ -336,6 +386,112 @@ describe('Phase 3 - Rust Code Generation - Control Flow & Error Handling', () =>
       expect(result.rustCode).toContain('for item in');
       expect(result.rustCode).toContain('Result<(), String>');
       expect(result.rustCode).toContain('continue;');
+    });
+  });
+
+  describe('Runtime Equivalence - Control Flow', () => {
+    it('should produce equivalent output for if/else statements', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const x: number = 15;
+        if (x > 10) {
+          console.log("large");
+        } else {
+          console.log("small");
+        }
+      `);
+      
+      if (!result.jsResult.success || !result.rustResult.success) {
+        console.log('JS output:', result.jsResult.stdout, result.jsResult.stderr);
+        console.log('Rust output:', result.rustResult.stdout, result.rustResult.stderr);
+      }
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(normalizeOutput(result.jsResult.stdout)).toBe('large');
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for for-of loops', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const items: number[] = [1, 2, 3, 4, 5];
+        for (const item of items) {
+          console.log(item);
+        }
+      `);
+      
+      if (!result.jsResult.success || !result.rustResult.success) {
+        console.log('JS output:', result.jsResult.stdout, result.jsResult.stderr);
+        console.log('Rust output:', result.rustResult.stdout, result.rustResult.stderr);
+      }
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(normalizeOutput(result.jsResult.stdout)).toBe('1\n2\n3\n4\n5');
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for nested if/else', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const grade: number = 85;
+        if (grade >= 90) {
+          console.log("A");
+        } else if (grade >= 80) {
+          console.log("B");
+        } else {
+          console.log("C");
+        }
+      `);
+      
+      if (!result.jsResult.success || !result.rustResult.success) {
+        console.log('JS output:', result.jsResult.stdout, result.jsResult.stderr);
+        console.log('Rust output:', result.rustResult.stdout, result.rustResult.stderr);
+      }
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(normalizeOutput(result.jsResult.stdout)).toBe('B');
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for loops with conditionals', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const nums: number[] = [1, 2, 3, 4, 5, 6];
+        for (const n of nums) {
+          if (n % 2 === 0) {
+            console.log(n);
+          }
+        }
+      `);
+      
+      if (!result.jsResult.success || !result.rustResult.success) {
+        console.log('JS output:', result.jsResult.stdout, result.jsResult.stderr);
+        console.log('Rust output:', result.rustResult.stdout, result.rustResult.stderr);
+      }
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(normalizeOutput(result.jsResult.stdout)).toBe('2\n4\n6');
+      expect(result.equivalent).toBe(true);
     });
   });
 });

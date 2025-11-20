@@ -1,8 +1,8 @@
 # Phase 3: Rust Code Generation
 
-**Status:** 🚧 In Progress (all-Result error handling complete)
+**Status:** 🚧 In Progress (all-Result error handling complete, runtime equivalence testing added)
 
-**Test Coverage:** 105 tests passing (61 core + 19 extended + 18 control flow + 7 error propagation)
+**Test Coverage:** 120 tests passing (61 core + 19 extended + 18 control flow + 7 error propagation + 15 runtime equivalence)
 
 ## Current Implementation Status
 
@@ -19,7 +19,7 @@
 - **Classes** - Translate to struct + impl blocks with proper self/&mut self
 - **Interfaces** - Translate to structs
 - **This→Self** - Proper translation of `this` references to `self`
-- **For-of Loops** - Clean Rust iteration syntax with proper borrowing (&)
+- **For-of Loops** - Clean Rust iteration syntax with proper borrowing (&) - prevents ownership consumption
 - **Binary Operators** - Including `===` → `==`, `!==` → `!=`
 - **Logical Operators** - &&, ||, ! (same in Rust)
 - **Unary Operators** - !, -, +, ++/-- → +=/-=
@@ -40,6 +40,7 @@
 - **Error Propagation** - ? operator on all function calls
 - **Root Error Handler** - Uncaught exceptions print message and exit(1)
 - **Automatic Imports** - use statements generated as needed (std::rc::{Rc, Weak}, std::collections::HashMap)
+- **Runtime Equivalence Testing** - All core features verified to produce identical output between JS and Rust
 
 ### 📋 Remaining Work
 

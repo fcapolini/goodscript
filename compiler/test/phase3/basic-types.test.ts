@@ -4,6 +4,7 @@ import { writeFileSync, unlinkSync, mkdirSync, existsSync, readFileSync, rmSync 
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { validateRustCode, isRustcAvailable } from './rust-validator';
+import { executeJS, executeRust, compareOutputs, normalizeOutput } from './runtime-helpers';
 
 describe('Phase 3 - Rust Code Generation - Basic Types', () => {
   let tmpDir: string;
@@ -58,6 +59,55 @@ describe('Phase 3 - Rust Code Generation - Basic Types', () => {
       errors,
       rustValid,
       rustErrors,
+    };
+  };
+
+  const compileAndExecute = (source: string): {
+    jsCode: string;
+    rustCode: string;
+    jsResult: ReturnType<typeof executeJS>;
+    rustResult: ReturnType<typeof executeRust>;
+    equivalent: boolean;
+  } => {
+    const srcFile = join(tmpDir, 'test.gs.ts');
+    const outDir = join(tmpDir, 'dist');
+    
+    writeFileSync(srcFile, source, 'utf-8');
+    
+    // Compile to JavaScript
+    const jsCompileResult = compiler.compile({
+      files: [srcFile],
+      outDir,
+      target: 'typescript',
+    });
+    
+    const jsFile = join(outDir, 'test.js');
+    const jsCode = existsSync(jsFile) ? readFileSync(jsFile, 'utf-8') : '';
+    
+    // Compile to Rust
+    const rustCompileResult = compiler.compile({
+      files: [srcFile],
+      outDir,
+      target: 'rust',
+    });
+    
+    const rsFile = join(outDir, 'test.rs');
+    const rustCode = existsSync(rsFile) ? readFileSync(rsFile, 'utf-8') : '';
+    
+    // Execute both
+    const jsResult = executeJS(jsCode);
+    const rustResult = isRustcAvailable() 
+      ? executeRust(rustCode)
+      : { success: false, stdout: '', stderr: 'rustc not available', exitCode: 1 };
+    
+    const equivalent = compareOutputs(jsResult, rustResult);
+    
+    return {
+      jsCode,
+      rustCode,
+      jsResult,
+      rustResult,
+      equivalent,
     };
   };
 
@@ -131,6 +181,83 @@ describe('Phase 3 - Rust Code Generation - Basic Types', () => {
       expect(result.success).toBe(true);
       expect(result.rustCode).toContain('let square = |x: f64| -> Result<f64, String>');
       expect(result.rustCode).toContain('return Ok(x * x);');
+    });
+  });
+
+  describe('Runtime Equivalence - Primitive Types', () => {
+    it('should produce equivalent output for number operations', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const x: number = 10;
+        const y: number = 5;
+        const sum: number = x + y;
+        const product: number = x * y;
+        console.log(sum);
+        console.log(product);
+      `);
+      
+      if (!result.jsResult.success || !result.rustResult.success) {
+        console.log('JS output:', result.jsResult.stdout, result.jsResult.stderr);
+        console.log('Rust output:', result.rustResult.stdout, result.rustResult.stderr);
+      }
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(normalizeOutput(result.jsResult.stdout)).toBe('15\n50');
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for string operations', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const hello: string = "Hello";
+        const world: string = "World";
+        const message: string = hello + " " + world;
+        console.log(message);
+      `);
+      
+      if (!result.jsResult.success || !result.rustResult.success) {
+        console.log('JS output:', result.jsResult.stdout, result.jsResult.stderr);
+        console.log('Rust output:', result.rustResult.stdout, result.rustResult.stderr);
+      }
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(normalizeOutput(result.jsResult.stdout)).toBe('Hello World');
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for boolean operations', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const a: boolean = true;
+        const b: boolean = false;
+        console.log(a && b);
+        console.log(a || b);
+        console.log(!a);
+      `);
+      
+      if (!result.jsResult.success || !result.rustResult.success) {
+        console.log('JS output:', result.jsResult.stdout, result.jsResult.stderr);
+        console.log('Rust output:', result.rustResult.stdout, result.rustResult.stderr);
+      }
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(normalizeOutput(result.jsResult.stdout)).toBe('false\ntrue\nfalse');
+      expect(result.equivalent).toBe(true);
     });
   });
 

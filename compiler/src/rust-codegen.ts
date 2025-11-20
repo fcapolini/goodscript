@@ -113,14 +113,30 @@ export class RustCodegen {
    * Generate code for the entire source file
    */
   private generateSourceFile(sourceFile: ts.SourceFile): void {
-    // Separate declarations from classes/interfaces/types
+    // Separate executable code from type/function declarations
     const topLevelDecls: ts.Statement[] = [];
     const typeDecls: ts.Statement[] = [];
     
     for (const statement of sourceFile.statements) {
-      if (ts.isVariableStatement(statement)) {
+      // Executable statements go in main()
+      if (ts.isVariableStatement(statement) || 
+          ts.isExpressionStatement(statement) ||
+          ts.isIfStatement(statement) ||
+          ts.isForOfStatement(statement) ||
+          ts.isForInStatement(statement) ||
+          ts.isForStatement(statement) ||
+          ts.isWhileStatement(statement) ||
+          ts.isDoStatement(statement) ||
+          ts.isSwitchStatement(statement) ||
+          ts.isTryStatement(statement) ||
+          ts.isReturnStatement(statement) ||
+          ts.isBreakStatement(statement) ||
+          ts.isContinueStatement(statement) ||
+          ts.isThrowStatement(statement) ||
+          ts.isBlock(statement)) {
         topLevelDecls.push(statement);
       } else {
+        // Type declarations, function declarations, classes, interfaces, etc.
         typeDecls.push(statement);
       }
     }
@@ -572,9 +588,14 @@ export class RustCodegen {
     
     const iterable = this.generateExpression(statement.expression);
     
-    // Determine if we need a reference
-    // If iterating over a property access (e.g., self.values), use reference
-    const needsRef = ts.isPropertyAccessExpression(statement.expression);
+    // In Rust, we should iterate over references to avoid consuming the collection
+    // This is especially important for:
+    // 1. Property access (e.g., self.values) - we don't want to move out of self
+    // 2. Local variables (e.g., vec) - they might be used later or in nested loops
+    // 3. Any collection that implements IntoIterator but not Copy
+    // Only skip the & if iterating over an array literal or function call result
+    const needsRef = !ts.isArrayLiteralExpression(statement.expression) &&
+                     !ts.isCallExpression(statement.expression);
     const iterableWithRef = needsRef ? `&${iterable}` : iterable;
     
     this.emit(`for ${variable} in ${iterableWithRef} {`);
@@ -836,9 +857,21 @@ export class RustCodegen {
    * Generate binary expression
    */
   private generateBinaryExpression(expr: ts.BinaryExpression): string {
+    let operator = expr.operatorToken.getText();
+    
+    // Handle string concatenation specially
+    if (operator === '+') {
+      // Check if either operand looks like a string
+      const leftIsString = this.expressionLooksLikeString(expr.left);
+      const rightIsString = this.expressionLooksLikeString(expr.right);
+      
+      if (leftIsString || rightIsString) {
+        return this.generateStringConcat(expr);
+      }
+    }
+    
     const left = this.generateExpression(expr.left);
     const right = this.generateExpression(expr.right);
-    let operator = expr.operatorToken.getText();
     
     // Translate JavaScript operators to Rust
     if (operator === '===') {
@@ -852,10 +885,96 @@ export class RustCodegen {
   }
   
   /**
+   * Check if an expression looks like a string (heuristic-based)
+   */
+  private expressionLooksLikeString(expr: ts.Expression): boolean {
+    // String literals
+    if (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr) || ts.isTemplateExpression(expr)) {
+      return true;
+    }
+    
+    // Binary expression with + that contains strings
+    if (ts.isBinaryExpression(expr) && expr.operatorToken.getText() === '+') {
+      return this.expressionLooksLikeString(expr.left) || this.expressionLooksLikeString(expr.right);
+    }
+    
+    // Check type annotation if available
+    const parent = expr.parent;
+    if (ts.isVariableDeclaration(parent) && parent.type) {
+      const typeText = parent.type.getText();
+      if (typeText === 'string' || typeText === 'String') {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Generate string concatenation using format! or + with proper borrowing
+   */
+  private generateStringConcat(expr: ts.BinaryExpression): string {
+    // Collect all parts of a chain of string concatenations
+    const parts: string[] = [];
+    const collectParts = (e: ts.Expression): void => {
+      if (ts.isBinaryExpression(e) && e.operatorToken.getText() === '+') {
+        collectParts(e.left);
+        collectParts(e.right);
+      } else {
+        parts.push(this.generateExpression(e));
+      }
+    };
+    collectParts(expr);
+    
+    // Use format! for multiple concatenations
+    if (parts.length > 2) {
+      const formatStr = parts.map(() => '{}').join('');
+      return `format!("${formatStr}", ${parts.join(', ')})`;
+    } else {
+      // Simple a + b case - use + with proper borrowing
+      // First part is consumed, rest need to be borrowed string slices
+      const [first, ...rest] = parts;
+      let result = first;
+      for (const part of rest) {
+        // Check if part is a string literal - if so, use the string slice directly
+        if (part.startsWith('String::from(')) {
+          // Extract the literal and use it as &str
+          const literal = part.slice('String::from('.length, -1);
+          result = `${result} + ${literal}`;
+        } else {
+          result = `${result} + &${part}`;
+        }
+      }
+      return result;
+    }
+  }
+  
+  /**
    * Generate call expression
-   * All function calls use ? operator for error propagation
+   * All function calls use ? operator for error propagation (except macros like println!)
    */
   private generateCallExpression(expr: ts.CallExpression): string {
+    // Special handling for console.log -> println! macro
+    if (ts.isPropertyAccessExpression(expr.expression)) {
+      const object = expr.expression.expression.getText();
+      const property = expr.expression.name.getText();
+      
+      if (object === 'console' && property === 'log') {
+        const args = expr.arguments.map(arg => this.generateExpression(arg));
+        // Use println! macro for console.log
+        // Macros don't need the ? operator
+        if (args.length === 0) {
+          return 'println!()';
+        } else if (args.length === 1) {
+          return `println!("{}", ${args[0]})`;
+        } else {
+          // Multiple arguments - join with spaces
+          const formatStr = args.map(() => '{}').join(' ');
+          return `println!("${formatStr}", ${args.join(', ')})`;
+        }
+      }
+    }
+    
     const func = this.generateExpression(expr.expression);
     const args = expr.arguments.map(arg => this.generateExpression(arg)).join(', ');
     

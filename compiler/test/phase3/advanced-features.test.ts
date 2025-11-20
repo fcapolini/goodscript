@@ -4,6 +4,7 @@ import { writeFileSync, unlinkSync, mkdirSync, existsSync, readFileSync, rmSync 
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { validateRustCode, isRustcAvailable } from './rust-validator';
+import { executeJS, executeRust, compareOutputs, normalizeOutput } from './runtime-helpers';
 
 describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
   let tmpDir: string;
@@ -58,6 +59,55 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       errors,
       rustValid,
       rustErrors,
+    };
+  };
+
+  const compileAndExecute = (source: string): {
+    jsCode: string;
+    rustCode: string;
+    jsResult: ReturnType<typeof executeJS>;
+    rustResult: ReturnType<typeof executeRust>;
+    equivalent: boolean;
+  } => {
+    const srcFile = join(tmpDir, 'test.gs.ts');
+    const outDir = join(tmpDir, 'dist');
+    
+    writeFileSync(srcFile, source, 'utf-8');
+    
+    // Compile to JavaScript
+    compiler.compile({
+      files: [srcFile],
+      outDir,
+      target: 'typescript',
+    });
+    
+    const jsFile = join(outDir, 'test.js');
+    const jsCode = existsSync(jsFile) ? readFileSync(jsFile, 'utf-8') : '';
+    
+    // Compile to Rust
+    compiler.compile({
+      files: [srcFile],
+      outDir,
+      target: 'rust',
+    });
+    
+    const rsFile = join(outDir, 'test.rs');
+    const rustCode = existsSync(rsFile) ? readFileSync(rsFile, 'utf-8') : '';
+    
+    // Execute both
+    const jsResult = executeJS(jsCode);
+    const rustResult = isRustcAvailable() 
+      ? executeRust(rustCode)
+      : { success: false, stdout: '', stderr: 'rustc not available', exitCode: 1 };
+    
+    const equivalent = compareOutputs(jsResult, rustResult);
+    
+    return {
+      jsCode,
+      rustCode,
+      jsResult,
+      rustResult,
+      equivalent,
     };
   };
 
@@ -126,7 +176,7 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('for n in arr');
+      expect(result.rustCode).toContain('for n in &arr');
       expect(result.rustCode).not.toContain('const n');
     });
 
@@ -140,7 +190,7 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('for item in items');
+      expect(result.rustCode).toContain('for item in &items');
       expect(result.rustCode).not.toContain('let item');
     });
   });
@@ -189,7 +239,7 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       expect(result.success).toBe(true);
       expect(result.rustCode).toContain('|numbers: Vec<f64>| -> Result<f64, String> {');
       expect(result.rustCode).toContain('let mut total = 0');
-      expect(result.rustCode).toContain('for n in numbers');
+      expect(result.rustCode).toContain('for n in &numbers');
       expect(result.rustCode).toContain('total = total + n');
     });
 
@@ -234,6 +284,85 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       expect(result.rustCode).toContain('self.values = newArray');
       expect(result.rustCode).not.toContain('this.');
       expect(result.rustCode).not.toContain('const v');
+    });
+  });
+
+  describe('Runtime Equivalence - Advanced Features', () => {
+    it('should produce equivalent output for array operations', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const numbers: number[] = [10, 20, 30];
+        for (const n of numbers) {
+          console.log(n);
+        }
+      `);
+      
+      if (!result.jsResult.success || !result.rustResult.success) {
+        console.log('JS output:', result.jsResult.stdout, result.jsResult.stderr);
+        console.log('Rust output:', result.rustResult.stdout, result.rustResult.stderr);
+      }
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(normalizeOutput(result.jsResult.stdout)).toBe('10\n20\n30');
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for nested loops', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const rows: number[] = [1, 2];
+        const cols: number[] = [3, 4];
+        for (const r of rows) {
+          for (const c of cols) {
+            console.log(r * c);
+          }
+        }
+      `);
+      
+      if (!result.jsResult.success || !result.rustResult.success) {
+        console.log('JS output:', result.jsResult.stdout, result.jsResult.stderr);
+        console.log('Rust output:', result.rustResult.stdout, result.rustResult.stderr);
+        console.log('Rust code:', result.rustCode);
+      }
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(normalizeOutput(result.jsResult.stdout)).toBe('3\n4\n6\n8');
+      expect(result.equivalent).toBe(true);
+    });
+
+    it('should produce equivalent output for arithmetic in loops', () => {
+      if (!isRustcAvailable()) {
+        console.log('Skipping runtime test: rustc not available');
+        return;
+      }
+
+      const result = compileAndExecute(`
+        const vals: number[] = [5, 10, 15];
+        for (const v of vals) {
+          const doubled: number = v * 2;
+          console.log(doubled);
+        }
+      `);
+      
+      if (!result.jsResult.success || !result.rustResult.success) {
+        console.log('JS output:', result.jsResult.stdout, result.jsResult.stderr);
+        console.log('Rust output:', result.rustResult.stdout, result.rustResult.stderr);
+      }
+      
+      expect(result.jsResult.success).toBe(true);
+      expect(result.rustResult.success).toBe(true);
+      expect(normalizeOutput(result.jsResult.stdout)).toBe('10\n20\n30');
+      expect(result.equivalent).toBe(true);
     });
   });
 });
