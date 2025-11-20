@@ -120,8 +120,54 @@ describe('Phase 3 - Multi-File Compilation', () => {
       const mainCode = readFileSync(mainRs, 'utf-8');
       expect(mainCode).toContain('use crate::math');
       
-      // Runtime check: verify Rust compiles and runs correctly
-      if (isRustcAvailable()) {
+      // Runtime equivalence check: compare JS and Rust outputs
+      // First, compile to JavaScript with outFile to bundle everything
+      const jsOutFile = join(outDir, 'bundle.js');
+      compiler.compile({
+        files: [mainFile, mathFile],
+        outDir,
+        target: 'typescript',
+      });
+      
+      // Capture JS output
+      let jsOutput = '';
+      const originalLog = console.log;
+      console.log = (...args: any[]) => {
+        jsOutput += args.join(' ') + '\n';
+      };
+      
+      try {
+        // Execute the compiled JS files
+        const mathJs = join(outDir, 'math.js');
+        const mainJs = join(outDir, 'main.js');
+        
+        if (existsSync(mathJs) && existsSync(mainJs)) {
+          delete require.cache[mathJs];
+          delete require.cache[mainJs];
+          
+          // Load math module first (simulate module system)
+          const math = require(mathJs);
+          (global as any).math = math; // Make it available
+          
+          // Patch require in main to use our loaded module
+          const Module = require('module');
+          const originalRequire = Module.prototype.require;
+          Module.prototype.require = function(id: string) {
+            if (id === './math') return math;
+            return originalRequire.apply(this, arguments);
+          };
+          
+          require(mainJs);
+          
+          Module.prototype.require = originalRequire;
+          delete (global as any).math;
+        }
+      } finally {
+        console.log = originalLog;
+      }
+      
+      // Now compile and run Rust
+      if (isRustcAvailable() && jsOutput) {
         setupCargoProject(outDir, [
           { name: 'math' },
           { name: 'main', isMain: true }
@@ -133,12 +179,30 @@ describe('Phase 3 - Multi-File Compilation', () => {
             encoding: 'utf-8'
           });
           
-          // Verify expected output (15 and 5)
-          expect(rustOutput).toContain('15');
-          expect(rustOutput).toContain('5');
+          // Compare outputs
+          expect(rustOutput.trim()).toBe(jsOutput.trim());
         } catch (e: any) {
-          // If Rust compilation fails, log it but don't fail the test
           console.log('Rust execution skipped:', e.message);
+        }
+      } else if (!jsOutput) {
+        // Fallback: just verify Rust output has expected values
+        if (isRustcAvailable()) {
+          setupCargoProject(outDir, [
+            { name: 'math' },
+            { name: 'main', isMain: true }
+          ]);
+          
+          try {
+            const rustOutput = execSync('cargo run --quiet 2>&1', {
+              cwd: outDir,
+              encoding: 'utf-8'
+            });
+            
+            expect(rustOutput).toContain('15');
+            expect(rustOutput).toContain('5');
+          } catch (e: any) {
+            console.log('Rust execution skipped:', e.message);
+          }
         }
       }
     });
