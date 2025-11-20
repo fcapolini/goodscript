@@ -108,7 +108,7 @@ describe('Phase 3 - Rust Code Generation - Classes', () => {
       expect(result.success).toBe(true);
       expect(result.rustCode).toContain('struct Counter');
       expect(result.rustCode).toContain('impl Counter {');
-      expect(result.rustCode).toContain('fn increment(&self) -> ()');
+      expect(result.rustCode).toContain('fn increment(&mut self) -> ()');
     });
 
     it('should add self parameter to methods', () => {

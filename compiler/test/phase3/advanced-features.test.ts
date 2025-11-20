@@ -200,8 +200,8 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('let square = |x: f64| -> f64 x * x');
-      expect(result.rustCode).toContain('let double = |x: f64| -> f64 x + x');
+      expect(result.rustCode).toContain('let square = |x: f64| -> f64 { x * x }');
+      expect(result.rustCode).toContain('let double = |x: f64| -> f64 { x + x }');
     });
   });
 
@@ -230,7 +230,7 @@ describe('Phase 3 - Rust Code Generation - Advanced Features', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('for v in self.values');
+      expect(result.rustCode).toContain('for v in &self.values');
       expect(result.rustCode).toContain('self.values = newArray');
       expect(result.rustCode).not.toContain('this.');
       expect(result.rustCode).not.toContain('const v');

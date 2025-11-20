@@ -123,6 +123,10 @@ describe('Phase 3 - Rust Code Validation with rustc', () => {
       `);
       
       expect(result.compileSuccess).toBe(true);
+      if (!result.rustValid) {
+        console.log('Rust code:', result.rustCode);
+        console.log('Rust errors:', result.rustErrors);
+      }
       expect(result.rustValid).toBe(true);
     });
 
@@ -189,6 +193,10 @@ describe('Phase 3 - Rust Code Validation with rustc', () => {
       `);
       
       expect(result.compileSuccess).toBe(true);
+      if (!result.rustValid) {
+        console.log('Rust code:', result.rustCode);
+        console.log('Rust errors:', result.rustErrors);
+      }
       expect(result.rustValid).toBe(true);
       expect(result.rustCode).toContain('use std::rc::Weak;');
     });

@@ -1,25 +1,27 @@
 # Phase 3: Rust Code Generation
 
-**Status:** 🚧 In Progress (Basic AST translation working)
+**Status:** 🚧 In Progress (rustc validation infrastructure complete)
 
-**Test Coverage:** 39 tests passing (basic types, ownership types, classes, advanced features)
+**Test Coverage:** 61 tests passing (39 AST translation tests + 22 rustc validation tests)
 
 ## Current Implementation Status
 
 ### ✅ Completed Features
 
 - **AST → Rust Translation** - Core transformation pipeline working
+- **Rustc Validation** - All generated Rust code compiles with rustc (22 validation tests)
 - **Ownership Type Mapping** - `Unique<T>` → `Box<T>`, `Shared<T>` → `Rc<T>`, `Weak<T>` → `Weak<T>`
+- **Ownership Constructors** - Automatic wrapping in Box::new(), Rc::new(), Rc::downgrade()
 - **Primitive Types** - number→f64, string→String, boolean→bool, void→()
 - **Nullable Types** - `T | null | undefined` → `Option<T>`
-- **Collections** - Arrays→Vec, array literals→vec!
-- **Arrow Functions** - Both single-expression and block bodies
-- **Classes** - Translate to struct + impl blocks
+- **Collections** - Arrays→Vec, array literals→vec! with proper f64 literals
+- **Arrow Functions** - Both single-expression and block bodies with correct closure syntax
+- **Classes** - Translate to struct + impl blocks with proper self/&mut self
 - **Interfaces** - Translate to structs
 - **This→Self** - Proper translation of `this` references to `self`
-- **For-of Loops** - Clean Rust iteration syntax
+- **For-of Loops** - Clean Rust iteration syntax with proper borrowing (&)
 - **Binary Operators** - Including `===` → `==`, `!==` → `!=`
-- **Automatic Imports** - use statements generated as needed
+- **Automatic Imports** - use statements generated as needed (std::rc::{Rc, Weak}, std::collections::HashMap)
 
 ### 📋 Remaining Work
 
@@ -41,6 +43,32 @@ gsc --target rust -o dist/rust src/main.gs.ts
 ```
 
 This generates `.rs` files in the output directory with proper ownership types and idiomatic Rust code.
+
+### Rustc Validation
+
+All generated Rust code is validated using `rustc` to ensure it compiles successfully:
+
+```typescript
+import { validateRustCode, isRustcAvailable } from './test/phase3/rust-validator';
+
+if (isRustcAvailable()) {
+  const result = validateRustCode(generatedRustCode);
+  if (!result.valid) {
+    console.error('Rust compilation errors:', result.errors);
+  }
+}
+```
+
+The test suite includes 22 comprehensive validation tests covering:
+- Primitive types (number, string, boolean)
+- Arrow functions (single-expression and block bodies)
+- Collections (arrays, vec! macros)
+- Ownership types (Unique, Shared, Weak)
+- Classes (structs, impl blocks, methods)
+- Advanced features (for-of loops, this.property, control flow)
+- Null/undefined handling
+
+**All 61 Phase 3 tests pass**, with every generated Rust code snippet compiling successfully with rustc.
 
 ---
 

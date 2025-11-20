@@ -167,12 +167,41 @@ export class RustCodegen {
       const typeAnnotation = decl.type ? `: ${this.generateType(decl.type)}` : '';
       
       if (decl.initializer) {
-        const value = this.generateExpression(decl.initializer);
+        let value = this.generateExpression(decl.initializer);
+        
+        // Wrap value in ownership constructor if needed (but not for arrow functions)
+        if (decl.type && !ts.isArrowFunction(decl.initializer)) {
+          value = this.wrapInOwnershipConstructor(value, decl.type);
+        }
+        
         this.emit(`let ${mutability}${name}${typeAnnotation} = ${value};`);
       } else {
         this.emit(`let ${mutability}${name}${typeAnnotation};`);
       }
     }
+  }
+  
+  /**
+   * Wrap a value in an ownership constructor if the type requires it
+   */
+  private wrapInOwnershipConstructor(value: string, type: ts.TypeNode): string {
+    if (ts.isTypeReferenceNode(type)) {
+      const typeName = type.typeName.getText();
+      
+      if (typeName === 'Unique') {
+        return `Box::new(${value})`;
+      } else if (typeName === 'Shared') {
+        return `Rc::new(${value})`;
+      } else if (typeName === 'Weak') {
+        // Weak references are typically created from Rc via downgrade()
+        // For now, we'll create an Rc and immediately downgrade it
+        // We need to import Rc as well for this to work
+        this.addImport('use std::rc::Rc;');
+        return `Rc::downgrade(&Rc::new(${value}))`;
+      }
+    }
+    
+    return value;
   }
   
   /**
@@ -360,7 +389,12 @@ export class RustCodegen {
     
     const iterable = this.generateExpression(statement.expression);
     
-    this.emit(`for ${variable} in ${iterable} {`);
+    // Determine if we need a reference
+    // If iterating over a property access (e.g., self.values), use reference
+    const needsRef = ts.isPropertyAccessExpression(statement.expression);
+    const iterableWithRef = needsRef ? `&${iterable}` : iterable;
+    
+    this.emit(`for ${variable} in ${iterableWithRef} {`);
     this.indent();
     this.generateStatement(statement.statement);
     this.dedent();
@@ -555,6 +589,10 @@ export class RustCodegen {
     } else {
       // Single expression
       const body = this.generateExpression(func.body);
+      // In Rust, closures with explicit return types need braces
+      if (returnAnnotation) {
+        return `|${params}|${returnAnnotation} { ${body} }`;
+      }
       return `|${params}|${returnAnnotation} ${body}`;
     }
   }

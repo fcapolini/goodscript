@@ -118,7 +118,7 @@ describe('Phase 3 - Rust Code Generation - Basic Types', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('let add = |a: f64, b: f64| -> f64 a + b');
+      expect(result.rustCode).toContain('let add = |a: f64, b: f64| -> f64 { a + b }');
     });
 
     it('should translate arrow function with block body', () => {
@@ -141,7 +141,7 @@ describe('Phase 3 - Rust Code Generation - Basic Types', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('vec![1, 2, 3]');
+      expect(result.rustCode).toContain('vec![1.0, 2.0, 3.0]');
     });
 
     it('should translate array type to Vec<T>', () => {
