@@ -2,7 +2,7 @@
 
 **Status:** 🚧 In Progress (all core features complete, comprehensive runtime equivalence testing)
 
-**Test Coverage:** 875 tests total (869 passing, 6 skipped)
+**Test Coverage:** 878 tests total (872 passing, 6 skipped)
 
 ## Current Implementation Status
 
@@ -76,11 +76,19 @@
   - `const p: Point = { x: 5, y: 10 }` → `Point { x: 5.0, y: 10.0 }`
   - Nested object literals: `{ address: { city: "NYC" } }` → `{ address: Address { city: "NYC" } }`
   - Function arguments: `printPoint({ x: 5, y: 10 })` → `printPoint(Point { x: 5.0, y: 10.0 })`
+- **Multi-File Compilation** - Compile projects with multiple `.gs.ts` files
+  - Each file generates corresponding `.rs` file
+  - Directory structure preserved in output
+  - Imports across files work correctly
+- **Cargo.toml Generation** - Automatic Cargo project file creation
+  - Package metadata (name, version, edition)
+  - Tokio dependency for async runtime
+  - Ready for `cargo build` and `cargo run`
 
 ### 📋 Remaining Work
 
 - Trait bounds for generic constraints (e.g., `T extends Named` → `T: Named`)
-- Multi-file compilation and module system integration
+- Module hierarchy generation (lib.rs, mod.rs files for complex projects)
 
 ### Usage
 

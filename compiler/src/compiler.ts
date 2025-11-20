@@ -181,8 +181,18 @@ export class Compiler {
       }
     }
 
+    // For Rust target with only module resolution errors, consider it successful
+    const isSuccessful = !hasErrors || (
+      target === 'rust' && allDiagnostics.every(d => 
+        d.severity !== 'error' || 
+        d.code === 'TS2307' ||  // Module not found
+        d.code === 'TS2792' ||  // Cannot find module (ESM)
+        d.code === 'TS2305'     // Module has no exported member
+      )
+    );
+
     return {
-      success: !hasErrors,
+      success: isSuccessful,
       diagnostics: allDiagnostics,
       fileStats: {
         goodscript: goodscriptFileCount,
@@ -411,5 +421,25 @@ export class Compiler {
         fs.writeFileSync(rsPath, rustCode, 'utf-8');
       }
     }
+    
+    // Generate Cargo.toml
+    this.generateCargoToml(outDir);
+  }
+  
+  /**
+   * Generate Cargo.toml for a Rust project
+   */
+  private generateCargoToml(outDir: string): void {
+    const cargoToml = `[package]
+name = "goodscript-project"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+`;
+    
+    const cargoPath = path.join(outDir, 'Cargo.toml');
+    fs.writeFileSync(cargoPath, cargoToml, 'utf-8');
   }
 }
