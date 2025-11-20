@@ -364,14 +364,15 @@ export class Compiler {
 
     const compilerOptions = program.getCompilerOptions();
     const rootDir = compilerOptions.rootDir || this.getCommonSourceDirectory(program);
+    const checker = program.getTypeChecker();
 
     // Process each GoodScript source file
     for (const sourceFile of program.getSourceFiles()) {
       if (!sourceFile.isDeclarationFile && this.isGoodScriptFile(sourceFile.fileName)) {
         const sourceFilePath = path.resolve(sourceFile.fileName);
         
-        // Generate Rust code
-        const rustCode = this.rustCodegen.generate(sourceFile);
+        // Generate Rust code with type checker for type inference
+        const rustCode = this.rustCodegen.generate(sourceFile, checker);
         
         // Compute relative path from root directory
         const relativePath = path.relative(rootDir, sourceFilePath);

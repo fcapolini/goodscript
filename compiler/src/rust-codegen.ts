@@ -21,6 +21,14 @@ export class RustCodegen {
   private integerVariables = new Set<string>();  // Track variables with integer type (from for loops)
   private inSwitchCaseClosure = false;  // Track if we're inside a switch case closure (for break handling)
   private currentLabel?: string;  // Track current label for labeled loops
+  private hasAsync = false;  // Track if we need tokio imports
+  private destructuringParams: Array<{tempName: string, pattern: ts.BindingName, isConst: boolean}> = [];  // Track destructuring parameters
+  private defaultExportedNames = new Set<string>();  // Track names that are default-exported
+  private checker?: ts.TypeChecker;  // Optional type checker for type inference
+  
+  constructor(checker?: ts.TypeChecker) {
+    this.checker = checker;
+  }
   
   /**
    * Check if a node or its descendants contain return statements
@@ -43,7 +51,11 @@ export class RustCodegen {
   /**
    * Generate Rust code from a GoodScript AST
    */
-  generate(sourceFile: ts.SourceFile): string {
+  generate(sourceFile: ts.SourceFile, checker?: ts.TypeChecker): string {
+    // Use passed checker if provided, otherwise fall back to instance checker
+    if (checker) {
+      this.checker = checker;
+    }
     this.reset();
     this.generateSourceFile(sourceFile);
     return this.buildOutput();
@@ -59,6 +71,7 @@ export class RustCodegen {
     this.optionVariables = new Set();
     this.integerVariables = new Set();
     this.inSwitchCaseClosure = false;
+    this.hasAsync = false;
   }
   
   /**
@@ -66,6 +79,11 @@ export class RustCodegen {
    */
   private buildOutput(): string {
     const lines: string[] = [];
+    
+    // Add tokio imports if async is used
+    if (this.hasAsync) {
+      this.addImport('use tokio;');
+    }
     
     // Add imports at the top
     if (this.imports.size > 0) {
@@ -117,16 +135,70 @@ export class RustCodegen {
   }
   
   /**
+   * Check if a statement has an export modifier
+   */
+  private isExported(statement: ts.Statement): boolean {
+    // Check if the statement has modifiers property
+    if ('modifiers' in statement) {
+      const modifiers = (statement as any).modifiers;
+      if (Array.isArray(modifiers)) {
+        return modifiers.some((m: ts.Modifier) => m.kind === ts.SyntaxKind.ExportKeyword);
+      }
+    }
+    return false;
+  }
+
+  /**
    * Generate code for the entire source file
    */
   private generateSourceFile(sourceFile: ts.SourceFile): void {
+    // First pass: find default exports
+    for (const statement of sourceFile.statements) {
+      if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
+        // export default identifier
+        if (ts.isIdentifier(statement.expression)) {
+          this.defaultExportedNames.add(statement.expression.text);
+        }
+      }
+    }
+    
     // Separate executable code from type/function declarations
     const topLevelDecls: ts.Statement[] = [];
     const typeDecls: ts.Statement[] = [];
+    const exportedDecls: ts.Statement[] = [];
+    const defaultExportedFunctions: Array<{name: string, func: ts.ArrowFunction, typeParams?: ts.NodeArray<ts.TypeParameterDeclaration>}> = [];
+    const genericFunctions: Array<{name: string, func: ts.ArrowFunction, typeParams: ts.NodeArray<ts.TypeParameterDeclaration>}> = [];
     
     for (const statement of sourceFile.statements) {
+      // Check if this is a variable statement with an arrow function (generic or default-exported)
+      if (ts.isVariableStatement(statement)) {
+        const decl = statement.declarationList.declarations[0];
+        if (decl && ts.isIdentifier(decl.name)) {
+          const name = decl.name.text;
+          
+          // Check for default-exported arrow function
+          if (this.defaultExportedNames.has(name) && decl.initializer && ts.isArrowFunction(decl.initializer)) {
+            // Extract this to generate as a pub fn
+            const func = decl.initializer;
+            defaultExportedFunctions.push({ name, func, typeParams: func.typeParameters });
+            continue; // Skip adding to topLevelDecls
+          }
+          
+          // Check for generic arrow function (has type parameters)
+          if (decl.initializer && ts.isArrowFunction(decl.initializer) && decl.initializer.typeParameters) {
+            // Extract generic functions to top level
+            genericFunctions.push({ name, func: decl.initializer, typeParams: decl.initializer.typeParameters });
+            continue; // Skip adding to topLevelDecls
+          }
+        }
+      }
+      
+      // Handle export declarations specially
+      if (this.isExported(statement)) {
+        exportedDecls.push(statement);
+      }
       // Executable statements go in main()
-      if (ts.isVariableStatement(statement) || 
+      else if (ts.isVariableStatement(statement) || 
           ts.isExpressionStatement(statement) ||
           ts.isIfStatement(statement) ||
           ts.isForOfStatement(statement) ||
@@ -149,7 +221,22 @@ export class RustCodegen {
       }
     }
     
-    // First emit type declarations (classes, interfaces, type aliases)
+    // First emit exported declarations with pub visibility
+    for (const statement of exportedDecls) {
+      this.generateExportedStatement(statement);
+    }
+    
+    // Then emit default-exported functions
+    for (const { name, func, typeParams } of defaultExportedFunctions) {
+      this.generateExportedArrowFunction(name, func, typeParams);
+    }
+    
+    // Then emit generic functions (non-exported)
+    for (const { name, func, typeParams } of genericFunctions) {
+      this.generateGenericFunction(name, func, typeParams);
+    }
+    
+    // Then emit type declarations (classes, interfaces, type aliases)
     for (const statement of typeDecls) {
       this.generateStatement(statement);
     }
@@ -234,10 +321,135 @@ export class RustCodegen {
       this.generateLabeledStatement(statement);
     } else if (ts.isBlock(statement)) {
       this.generateBlock(statement);
+    } else if (ts.isExportAssignment(statement)) {
+      // Export default - skip in Rust (the actual item is already defined)
+      // In TypeScript: export default foo; just assigns exports.default = foo
+      // In Rust: we don't have a direct equivalent, the item is already public if exported
+      this.emit(`// export default (skipped in Rust)`);
     } else {
       // Unknown statement type - emit a comment
       this.emit(`// TODO: Implement code generation for ${ts.SyntaxKind[statement.kind]}`);
     }
+  }
+
+  /**
+   * Generate code for an exported statement (with pub visibility)
+   */
+  private generateExportedStatement(statement: ts.Statement): void {
+    if (ts.isVariableStatement(statement)) {
+      // For exported variables, we need to move them out of functions
+      // For now, treat them as exported constants
+      const declarations = statement.declarationList.declarations;
+      const isConst = (statement.declarationList.flags & ts.NodeFlags.Const) !== 0;
+      
+      for (const decl of declarations) {
+        if (ts.isIdentifier(decl.name)) {
+          const name = decl.name.getText();
+          const typeAnnotation = decl.type ? `: ${this.generateType(decl.type)}` : '';
+          
+          if (decl.initializer) {
+            let value = this.generateExpression(decl.initializer);
+            
+            // For arrow functions, convert to pub fn
+            if (ts.isArrowFunction(decl.initializer)) {
+              this.generateExportedArrowFunction(name, decl.initializer);
+            } else {
+              // For constants, use pub const
+              this.emit(`pub const ${name}${typeAnnotation} = ${value};`);
+            }
+          }
+        }
+      }
+    } else if (ts.isFunctionDeclaration(statement)) {
+      this.generateFunctionDeclaration(statement, true);
+    } else if (ts.isClassDeclaration(statement)) {
+      this.generateClassDeclaration(statement, true);
+    } else if (ts.isInterfaceDeclaration(statement)) {
+      this.generateInterfaceDeclaration(statement, true);
+    } else if (ts.isTypeAliasDeclaration(statement)) {
+      this.generateTypeAliasDeclaration(statement, true);
+    } else if (ts.isEnumDeclaration(statement)) {
+      this.generateEnumDeclaration(statement, true);
+    } else {
+      // For other exported statements, emit a comment
+      this.emit(`// TODO: Implement export for ${ts.SyntaxKind[statement.kind]}`);
+    }
+  }
+
+  /**
+   * Generate exported arrow function as a pub fn
+   */
+  private generateExportedArrowFunction(name: string, func: ts.ArrowFunction, typeParams?: ts.NodeArray<ts.TypeParameterDeclaration>): void {
+    const genericParams = this.generateTypeParameters(typeParams);
+    const params = this.generateParameters(func.parameters);
+    const returnType = func.type ? this.generateType(func.type) : '()';
+    const resultType = `Result<${returnType}, String>`;
+    
+    // Check if arrow function is async
+    const isAsync = func.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword);
+    if (isAsync) {
+      this.hasAsync = true;
+    }
+    const asyncModifier = isAsync ? 'async ' : '';
+    
+    this.emit(`pub ${asyncModifier}fn ${name}${genericParams}(${params}) -> ${resultType} {`);
+    this.indent();
+    
+    if (ts.isBlock(func.body)) {
+      for (const statement of func.body.statements) {
+        this.generateStatement(statement);
+      }
+      
+      const hasReturnStatement = this.containsReturnStatement(func.body);
+      if (!hasReturnStatement) {
+        this.emit('Ok(())');
+      }
+    } else {
+      const body = this.generateExpression(func.body);
+      this.emit(`Ok(${body})`);
+    }
+    
+    this.dedent();
+    this.emit('}');
+    this.emit('');
+  }
+
+  /**
+   * Generate generic function (non-exported)
+   */
+  private generateGenericFunction(name: string, func: ts.ArrowFunction, typeParams: ts.NodeArray<ts.TypeParameterDeclaration>): void {
+    const genericParams = this.generateTypeParameters(typeParams);
+    const params = this.generateParameters(func.parameters);
+    const returnType = func.type ? this.generateType(func.type) : '()';
+    const resultType = `Result<${returnType}, String>`;
+    
+    // Check if arrow function is async
+    const isAsync = func.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword);
+    if (isAsync) {
+      this.hasAsync = true;
+    }
+    const asyncModifier = isAsync ? 'async ' : '';
+    
+    this.emit(`${asyncModifier}fn ${name}${genericParams}(${params}) -> ${resultType} {`);
+    this.indent();
+    
+    if (ts.isBlock(func.body)) {
+      for (const statement of func.body.statements) {
+        this.generateStatement(statement);
+      }
+      
+      const hasReturnStatement = this.containsReturnStatement(func.body);
+      if (!hasReturnStatement) {
+        this.emit('Ok(())');
+      }
+    } else {
+      const body = this.generateExpression(func.body);
+      this.emit(`Ok(${body})`);
+    }
+    
+    this.dedent();
+    this.emit('}');
+    this.emit('');
   }
   
   /**
@@ -248,44 +460,245 @@ export class RustCodegen {
     const isConst = (statement.declarationList.flags & ts.NodeFlags.Const) !== 0;
     
     for (const decl of declarations) {
-      const name = decl.name.getText();
-      // Make variables mutable if they're not const, OR if they're initialized with a class instance
-      const needsMutable = !isConst || (decl.initializer && ts.isNewExpression(decl.initializer));
-      const mutability = needsMutable ? 'mut ' : '';
-      const typeAnnotation = decl.type ? `: ${this.generateType(decl.type)}` : '';
-      
-      if (decl.initializer) {
-        let value: string;
+      // Check if this is a destructuring pattern
+      if (ts.isArrayBindingPattern(decl.name) || ts.isObjectBindingPattern(decl.name)) {
+        this.generateDestructuringDeclaration(decl, isConst);
+      } else {
+        // Regular identifier binding
+        const name = decl.name.getText();
+        // Make variables mutable if they're not const, OR if they're initialized with a class instance
+        const needsMutable = !isConst || (decl.initializer && ts.isNewExpression(decl.initializer));
+        const mutability = needsMutable ? 'mut ' : '';
+        const typeAnnotation = decl.type ? `: ${this.generateType(decl.type)}` : '';
         
-        // For object literals with type annotation, pass the type to the generator
-        if (ts.isObjectLiteralExpression(decl.initializer) && decl.type && ts.isTypeReferenceNode(decl.type)) {
-          const structName = decl.type.typeName.getText();
-          value = this.generateObjectLiteralWithType(decl.initializer, structName);
-        } else {
-          value = this.generateExpression(decl.initializer);
-        }
-        
-        // Check if we need to wrap in Some() for Option types
-        if (decl.type) {
-          const rustType = this.generateType(decl.type);
-          // If it's an Option type and the value isn't None, wrap in Some()
-          if (rustType.startsWith('Option<')) {
-            // Track this variable as an Option type
-            this.optionVariables.add(name);
-            if (value !== 'None') {
-              value = `Some(${value})`;
+        if (decl.initializer) {
+          let value: string;
+          
+          // For object literals with type annotation, pass the type to the generator
+          if (ts.isObjectLiteralExpression(decl.initializer) && decl.type && ts.isTypeReferenceNode(decl.type)) {
+            const structName = decl.type.typeName.getText();
+            value = this.generateObjectLiteralWithType(decl.initializer, structName);
+          } else {
+            value = this.generateExpression(decl.initializer);
+          }
+          
+          // Check if we need to wrap in Some() for Option types
+          if (decl.type) {
+            const rustType = this.generateType(decl.type);
+            // If it's an Option type and the value isn't None, wrap in Some()
+            if (rustType.startsWith('Option<')) {
+              // Track this variable as an Option type
+              this.optionVariables.add(name);
+              if (value !== 'None') {
+                value = `Some(${value})`;
+              }
             }
           }
+          
+          // Wrap value in ownership constructor if needed (but not for arrow functions)
+          if (decl.type && !ts.isArrowFunction(decl.initializer) && !ts.isObjectLiteralExpression(decl.initializer)) {
+            value = this.wrapInOwnershipConstructor(value, decl.type);
+          }
+          
+          this.emit(`let ${mutability}${name}${typeAnnotation} = ${value};`);
+        } else {
+          this.emit(`let ${mutability}${name}${typeAnnotation};`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Generate code for destructuring declarations
+   */
+  private generateDestructuringDeclaration(decl: ts.VariableDeclaration, isConst: boolean): void {
+    if (!decl.initializer) {
+      this.emit('// TODO: Destructuring without initializer');
+      return;
+    }
+
+    const source = this.generateExpression(decl.initializer);
+
+    if (ts.isArrayBindingPattern(decl.name)) {
+      // Array destructuring: const [a, b, c] = arr;
+      // In Rust: let [a, b, c] = [arr[0].clone(), arr[1].clone(), arr[2].clone()];
+      // Or better: assign individually
+      const elements = decl.name.elements;
+      
+      // First, store the source in a temp variable
+      const tempVar = `_tmp_${Math.random().toString(36).substring(7)}`;
+      this.emit(`let ${tempVar} = ${source};`);
+      
+      let index = 0;
+      for (const elem of elements) {
+        if (ts.isOmittedExpression(elem)) {
+          // Skip this element
+          index++;
+          continue;
         }
         
-        // Wrap value in ownership constructor if needed (but not for arrow functions)
-        if (decl.type && !ts.isArrowFunction(decl.initializer) && !ts.isObjectLiteralExpression(decl.initializer)) {
-          value = this.wrapInOwnershipConstructor(value, decl.type);
+        if (ts.isBindingElement(elem)) {
+          const mutability = isConst ? '' : 'mut ';
+          
+          if (elem.dotDotDotToken) {
+            // Rest element: ...rest
+            const elemName = elem.name.getText();
+            // In Rust: let rest = tmp[index..].to_vec();
+            this.emit(`let ${mutability}${elemName} = ${tempVar}[${index}..].to_vec();`);
+            break; // Rest must be last
+          } else if (ts.isArrayBindingPattern(elem.name)) {
+            // Nested array destructuring
+            const nestedTempVar = `_tmp_${Math.random().toString(36).substring(7)}`;
+            this.emit(`let ${nestedTempVar} = ${tempVar}[${index}].clone();`);
+            
+            // Recursively destructure the nested pattern
+            const nestedElements = elem.name.elements;
+            let nestedIndex = 0;
+            for (const nestedElem of nestedElements) {
+              if (ts.isOmittedExpression(nestedElem)) {
+                nestedIndex++;
+                continue;
+              }
+              if (ts.isBindingElement(nestedElem)) {
+                const nestedName = nestedElem.name.getText();
+                this.emit(`let ${mutability}${nestedName} = ${nestedTempVar}[${nestedIndex}].clone();`);
+                nestedIndex++;
+              }
+            }
+            index++;
+          } else if (ts.isObjectBindingPattern(elem.name)) {
+            // Nested object destructuring
+            const nestedTempVar = `_tmp_${Math.random().toString(36).substring(7)}`;
+            this.emit(`let ${nestedTempVar} = ${tempVar}[${index}].clone();`);
+            
+            // Recursively destructure the nested pattern
+            const nestedElements = elem.name.elements;
+            for (const nestedElem of nestedElements) {
+              const propName = nestedElem.propertyName ? nestedElem.propertyName.getText() : nestedElem.name.getText();
+              const bindingName = nestedElem.name.getText();
+              this.emit(`let ${mutability}${bindingName} = ${nestedTempVar}.${propName}.clone();`);
+            }
+            index++;
+          } else {
+            // Regular element
+            const elemName = elem.name.getText();
+            this.emit(`let ${mutability}${elemName} = ${tempVar}[${index}].clone();`);
+            index++;
+          }
+        }
+      }
+    } else if (ts.isObjectBindingPattern(decl.name)) {
+      // Object destructuring: const { x, y } = point;
+      // In Rust: let x = point.x.clone(); let y = point.y.clone();
+      const elements = decl.name.elements;
+      
+      // First, store the source in a temp variable
+      const tempVar = `_tmp_${Math.random().toString(36).substring(7)}`;
+      this.emit(`let ${tempVar} = ${source};`);
+      
+      for (const elem of elements) {
+        const mutability = isConst ? '' : 'mut ';
+        
+        if (elem.dotDotDotToken) {
+          // Rest in object destructuring - not commonly supported in Rust
+          this.emit('// TODO: Object rest pattern not supported in Rust');
+          continue;
         }
         
-        this.emit(`let ${mutability}${name}${typeAnnotation} = ${value};`);
-      } else {
-        this.emit(`let ${mutability}${name}${typeAnnotation};`);
+        // Get the property name being destructured
+        const propName = elem.propertyName ? elem.propertyName.getText() : elem.name.getText();
+        
+        if (ts.isArrayBindingPattern(elem.name)) {
+          // Nested array destructuring from object property
+          const nestedTempVar = `_tmp_${Math.random().toString(36).substring(7)}`;
+          this.emit(`let ${nestedTempVar} = ${tempVar}.${propName}.clone();`);
+          
+          // Recursively destructure the nested array
+          const nestedElements = elem.name.elements;
+          let nestedIndex = 0;
+          for (const nestedElem of nestedElements) {
+            if (ts.isOmittedExpression(nestedElem)) {
+              nestedIndex++;
+              continue;
+            }
+            if (ts.isBindingElement(nestedElem)) {
+              const nestedName = nestedElem.name.getText();
+              this.emit(`let ${mutability}${nestedName} = ${nestedTempVar}[${nestedIndex}].clone();`);
+              nestedIndex++;
+            }
+          }
+        } else if (ts.isObjectBindingPattern(elem.name)) {
+          // Nested object destructuring
+          const nestedTempVar = `_tmp_${Math.random().toString(36).substring(7)}`;
+          this.emit(`let ${nestedTempVar} = ${tempVar}.${propName}.clone();`);
+          
+          // Recursively destructure the nested object
+          const nestedElements = elem.name.elements;
+          for (const nestedElem of nestedElements) {
+            const nestedPropName = nestedElem.propertyName ? nestedElem.propertyName.getText() : nestedElem.name.getText();
+            const nestedBindingName = nestedElem.name.getText();
+            this.emit(`let ${mutability}${nestedBindingName} = ${nestedTempVar}.${nestedPropName}.clone();`);
+          }
+        } else {
+          // Regular property
+          const bindingName = elem.name.getText();
+          let value = `${tempVar}.${propName}`;
+          
+          // Check if there's an initializer (default value)
+          if (elem.initializer) {
+            const defaultValue = this.generateExpression(elem.initializer);
+            // In Rust, we'd need Option types for this to work properly
+            // For now, just use the direct value
+            value = `${tempVar}.${propName}`;
+          }
+          
+          // Add .clone() since we're extracting from a struct
+          this.emit(`let ${mutability}${bindingName} = ${value}.clone();`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Generate destructuring from a binding pattern and source variable name
+   * This is used for function parameter destructuring where the source is a simple string
+   */
+  private generateDestructuringFromPattern(pattern: ts.BindingName, sourceVar: string, isConst: boolean): void {
+    if (ts.isArrayBindingPattern(pattern)) {
+      // Array destructuring
+      const elements = pattern.elements;
+      let index = 0;
+      
+      for (const elem of elements) {
+        if (ts.isOmittedExpression(elem)) {
+          index++;
+          continue;
+        }
+        
+        if (ts.isBindingElement(elem)) {
+          const mutability = isConst ? '' : 'mut ';
+          const elemName = elem.name.getText();
+          
+          if (elem.dotDotDotToken) {
+            // Rest element
+            this.emit(`let ${mutability}${elemName} = ${sourceVar}[${index}..].to_vec();`);
+            break;
+          } else {
+            this.emit(`let ${mutability}${elemName} = ${sourceVar}[${index}].clone();`);
+            index++;
+          }
+        }
+      }
+    } else if (ts.isObjectBindingPattern(pattern)) {
+      // Object destructuring
+      const elements = pattern.elements;
+      
+      for (const elem of elements) {
+        const mutability = isConst ? '' : 'mut ';
+        const propName = elem.propertyName ? elem.propertyName.getText() : elem.name.getText();
+        const bindingName = elem.name.getText();
+        
+        this.emit(`let ${mutability}${bindingName} = ${sourceVar}.${propName}.clone();`);
       }
     }
   }
@@ -317,14 +730,22 @@ export class RustCodegen {
    * Generate function declaration (legacy, should be arrow functions in GoodScript)
    * All functions return Result<T, E> for error propagation
    */
-  private generateFunctionDeclaration(func: ts.FunctionDeclaration): void {
+  private generateFunctionDeclaration(func: ts.FunctionDeclaration, isExported: boolean = false): void {
     const name = func.name?.getText() || 'anonymous';
     const params = this.generateParameters(func.parameters);
     const returnType = func.type ? this.generateType(func.type) : '()';
     // Wrap return type in Result<T, String>
     const resultType = `Result<${returnType}, String>`;
     
-    this.emit(`fn ${name}(${params}) -> ${resultType} {`);
+    // Check if function is async
+    const isAsync = func.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword);
+    if (isAsync) {
+      this.hasAsync = true;
+    }
+    const asyncModifier = isAsync ? 'async ' : '';
+    const pubModifier = isExported ? 'pub ' : '';
+    
+    this.emit(`${pubModifier}${asyncModifier}fn ${name}(${params}) -> ${resultType} {`);
     this.indent();
     
     if (func.body) {
@@ -345,11 +766,14 @@ export class RustCodegen {
   /**
    * Generate class declaration
    */
-  private generateClassDeclaration(classDecl: ts.ClassDeclaration): void {
+  private generateClassDeclaration(classDecl: ts.ClassDeclaration, isExported: boolean = false): void {
     const name = classDecl.name?.getText() || 'AnonymousClass';
+    const pubModifier = isExported ? 'pub ' : '';
+    const typeParams = this.generateTypeParameters(classDecl.typeParameters);
     
     // Generate struct for fields
-    this.emit(`struct ${name} {`);
+    this.emit(`#[derive(Clone)]`);
+    this.emit(`${pubModifier}struct ${name}${typeParams} {`);
     this.indent();
     
     const fields = classDecl.members.filter(ts.isPropertyDeclaration);
@@ -365,7 +789,11 @@ export class RustCodegen {
     
     // Generate impl block for constructor and methods
     const methods = classDecl.members.filter(ts.isMethodDeclaration);
-    this.emit(`impl ${name} {`);
+    if (typeParams) {
+      this.emit(`impl${typeParams} ${name}${typeParams} {`);
+    } else {
+      this.emit(`impl ${name} {`);
+    }
     this.indent();
     
     // Generate constructor (new method)
@@ -422,7 +850,14 @@ export class RustCodegen {
     // Wrap return type in Result<T, String>
     const resultType = `Result<${returnType}, String>`;
     
-    this.emit(`fn ${name}(${params}) -> ${resultType} {`);
+    // Check if method is async
+    const isAsync = method.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword);
+    if (isAsync) {
+      this.hasAsync = true;
+    }
+    const asyncModifier = isAsync ? 'async ' : '';
+    
+    this.emit(`${asyncModifier}fn ${name}(${params}) -> ${resultType} {`);
     this.indent();
     
     if (method.body) {
@@ -443,10 +878,13 @@ export class RustCodegen {
   /**
    * Generate interface declaration (converts to struct)
    */
-  private generateInterfaceDeclaration(iface: ts.InterfaceDeclaration): void {
+  private generateInterfaceDeclaration(iface: ts.InterfaceDeclaration, isExported: boolean = false): void {
     const name = iface.name.getText();
+    const pubModifier = isExported ? 'pub ' : '';
+    const typeParams = this.generateTypeParameters(iface.typeParameters);
     
-    this.emit(`struct ${name} {`);
+    this.emit(`#[derive(Clone)]`);
+    this.emit(`${pubModifier}struct ${name}${typeParams} {`);
     this.indent();
     
     for (const member of iface.members) {
@@ -465,8 +903,9 @@ export class RustCodegen {
   /**
    * Generate type alias declaration
    */
-  private generateTypeAliasDeclaration(typeAlias: ts.TypeAliasDeclaration): void {
+  private generateTypeAliasDeclaration(typeAlias: ts.TypeAliasDeclaration, isExported: boolean = false): void {
     const name = typeAlias.name.getText();
+    const pubModifier = isExported ? 'pub ' : '';
     
     // Check if this is a discriminated union type
     if (ts.isUnionTypeNode(typeAlias.type)) {
@@ -481,7 +920,7 @@ export class RustCodegen {
       
       if (isDiscriminatedUnion) {
         // Generate as Rust enum
-        this.emit(`enum ${name} {`);
+        this.emit(`${pubModifier}enum ${name} {`);
         this.indent();
         
         for (const variant of typeAlias.type.types) {
@@ -530,8 +969,9 @@ export class RustCodegen {
   /**
    * Generate enum declaration
    */
-  private generateEnumDeclaration(enumDecl: ts.EnumDeclaration): void {
+  private generateEnumDeclaration(enumDecl: ts.EnumDeclaration, isExported: boolean = false): void {
     const name = enumDecl.name.getText();
+    const pubModifier = isExported ? 'pub ' : '';
     
     // Check if it's a numeric or string enum
     const hasStringValues = enumDecl.members.some(m => 
@@ -540,7 +980,7 @@ export class RustCodegen {
     
     if (hasStringValues) {
       // String enum - generate as regular enum
-      this.emit(`enum ${name} {`);
+      this.emit(`${pubModifier}enum ${name} {`);
       this.indent();
       
       for (const member of enumDecl.members) {
@@ -553,7 +993,7 @@ export class RustCodegen {
       this.emit('');
     } else {
       // Numeric enum - generate with discriminant values
-      this.emit(`enum ${name} {`);
+      this.emit(`${pubModifier}enum ${name} {`);
       this.indent();
       
       let currentValue = 0;
@@ -1008,18 +1448,59 @@ export class RustCodegen {
   private generateParameters(parameters: ts.NodeArray<ts.ParameterDeclaration>, isMethod: boolean = false, mutableSelf: boolean = false): string {
     const params: string[] = [];
     
+    // Clear destructuring params for new function
+    this.destructuringParams = [];
+    
     // Add self parameter for methods
     if (isMethod) {
       params.push(mutableSelf ? '&mut self' : '&self');
     }
     
     for (const param of parameters) {
-      const name = param.name.getText();
-      const type = param.type ? this.generateType(param.type) : 'unknown';
-      params.push(`${name}: ${type}`);
+      // Check if parameter is destructuring
+      if (ts.isArrayBindingPattern(param.name) || ts.isObjectBindingPattern(param.name)) {
+        // For destructuring parameters, create a temp parameter and destructure in function body
+        const tempName = `_param_${Math.random().toString(36).substring(7)}`;
+        const type = param.type ? this.generateType(param.type) : 'unknown';
+        params.push(`${tempName}: ${type}`);
+        // Store for destructuring at start of function body
+        this.destructuringParams.push({
+          tempName,
+          pattern: param.name,
+          isConst: true,  // Parameters are immutable by default
+        });
+      } else {
+        const name = param.name.getText();
+        const type = param.type ? this.generateType(param.type) : 'unknown';
+        params.push(`${name}: ${type}`);
+      }
     }
     
     return params.join(', ');
+  }
+  
+  /**
+   * Generate type parameters for generic functions/classes
+   */
+  private generateTypeParameters(typeParameters?: ts.NodeArray<ts.TypeParameterDeclaration>): string {
+    if (!typeParameters || typeParameters.length === 0) {
+      return '';
+    }
+    
+    const params = typeParameters.map(tp => {
+      const name = tp.name.getText();
+      // Handle constraints (e.g., T extends Named)
+      if (tp.constraint) {
+        const constraint = tp.constraint.getText();
+        // In Rust, trait bounds are specified differently
+        // For now, just use the type parameter name
+        // TODO: Properly translate trait bounds
+        return name;
+      }
+      return name;
+    });
+    
+    return `<${params.join(', ')}>`;
   }
   
   /**
@@ -1084,6 +1565,11 @@ export class RustCodegen {
       this.addImport('use std::rc::Weak;');
       const innerType = this.generateType(type.typeArguments[0]);
       return `Weak<${innerType}>`;
+    } else if (typeName === 'Promise' && type.typeArguments && type.typeArguments.length > 0) {
+      // Promise<T> becomes the inner type T in async context
+      // The async keyword on the function handles the future wrapper
+      this.hasAsync = true;
+      return this.generateType(type.typeArguments[0]);
     }
     
     // Handle standard generic types
@@ -1155,9 +1641,20 @@ export class RustCodegen {
       return this.generateTemplateLiteral(expr);
     } else if (ts.isParenthesizedExpression(expr)) {
       return `(${this.generateExpression(expr.expression)})`;
+    } else if (ts.isAwaitExpression(expr)) {
+      return this.generateAwaitExpression(expr);
     } else {
       return `/* TODO: ${ts.SyntaxKind[expr.kind]} */`;
     }
+  }
+  
+  /**
+   * Generate await expression
+   */
+  private generateAwaitExpression(expr: ts.AwaitExpression): string {
+    this.hasAsync = true;
+    const inner = this.generateExpression(expr.expression);
+    return `${inner}.await`;
   }
   
   /**
@@ -1170,6 +1667,13 @@ export class RustCodegen {
     // Wrap return type in Result<T, String>
     const resultType = `Result<${returnType}, String>`;
     
+    // Check if arrow function is async
+    const isAsync = func.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword);
+    if (isAsync) {
+      this.hasAsync = true;
+    }
+    const asyncModifier = isAsync ? 'async ' : '';
+    
     if (ts.isBlock(func.body)) {
       // Multi-line function - we need to capture the body statements separately
       // Save current output state
@@ -1177,6 +1681,16 @@ export class RustCodegen {
       this.output = [];
       
       this.indent();
+      
+      // Generate destructuring for destructuring parameters
+      for (const destructParam of this.destructuringParams) {
+        this.generateDestructuringFromPattern(
+          destructParam.pattern,
+          destructParam.tempName,
+          destructParam.isConst
+        );
+      }
+      
       for (const statement of func.body.statements) {
         this.generateStatement(statement);
       }
@@ -1196,15 +1710,15 @@ export class RustCodegen {
       
       // Build the closure with proper formatting
       if (bodyLines.length === 0) {
-        return `|${params}| -> ${resultType} { Ok(()) }`;
+        return `${asyncModifier}|${params}| -> ${resultType} { Ok(()) }`;
       } else {
         const bodyCode = bodyLines.join('\n');
-        return `|${params}| -> ${resultType} {\n${bodyCode}\n${this.INDENT.repeat(this.indentLevel)}}`;
+        return `${asyncModifier}|${params}| -> ${resultType} {\n${bodyCode}\n${this.INDENT.repeat(this.indentLevel)}}`;
       }
     } else {
       // Single expression - wrap in Ok()
       const body = this.generateExpression(func.body);
-      return `|${params}| -> ${resultType} { Ok(${body}) }`;
+      return `${asyncModifier}|${params}| -> ${resultType} { Ok(${body}) }`;
     }
   }
   
@@ -1368,11 +1882,23 @@ export class RustCodegen {
         return this.generateArrayForEach(objectExpr, expr.arguments);
       } else if (property === 'reduce') {
         return this.generateArrayReduce(objectExpr, expr.arguments);
+      } else if (property === 'join') {
+        return this.generateArrayJoin(objectExpr, expr.arguments);
       }
     }
     
     const func = this.generateExpression(expr.expression);
-    const args = expr.arguments.map(arg => this.generateExpression(arg)).join(', ');
+    
+    // Handle function arguments, including spread
+    const args = expr.arguments.map(arg => {
+      if (ts.isSpreadElement(arg)) {
+        // Spread in function call: sum(...args) -> sum(args)
+        // In Rust, we just pass the Vec directly
+        return this.generateExpression(arg.expression);
+      } else {
+        return this.generateExpression(arg);
+      }
+    }).join(', ');
     
     return `${func}(${args})?`;
   }
@@ -1462,6 +1988,31 @@ export class RustCodegen {
   }
   
   /**
+   * Generate array.join() -> iter().map(ToString).collect::<Vec<_>>().join()
+   * JavaScript: arr.join(',') becomes
+   * Rust: arr.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",")
+   */
+  private generateArrayJoin(array: ts.Expression, args: readonly ts.Expression[]): string {
+    const arrayCode = this.generateExpression(array);
+    
+    // Default separator is comma
+    let separator = '","';
+    if (args.length > 0) {
+      // For string literals, extract the inner value
+      if (ts.isStringLiteral(args[0])) {
+        const text = args[0].text;
+        separator = `"${text}"`;
+      } else {
+        // For expressions, use as-is but convert String::from(...) to &str
+        const sepExpr = this.generateExpression(args[0]);
+        separator = sepExpr.replace(/^String::from\("(.*)"\)$/, '"$1"');
+      }
+    }
+    
+    return `${arrayCode}.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(${separator})`;
+  }
+  
+  /**
    * Generate callback function for array methods
    */
   private generateArrayMethodCallback(callback: ts.Expression, withIndex: boolean): string {
@@ -1536,44 +2087,179 @@ export class RustCodegen {
   }
   
   /**
+   * Get the type of a property in an object literal from the contextual type
+   */
+  private getPropertyType(expr: ts.ObjectLiteralExpression, propertyName: string): ts.Type | undefined {
+    if (!this.checker) {
+      return undefined;
+    }
+    
+    const contextualType = this.checker.getContextualType(expr);
+    if (!contextualType) {
+      return undefined;
+    }
+    
+    const property = contextualType.getProperty(propertyName);
+    if (!property) {
+      return undefined;
+    }
+    
+    return this.checker.getTypeOfSymbolAtLocation(property, expr);
+  }
+  
+  /**
+   * Generate expression with a type hint for nested object literals
+   */
+  private generateExpressionWithTypeHint(expr: ts.Expression, expectedType: ts.Type | undefined): string {
+    // If the expression is an object literal and we have a type hint, use it
+    if (ts.isObjectLiteralExpression(expr) && expectedType && expectedType.symbol) {
+      const structName = expectedType.symbol.name;
+      return this.generateObjectLiteralWithType(expr, structName);
+    }
+    
+    // Otherwise, generate normally
+    return this.generateExpression(expr);
+  }
+  
+  /**
    * Generate object literal
    */
   private generateObjectLiteral(expr: ts.ObjectLiteralExpression): string {
-    // For now, generate a basic struct initialization
-    const properties = expr.properties.map(prop => {
-      if (ts.isPropertyAssignment(prop)) {
-        const name = prop.name.getText();
-        const value = this.generateExpression(prop.initializer);
-        return `${name}: ${value}`;
-      }
-      return '';
-    }).filter(p => p !== '').join(', ');
+    // Try to infer the expected type from context using the type checker
+    let structName: string | undefined;
     
-    return `{ ${properties} }`;
+    if (this.checker) {
+      const contextualType = this.checker.getContextualType(expr);
+      if (contextualType && contextualType.symbol) {
+        structName = contextualType.symbol.name;
+      }
+    }
+    
+    // If we have a struct name, use the typed version
+    if (structName) {
+      return this.generateObjectLiteralWithType(expr, structName);
+    }
+    
+    // Otherwise, generate anonymous struct
+    // Check for spread assignments
+    const hasSpread = expr.properties.some(prop => ts.isSpreadAssignment(prop));
+    
+    if (hasSpread) {
+      // For spread, we need to create a new object and merge properties
+      // In Rust, use struct update syntax: MyStruct { field: value, ..other }
+      // NOTE: ..spread MUST come last in Rust
+      const normalProps: string[] = [];
+      const spreadProps: string[] = [];
+      
+      for (const prop of expr.properties) {
+        if (ts.isSpreadAssignment(prop)) {
+          const spreadExpr = this.generateExpression(prop.expression);
+          spreadProps.push(`..${spreadExpr}`);
+        } else if (ts.isPropertyAssignment(prop)) {
+          const name = prop.name.getText();
+          const value = this.generateExpressionWithTypeHint(prop.initializer, this.getPropertyType(expr, name));
+          normalProps.push(`${name}: ${value}`);
+        } else if (ts.isShorthandPropertyAssignment(prop)) {
+          const name = prop.name.getText();
+          normalProps.push(`${name}: ${name}`);
+        }
+      }
+      
+      const allParts = [...normalProps, ...spreadProps];
+      return `{ ${allParts.join(', ')} }`;
+    } else {
+      const properties = expr.properties.map(prop => {
+        if (ts.isPropertyAssignment(prop)) {
+          const name = prop.name.getText();
+          const value = this.generateExpressionWithTypeHint(prop.initializer, this.getPropertyType(expr, name));
+          return `${name}: ${value}`;
+        } else if (ts.isShorthandPropertyAssignment(prop)) {
+          const name = prop.name.getText();
+          return `${name}: ${name}`;
+        }
+        return '';
+      }).filter(p => p !== '').join(', ');
+      
+      return `{ ${properties} }`;
+    }
   }
-  
+
   /**
    * Generate object literal with explicit struct type name
    */
   private generateObjectLiteralWithType(expr: ts.ObjectLiteralExpression, structName: string): string {
-    const properties = expr.properties.map(prop => {
-      if (ts.isPropertyAssignment(prop)) {
-        const name = prop.name.getText();
-        const value = this.generateExpression(prop.initializer);
-        return `${name}: ${value}`;
-      }
-      return '';
-    }).filter(p => p !== '').join(', ');
+    // Check for spread assignments
+    const hasSpread = expr.properties.some(prop => ts.isSpreadAssignment(prop));
     
-    return `${structName} { ${properties} }`;
+    if (hasSpread) {
+      // NOTE: ..spread MUST come last in Rust
+      const normalProps: string[] = [];
+      const spreadProps: string[] = [];
+      
+      for (const prop of expr.properties) {
+        if (ts.isSpreadAssignment(prop)) {
+          const spreadExpr = this.generateExpression(prop.expression);
+          spreadProps.push(`..${spreadExpr}`);
+        } else if (ts.isPropertyAssignment(prop)) {
+          const name = prop.name.getText();
+          const value = this.generateExpression(prop.initializer);
+          normalProps.push(`${name}: ${value}`);
+        } else if (ts.isShorthandPropertyAssignment(prop)) {
+          const name = prop.name.getText();
+          normalProps.push(`${name}: ${name}`);
+        }
+      }
+      
+      const allParts = [...normalProps, ...spreadProps];
+      return `${structName} { ${allParts.join(', ')} }`;
+    } else {
+      const properties = expr.properties.map(prop => {
+        if (ts.isPropertyAssignment(prop)) {
+          const name = prop.name.getText();
+          const value = this.generateExpression(prop.initializer);
+          return `${name}: ${value}`;
+        } else if (ts.isShorthandPropertyAssignment(prop)) {
+          const name = prop.name.getText();
+          return `${name}: ${name}`;
+        }
+        return '';
+      }).filter(p => p !== '').join(', ');
+      
+      return `${structName} { ${properties} }`;
+    }
   }
   
   /**
    * Generate array literal
    */
   private generateArrayLiteral(expr: ts.ArrayLiteralExpression): string {
-    const elements = expr.elements.map(elem => this.generateExpression(elem)).join(', ');
-    return `vec![${elements}]`;
+    // Check if any elements are spread expressions
+    const hasSpread = expr.elements.some(elem => ts.isSpreadElement(elem));
+    
+    if (hasSpread) {
+      // Use iterator chaining for spread elements
+      const parts: string[] = [];
+      
+      for (const elem of expr.elements) {
+        if (ts.isSpreadElement(elem)) {
+          const spread = this.generateExpression(elem.expression);
+          parts.push(`${spread}.iter().copied()`);
+        } else {
+          const val = this.generateExpression(elem);
+          parts.push(`std::iter::once(${val})`);
+        }
+      }
+      
+      if (parts.length === 1) {
+        return `${parts[0]}.collect::<Vec<_>>()`;
+      } else {
+        // Chain iterators: iter1.chain(iter2).chain(iter3).collect()
+        return `${parts[0]}${parts.slice(1).map(p => `.chain(${p})`).join('')}.collect::<Vec<_>>()`;
+      }
+    } else {
+      const elements = expr.elements.map(elem => this.generateExpression(elem)).join(', ');
+      return `vec![${elements}]`;
+    }
   }
   
   /**
@@ -1643,36 +2329,28 @@ export class RustCodegen {
   private generateTemplateLiteral(expr: ts.TemplateExpression | ts.NoSubstitutionTemplateLiteral): string {
     if (ts.isNoSubstitutionTemplateLiteral(expr)) {
       // Simple template literal without substitutions
-      const text = expr.getText().slice(1, -1); // Remove backticks
-      return `String::from(\"${text}\")`;
+      const text = expr.text;
+      return `String::from("${text}")`;
     }
     
-    // Template literal with substitutions
-    const parts: string[] = [];
+    // Template literal with substitutions: `head${expr1}mid${expr2}tail`
+    // Build format string and collect expressions
+    let formatStr = expr.head.text;
+    const expressions: string[] = [];
     
-    // Head
-    const head = expr.head.getText().slice(1); // Remove opening backtick
-    if (head) {
-      parts.push(`\"${head}\"`);
-    }
-    
-    // Template spans
     for (const span of expr.templateSpans) {
-      const exprText = this.generateExpression(span.expression);
-      parts.push(`${exprText}`);
+      // Add placeholder for this expression
+      formatStr += '{}';
+      expressions.push(this.generateExpression(span.expression));
       
-      const literal = span.literal.getText();
-      const text = literal.slice(0, -1); // Remove closing marker
-      if (text) {
-        parts.push(`\"${text}\"`);
-      }
+      // Add the literal text after the expression
+      formatStr += span.literal.text;
     }
     
-    if (parts.length === 0) {
-      return 'String::new()';
+    if (expressions.length === 0) {
+      return `String::from("${formatStr}")`;
     } else {
-      // Use format! macro for templates
-      return `format!(${parts.map((p, i) => i % 2 === 0 ? p : '{}').join('')}, ${parts.filter((_, i) => i % 2 === 1).join(', ')})`;
+      return `format!("${formatStr}", ${expressions.join(', ')})`;
     }
   }
   
