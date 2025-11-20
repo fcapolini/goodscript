@@ -150,6 +150,20 @@ export class RustCodegen {
       this.generateForOfStatement(statement);
     } else if (ts.isSwitchStatement(statement)) {
       this.generateSwitchStatement(statement);
+    } else if (ts.isTryStatement(statement)) {
+      this.generateTryStatement(statement);
+    } else if (ts.isThrowStatement(statement)) {
+      this.generateThrowStatement(statement);
+    } else if (ts.isWhileStatement(statement)) {
+      this.generateWhileStatement(statement);
+    } else if (ts.isDoStatement(statement)) {
+      this.generateDoStatement(statement);
+    } else if (ts.isBreakStatement(statement)) {
+      this.generateBreakStatement(statement);
+    } else if (ts.isContinueStatement(statement)) {
+      this.generateContinueStatement(statement);
+    } else if (ts.isLabeledStatement(statement)) {
+      this.generateLabeledStatement(statement);
     } else if (ts.isBlock(statement)) {
       this.generateBlock(statement);
     } else {
@@ -691,6 +705,8 @@ export class RustCodegen {
       return this.generateArrayLiteral(expr);
     } else if (ts.isNewExpression(expr)) {
       return this.generateNewExpression(expr);
+    } else if (ts.isElementAccessExpression(expr)) {
+      return this.generateElementAccess(expr);
     } else if (ts.isPrefixUnaryExpression(expr)) {
       return this.generatePrefixUnaryExpression(expr);
     } else if (ts.isPostfixUnaryExpression(expr)) {
@@ -909,6 +925,153 @@ export class RustCodegen {
     } else {
       // Use format! macro for templates
       return `format!(${parts.map((p, i) => i % 2 === 0 ? p : '{}').join('')}, ${parts.filter((_, i) => i % 2 === 1).join(', ')})`;
+    }
+  }
+  
+  /**
+   * Generate try/catch statement as Result pattern matching
+   */
+  private generateTryStatement(statement: ts.TryStatement): void {
+    // In Rust, we'll convert try/catch to a closure that returns Result
+    // and then match on it
+    this.emit('let result = (|| -> Result<(), String> {');
+    this.indent();
+    
+    // Generate try block
+    if (statement.tryBlock) {
+      for (const stmt of statement.tryBlock.statements) {
+        this.generateStatement(stmt);
+      }
+    }
+    
+    this.emit('Ok(())');
+    this.dedent();
+    this.emit('})();');
+    this.emit('');
+    
+    // Generate catch block if present
+    if (statement.catchClause) {
+      this.emit('match result {');
+      this.indent();
+      this.emit('Ok(_) => {},');
+      
+      const errorVar = statement.catchClause.variableDeclaration?.name.getText() || 'e';
+      this.emit(`Err(${errorVar}) => {`);
+      this.indent();
+      
+      if (statement.catchClause.block) {
+        for (const stmt of statement.catchClause.block.statements) {
+          this.generateStatement(stmt);
+        }
+      }
+      
+      this.dedent();
+      this.emit('}');
+      this.dedent();
+      this.emit('}');
+    }
+    
+    // Generate finally block if present
+    if (statement.finallyBlock) {
+      this.emit('// Finally block');
+      for (const stmt of statement.finallyBlock.statements) {
+        this.generateStatement(stmt);
+      }
+    }
+  }
+  
+  /**
+   * Generate throw statement as Result::Err return
+   */
+  private generateThrowStatement(statement: ts.ThrowStatement): void {
+    if (statement.expression) {
+      const expr = this.generateExpression(statement.expression);
+      this.emit(`return Err(${expr}.to_string());`);
+    } else {
+      this.emit('return Err(String::from("Error"));');
+    }
+  }
+  
+  /**
+   * Generate while loop
+   */
+  private generateWhileStatement(statement: ts.WhileStatement): void {
+    const condition = this.generateExpression(statement.expression);
+    this.emit(`while ${condition} {`);
+    this.indent();
+    this.generateStatement(statement.statement);
+    this.dedent();
+    this.emit('}');
+  }
+  
+  /**
+   * Generate do-while loop
+   */
+  private generateDoStatement(statement: ts.DoStatement): void {
+    // Rust doesn't have do-while, so we use loop with a break
+    this.emit('loop {');
+    this.indent();
+    this.generateStatement(statement.statement);
+    const condition = this.generateExpression(statement.expression);
+    this.emit(`if !(${condition}) {`);
+    this.indent();
+    this.emit('break;');
+    this.dedent();
+    this.emit('}');
+    this.dedent();
+    this.emit('}');
+  }
+  
+  /**
+   * Generate break statement
+   */
+  private generateBreakStatement(statement: ts.BreakStatement): void {
+    if (statement.label) {
+      const label = statement.label.getText();
+      this.emit(`break '${label};`);
+    } else {
+      this.emit('break;');
+    }
+  }
+  
+  /**
+   * Generate continue statement
+   */
+  private generateContinueStatement(statement: ts.ContinueStatement): void {
+    if (statement.label) {
+      const label = statement.label.getText();
+      this.emit(`continue '${label};`);
+    } else {
+      this.emit('continue;');
+    }
+  }
+  
+  /**
+   * Generate labeled statement
+   */
+  private generateLabeledStatement(statement: ts.LabeledStatement): void {
+    const label = statement.label.getText();
+    this.emit(`'${label}: loop {`);
+    this.indent();
+    this.generateStatement(statement.statement);
+    this.dedent();
+    this.emit('}');
+  }
+  
+  /**
+   * Generate element access expression (array/object indexing)
+   */
+  private generateElementAccess(expr: ts.ElementAccessExpression): string {
+    const object = this.generateExpression(expr.expression);
+    const index = this.generateExpression(expr.argumentExpression);
+    
+    // For arrays, use indexing; for maps, use get()
+    // We'll use a simple heuristic: if index is a number, use [], otherwise assume it's a map
+    if (ts.isNumericLiteral(expr.argumentExpression)) {
+      return `${object}[${index} as usize]`;
+    } else {
+      // Could be a map access
+      return `${object}[&${index}]`;
     }
   }
 }
