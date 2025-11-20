@@ -4,6 +4,8 @@
 
 GoodScript provides JavaScript-style exception handling (`try/catch/throw`) that compiles to type-safe Rust code using `Result<T, E>`. This document explains the design and implementation.
 
+**💡 The Killer Feature:** This design enables GoodScript to seamlessly call **any Rust library** and catch their errors using familiar try/catch syntax. This gives GoodScript developers access to the entire Rust ecosystem (90,000+ crates) with zero-cost, type-safe error handling.
+
 ## Design Goals
 
 1. **Familiar JS semantics** - GoodScript developers write `try/catch/throw` 
@@ -11,6 +13,7 @@ GoodScript provides JavaScript-style exception handling (`try/catch/throw`) that
 3. **Zero runtime overhead** - Compiles to efficient Rust with no performance penalty
 4. **Error propagation** - Errors automatically propagate through function call chains
 5. **Unhandled exceptions crash** - Like JavaScript, unhandled errors terminate the program
+6. **🚀 Rust ecosystem access** - Seamlessly call Rust libraries and catch their errors
 
 ## The All-Result Pattern
 
@@ -23,6 +26,7 @@ This enables:
 - ✅ Type-safe exception handling
 - ✅ Zero-cost abstractions
 - ✅ Idiomatic Rust code
+- ✅ **Seamless Rust library interop** - Call any Rust library and catch errors!
 
 ### Translation Rules
 
@@ -281,40 +285,213 @@ let safeDivide = |a: f64, b: f64| -> Result<f64, String> {
 
 ## Library Interop
 
-### Rust Library Functions
+### The Killer Feature: Seamless Rust Ecosystem Access 🚀
 
-Rust libraries return `Result<T, E>` natively. GoodScript can call them with appropriate error mapping:
+**This is where the all-Result pattern becomes game-changing.** Because GoodScript functions return `Result<T, String>` and Rust libraries also return `Result<T, E>`, GoodScript can **seamlessly call the entire Rust ecosystem** and "catch" their errors using familiar try/catch syntax!
+
+### How It Works
+
+1. **Rust libraries return `Result<T, E>`** where `E` is their specific error type
+2. **GoodScript wrapper uses `.map_err(|e| e.to_string())`** to convert to `Result<T, String>`
+3. **The `?` operator propagates** the error through GoodScript code
+4. **GoodScript `catch` block receives** the error as a string
+
+### Real-World Example: File I/O
 
 ```typescript
-// GoodScript wrapper for Rust library
-const parseJSON = (s: string): any => {
-  // Compiler generates wrapper that converts Result to throw
-  return serde_json::from_str(s);  // Native Rust call
+// GoodScript code - looks like JavaScript
+const loadConfig = (path: string): Config => {
+  try {
+    const contents = readFile(path);      // Calls Rust std::fs
+    const config = parseJSON(contents);   // Calls Rust serde_json
+    return config as Config;
+  } catch (e) {
+    console.log("Failed to load config:", e);  // Catches IO or parse errors!
+    return defaultConfig;
+  }
 };
 ```
 
 ```rust
-// Generated wrapper
+// Generated wrapper for std::fs::read_to_string
+let readFile = |path: String| -> Result<String, String> {
+    std::fs::read_to_string(&path)
+        .map_err(|e| e.to_string())?  // IO error → String → propagates to catch!
+};
+
+// Generated wrapper for serde_json::from_str
 let parseJSON = |s: String| -> Result<serde_json::Value, String> {
     serde_json::from_str(&s)
-        .map_err(|e| e.to_string())  // Convert library error to String
+        .map_err(|e| e.to_string())?  // Parse error → String → propagates to catch!
+};
+
+// Generated loadConfig - errors propagate through the call chain!
+let loadConfig = |path: String| -> Result<Config, String> {
+    let result = (|| -> Result<Config, String> {
+        let contents = readFile(path)?;      // Rust IO errors propagate!
+        let config = parseJSON(contents)?;   // Rust parse errors propagate!
+        Ok(config)
+    })();
+    
+    match result {
+        Ok(config) => Ok(config),
+        Err(e) => {
+            console_log(format!("Failed to load config: {}", e))?;
+            Ok(defaultConfig)
+        }
+    }
 };
 ```
+
+### More Examples
+
+#### HTTP Requests (using reqwest)
+
+```typescript
+// GoodScript
+const fetchUserData = (userId: string): User => {
+  try {
+    const response = httpGet(`https://api.example.com/users/${userId}`);
+    return parseJSON(response.body) as User;
+  } catch (e) {
+    throw `Failed to fetch user ${userId}: ${e}`;
+  }
+};
+```
+
+```rust
+// Wrapper for reqwest
+let httpGet = |url: String| -> Result<Response, String> {
+    reqwest::blocking::get(&url)
+        .map_err(|e| e.to_string())?  // Network errors caught by GoodScript!
+};
+```
+
+#### Database Queries (using diesel)
+
+```typescript
+// GoodScript
+const findUser = (id: number): User => {
+  try {
+    const user = dbQuery("SELECT * FROM users WHERE id = ?", [id]);
+    return user as User;
+  } catch (e) {
+    throw `Database error: ${e}`;
+  }
+};
+```
+
+```rust
+// Wrapper for diesel
+let dbQuery = |sql: String, params: Vec<serde_json::Value>| -> Result<serde_json::Value, String> {
+    diesel::query(&sql)
+        .bind(params)
+        .get_result()
+        .map_err(|e| e.to_string())?  // SQL errors caught by GoodScript!
+};
+```
+
+#### File System Operations
+
+```typescript
+// GoodScript - comprehensive file operations with error handling
+const processFiles = (directory: string): void => {
+  try {
+    const files = listDir(directory);           // std::fs::read_dir
+    for (const file of files) {
+      if (file.endsWith(".json")) {
+        const contents = readFile(file);         // std::fs::read_to_string
+        const data = parseJSON(contents);        // serde_json::from_str
+        const output = transformData(data);
+        writeFile(file.replace(".json", ".out"), output);  // std::fs::write
+      }
+    }
+  } catch (e) {
+    console.log("Error processing files:", e);
+    // Single catch handles IO errors, parse errors, write errors!
+  }
+};
+```
+
+### Error Type Mapping
+
+Any Rust error type that implements `Display` or `ToString` can be caught:
+
+| Rust Library | Error Type | Example Error Message |
+|--------------|------------|----------------------|
+| **std::fs** | `std::io::Error` | "No such file or directory" |
+| **serde_json** | `serde_json::Error` | "EOF while parsing a value at line 3" |
+| **reqwest** | `reqwest::Error` | "error sending request for url" |
+| **diesel** | `diesel::result::Error` | "Record not found" |
+| **regex** | `regex::Error` | "regex parse error" |
+| **zip** | `zip::result::ZipError` | "invalid zip header" |
+| **image** | `image::error::ImageError` | "Format error decoding Png" |
+| **tokio** | Various async errors | Runtime-specific messages |
+
+### The Impact
+
+This means **GoodScript developers get access to**:
+- ✅ File I/O, networking, compression
+- ✅ JSON, XML, YAML, TOML parsing
+- ✅ HTTP clients and servers
+- ✅ Database connectors (PostgreSQL, MySQL, SQLite)
+- ✅ Cryptography and hashing
+- ✅ Image processing
+- ✅ Regular expressions
+- ✅ WebAssembly compilation
+- ✅ **The entire crates.io ecosystem** (90,000+ libraries!)
+
+All with **familiar JavaScript-style error handling**. No need to learn Rust's error handling patterns - just use try/catch and it works!
 
 ### Standard Library
 
-GoodScript provides wrapped standard library functions that follow the all-Result pattern:
+GoodScript will provide a standard library of commonly-used wrappers:
 
 ```rust
-// GoodScript standard library
-pub fn console_log(msg: String) -> Result<(), String> {
-    println!("{}", msg);
-    Ok(())
+// GoodScript standard library (Phase 4)
+pub mod fs {
+    pub fn read_file(path: String) -> Result<String, String> {
+        std::fs::read_to_string(&path).map_err(|e| e.to_string())
+    }
+    
+    pub fn write_file(path: String, contents: String) -> Result<(), String> {
+        std::fs::write(&path, contents).map_err(|e| e.to_string())
+    }
+    
+    pub fn list_dir(path: String) -> Result<Vec<String>, String> {
+        std::fs::read_dir(&path)
+            .map_err(|e| e.to_string())?
+            .map(|entry| entry.map(|e| e.path().to_string_lossy().to_string()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())
+    }
 }
 
-pub fn parse_int(s: String) -> Result<i64, String> {
-    s.parse()
-        .map_err(|e| format!("Parse error: {}", e))
+pub mod json {
+    pub fn parse(s: String) -> Result<serde_json::Value, String> {
+        serde_json::from_str(&s).map_err(|e| e.to_string())
+    }
+    
+    pub fn stringify(value: serde_json::Value) -> Result<String, String> {
+        serde_json::to_string(&value).map_err(|e| e.to_string())
+    }
+}
+
+pub mod http {
+    pub fn get(url: String) -> Result<String, String> {
+        reqwest::blocking::get(&url)
+            .and_then(|r| r.text())
+            .map_err(|e| e.to_string())
+    }
+    
+    pub fn post(url: String, body: String) -> Result<String, String> {
+        reqwest::blocking::Client::new()
+            .post(&url)
+            .body(body)
+            .send()
+            .and_then(|r| r.text())
+            .map_err(|e| e.to_string())
+    }
 }
 ```
 
@@ -356,11 +533,36 @@ Currently uses `String` for all errors. Future enhancements could:
 
 ## Advantages
 
-1. **Zero runtime overhead** - Compiled to efficient Rust code
-2. **Type safe** - Compiler enforces error handling
-3. **Familiar semantics** - JavaScript developers feel at home
-4. **Idiomatic Rust** - Uses Result<T, E> pattern properly
-5. **Works with Rust ecosystem** - Easy interop with Rust libraries
+1. **🚀 Full Rust Ecosystem Access** - Call any of the 90,000+ crates on crates.io
+   - File I/O, networking, databases, HTTP, JSON, image processing, crypto...
+   - Use `.map_err(|e| e.to_string())` to convert Rust errors to GoodScript exceptions
+   - Single try/catch can handle errors from multiple Rust libraries
+   - No need to learn Rust error handling - just use try/catch!
+
+2. **Zero runtime overhead** - Compiled to efficient Rust code
+   - `?` operator compiles to zero-cost error checking
+   - No exception unwinding, no runtime penalty
+   - As fast as hand-written Rust code
+
+3. **Type safe** - Compiler enforces error handling
+   - Forgotten error checks cause compile errors
+   - Can't ignore Results accidentally
+   - Refactoring is safe
+
+4. **Familiar semantics** - JavaScript developers feel at home
+   - Write `try/catch/throw` like in JavaScript/TypeScript
+   - Errors propagate through call chains automatically
+   - No new concepts to learn
+
+5. **Idiomatic Rust** - Generated code follows Rust best practices
+   - Uses `Result<T, E>` pattern properly
+   - Integrates naturally with Rust libraries
+   - Rust developers can read and understand generated code
+
+6. **Composable** - Mix GoodScript and Rust libraries seamlessly
+   - GoodScript functions can call Rust functions
+   - Rust functions can call GoodScript functions
+   - Errors flow bidirectionally with no impedance mismatch
 
 ## Limitations
 
