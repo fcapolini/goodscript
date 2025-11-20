@@ -4,6 +4,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { execSync } from 'child_process';
+import { executeRustWithCargo, isCargoAvailable } from './runtime-helpers';
 
 describe('Phase 3 - Generics', () => {
   let tmpDir: string;
@@ -500,6 +501,255 @@ describe('Phase 3 - Generics', () => {
       const jsResult = executeJS(jsCode);
       expect(jsResult.success).toBe(true);
       expect(jsResult.output.trim()).toBe('1,2,3');
+      
+      cleanup();
+    });
+  });
+
+  describe('Trait Bounds (Generic Constraints)', () => {
+    it('should handle simple trait bound', () => {
+      setupTest();
+      const source = `
+        interface Named {
+          name: string;
+        }
+        
+        const getName = <T extends Named>(item: T): string => {
+          return item.name;
+        };
+        
+        // Runtime check
+        const person: Named = { name: "Alice" };
+        const result = getName(person);
+        console.log(result);
+      `;
+      
+      const { jsCode, rustCode } = compile(source);
+      
+      // Verify Rust code has trait and trait bound
+      expect(rustCode).toContain('trait NamedTrait');
+      expect(rustCode).toContain('fn getName<T: NamedTrait>');
+      expect(rustCode).toContain('item.name()');  // Should be method call in generic context
+      
+      // Verify JavaScript works
+      const jsResult = executeJS(jsCode);
+      expect(jsResult.success).toBe(true);
+      expect(jsResult.output.trim()).toBe('Alice');
+      
+      // Verify Rust works with Cargo (if available)
+      if (isCargoAvailable()) {
+        const rustResult = executeRustWithCargo(rustCode);
+        expect(rustResult.success).toBe(true);
+        expect(rustResult.stdout.trim()).toBe('Alice');
+      }
+      
+      cleanup();
+    });
+
+    it('should handle trait bound with multiple properties', () => {
+      setupTest();
+      const source = `
+        interface Person {
+          name: string;
+          age: number;
+        }
+        
+        const describe = <T extends Person>(person: T): string => {
+          return \`\${person.name} is \${person.age} years old\`;
+        };
+        
+        // Runtime check
+        const alice: Person = { name: "Alice", age: 30 };
+        const result = describe(alice);
+        console.log(result);
+      `;
+      
+      const { jsCode, rustCode } = compile(source);
+      
+      // Verify Rust code structure
+      expect(rustCode).toContain('trait PersonTrait');
+      expect(rustCode).toContain('fn name(&self) -> String');
+      expect(rustCode).toContain('fn age(&self) -> f64');
+      expect(rustCode).toContain('fn describe<T: PersonTrait>');
+      expect(rustCode).toContain('person.name()');
+      expect(rustCode).toContain('person.age()');
+      
+      // Verify JavaScript works
+      const jsResult = executeJS(jsCode);
+      expect(jsResult.success).toBe(true);
+      expect(jsResult.output.trim()).toBe('Alice is 30 years old');
+      
+      // Verify Rust works
+      if (isCargoAvailable()) {
+        const rustResult = executeRustWithCargo(rustCode);
+        expect(rustResult.success).toBe(true);
+        expect(rustResult.stdout.trim()).toBe('Alice is 30 years old');
+      }
+      
+      cleanup();
+    });
+
+    it('should handle trait bound with object literal', () => {
+      setupTest();
+      const source = `
+        interface Identifiable {
+          id: number;
+        }
+        
+        const getId = <T extends Identifiable>(item: T): number => {
+          return item.id;
+        };
+        
+        // Runtime check with object literal
+        const result = getId({ id: 42, extra: "data" });
+        console.log(result);
+      `;
+      
+      const { jsCode, rustCode } = compile(source);
+      
+      // Verify Rust code
+      expect(rustCode).toContain('trait IdentifiableTrait');
+      expect(rustCode).toContain('fn getId<T: IdentifiableTrait>');
+      expect(rustCode).toContain('item.id()');
+      
+      // Verify JavaScript works
+      const jsResult = executeJS(jsCode);
+      expect(jsResult.success).toBe(true);
+      expect(jsResult.output.trim()).toBe('42');
+      
+      cleanup();
+    });
+
+    it('should handle multiple trait-bounded parameters', () => {
+      setupTest();
+      const source = `
+        interface Named {
+          name: string;
+        }
+        
+        interface Valued {
+          value: number;
+        }
+        
+        const combine = <T extends Named, U extends Valued>(item1: T, item2: U): string => {
+          return \`\${item1.name}: \${item2.value}\`;
+        };
+        
+        // Runtime check
+        const person: Named = { name: "Alice" };
+        const score: Valued = { value: 100 };
+        const result = combine(person, score);
+        console.log(result);
+      `;
+      
+      const { jsCode, rustCode } = compile(source);
+      
+      // Verify Rust code has both traits
+      expect(rustCode).toContain('trait NamedTrait');
+      expect(rustCode).toContain('trait ValuedTrait');
+      expect(rustCode).toContain('fn combine<T: NamedTrait, U: ValuedTrait>');
+      expect(rustCode).toContain('item1.name()');
+      expect(rustCode).toContain('item2.value()');
+      
+      // Verify JavaScript works
+      const jsResult = executeJS(jsCode);
+      expect(jsResult.success).toBe(true);
+      expect(jsResult.output.trim()).toBe('Alice: 100');
+      
+      // Verify Rust works
+      if (isCargoAvailable()) {
+        const rustResult = executeRustWithCargo(rustCode);
+        expect(rustResult.success).toBe(true);
+        expect(rustResult.stdout.trim()).toBe('Alice: 100');
+      }
+      
+      cleanup();
+    });
+
+    it('should handle trait bound with conditional logic', () => {
+      setupTest();
+      const source = `
+        interface Scoreable {
+          score: number;
+        }
+        
+        const classify = <T extends Scoreable>(item: T): string => {
+          if (item.score >= 90) {
+            return "excellent";
+          } else if (item.score >= 70) {
+            return "good";
+          } else {
+            return "needs improvement";
+          }
+        };
+        
+        // Runtime check
+        const test1: Scoreable = { score: 95 };
+        const test2: Scoreable = { score: 75 };
+        const test3: Scoreable = { score: 50 };
+        console.log(\`\${classify(test1)},\${classify(test2)},\${classify(test3)}\`);
+      `;
+      
+      const { jsCode, rustCode } = compile(source);
+      
+      // Verify Rust code
+      expect(rustCode).toContain('trait ScoreableTrait');
+      expect(rustCode).toContain('fn classify<T: ScoreableTrait>');
+      expect(rustCode).toContain('item.score()');
+      
+      // Verify JavaScript works
+      const jsResult = executeJS(jsCode);
+      expect(jsResult.success).toBe(true);
+      expect(jsResult.output.trim()).toBe('excellent,good,needs improvement');
+      
+      // Verify Rust works
+      if (isCargoAvailable()) {
+        const rustResult = executeRustWithCargo(rustCode);
+        expect(rustResult.success).toBe(true);
+        expect(rustResult.stdout.trim()).toBe('excellent,good,needs improvement');
+      }
+      
+      cleanup();
+    });
+
+    it('should generate both trait and struct for interfaces', () => {
+      setupTest();
+      const source = `
+        interface Point {
+          x: number;
+          y: number;
+        }
+        
+        // Use as constraint
+        const getX = <T extends Point>(point: T): number => {
+          return point.x;
+        };
+        
+        // Use as concrete type
+        const pt: Point = { x: 0, y: 0 };
+        const result = getX(pt);
+        console.log(result);
+      `;
+      
+      const { jsCode, rustCode } = compile(source);
+      
+      // Verify Rust code has both trait and struct
+      expect(rustCode).toContain('trait PointTrait');
+      expect(rustCode).toContain('struct Point');
+      expect(rustCode).toContain('impl Point {');  // Inherent impl
+      expect(rustCode).toContain('impl PointTrait for Point {');  // Trait impl
+      
+      // Verify JavaScript works
+      const jsResult = executeJS(jsCode);
+      expect(jsResult.success).toBe(true);
+      expect(jsResult.output.trim()).toBe('0');
+      
+      // Verify Rust works
+      if (isCargoAvailable()) {
+        const rustResult = executeRustWithCargo(rustCode);
+        expect(rustResult.success).toBe(true);
+        expect(rustResult.stdout.trim()).toBe('0');
+      }
       
       cleanup();
     });

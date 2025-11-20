@@ -72,6 +72,16 @@
   - Generic interfaces: `interface Result<T>` → `struct Result<T>`
   - Multiple type parameters: `<T, U>`, `<K, V>` etc.
   - Nested generics: `Box<Box<T>>`, `Result<Vec<T>>`
+- **Trait Bounds (Generic Constraints)** - TypeScript constraints → Rust trait bounds with runtime validation
+  - Constraint syntax: `<T extends Named>` → `<T: NamedTrait>`
+  - Dual interface generation: Interfaces create both trait (for constraints) and struct (for concrete types)
+  - Trait definition: `trait NamedTrait { fn name(&self) -> String; }`
+  - Struct definition: `struct Named { name: String, }`
+  - Inherent impl: Methods on struct for field access and method calls
+  - Trait impl: Satisfies trait bound requirements
+  - Context-aware property access: `item.name` → `item.name()` in generic functions with trait bounds
+  - Multiple constraints: `<T extends Named, U extends Valued>` → `<T: NamedTrait, U: ValuedTrait>`
+  - Full runtime equivalence: All tests verify JS and Rust produce identical output
 - **TypeScript Type Checker Integration** - Object literals infer expected type from context
   - `const p: Point = { x: 5, y: 10 }` → `Point { x: 5.0, y: 10.0 }`
   - Nested object literals: `{ address: { city: "NYC" } }` → `{ address: Address { city: "NYC" } }`
@@ -87,8 +97,9 @@
 
 ### 📋 Remaining Work
 
-- Trait bounds for generic constraints (e.g., `T extends Named` → `T: Named`)
 - Module hierarchy generation (lib.rs, mod.rs files for complex projects)
+- Advanced trait features (associated types, default implementations)
+- Lifetime annotations for complex borrowing scenarios
 
 ### Usage
 

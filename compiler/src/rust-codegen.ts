@@ -25,6 +25,8 @@ export class RustCodegen {
   private destructuringParams: Array<{tempName: string, pattern: ts.BindingName, isConst: boolean}> = [];  // Track destructuring parameters
   private defaultExportedNames = new Set<string>();  // Track names that are default-exported
   private checker?: ts.TypeChecker;  // Optional type checker for type inference
+  private inGenericFunction = false;  // Track if we're inside a generic function with trait bounds
+  private genericParameterNames = new Set<string>();  // Track generic parameter names in current scope
   
   constructor(checker?: ts.TypeChecker) {
     this.checker = checker;
@@ -516,6 +518,17 @@ export class RustCodegen {
     }
     const asyncModifier = isAsync ? 'async ' : '';
     
+    // Track that we're in a generic function with trait bounds
+    const wasInGenericFunction = this.inGenericFunction;
+    const hasTraitBounds = typeParams.some(tp => tp.constraint);
+    if (hasTraitBounds) {
+      this.inGenericFunction = true;
+      // Track parameter names so we know which identifiers are generic
+      for (const tp of typeParams) {
+        this.genericParameterNames.add(tp.name.getText());
+      }
+    }
+    
     this.emit(`${asyncModifier}fn ${name}${genericParams}(${params}) -> ${resultType} {`);
     this.indent();
     
@@ -536,6 +549,14 @@ export class RustCodegen {
     this.dedent();
     this.emit('}');
     this.emit('');
+    
+    // Restore state
+    this.inGenericFunction = wasInGenericFunction;
+    if (hasTraitBounds) {
+      for (const tp of typeParams) {
+        this.genericParameterNames.delete(tp.name.getText());
+      }
+    }
   }
   
   /**
@@ -1119,6 +1140,26 @@ export class RustCodegen {
     const pubModifier = isExported ? 'pub ' : '';
     const typeParams = this.generateTypeParameters(iface.typeParameters);
     
+    // Generate as both a trait (for generic constraints) and a struct (for concrete usage)
+    
+    // 1. Generate the trait
+    this.emit(`${pubModifier}trait ${name}Trait${typeParams} {`);
+    this.indent();
+    
+    for (const member of iface.members) {
+      if (ts.isPropertySignature(member)) {
+        const fieldName = member.name?.getText() || 'unknown';
+        const fieldType = member.type ? this.generateType(member.type) : 'String';
+        // Trait getter method - same name as field, returns owned value (cloned)
+        this.emit(`fn ${fieldName}(&self) -> ${fieldType};`);
+      }
+    }
+    
+    this.dedent();
+    this.emit('}');
+    this.emit('');
+    
+    // 2. Generate the concrete struct
     this.emit(`#[derive(Clone)]`);
     this.emit(`${pubModifier}struct ${name}${typeParams} {`);
     this.indent();
@@ -1126,8 +1167,48 @@ export class RustCodegen {
     for (const member of iface.members) {
       if (ts.isPropertySignature(member)) {
         const fieldName = member.name?.getText() || 'unknown';
-        const fieldType = member.type ? this.generateType(member.type) : 'unknown';
-        this.emit(`${fieldName}: ${fieldType},`);
+        const fieldType = member.type ? this.generateType(member.type) : 'String';
+        this.emit(`${pubModifier}${fieldName}: ${fieldType},`);
+      }
+    }
+    
+    this.dedent();
+    this.emit('}');
+    this.emit('');
+    
+    // 2b. Add inherent methods to the struct (so both field access and method calls work)
+    this.emit(`impl${typeParams} ${name}${typeParams} {`);
+    this.indent();
+    
+    for (const member of iface.members) {
+      if (ts.isPropertySignature(member)) {
+        const fieldName = member.name?.getText() || 'unknown';
+        const fieldType = member.type ? this.generateType(member.type) : 'String';
+        this.emit(`${pubModifier}fn ${fieldName}(&self) -> ${fieldType} {`);
+        this.indent();
+        this.emit(`self.${fieldName}.clone()`);
+        this.dedent();
+        this.emit(`}`);
+      }
+    }
+    
+    this.dedent();
+    this.emit('}');
+    this.emit('');
+    
+    // 3. Implement the trait for the struct
+    this.emit(`impl${typeParams} ${name}Trait${typeParams} for ${name}${typeParams} {`);
+    this.indent();
+    
+    for (const member of iface.members) {
+      if (ts.isPropertySignature(member)) {
+        const fieldName = member.name?.getText() || 'unknown';
+        const fieldType = member.type ? this.generateType(member.type) : 'String';
+        this.emit(`fn ${fieldName}(&self) -> ${fieldType} {`);
+        this.indent();
+        this.emit(`self.${fieldName}.clone()`);
+        this.dedent();
+        this.emit(`}`);
       }
     }
     
@@ -1727,11 +1808,21 @@ export class RustCodegen {
       const name = tp.name.getText();
       // Handle constraints (e.g., T extends Named)
       if (tp.constraint) {
-        const constraint = tp.constraint.getText();
-        // In Rust, trait bounds are specified differently
-        // For now, just use the type parameter name
-        // TODO: Properly translate trait bounds
-        return name;
+        let constraint = this.generateType(tp.constraint);
+        // If the constraint is an interface, use the Trait version
+        // (interfaces generate both a struct and a trait with "Trait" suffix)
+        if (this.checker && ts.isTypeReferenceNode(tp.constraint)) {
+          const symbol = this.checker.getSymbolAtLocation(tp.constraint.typeName);
+          if (symbol) {
+            const declarations = symbol.getDeclarations();
+            if (declarations && declarations.some(d => ts.isInterfaceDeclaration(d))) {
+              constraint = `${constraint}Trait`;
+            }
+          }
+        }
+        // In Rust, trait bounds use : instead of extends
+        // T extends Named -> T: NamedTrait
+        return `${name}: ${constraint}`;
       }
       return name;
     });
@@ -2358,6 +2449,12 @@ export class RustCodegen {
     if (property === 'length') {
       // array.length -> vec.len() as f64 (for comparison with f64 loop variables)
       return `${object}.len() as f64`;
+    }
+    
+    // If we're in a generic function with trait bounds, convert property access to method calls
+    // This is because trait-bounded generic types can only access trait methods, not struct fields
+    if (this.inGenericFunction) {
+      return `${object}.${property}()`;
     }
     
     return `${object}.${property}`;
