@@ -39,6 +39,13 @@ export class RustCodegen {
   }>();
   private syntheticTypeDeclarations: string[] = [];  // Generated struct + impl code
   
+  // Class inheritance tracking
+  private classes = new Map<string, {
+    fields: Array<{ name: string; type: string; initializer?: string }>;
+    methods: Array<{ name: string; method: ts.MethodDeclaration }>;
+    baseClass?: string;
+  }>();
+  
   constructor(checker?: ts.TypeChecker) {
     this.checker = checker;
   }
@@ -89,6 +96,7 @@ export class RustCodegen {
     this.syntheticTypeDeclarations = [];
     this.interfaceTraits = new Map();
     this.syntheticTypeCounter = 0;
+    this.classes = new Map();
   }
   
   /**
@@ -315,6 +323,18 @@ export class RustCodegen {
     // Then emit generic functions (non-exported)
     for (const { name, func, typeParams } of genericFunctions) {
       this.generateGenericFunction(name, func, typeParams);
+    }
+    
+    // Pre-pass: Register all classes for inheritance processing
+    for (const statement of typeDecls) {
+      if (ts.isClassDeclaration(statement)) {
+        this.registerClass(statement);
+      }
+    }
+    for (const statement of exportedDecls) {
+      if (ts.isClassDeclaration(statement)) {
+        this.registerClass(statement);
+      }
     }
     
     // Then emit type declarations (classes, interfaces, type aliases)
@@ -1042,6 +1062,92 @@ export class RustCodegen {
   }
   
   /**
+   * Collect all fields from a class and its inheritance chain
+   */
+  private collectAllFields(className: string): Array<{ name: string; type: string; initializer?: string }> {
+    const classInfo = this.classes.get(className);
+    if (!classInfo) return [];
+    
+    let allFields: Array<{ name: string; type: string; initializer?: string }> = [];
+    
+    // Recursively collect fields from base classes
+    if (classInfo.baseClass) {
+      allFields = this.collectAllFields(classInfo.baseClass);
+    }
+    
+    // Add this class's own fields
+    allFields.push(...classInfo.fields);
+    
+    return allFields;
+  }
+  
+  /**
+   * Collect all methods from a class and its inheritance chain
+   */
+  private collectAllMethods(className: string): Array<{ name: string; method: ts.MethodDeclaration; fromClass: string }> {
+    const classInfo = this.classes.get(className);
+    if (!classInfo) return [];
+    
+    let allMethods: Array<{ name: string; method: ts.MethodDeclaration; fromClass: string }> = [];
+    
+    // Recursively collect methods from base classes
+    if (classInfo.baseClass) {
+      allMethods = this.collectAllMethods(classInfo.baseClass);
+    }
+    
+    // Add/override with this class's methods
+    for (const methodInfo of classInfo.methods) {
+      const existingIndex = allMethods.findIndex(m => m.name === methodInfo.name);
+      if (existingIndex >= 0) {
+        // Override base class method
+        allMethods[existingIndex] = { ...methodInfo, fromClass: className };
+      } else {
+        // Add new method
+        allMethods.push({ ...methodInfo, fromClass: className });
+      }
+    }
+    
+    return allMethods;
+  }
+  
+  /**
+   * Register class information for inheritance processing
+   */
+  private registerClass(classDecl: ts.ClassDeclaration): void {
+    const name = classDecl.name?.getText() || 'AnonymousClass';
+    
+    // Collect fields
+    const fields = classDecl.members
+      .filter(ts.isPropertyDeclaration)
+      .map(field => ({
+        name: field.name.getText(),
+        type: field.type ? this.generateType(field.type) : 'String',
+        initializer: field.initializer ? this.generateExpression(field.initializer) : undefined,
+      }));
+    
+    // Collect methods
+    const methods = classDecl.members
+      .filter(ts.isMethodDeclaration)
+      .map(method => ({
+        name: method.name.getText(),
+        method,
+      }));
+    
+    // Get base class if it exists
+    let baseClass: string | undefined;
+    if (classDecl.heritageClauses) {
+      for (const clause of classDecl.heritageClauses) {
+        if (clause.token === ts.SyntaxKind.ExtendsKeyword && clause.types.length > 0) {
+          baseClass = clause.types[0].expression.getText();
+          break;
+        }
+      }
+    }
+    
+    this.classes.set(name, { fields, methods, baseClass });
+  }
+
+  /**
    * Generate class declaration
    */
   private generateClassDeclaration(classDecl: ts.ClassDeclaration, isExported: boolean = false): void {
@@ -1049,24 +1155,74 @@ export class RustCodegen {
     const pubModifier = isExported ? 'pub ' : '';
     const typeParams = this.generateTypeParameters(classDecl.typeParameters);
     
+    // Get all fields (including inherited)
+    const allFields = this.collectAllFields(name);
+    
+    // Get class info for base class
+    const classInfo = this.classes.get(name);
+    const baseClass = classInfo?.baseClass;
+    
     // Generate struct for fields
     this.emit(`#[derive(Clone)]`);
     this.emit(`${pubModifier}struct ${name}${typeParams} {`);
     this.indent();
     
-    const fields = classDecl.members.filter(ts.isPropertyDeclaration);
-    for (const field of fields) {
-      const fieldName = field.name.getText();
-      const fieldType = field.type ? this.generateType(field.type) : 'unknown';
-      this.emit(`${fieldName}: ${fieldType},`);
+    for (const field of allFields) {
+      this.emit(`${field.name}: ${field.type},`);
     }
     
     this.dedent();
     this.emit('}');
     this.emit('');
     
+    // If this class has methods, generate a trait for polymorphism
+    const ownMethods = classInfo?.methods || [];
+    if (ownMethods.length > 0) {
+      // Generate trait for this class
+      this.generateClassTrait(name);
+      
+      // Also implement the trait for this class
+      this.emit(`impl ${name}Trait for ${name} {`);
+      this.indent();
+      
+      for (const methodInfo of ownMethods) {
+        const method = methodInfo.method;
+        const methodName = method.name.getText();
+        
+        let modifiesSelf = false;
+        if (method.body) {
+          const bodyText = method.body.getText();
+          modifiesSelf = /this\.\w+\s*=/.test(bodyText);
+        }
+        
+        const params = this.generateParameters(method.parameters, true, modifiesSelf);
+        const returnType = method.type ? this.generateType(method.type) : '()';
+        const resultType = `Result<${returnType}, String>`;
+        
+        this.emit(`fn ${methodName}(${params}) -> ${resultType} {`);
+        this.indent();
+        
+        if (method.body) {
+          this.generateBlock(method.body);
+          
+          const hasReturnStatement = this.containsReturnStatement(method.body);
+          if (!hasReturnStatement) {
+            this.emit('Ok(())');
+          }
+        }
+        
+        this.dedent();
+        this.emit('}');
+        this.emit('');
+      }
+      
+      this.dedent();
+      this.emit('}');
+      this.emit('');
+    }
+    
     // Generate impl block for constructor and methods
-    const methods = classDecl.members.filter(ts.isMethodDeclaration);
+    const allMethods = this.collectAllMethods(name);
     if (typeParams) {
       this.emit(`impl${typeParams} ${name}${typeParams} {`);
     } else {
@@ -1080,16 +1236,12 @@ export class RustCodegen {
     this.emit(`${name} {`);
     this.indent();
     
-    // Initialize fields with their default values
-    for (const field of fields) {
-      const fieldName = field.name.getText();
+    // Initialize all fields (including inherited) with their default values
+    for (const field of allFields) {
       if (field.initializer) {
-        const initValue = this.generateExpression(field.initializer);
-        this.emit(`${fieldName}: ${initValue},`);
+        this.emit(`${field.name}: ${field.initializer},`);
       } else {
-        // Use default values
-        const fieldType = field.type ? this.generateType(field.type) : 'unknown';
-        this.emit(`${fieldName}: ${this.getDefaultValue(fieldType)},`);
+        this.emit(`${field.name}: ${this.getDefaultValue(field.type)},`);
       }
     }
     
@@ -1099,14 +1251,122 @@ export class RustCodegen {
     this.emit('}');
     this.emit('');
     
-    // Generate methods
-    for (const method of methods) {
-      this.generateMethodDeclaration(method);
+    // Generate all methods (inherited and own)
+    for (const methodInfo of allMethods) {
+      this.generateMethodDeclaration(methodInfo.method);
     }
     
     this.dedent();
     this.emit('}');
     this.emit('');
+    
+    // Implement base class trait if we're extending
+    if (baseClass) {
+      this.generateClassTraitImpl(name, baseClass);
+    }
+  }
+  
+  /**
+   * Generate trait for a base class (for polymorphism)
+   */
+  private generateClassTrait(className: string): void {
+    const classInfo = this.classes.get(className);
+    if (!classInfo) return;
+    
+    // Check if we already generated this trait
+    const traitName = `${className}Trait`;
+    if (this.interfaceTraits.has(traitName)) return;
+    
+    // Mark as generated
+    this.interfaceTraits.set(traitName, []);
+    
+    // Generate trait
+    this.emit(`trait ${traitName} {`);
+    this.indent();
+    
+    for (const methodInfo of classInfo.methods) {
+      const method = methodInfo.method;
+      const methodName = method.name.getText();
+      
+      // Determine if method modifies self
+      let modifiesSelf = false;
+      if (method.body) {
+        const bodyText = method.body.getText();
+        modifiesSelf = /this\.\w+\s*=/.test(bodyText);
+      }
+      
+      const params = this.generateParameters(method.parameters, true, modifiesSelf);
+      const returnType = method.type ? this.generateType(method.type) : '()';
+      const resultType = `Result<${returnType}, String>`;
+      
+      this.emit(`fn ${methodName}(${params}) -> ${resultType};`);
+    }
+    
+    this.dedent();
+    this.emit('}');
+    this.emit('');
+  }
+  
+  /**
+   * Generate trait implementation for a derived class
+   */
+  private generateClassTraitImpl(className: string, baseClassName: string): void {
+    const baseClassInfo = this.classes.get(baseClassName);
+    if (!baseClassInfo || baseClassInfo.methods.length === 0) return;
+    
+    const traitName = `${baseClassName}Trait`;
+    const classInfo = this.classes.get(className);
+    if (!classInfo) return;
+    
+    this.emit(`impl ${traitName} for ${className} {`);
+    this.indent();
+    
+    // Implement all base class methods
+    for (const baseMethod of baseClassInfo.methods) {
+      const methodName = baseMethod.name;
+      
+      // Check if this class overrides the method
+      const overridden = classInfo.methods.find(m => m.name === methodName);
+      const method = overridden ? overridden.method : baseMethod.method;
+      
+      let modifiesSelf = false;
+      if (method.body) {
+        const bodyText = method.body.getText();
+        modifiesSelf = /this\.\w+\s*=/.test(bodyText);
+      }
+      
+      const params = this.generateParameters(method.parameters, true, modifiesSelf);
+      const returnType = method.type ? this.generateType(method.type) : '()';
+      const resultType = `Result<${returnType}, String>`;
+      
+      this.emit(`fn ${methodName}(${params}) -> ${resultType} {`);
+      this.indent();
+      
+      // Generate the method body directly (not delegating)
+      if (method.body) {
+        this.generateBlock(method.body);
+        
+        const hasReturnStatement = this.containsReturnStatement(method.body);
+        if (!hasReturnStatement) {
+          this.emit('Ok(())');
+        }
+      }
+      
+      this.dedent();
+      this.emit('}');
+      this.emit('');
+    }
+    
+    this.dedent();
+    this.emit('}');
+    this.emit('');
+  }
+  
+  /**
+   * Generate parameter names for method call (without types)
+   */
+  private generateMethodCallParams(parameters: ts.NodeArray<ts.ParameterDeclaration>): string {
+    return parameters.map(p => p.name.getText()).join(', ');
   }
   
   /**
@@ -2289,6 +2549,12 @@ export class RustCodegen {
     
     const func = this.generateExpression(expr.expression);
     
+    // Special handling for String() constructor calls
+    if (func === 'String' && expr.arguments.length === 1) {
+      const arg = this.generateExpression(expr.arguments[0]);
+      return `${arg}.to_string()`;
+    }
+    
     // Handle function arguments, including spread
     const args = expr.arguments.map(arg => {
       if (ts.isSpreadElement(arg)) {
@@ -2487,6 +2753,19 @@ export class RustCodegen {
     // This is because trait-bounded generic types can only access trait methods, not struct fields
     if (this.inGenericFunction) {
       return `${object}.${property}()`;
+    }
+    
+    // If we're accessing a field on self, we need to clone it for non-Copy types
+    // This is because we can't move out of &self
+    // For now, we'll clone String fields when accessed on self
+    if (object === 'self' && this.checker) {
+      const type = this.checker.getTypeAtLocation(expr);
+      const typeStr = this.checker.typeToString(type);
+      
+      // Clone String fields accessed on self
+      if (typeStr === 'string') {
+        return `${object}.${property}.clone()`;
+      }
     }
     
     return `${object}.${property}`;

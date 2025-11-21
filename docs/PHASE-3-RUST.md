@@ -2,7 +2,7 @@
 
 **Status:** 🚧 In Progress (all core features complete, comprehensive runtime equivalence testing)
 
-**Test Coverage:** 878 tests total (872 passing, 6 skipped)
+**Test Coverage:** 449 tests total (449 passing, 6 skipped)
 
 ## Current Implementation Status
 
@@ -18,6 +18,14 @@
 - **Collections** - Arrays→Vec, array literals→vec! with proper f64 literals
 - **Arrow Functions** - Both single-expression and block bodies with correct closure syntax
 - **Classes** - Translate to struct + impl blocks with proper self/&mut self, supports generics, #[derive(Clone)]
+- **Class Inheritance** - Full support with field duplication and trait-based polymorphism
+  - Base class fields duplicated in derived classes
+  - Base class methods generate trait for polymorphism
+  - Derived classes implement base trait automatically
+  - Method overriding supported (trait impl uses overridden version)
+  - Multi-level inheritance (grandparent → parent → child)
+  - All inherited fields accessible with `self.field`
+  - All inherited methods callable with `self.method()`
 - **Interfaces** - Translate to structs, supports generics, #[derive(Clone)]
 - **This→Self** - Proper translation of `this` references to `self`
 - **For-of Loops** - Clean Rust iteration syntax with proper borrowing (&) - prevents ownership consumption

@@ -6,7 +6,7 @@ Write clean TypeScript. Get native performance. No borrow checker required.
 
 ---
 
-> ⚠️ **BETA STAGE**: GoodScript is under active development. Phase 1 (parsing, validation, JS target) is complete. Phase 2 (ownership analysis, DAG validation) is complete with 100% test coverage. Phase 3 (Rust code generation) is in progress with 878 tests passing and comprehensive runtime equivalence coverage. APIs and language features may change.
+> ⚠️ **BETA STAGE**: GoodScript is under active development. Phase 1 (parsing, validation, JS target) is complete. Phase 2 (ownership analysis, DAG validation) is complete with 100% test coverage. Phase 3 (Rust code generation) is in progress with 449 tests passing and comprehensive runtime equivalence coverage. APIs and language features may change.
 
 ---
 
@@ -102,6 +102,7 @@ In **Phase 3** (now in progress), GoodScript transpiles to **optimized Rust sour
 - **Memory Safety:** Ownership system maps directly to Rust's `Box<T>`, `Rc<T>`, and `Weak<T>`
 - **Deterministic Performance:** No GC pauses, predictable memory usage
 - **🎯 Rust Ecosystem Access:** Call any Rust library (90,000+ crates) and catch errors with try/catch (see [ERROR-HANDLING.md](docs/ERROR-HANDLING.md))
+- **Full OOP Semantics**: Support for TypeScript `class` and `interface` in generated Rust
 - **Automatic Structural Types**: Transparent mapping of TypeScript structural typing to Rust nominal typing
 
 The compiler's **DAG validation** (Phase 2) ensures that generated Rust code is memory-leak-free by preventing reference cycles at compile time. Complex data structures use the [pool pattern](docs/POOL-PATTERN.md) to maintain DAG invariants while supporting natural graph/tree topologies.
@@ -172,7 +173,7 @@ GoodScript is being developed in phases, with each phase corresponding to a lang
 |-------|----------------|----------|--------|
 | **Phase 1** | Level 1 "clean" | Strict TypeScript semantics<br/>(13 restrictions, 244 tests)<br/>[📖 Details](docs/PHASE-1-CLEAN.md) | ✅ **Complete** |
 | **Phase 2** | Level 2 "dag" | Ownership analysis & DAG validation<br/>(425 tests, 100% coverage)<br/>[📖 Details](docs/PHASE-2-DAG.md) | ✅ **Complete** |
-| **Phase 3** | Level 3 "rust" | Rust code generation<br/>(878 tests, runtime equivalence testing)<br/>**Latest: Trait bounds for generic constraints**<br/>[📖 Details](docs/PHASE-3-RUST.md) | 🚧 **In Progress** |
+| **Phase 3** | Level 3 "rust" | Rust code generation<br/>(885 tests, runtime equivalence testing)<br/>**Latest: Class inheritance with trait-based polymorphism**<br/>[📖 Details](docs/PHASE-3-RUST.md) | 🚧 **In Progress** |
 | **Phase 4** | — | Ecosystem integration<br/>[📖 Details](docs/PHASE-4-ECOSYSTEM.md) | 📋 Planned |
 
 **Phase 1 Restrictions** (enforced at all levels, see [docs/GOOD-PARTS.md](docs/GOOD-PARTS.md)):
