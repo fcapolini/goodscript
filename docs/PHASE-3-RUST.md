@@ -86,6 +86,15 @@
   - `const p: Point = { x: 5, y: 10 }` → `Point { x: 5.0, y: 10.0 }`
   - Nested object literals: `{ address: { city: "NYC" } }` → `{ address: Address { city: "NYC" } }`
   - Function arguments: `printPoint({ x: 5, y: 10 })` → `printPoint(Point { x: 5.0, y: 10.0 })`
+- **Synthetic Types for Structural Typing** - Auto-generate nominal types for object literals (transparent TypeScript structural typing in Rust)
+  - Contextual type detection via TypeScript type checker
+  - Signature-based deduplication (same structure → same type)
+  - Sequential numbering: `AnonymousType1`, `AnonymousType2`, etc.
+  - Automatic trait implementation for matching interfaces
+  - Filters TypeScript internal symbols (`__object`, `__type`)
+  - Deterministic within compilation session
+  - Prevents all naming collisions
+  - Example: `printName({ name: "Alice" })` → `printName(AnonymousType1 { name: String::from("Alice") })`
 - **Multi-File Compilation** - Compile projects with multiple `.gs.ts` files
   - Each file generates corresponding `.rs` file
   - Directory structure preserved in output

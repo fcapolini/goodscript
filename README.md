@@ -102,8 +102,7 @@ In **Phase 3** (now in progress), GoodScript transpiles to **optimized Rust sour
 - **Memory Safety:** Ownership system maps directly to Rust's `Box<T>`, `Rc<T>`, and `Weak<T>`
 - **Deterministic Performance:** No GC pauses, predictable memory usage
 - **🎯 Rust Ecosystem Access:** Call any Rust library (90,000+ crates) and catch errors with try/catch (see [ERROR-HANDLING.md](docs/ERROR-HANDLING.md))
-
-**🎉 Recent Achievement:** Full trait bounds support! TypeScript generic constraints like `<T extends Interface>` now compile to proper Rust trait bounds `<T: InterfaceTrait>`, with automatic dual generation of traits (for constraints) and structs (for concrete types). All 878 Phase 3 tests passing with 100% runtime equivalence between JavaScript and Rust output.
+- **Automatic Structural Types**: Transparent mapping of TypeScript structural typing to Rust nominal typing
 
 The compiler's **DAG validation** (Phase 2) ensures that generated Rust code is memory-leak-free by preventing reference cycles at compile time. Complex data structures use the [pool pattern](docs/POOL-PATTERN.md) to maintain DAG invariants while supporting natural graph/tree topologies.
 

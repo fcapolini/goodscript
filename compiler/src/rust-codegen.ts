@@ -27,6 +27,17 @@ export class RustCodegen {
   private checker?: ts.TypeChecker;  // Optional type checker for type inference
   private inGenericFunction = false;  // Track if we're inside a generic function with trait bounds
   private genericParameterNames = new Set<string>();  // Track generic parameter names in current scope
+  // Track interface traits and their required fields for automatic trait implementation
+  private interfaceTraits = new Map<string, Array<{name: string, type: string}>>();  // Maps TraitName -> [{fieldName, fieldType}]
+  private syntheticTypeCounter = 0;  // Counter for generating unique synthetic type names
+  
+  // Synthetic nominal types for structural typing
+  private syntheticTypes = new Map<string, {
+    name: string;
+    fields: Array<{ name: string; type: string }>;
+    traits: Set<string>;  // Traits this type should implement
+  }>();
+  private syntheticTypeDeclarations: string[] = [];  // Generated struct + impl code
   
   constructor(checker?: ts.TypeChecker) {
     this.checker = checker;
@@ -74,6 +85,10 @@ export class RustCodegen {
     this.integerVariables = new Set();
     this.inSwitchCaseClosure = false;
     this.hasAsync = false;
+    this.syntheticTypes = new Map();
+    this.syntheticTypeDeclarations = [];
+    this.interfaceTraits = new Map();
+    this.syntheticTypeCounter = 0;
   }
   
   /**
@@ -94,6 +109,12 @@ export class RustCodegen {
         lines.push(imp);
       }
       lines.push(''); // Blank line after imports
+    }
+    
+    // Add synthetic type declarations
+    if (this.syntheticTypeDeclarations.length > 0) {
+      lines.push(...this.syntheticTypeDeclarations);
+      lines.push(''); // Blank line after synthetic types
     }
     
     // Add generated code
@@ -1139,6 +1160,17 @@ export class RustCodegen {
     const name = iface.name.getText();
     const pubModifier = isExported ? 'pub ' : '';
     const typeParams = this.generateTypeParameters(iface.typeParameters);
+    
+    // Track this interface's trait signature for synthetic type generation
+    const traitFields: Array<{name: string, type: string}> = [];
+    for (const member of iface.members) {
+      if (ts.isPropertySignature(member)) {
+        const fieldName = member.name?.getText() || 'unknown';
+        const fieldType = member.type ? this.generateType(member.type) : 'String';
+        traitFields.push({name: fieldName, type: fieldType});
+      }
+    }
+    this.interfaceTraits.set(`${name}Trait`, traitFields);
     
     // Generate as both a trait (for generic constraints) and a struct (for concrete usage)
     
@@ -2496,6 +2528,202 @@ export class RustCodegen {
   }
   
   /**
+   * Create a synthetic nominal type for a structural type (object literal)
+   * Returns the struct name to use
+   */
+  private createSyntheticType(expr: ts.ObjectLiteralExpression, requiredTraits: Set<string> = new Set()): string {
+    // Extract field information from the object literal
+    const fields: Array<{ name: string; type: string }> = [];
+    
+    for (const prop of expr.properties) {
+      if (ts.isPropertyAssignment(prop)) {
+        const name = prop.name.getText();
+        const rustType = this.inferRustType(prop.initializer);
+        fields.push({ name, type: rustType });
+      } else if (ts.isShorthandPropertyAssignment(prop)) {
+        const name = prop.name.getText();
+        // For shorthand, try to infer from the identifier
+        const rustType = this.inferRustTypeFromIdentifier(prop.name);
+        fields.push({ name, type: rustType });
+      }
+    }
+    
+    // Create a signature for this structure (sorted field names and types)
+    const signature = fields
+      .map(f => `${f.name}:${f.type}`)
+      .sort()
+      .join(',');
+    
+    // Check if we already have this synthetic type
+    if (this.syntheticTypes.has(signature)) {
+      const existing = this.syntheticTypes.get(signature)!;
+      // Add any new required traits
+      requiredTraits.forEach(trait => existing.traits.add(trait));
+      return existing.name;
+    }
+    
+    // Generate a unique struct name using sequential numbering
+    this.syntheticTypeCounter++;
+    const typeName = `AnonymousType${this.syntheticTypeCounter}`;
+    
+    // Store the synthetic type
+    this.syntheticTypes.set(signature, {
+      name: typeName,
+      fields,
+      traits: new Set(requiredTraits)
+    });
+    
+    // Generate the struct definition
+    this.generateSyntheticTypeDeclaration(typeName, fields, requiredTraits);
+    
+    return typeName;
+  }
+  
+  /**
+   * Generate the Rust code for a synthetic type
+   */
+  private generateSyntheticTypeDeclaration(
+    typeName: string,
+    fields: Array<{ name: string; type: string }>,
+    traits: Set<string>
+  ): void {
+    const lines: string[] = [];
+    
+    // Generate struct
+    lines.push(`#[derive(Clone)]`);
+    lines.push(`struct ${typeName} {`);
+    for (const field of fields) {
+      lines.push(`    ${field.name}: ${field.type},`);
+    }
+    lines.push(`}`);
+    lines.push('');
+    
+    // Generate inherent impl (for field access via methods)
+    lines.push(`impl ${typeName} {`);
+    for (const field of fields) {
+      lines.push(`    fn ${field.name}(&self) -> ${field.type} {`);
+      lines.push(`        self.${field.name}.clone()`);
+      lines.push(`    }`);
+    }
+    lines.push(`}`);
+    lines.push('');
+    
+    // Auto-detect which traits this type can implement based on its fields
+    const implementableTraits = this.findImplementableTraits(fields);
+    
+    // Generate trait implementations for both explicitly requested and auto-detected traits
+    const allTraits = new Set([...traits, ...implementableTraits]);
+    
+    for (const traitName of allTraits) {
+      const traitFields = this.interfaceTraits.get(traitName);
+      if (!traitFields) {
+        continue;  // Skip if we don't know about this trait
+      }
+      
+      // Check if this type has all the required fields for this trait
+      const canImplement = traitFields.every(requiredField => 
+        fields.some(f => f.name === requiredField.name && f.type === requiredField.type)
+      );
+      
+      if (canImplement) {
+        lines.push(`impl ${traitName} for ${typeName} {`);
+        for (const requiredField of traitFields) {
+          lines.push(`    fn ${requiredField.name}(&self) -> ${requiredField.type} {`);
+          lines.push(`        self.${requiredField.name}.clone()`);
+          lines.push(`    }`);
+        }
+        lines.push(`}`);
+        lines.push('');
+      }
+    }
+    
+    this.syntheticTypeDeclarations.push(...lines);
+  }
+  
+  /**
+   * Find which traits a synthetic type can implement based on its fields
+   * Returns trait names that match the type's field signature
+   */
+  private findImplementableTraits(fields: Array<{ name: string; type: string }>): string[] {
+    const implementable: string[] = [];
+    
+    // Check each known trait to see if this type has all required fields
+    for (const [traitName, traitFields] of this.interfaceTraits) {
+      const hasAllFields = traitFields.every(requiredField =>
+        fields.some(f => f.name === requiredField.name && f.type === requiredField.type)
+      );
+      
+      if (hasAllFields) {
+        implementable.push(traitName);
+      }
+    }
+    
+    return implementable;
+  }
+  
+  /**
+   * Infer Rust type from a TypeScript expression
+   */
+  private inferRustType(expr: ts.Expression): string {
+    if (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) {
+      return 'String';
+    }
+    if (ts.isNumericLiteral(expr)) {
+      return 'f64';
+    }
+    if (expr.kind === ts.SyntaxKind.TrueKeyword || expr.kind === ts.SyntaxKind.FalseKeyword) {
+      return 'bool';
+    }
+    if (ts.isArrayLiteralExpression(expr)) {
+      // Try to infer element type
+      if (expr.elements.length > 0) {
+        const elementType = this.inferRustType(expr.elements[0]);
+        return `Vec<${elementType}>`;
+      }
+      return 'Vec<String>'; // Default
+    }
+    
+    // Try using type checker if available
+    if (this.checker) {
+      const type = this.checker.getTypeAtLocation(expr);
+      if (type) {
+        return this.mapTypeScriptTypeToRust(type);
+      }
+    }
+    
+    return 'String'; // Default fallback
+  }
+  
+  /**
+   * Infer Rust type from an identifier (for shorthand properties)
+   */
+  private inferRustTypeFromIdentifier(identifier: ts.Identifier): string {
+    if (this.checker) {
+      const symbol = this.checker.getSymbolAtLocation(identifier);
+      if (symbol && symbol.valueDeclaration) {
+        const type = this.checker.getTypeOfSymbolAtLocation(symbol, identifier);
+        return this.mapTypeScriptTypeToRust(type);
+      }
+    }
+    return 'String'; // Default fallback
+  }
+  
+  /**
+   * Map TypeScript type to Rust type
+   */
+  private mapTypeScriptTypeToRust(type: ts.Type): string {
+    const typeStr = this.checker?.typeToString(type) || '';
+    
+    if (typeStr === 'string') return 'String';
+    if (typeStr === 'number') return 'f64';
+    if (typeStr === 'boolean') return 'bool';
+    if (typeStr.startsWith('string[]') || typeStr.includes('Array<string>')) return 'Vec<String>';
+    if (typeStr.startsWith('number[]') || typeStr.includes('Array<number>')) return 'Vec<f64>';
+    
+    return 'String'; // Default
+  }
+  
+  /**
    * Generate object literal
    */
   private generateObjectLiteral(expr: ts.ObjectLiteralExpression): string {
@@ -2505,7 +2733,11 @@ export class RustCodegen {
     if (this.checker) {
       const contextualType = this.checker.getContextualType(expr);
       if (contextualType && contextualType.symbol) {
-        structName = contextualType.symbol.name;
+        const symbolName = contextualType.symbol.name;
+        // Skip TypeScript's internal anonymous object type marker
+        if (symbolName !== '__object' && symbolName !== '__type') {
+          structName = symbolName;
+        }
       }
     }
     
@@ -2514,48 +2746,57 @@ export class RustCodegen {
       return this.generateObjectLiteralWithType(expr, structName);
     }
     
-    // Otherwise, generate anonymous struct
-    // Check for spread assignments
-    const hasSpread = expr.properties.some(prop => ts.isSpreadAssignment(prop));
+    // No contextual type - create a synthetic nominal type for this structural type
+    // Determine if this object literal needs to implement any traits
+    // (This happens when used as argument to generic functions with trait bounds)
+    const requiredTraits = this.inferRequiredTraits(expr);
     
-    if (hasSpread) {
-      // For spread, we need to create a new object and merge properties
-      // In Rust, use struct update syntax: MyStruct { field: value, ..other }
-      // NOTE: ..spread MUST come last in Rust
-      const normalProps: string[] = [];
-      const spreadProps: string[] = [];
+    const syntheticTypeName = this.createSyntheticType(expr, requiredTraits);
+    
+    // Now generate the object literal using the synthetic type
+    return this.generateObjectLiteralWithType(expr, syntheticTypeName);
+  }
+  
+  /**
+   * Infer which traits an object literal needs to implement based on its usage context
+   */
+  private inferRequiredTraits(expr: ts.ObjectLiteralExpression): Set<string> {
+    const traits = new Set<string>();
+    
+    if (!this.checker) {
+      return traits;
+    }
+    
+    // Get the parent node to understand usage context
+    const parent = expr.parent;
+    
+    // Check if it's being passed as an argument to a function
+    if (ts.isCallExpression(parent)) {
+      const callExpr = parent;
+      const signature = this.checker.getResolvedSignature(callExpr);
       
-      for (const prop of expr.properties) {
-        if (ts.isSpreadAssignment(prop)) {
-          const spreadExpr = this.generateExpression(prop.expression);
-          spreadProps.push(`..${spreadExpr}`);
-        } else if (ts.isPropertyAssignment(prop)) {
-          const name = prop.name.getText();
-          const value = this.generateExpressionWithTypeHint(prop.initializer, this.getPropertyType(expr, name));
-          normalProps.push(`${name}: ${value}`);
-        } else if (ts.isShorthandPropertyAssignment(prop)) {
-          const name = prop.name.getText();
-          normalProps.push(`${name}: ${name}`);
+      if (signature) {
+        const argIndex = callExpr.arguments.indexOf(expr);
+        if (argIndex >= 0 && argIndex < signature.parameters.length) {
+          const param = signature.parameters[argIndex];
+          const paramType = this.checker.getTypeOfSymbolAtLocation(param, param.valueDeclaration!);
+          
+          // Check if parameter has a constraint (trait bound)
+          if (paramType && paramType.symbol && paramType.symbol.declarations) {
+            for (const decl of paramType.symbol.declarations) {
+              if (ts.isTypeParameterDeclaration(decl) && decl.constraint) {
+                if (ts.isTypeReferenceNode(decl.constraint)) {
+                  const traitName = decl.constraint.typeName.getText() + 'Trait';
+                  traits.add(traitName);
+                }
+              }
+            }
+          }
         }
       }
-      
-      const allParts = [...normalProps, ...spreadProps];
-      return `{ ${allParts.join(', ')} }`;
-    } else {
-      const properties = expr.properties.map(prop => {
-        if (ts.isPropertyAssignment(prop)) {
-          const name = prop.name.getText();
-          const value = this.generateExpressionWithTypeHint(prop.initializer, this.getPropertyType(expr, name));
-          return `${name}: ${value}`;
-        } else if (ts.isShorthandPropertyAssignment(prop)) {
-          const name = prop.name.getText();
-          return `${name}: ${name}`;
-        }
-        return '';
-      }).filter(p => p !== '').join(', ');
-      
-      return `{ ${properties} }`;
     }
+    
+    return traits;
   }
 
   /**
