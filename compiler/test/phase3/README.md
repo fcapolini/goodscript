@@ -56,6 +56,7 @@ npm test -- test/phase3/rust-validation.test.ts
 ## Test Structure
 
 - `runtime-equivalence.test.ts` - **Runtime equivalence tests** (NEW) - Execute JS and Rust, compare outputs
+- `concrete-examples.test.ts` - **Real-world programs** (NEW) - Complete algorithms (N-Queens, etc.)
 - `basic-types.test.ts` - Primitive type translation
 - `ownership-types.test.ts` - Unique/Shared/Weak type translation
 - `classes.test.ts` - Class to struct+impl translation

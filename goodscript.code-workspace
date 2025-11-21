@@ -23,7 +23,8 @@
 			"**/Thumbs.db": true,
 			"compiler": true,
 			"extension": true,
-			"vite-plugin": true
+			"vite-plugin": true,
+			"demos": true
 		},
 		"explorerExclude.backup": {}
 	}
