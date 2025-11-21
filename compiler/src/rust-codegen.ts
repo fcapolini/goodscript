@@ -99,9 +99,20 @@ export class RustCodegen {
         ? this.allPathsReturn(lastStatement.thenStatement)
         : ts.isReturnStatement(lastStatement.thenStatement);
       
-      const elseReturns = ts.isBlock(lastStatement.elseStatement)
-        ? this.allPathsReturn(lastStatement.elseStatement)
-        : ts.isReturnStatement(lastStatement.elseStatement);
+      // For else branch, need to handle both block and if-else chains
+      let elseReturns = false;
+      if (ts.isBlock(lastStatement.elseStatement)) {
+        elseReturns = this.allPathsReturn(lastStatement.elseStatement);
+      } else if (ts.isReturnStatement(lastStatement.elseStatement)) {
+        elseReturns = true;
+      } else if (ts.isIfStatement(lastStatement.elseStatement)) {
+        // Recursively check nested if statement
+        const syntheticBlock: ts.Block = {
+          kind: ts.SyntaxKind.Block,
+          statements: ts.factory.createNodeArray([lastStatement.elseStatement]),
+        } as any;
+        elseReturns = this.allPathsReturn(syntheticBlock);
+      }
       
       return thenReturns && elseReturns;
     }
@@ -3289,6 +3300,23 @@ export class RustCodegen {
         left = `${left} as f64`;
       } else if (rightIsInteger) {
         right = `${right} as f64`;
+      }
+    }
+    
+    // Handle integer literals in arithmetic with f64 expressions
+    // If one side is a cast to f64 or contains f64, convert integer literals on the other side
+    if ((op === '+' || op === '-' || op === '*' || op === '/' || op === '%')) {
+      const leftHasFloat = left.includes('as f64') || left.includes('.0');
+      const rightHasFloat = right.includes('as f64') || right.includes('.0');
+      const leftIsIntLiteral = ts.isNumericLiteral(expr.left) && !expr.left.getText().includes('.');
+      const rightIsIntLiteral = ts.isNumericLiteral(expr.right) && !expr.right.getText().includes('.');
+      
+      if (leftHasFloat && rightIsIntLiteral) {
+        // Right side is int literal, left has float - add .0 to right
+        right = right + '.0';
+      } else if (rightHasFloat && leftIsIntLiteral) {
+        // Left side is int literal, right has float - add .0 to left
+        left = left + '.0';
       }
     }
     

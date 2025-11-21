@@ -4,7 +4,7 @@
 
 **GoodScript** is a TypeScript variant with ownership semantics that compiles to both TypeScript/JavaScript and Rust. It eliminates JavaScript's "bad parts" and adds a three-tier ownership system for deterministic memory management.
 
-**Current Status**: Language level "clean" (Phase 1) complete with 244 tests passing. Language level "dag" (Phase 2) complete with 425 tests passing and 100% coverage. Phase 3 (Rust code generation) is in progress with 878 tests passing - basic AST translation, ownership type mapping, core features, async/await, and trait bounds all working with comprehensive runtime validation. Phase 4 (ecosystem integration) is planned.
+**Current Status**: Language level "clean" (Phase 1) complete with 244 tests passing. Language level "dag" (Phase 2) complete with 425 tests passing and 100% coverage. Phase 3 (Rust code generation) is in progress with 906 tests passing - basic AST translation, ownership type mapping, core features, async/await, and trait bounds all working with comprehensive runtime validation. Phase 4 (ecosystem integration) is planned.
 
 ## Core Concepts
 
@@ -261,4 +261,4 @@ npm run test:watch          # Watch mode
 ## Session Notes
 Development session summaries are in `/notes/SESSION-X.md`. Always check the latest session note to understand recent changes and context.
 
-**Latest:** Session 24 - Smart Vec initialization with pattern analysis
+**Latest:** Session 25 - Array assignment fix, Option handling, control flow analysis, and integer literal conversion

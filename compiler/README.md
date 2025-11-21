@@ -8,7 +8,7 @@ The compiler implements GoodScript in four phases:
 
 - **Phase 1** (✅ Complete): Strict TypeScript semantics - eliminates JavaScript "bad parts" (244 tests) - [Details](../docs/PHASE-1-CLEAN.md)
 - **Phase 2** (✅ Complete): Ownership analysis and DAG validation (425 tests, 100% coverage) - [Details](../docs/PHASE-2-DAG.md)
-- **Phase 3** (🚧 In Progress): Rust code generation - **First successful executable!** N-Queens compiles and runs correctly (901/903 tests passing) - [Details](../docs/PHASE-3-RUST.md)
+- **Phase 3** (🚧 In Progress): Rust code generation - **First successful executable!** N-Queens compiles and runs correctly (906/912 tests passing) - [Details](../docs/PHASE-3-RUST.md)
 - **Phase 4** (📋 Planned): Ecosystem integration - Cargo, standard library, WASM, deployment tools - [Details](../docs/PHASE-4-ECOSYSTEM.md)
 
 ## Installation
