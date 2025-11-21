@@ -81,7 +81,12 @@
   - Parameter mutability: `mut param` when parameter is reassigned
   - Field access: automatic `self.field` prefixing in methods
   - Method calls: automatic `self.method()` for cross-method calls
-  - Vec initialization: smart sizing based on parameters (e.g., `vec![0.0; (N * N) as usize]`)
+  - **Smart Vec initialization**: Analyzes method bodies to detect array initialization patterns
+    * Finds loops like `for (let i = 0; i < SIZE; i++) array[i] = value`
+    * Extracts SIZE expression from loop condition
+    * Generates proper `vec![default; size]` in constructor
+    * Supports complex expressions: `N * N`, `size * 2 + 10`, etc.
+    * Example: detects `for (i = 0; i < N * N; i++)` → generates `vec![0.0; (N * N) as usize]`
   - Eliminates Rust borrow checker issues with shared mutable captures
   - Pattern: outer function → struct, inner closures → methods, local vars → fields
 - **Module Exports** - Named exports with `pub` visibility, default exports for arrow functions

@@ -2848,6 +2848,9 @@ export class RustCodegen {
     this.emit(`impl ${structName} {`);
     this.indent();
     
+    // Analyze Vec field usage to determine initialization size
+    const vecSizes = this.analyzeVecFieldUsage(fields, methods, outerParams);
+    
     // Generate new() constructor
     this.emit(`fn new(${outerParams.map(p => `${p.name}: ${p.type}`).join(', ')}) -> Self {`);
     this.indent();
@@ -2858,12 +2861,10 @@ export class RustCodegen {
     }
     for (const field of fields) {
       if (field.initializer) {
-        // Special case: if this is a Vec and we have parameters that look like size,
-        // initialize with capacity/size
-        if (field.initializer === 'Vec::new()' && outerParams.length > 0) {
-          // Heuristic: if first param looks like a size (N, size, length), use it
-          const sizeParam = outerParams[0];
-          this.emit(`${field.name}: vec![0.0; (${sizeParam.name} * ${sizeParam.name}) as usize],`);
+        // Check if we detected a size for this Vec field
+        if (field.initializer === 'Vec::new()' && vecSizes.has(field.name)) {
+          const sizeExpr = vecSizes.get(field.name)!;
+          this.emit(`${field.name}: vec![0.0; ${sizeExpr}],`);
         } else {
           this.emit(`${field.name}: ${field.initializer},`);
         }
@@ -3018,6 +3019,123 @@ export class RustCodegen {
     }
     
     return mutableParams;
+  }
+  
+  /**
+   * Analyze how Vec fields are used to determine appropriate initialization size
+   * Looks for patterns like:
+   * - for (let i = 0; i < N; i++) array[i] = x  →  vec![default; N]
+   * - for (let i = 0; i < N * N; i++) array[i] = x  →  vec![default; N * N]
+   */
+  private analyzeVecFieldUsage(
+    fields: Array<{name: string, type: string, initializer?: string}>,
+    methods: Array<{name: string, body: ts.Block | ts.Expression}>,
+    outerParams: Array<{name: string, type: string}>
+  ): Map<string, string> {
+    const sizes = new Map<string, string>();
+    
+    // Find Vec fields
+    const vecFields = fields.filter(f => f.type.startsWith('Vec<'));
+    if (vecFields.length === 0) return sizes;
+    
+    // Look for initialization patterns in methods
+    for (const method of methods) {
+      if (!ts.isBlock(method.body)) continue;
+      
+      for (const statement of method.body.statements) {
+        // Look for: for (let i = 0; i < SIZE; i++) vecField[i] = value
+        if (ts.isForStatement(statement)) {
+          const arrayAssignments = this.findArrayAssignmentsInLoop(statement, vecFields.map(f => f.name));
+          
+          for (const [fieldName, sizeExpr] of arrayAssignments) {
+            if (!sizes.has(fieldName)) {
+              // Convert size expression to Rust
+              const rustSize = this.convertSizeExpression(sizeExpr, outerParams);
+              sizes.set(fieldName, rustSize);
+            }
+          }
+        }
+      }
+    }
+    
+    return sizes;
+  }
+  
+  /**
+   * Find array assignments in a for loop and extract the size from loop condition
+   */
+  private findArrayAssignmentsInLoop(
+    forLoop: ts.ForStatement,
+    vecFieldNames: string[]
+  ): Map<string, ts.Expression> {
+    const assignments = new Map<string, ts.Expression>();
+    
+    // Check if this is a standard for loop: for (let i = 0; i < SIZE; i++)
+    if (!forLoop.condition || !ts.isBinaryExpression(forLoop.condition)) return assignments;
+    
+    const condition = forLoop.condition;
+    // Get the size expression from condition (i < SIZE or i < N * N, etc.)
+    if (condition.operatorToken.kind !== ts.SyntaxKind.LessThanToken &&
+        condition.operatorToken.kind !== ts.SyntaxKind.LessThanEqualsToken) {
+      return assignments;
+    }
+    
+    const sizeExpr = condition.right;
+    
+    // Check if loop body contains array assignments
+    if (forLoop.statement) {
+      this.visitNodeForArrayAssignments(forLoop.statement, vecFieldNames, sizeExpr, assignments);
+    }
+    
+    return assignments;
+  }
+  
+  /**
+   * Visit AST nodes looking for array element assignments
+   */
+  private visitNodeForArrayAssignments(
+    node: ts.Node,
+    vecFieldNames: string[],
+    sizeExpr: ts.Expression,
+    assignments: Map<string, ts.Expression>
+  ): void {
+    if (ts.isExpressionStatement(node)) {
+      node = node.expression;
+    }
+    
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+      // Check if left side is array[index]
+      if (ts.isElementAccessExpression(node.left)) {
+        const arrayName = node.left.expression.getText();
+        if (vecFieldNames.includes(arrayName) && !assignments.has(arrayName)) {
+          assignments.set(arrayName, sizeExpr);
+        }
+      }
+    }
+    
+    if (ts.isBlock(node)) {
+      for (const statement of node.statements) {
+        this.visitNodeForArrayAssignments(statement, vecFieldNames, sizeExpr, assignments);
+      }
+    }
+  }
+  
+  /**
+   * Convert a TypeScript size expression to Rust
+   */
+  private convertSizeExpression(
+    expr: ts.Expression,
+    outerParams: Array<{name: string, type: string}>
+  ): string {
+    // For simple identifiers or expressions, generate as-is and cast to usize
+    const exprText = this.generateExpression(expr);
+    
+    // If it's already a simple param name, just cast
+    if (outerParams.some(p => exprText.includes(p.name))) {
+      return `(${exprText}) as usize`;
+    }
+    
+    return `(${exprText}) as usize`;
   }
   
   /**
