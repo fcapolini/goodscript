@@ -6,7 +6,7 @@ Write clean TypeScript. Get native performance. No borrow checker required.
 
 ---
 
-> ⚠️ **BETA STAGE**: GoodScript is under active development. Phase 1 (parsing, validation, JS target) is complete. Phase 2 (ownership analysis, DAG validation) is complete with 100% test coverage. Phase 3 (Rust code generation) is in progress with 449 tests passing and comprehensive runtime equivalence coverage. APIs and language features may change.
+> ⚠️ **ALPHA STAGE**: GoodScript is under active development. Phase 1 (parsing, validation, JS target) is complete. Phase 2 (ownership analysis, DAG validation) is complete with 100% test coverage. Phase 3 (Rust code generation) is in progress with 449 tests passing and comprehensive runtime equivalence coverage. APIs and language features may change.
 
 ---
 
@@ -17,7 +17,7 @@ Write clean TypeScript. Get native performance. No borrow checker required.
   - No type coercion, no `var`, no truthiness, no `this` surprises
   - Strict equality operators only (`===`, `!==`)
   - GoodScript sources use the `*.gs.ts` extension (or `*.gs.tsx` for React/JSX)
-  - JSX/TSX support for web development (TypeScript output only)
+  - JSX/TSX support for web development (JavaScript output only)
 
 - **A TypeScript to Rust transpiler**
   - Reference counting with ownership tracking (no GC, no borrow checker)
@@ -37,7 +37,7 @@ The second part leverages what is now an enterprise level, fully statically type
 
 ## Clean TypeScript
 
-> Thanks to TypeScript the world moved on from plain JavaScript. It's time to get rid of its baggage too.
+> Thanks to TypeScript the world moved on from plain JavaScript. GoodScript lets you get rid of its baggage too.
 
 GoodScript can be **incrementally adopted** in existing TypeScript projects. Use the `.gs.ts` file extension for GoodScript sources (or `.gs.tsx` for React/JSX components) and continue using `.ts` for standard TypeScript files—they work side by side seamlessly.
 
@@ -96,7 +96,7 @@ Configure in `tsconfig.json`:
 
 ## Rust transpiler
 
-> Clean TypeScript can in fact be a proper, excellent enterprise-level language.
+> Clean TypeScript can be an excellent systems programming language too.
 
 In **Phase 3** (now in progress), GoodScript transpiles to **optimized Rust source code**, delivering:
 
@@ -121,27 +121,6 @@ cargo build --release
 ```
 
 The Rust backend will support both server-side applications and browser WASM modules, making GoodScript suitable for performance-critical full-stack development.
-
-### Development Workflow: Validate with JavaScript, Deploy with Rust
-
-A powerful GoodScript workflow is to **develop and test with the TypeScript/JavaScript target**, then **compile to Rust for production deployment**:
-
-1. **Rapid Development** - Use the JS target for fast iteration cycles
-   - Instant compilation and hot reload
-   - Familiar debugging tools (Chrome DevTools, VS Code debugger)
-   - Access to the entire npm ecosystem for testing and development tools
-
-2. **Validate Correctness** - Prove your application logic works in JavaScript
-   - Run comprehensive test suites with Jest, Vitest, or Mocha
-   - Use level "dag" to validate ownership semantics compile-time
-   - Catch logic errors before dealing with Rust compilation
-
-3. **Deploy to Rust** - Compile the validated codebase for production
-   - Same source code, two targets (no platform-specific code needed)
-   - Native performance with deterministic memory management
-   - Self-contained binaries with no runtime dependencies
-
-This dual-target strategy combines JavaScript's developer ergonomics with Rust's production performance, enabling teams to move fast during development while delivering optimized native applications to users.
 
 ## Language Overview
 
@@ -306,7 +285,9 @@ export { Button };
 - **No `var`** - Block-scoped variables only (`const`, `let`)
 - **No `any` type** - Full type safety across your component tree
 
-These restrictions enforce cleaner, more maintainable code that's easier to understand and refactor. Perfect for large React codebases where consistency and readability matter. This support also removes the burden of mentally switching "language level" mode in full-stack projects using GoodScript for the backend. Level 2 ownership types are also supported in `.gs.tsx` files for consistency in full-stack projects, though they provide no runtime benefit when compiling to JavaScript.
+These restrictions enforce cleaner, more maintainable code that's easier to understand and refactor. Perfect for large React codebases where consistency and readability matter.
+
+This support also removes the burden of mentally switching "language level" mode in full-stack projects using GoodScript for the backend. Level 2 ownership types are also supported in `.gs.tsx` files for consistency in full-stack projects, though they provide no runtime benefit when compiling to JavaScript.
 
 **Key points:**
 - Use `.gs.tsx` extension for JSX/React components
