@@ -18,7 +18,7 @@ const nQueens = (N: number) => {
       x--; y--;
     }
     while (x < N && y < N) {
-      if (get(x, y)) {
+      if (get(x, y) !== 0) {
         return false;
       }
       x++; y++;
@@ -31,7 +31,7 @@ const nQueens = (N: number) => {
       x--; y++;
     }
     while (x < N && y >= 0) {
-      if (get(x, y)) {
+      if (get(x, y) !== 0) {
         return false;
       }
       x++; y--;
@@ -41,10 +41,10 @@ const nQueens = (N: number) => {
 
   const check = (x: number, y: number): boolean => {
     for (let i = 0; i < N; i++) {
-      if (get(i, y)) {
+      if (get(i, y) !== 0) {
         return false;
       }
-      if (get(x, i)) {
+      if (get(x, i) !== 0) {
         return false;
       }
     }

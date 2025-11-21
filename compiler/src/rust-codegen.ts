@@ -27,6 +27,13 @@ export class RustCodegen {
   private checker?: ts.TypeChecker;  // Optional type checker for type inference
   private inGenericFunction = false;  // Track if we're inside a generic function with trait bounds
   private genericParameterNames = new Set<string>();  // Track generic parameter names in current scope
+  private recursiveFunctions = new Set<string>();  // Track which functions are recursive (direct or indirect)
+  private currentRecursiveFunctionName?: string;  // Track current recursive function we're generating body for
+  private refCellVariables = new Set<string>();  // Track variables wrapped in Rc<RefCell<>> for shared mutability
+  private structMethods = new Set<string>();  // Track method names when generating struct-based functions
+  private structFields = new Set<string>();  // Track field names when generating struct-based methods
+  private inStructWrapper = false;  // Track if we're inside the wrapper function of a struct
+  private inStructMethod = false;  // Track if we're inside a struct method
   // Track interface traits and their required fields for automatic trait implementation
   private interfaceTraits = new Map<string, Array<{name: string, type: string}>>();  // Maps TraitName -> [{fieldName, fieldType}]
   private syntheticTypeCounter = 0;  // Counter for generating unique synthetic type names
@@ -66,6 +73,161 @@ export class RustCodegen {
     });
     
     return found;
+  }
+  
+  /**
+   * Check if all code paths in a block definitely return
+   * This is more precise than containsReturnStatement
+   */
+  private allPathsReturn(block: ts.Block): boolean {
+    if (block.statements.length === 0) {
+      return false;
+    }
+    
+    const lastStatement = block.statements[block.statements.length - 1];
+    
+    // If last statement is a return, we definitely return
+    if (ts.isReturnStatement(lastStatement)) {
+      return true;
+    }
+    
+    // If last statement is if/else, check if both branches return
+    if (ts.isIfStatement(lastStatement) && lastStatement.elseStatement) {
+      const thenReturns = ts.isBlock(lastStatement.thenStatement)
+        ? this.allPathsReturn(lastStatement.thenStatement)
+        : ts.isReturnStatement(lastStatement.thenStatement);
+      
+      const elseReturns = ts.isBlock(lastStatement.elseStatement)
+        ? this.allPathsReturn(lastStatement.elseStatement)
+        : ts.isReturnStatement(lastStatement.elseStatement);
+      
+      return thenReturns && elseReturns;
+    }
+    
+    // Otherwise, we don't definitely return
+    return false;
+  }
+  
+  /**
+   * Check if a function calls itself (is recursive)
+   * @param func The function to check
+   * @param functionName The name of the function variable
+   */
+  private isRecursiveFunction(func: ts.ArrowFunction | ts.FunctionDeclaration, functionName: string): boolean {
+    let hasRecursiveCall = false;
+    
+    const visit = (node: ts.Node): void => {
+      // Check if this is a call to the function itself
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+        if (node.expression.text === functionName) {
+          hasRecursiveCall = true;
+        }
+      }
+      
+      // Don't recurse into nested function declarations/expressions
+      if (node !== func && (ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node))) {
+        return;
+      }
+      
+      ts.forEachChild(node, visit);
+    };
+    
+    visit(func);
+    return hasRecursiveCall;
+  }
+  
+  /**
+   * Build a call graph for all arrow functions in a block to detect mutual recursion
+   * Returns a map of function names to the set of functions they call
+   */
+  private buildCallGraph(statements: readonly ts.Statement[]): Map<string, Set<string>> {
+    const callGraph = new Map<string, Set<string>>();
+    const arrowFunctions = new Map<string, ts.ArrowFunction>();
+    
+    // First pass: collect all arrow function declarations
+    for (const statement of statements) {
+      if (ts.isVariableStatement(statement)) {
+        for (const decl of statement.declarationList.declarations) {
+          if (ts.isIdentifier(decl.name) && decl.initializer && ts.isArrowFunction(decl.initializer)) {
+            const name = decl.name.text;
+            arrowFunctions.set(name, decl.initializer);
+            callGraph.set(name, new Set());
+          }
+        }
+      }
+    }
+    
+    // Second pass: analyze calls in each function
+    for (const [funcName, func] of arrowFunctions) {
+      const calls = callGraph.get(funcName)!;
+      
+      const visit = (node: ts.Node): void => {
+        // Check if this is a call to another function in our scope
+        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+          const calledName = node.expression.text;
+          if (arrowFunctions.has(calledName)) {
+            calls.add(calledName);
+          }
+        }
+        
+        // Don't recurse into nested function declarations
+        if (node !== func && (ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node))) {
+          return;
+        }
+        
+        ts.forEachChild(node, visit);
+      };
+      
+      visit(func);
+    }
+    
+    return callGraph;
+  }
+  
+  /**
+   * Find all functions involved in recursive cycles (direct or indirect)
+   * Uses depth-first search to detect cycles in the call graph
+   */
+  private findRecursiveFunctions(callGraph: Map<string, Set<string>>): Set<string> {
+    const recursive = new Set<string>();
+    const visiting = new Set<string>();
+    const visited = new Set<string>();
+    
+    const dfs = (funcName: string): boolean => {
+      if (visited.has(funcName)) {
+        return false;
+      }
+      
+      if (visiting.has(funcName)) {
+        // Found a cycle - all functions in the current path are recursive
+        return true;
+      }
+      
+      visiting.add(funcName);
+      
+      const calls = callGraph.get(funcName);
+      if (calls) {
+        for (const calledFunc of calls) {
+          if (dfs(calledFunc)) {
+            // Mark this function as recursive
+            recursive.add(funcName);
+            recursive.add(calledFunc);
+          }
+        }
+      }
+      
+      visiting.delete(funcName);
+      visited.add(funcName);
+      
+      return recursive.has(funcName);
+    };
+    
+    // Check each function
+    for (const funcName of callGraph.keys()) {
+      dfs(funcName);
+    }
+    
+    return recursive;
   }
   
   /**
@@ -529,8 +691,8 @@ export class RustCodegen {
         this.generateStatement(statement);
       }
       
-      const hasReturnStatement = this.containsReturnStatement(func.body);
-      if (!hasReturnStatement) {
+      const definitelyReturns = this.allPathsReturn(func.body);
+      if (!definitelyReturns) {
         this.emit('Ok(())');
       }
     } else {
@@ -578,8 +740,8 @@ export class RustCodegen {
         this.generateStatement(statement);
       }
       
-      const hasReturnStatement = this.containsReturnStatement(func.body);
-      if (!hasReturnStatement) {
+      const definitelyReturns = this.allPathsReturn(func.body);
+      if (!definitelyReturns) {
         this.emit('Ok(())');
       }
     } else {
@@ -764,6 +926,21 @@ export class RustCodegen {
       } else {
         // Regular identifier binding
         const name = decl.name.getText();
+        
+        // Check if this arrow function should become a struct with methods
+        if (decl.initializer && ts.isArrowFunction(decl.initializer) && 
+            this.shouldGenerateAsStruct(decl.initializer)) {
+          this.generateStructWithMethods(decl.initializer, name);
+          continue;  // Skip normal variable generation
+        }
+        
+        // Check if this is a recursive arrow function - convert to local function
+        if (decl.initializer && ts.isArrowFunction(decl.initializer) && this.recursiveFunctions.has(name)) {
+          // Generate as a local function instead of a closure
+          this.generateRecursiveFunction(decl.initializer, name);
+          continue;  // Skip normal variable generation
+        }
+        
         // Make variables mutable if they're not const, OR if they're initialized with a class instance
         const needsMutable = !isConst || (decl.initializer && ts.isNewExpression(decl.initializer));
         const mutability = needsMutable ? 'mut ' : '';
@@ -778,6 +955,13 @@ export class RustCodegen {
             value = this.generateObjectLiteralWithType(decl.initializer, structName);
           } else {
             value = this.generateExpression(decl.initializer);
+            // If initializing a Vec (Array), wrap in Rc<RefCell<>> for shared mutability across closures
+            // This is needed when multiple closures need to access the same mutable array
+            if (ts.isNewExpression(decl.initializer) && 
+                decl.initializer.expression.getText() === 'Array') {
+              value = `std::rc::Rc::new(std::cell::RefCell::new(${value}))`; 
+              this.refCellVariables.add(name);
+            }
           }
           
           // Check if we need to wrap in Some() for Option types
@@ -1049,9 +1233,9 @@ export class RustCodegen {
     if (func.body) {
       this.generateBlock(func.body);
       
-      // Auto-add Ok(()) if function doesn't have any return statements
-      const hasReturnStatement = this.containsReturnStatement(func.body);
-      if (!hasReturnStatement) {
+      // Auto-add Ok(()) if function doesn't return on all paths
+      const definitelyReturns = this.allPathsReturn(func.body);
+      if (!definitelyReturns) {
         this.emit('Ok(())');
       }
     }
@@ -1205,8 +1389,8 @@ export class RustCodegen {
         if (method.body) {
           this.generateBlock(method.body);
           
-          const hasReturnStatement = this.containsReturnStatement(method.body);
-          if (!hasReturnStatement) {
+          const definitelyReturns = this.allPathsReturn(method.body);
+          if (!definitelyReturns) {
             this.emit('Ok(())');
           }
         }
@@ -1346,8 +1530,8 @@ export class RustCodegen {
       if (method.body) {
         this.generateBlock(method.body);
         
-        const hasReturnStatement = this.containsReturnStatement(method.body);
-        if (!hasReturnStatement) {
+        const definitelyReturns = this.allPathsReturn(method.body);
+        if (!definitelyReturns) {
           this.emit('Ok(())');
         }
       }
@@ -1401,9 +1585,9 @@ export class RustCodegen {
     if (method.body) {
       this.generateBlock(method.body);
       
-      // Auto-add Ok(()) if method doesn't have any return statements
-      const hasReturnStatement = this.containsReturnStatement(method.body);
-      if (!hasReturnStatement) {
+      // Auto-add Ok(()) if method doesn't return on all paths
+      const definitelyReturns = this.allPathsReturn(method.body);
+      if (!definitelyReturns) {
         this.emit('Ok(())');
       }
     }
@@ -1775,13 +1959,22 @@ export class RustCodegen {
   
   /**
    * Convert a numeric expression to an integer literal (strips .0 suffix)
+   * For complex expressions (variables, arithmetic), wraps in "as usize" cast
    */
   private convertToIntegerLiteral(value: string): string {
-    // If it ends with .0, remove it
+    // If it ends with .0, remove it (simple literal)
     if (value.endsWith('.0')) {
       return value.slice(0, -2);
     }
-    return value;
+    
+    // If it's a simple integer literal, return as-is
+    if (/^\d+$/.test(value)) {
+      return value;
+    }
+    
+    // For complex expressions (variables, arithmetic), cast to usize
+    // This handles cases like N, N * N, etc.
+    return `(${value}) as usize`;
   }
   
   /**
@@ -2046,9 +2239,20 @@ export class RustCodegen {
    * Generate block statement
    */
   private generateBlock(block: ts.Block): void {
+    // Analyze the block for recursive functions before generating
+    const callGraph = this.buildCallGraph(block.statements);
+    const recursiveFuncs = this.findRecursiveFunctions(callGraph);
+    
+    // Save previous state and update
+    const prevRecursiveFunctions = this.recursiveFunctions;
+    this.recursiveFunctions = new Set([...prevRecursiveFunctions, ...recursiveFuncs]);
+    
     for (const statement of block.statements) {
       this.generateStatement(statement);
     }
+    
+    // Restore previous state
+    this.recursiveFunctions = prevRecursiveFunctions;
   }
   
   /**
@@ -2213,8 +2417,9 @@ export class RustCodegen {
       }
       return text;
     } else if (ts.isStringLiteral(expr)) {
-      // Convert to Rust string literal
-      return `String::from(${expr.getText()})`;
+      // Convert to Rust string literal (with double quotes)
+      const text = expr.text; // Gets the string content without quotes
+      return `String::from("${text}")`;  // Always use double quotes for Rust
     } else if (expr.kind === ts.SyntaxKind.TrueKeyword) {
       return 'true';
     } else if (expr.kind === ts.SyntaxKind.FalseKeyword) {
@@ -2233,6 +2438,11 @@ export class RustCodegen {
       if (text === 'this') {
         return 'self';
       }
+      // If we're in a struct method and this is a field, prefix with self.
+      if (this.inStructMethod && this.structFields.has(text)) {
+        return `self.${text}`;
+      }
+      // If we're in a struct wrapper and this is a method, it's handled in generateCallExpression
       return text;
     } else if (ts.isArrowFunction(expr)) {
       return this.generateArrowFunction(expr);
@@ -2287,7 +2497,41 @@ export class RustCodegen {
    */
   private generateArrowFunction(func: ts.ArrowFunction): string {
     const params = this.generateParameters(func.parameters);
-    const returnType = func.type ? this.generateType(func.type) : '()';
+    
+    // Determine return type
+    let returnType: string;
+    if (func.type) {
+      // Explicit return type annotation
+      returnType = this.generateType(func.type);
+    } else if (this.checker) {
+      // Try to infer return type using TypeScript's type checker
+      const signature = this.checker.getSignatureFromDeclaration(func);
+      if (signature) {
+        const inferredReturnType = this.checker.getReturnTypeOfSignature(signature);
+        const typeString = this.checker.typeToString(inferredReturnType);
+        
+        // Map TypeScript types to Rust types
+        if (typeString === 'void') {
+          returnType = '()';
+        } else if (typeString === 'number') {
+          returnType = 'f64';
+        } else if (typeString === 'string') {
+          returnType = 'String';
+        } else if (typeString === 'boolean') {
+          returnType = 'bool';
+        } else {
+          // For complex types, try to generate from the inferred type
+          // Fall back to () if we can't infer
+          returnType = '()';
+        }
+      } else {
+        returnType = '()';
+      }
+    } else {
+      // No type annotation and no type checker - default to ()
+      returnType = '()';
+    }
+    
     // Wrap return type in Result<T, String>
     const resultType = `Result<${returnType}, String>`;
     
@@ -2306,6 +2550,14 @@ export class RustCodegen {
       
       this.indent();
       
+      // Analyze for recursive functions before generating
+      const callGraph = this.buildCallGraph(func.body.statements);
+      const recursiveFuncs = this.findRecursiveFunctions(callGraph);
+      
+      // Save and update recursive functions set
+      const prevRecursiveFunctions = this.recursiveFunctions;
+      this.recursiveFunctions = new Set([...prevRecursiveFunctions, ...recursiveFuncs]);
+      
       // Generate destructuring for destructuring parameters
       for (const destructParam of this.destructuringParams) {
         this.generateDestructuringFromPattern(
@@ -2319,10 +2571,13 @@ export class RustCodegen {
         this.generateStatement(statement);
       }
       
-      // Auto-add Ok(()) if function doesn't have any return statements
-      // Check recursively through the entire block
-      const hasReturnStatement = this.containsReturnStatement(func.body);
-      if (!hasReturnStatement) {
+      // Restore recursive functions set
+      this.recursiveFunctions = prevRecursiveFunctions;
+      
+      // Auto-add Ok(()) if function doesn't return on all paths
+      // Use allPathsReturn which checks if all code paths definitely return
+      const definitelyReturns = this.allPathsReturn(func.body);
+      if (!definitelyReturns) {
         this.emit('Ok(())');
       }
       
@@ -2347,6 +2602,432 @@ export class RustCodegen {
   }
   
   /**
+   * Generate a recursive arrow function as an explicit closure structure
+   * Instead of trying to use Rust closures (which can't be recursive), we generate
+   * a struct that holds captured variables and has a call method
+   */
+  private generateRecursiveFunction(func: ts.ArrowFunction, name: string): void {
+    // Collect the names of the parameters
+    const paramNames: string[] = [];
+    const paramTypes: string[] = [];
+    for (const param of func.parameters) {
+      if (ts.isIdentifier(param.name)) {
+        paramNames.push(param.name.text);
+        const paramType = param.type ? this.generateType(param.type) : 'f64';
+        paramTypes.push(paramType);
+      }
+    }
+    
+    // Determine return type
+    let returnType: string;
+    if (func.type) {
+      returnType = this.generateType(func.type);
+    } else if (this.checker) {
+      const signature = this.checker.getSignatureFromDeclaration(func);
+      if (signature) {
+        const inferredReturnType = this.checker.getReturnTypeOfSignature(signature);
+        const typeString = this.checker.typeToString(inferredReturnType);
+        
+        if (typeString === 'void') {
+          returnType = '()';
+        } else if (typeString === 'number') {
+          returnType = 'f64';
+        } else if (typeString === 'string') {
+          returnType = 'String';
+        } else if (typeString === 'boolean') {
+          returnType = 'bool';
+        } else {
+          returnType = '()';
+        }
+      } else {
+        returnType = '()';
+      }
+    } else {
+      returnType = '()';
+    }
+    
+    const resultType = `Result<${returnType}, String>`;
+    const structName = `${this.capitalize(name)}Closure`;
+    
+    // Emit comment explaining the structure
+    this.emit(`// Recursive closure '${name}' implemented as explicit struct`);
+    
+    // For now, generate as a simple closure struct wrapper
+    // We'll use Rc<RefCell<>> for the recursive reference
+    // Build the full type for the closure
+    const closureType = `Box<dyn Fn(${paramTypes.join(', ')}) -> ${resultType}>`;
+    this.emit(`let ${name} = std::rc::Rc::new(std::cell::RefCell::new(None::<${closureType}>));`);
+    this.emit(`let ${name}_clone = ${name}.clone();`);
+    
+    // Build parameter list
+    const params = paramNames.map((n, i) => `${n}: ${paramTypes[i]}`).join(', ');
+    
+    // Generate the closure body
+    this.emit(`*${name}.borrow_mut() = Some(Box::new(move |${params}| -> ${resultType} {`);
+    this.indent();
+    
+    // Track that we're inside this recursive function
+    const previousRecursiveFunctionName = this.currentRecursiveFunctionName;
+    this.currentRecursiveFunctionName = name;
+    
+    // Generate the function body
+    if (ts.isBlock(func.body)) {
+      for (const statement of func.body.statements) {
+        // Replace recursive calls with calls through the Rc
+        this.generateStatement(statement);
+      }
+      
+      const definitelyReturns = this.allPathsReturn(func.body);
+      if (!definitelyReturns) {
+        this.emit('Ok(())');
+      }
+    } else {
+      const body = this.generateExpression(func.body);
+      this.emit(`Ok(${body})`);
+    }
+    
+    // Restore previous recursive function context
+    this.currentRecursiveFunctionName = previousRecursiveFunctionName;
+    
+    this.dedent();
+    this.emit('}));');
+    this.emit('');
+    
+    // Create the callable wrapper
+    this.emit(`let ${name} = move |${params}| -> ${resultType} {`);
+    this.indent();
+    this.emit(`${name}_clone.borrow().as_ref().unwrap()(${paramNames.join(', ')})`);
+    this.dedent();
+    this.emit('};');
+    this.emit('');
+  }
+  
+  /**
+   * Check if an arrow function should be generated as a struct with methods
+   * This is needed when multiple closures share captured mutable state
+   */
+  private shouldGenerateAsStruct(func: ts.ArrowFunction): boolean {
+    if (!ts.isBlock(func.body)) {
+      return false;
+    }
+    
+    // Count arrow function declarations in the body
+    let arrowFunctionCount = 0;
+    let hasSharedVariables = false;
+    
+    for (const statement of func.body.statements) {
+      if (ts.isVariableStatement(statement)) {
+        for (const decl of statement.declarationList.declarations) {
+          // Check if it's an arrow function
+          if (decl.initializer && ts.isArrowFunction(decl.initializer)) {
+            arrowFunctionCount++;
+          }
+          // Check if it's a variable that could be shared (array, object)
+          if (decl.initializer && ts.isNewExpression(decl.initializer)) {
+            hasSharedVariables = true;
+          }
+        }
+      }
+    }
+    
+    // If we have 3+ arrow functions and shared variables, use struct pattern
+    return arrowFunctionCount >= 3 && hasSharedVariables;
+  }
+  
+  /**
+   * Generate an arrow function as a struct with methods
+   * This converts closure-heavy code to more idiomatic Rust
+   */
+  private generateStructWithMethods(func: ts.ArrowFunction, name: string): void {
+    if (!ts.isBlock(func.body)) {
+      return;
+    }
+    
+    const structName = this.capitalize(name);
+    
+    // Collect parameters of the outer function (these become fields)
+    const outerParams: Array<{name: string, type: string}> = [];
+    for (const param of func.parameters) {
+      if (ts.isIdentifier(param.name)) {
+        const paramType = param.type ? this.generateType(param.type) : 'f64';
+        outerParams.push({name: param.name.text, type: paramType});
+      }
+    }
+    
+    // Analyze the function body to find fields and methods
+    const fields: Array<{name: string, type: string, initializer?: string}> = [];
+    const methods: Array<{name: string, params: string[], paramTypes: string[], returnType: string, body: ts.Block | ts.Expression, isMutable: boolean, mutableParams?: Set<string>}> = [];
+    const otherStatements: ts.Statement[] = [];
+    
+    for (const statement of func.body.statements) {
+      if (ts.isVariableStatement(statement)) {
+        for (const decl of statement.declarationList.declarations) {
+          const varName = decl.name.getText();
+          
+          if (decl.initializer && ts.isArrowFunction(decl.initializer)) {
+            // This is a method
+            const arrowFunc = decl.initializer;
+            const params: string[] = [];
+            const paramTypes: string[] = [];
+            
+            for (const param of arrowFunc.parameters) {
+              if (ts.isIdentifier(param.name)) {
+                params.push(param.name.text);
+                paramTypes.push(param.type ? this.generateType(param.type) : 'f64');
+              }
+            }
+            
+            let returnType = '()';
+            if (arrowFunc.type) {
+              returnType = this.generateType(arrowFunc.type);
+            } else if (this.checker) {
+              const signature = this.checker.getSignatureFromDeclaration(arrowFunc);
+              if (signature) {
+                const inferredReturnType = this.checker.getReturnTypeOfSignature(signature);
+                const typeString = this.checker.typeToString(inferredReturnType);
+                if (typeString === 'void') returnType = '()';
+                else if (typeString === 'number') returnType = 'f64';
+                else if (typeString === 'string') returnType = 'String';
+                else if (typeString === 'boolean') returnType = 'bool';
+              }
+            }
+            
+            // Detect if method needs &mut self by checking if it mutates captured variables
+            const isMutable = this.methodNeedsMutableSelf(arrowFunc);
+            
+            // Detect which parameters are mutated
+            const mutableParams = this.findMutableParams(arrowFunc, params);
+            
+            methods.push({name: varName, params, paramTypes, returnType, body: arrowFunc.body, isMutable, mutableParams});
+          } else {
+            // This is a field
+            let fieldType = 'f64';
+            let initializer: string | undefined;
+            
+            if (decl.type) {
+              fieldType = this.generateType(decl.type);
+            } else if (decl.initializer) {
+              if (ts.isNewExpression(decl.initializer) && 
+                  decl.initializer.expression.getText() === 'Array') {
+                fieldType = 'Vec<f64>';
+                initializer = 'Vec::new()';
+              } else {
+                initializer = this.generateExpression(decl.initializer);
+              }
+            }
+            
+            fields.push({name: varName, type: fieldType, initializer});
+          }
+        }
+      } else {
+        // Keep other statements (like function calls at the end)
+        otherStatements.push(statement);
+      }
+    }
+    
+    // Generate the struct
+    this.emit(`// Struct ${structName} for ${name}`);
+    this.emit(`struct ${structName} {`);
+    this.indent();
+    
+    // Add outer parameters as fields
+    for (const param of outerParams) {
+      this.emit(`${param.name}: ${param.type},`);
+    }
+    
+    // Add other fields
+    for (const field of fields) {
+      this.emit(`${field.name}: ${field.type},`);
+    }
+    
+    this.dedent();
+    this.emit('}');
+    this.emit('');
+    
+    // Generate impl block with methods
+    this.emit(`impl ${structName} {`);
+    this.indent();
+    
+    // Generate new() constructor
+    this.emit(`fn new(${outerParams.map(p => `${p.name}: ${p.type}`).join(', ')}) -> Self {`);
+    this.indent();
+    this.emit(`Self {`);
+    this.indent();
+    for (const param of outerParams) {
+      this.emit(`${param.name},`);
+    }
+    for (const field of fields) {
+      if (field.initializer) {
+        // Special case: if this is a Vec and we have parameters that look like size,
+        // initialize with capacity/size
+        if (field.initializer === 'Vec::new()' && outerParams.length > 0) {
+          // Heuristic: if first param looks like a size (N, size, length), use it
+          const sizeParam = outerParams[0];
+          this.emit(`${field.name}: vec![0.0; (${sizeParam.name} * ${sizeParam.name}) as usize],`);
+        } else {
+          this.emit(`${field.name}: ${field.initializer},`);
+        }
+      } else {
+        this.emit(`${field.name}: Default::default(),`);
+      }
+    }
+    this.dedent();
+    this.emit(`}`);
+    this.dedent();
+    this.emit(`}`);
+    this.emit('');
+    
+    // Generate methods
+    for (const method of methods) {
+      const selfParam = method.isMutable ? '&mut self' : '&self';
+      const params = method.params.length > 0 
+        ? `, ${method.params.map((p, i) => {
+            const mutPrefix = method.mutableParams?.has(p) ? 'mut ' : '';
+            return `${mutPrefix}${p}: ${method.paramTypes[i]}`;
+          }).join(', ')}`
+        : '';
+      const resultType = `Result<${method.returnType}, String>`;
+      
+      this.emit(`fn ${method.name}(${selfParam}${params}) -> ${resultType} {`);
+      this.indent();
+      
+      // Track that we're inside a struct method with these fields and methods available
+      const previousStructFields = this.structFields;
+      const previousStructMethods = this.structMethods;
+      const previousInStructMethod = this.inStructMethod;
+      this.structFields = new Set([...outerParams.map(p => p.name), ...fields.map(f => f.name)]);
+      this.structMethods = new Set(methods.map(m => m.name));
+      this.inStructMethod = true;
+      
+      if (ts.isBlock(method.body)) {
+        for (const statement of method.body.statements) {
+          this.generateStatement(statement);
+        }
+        
+        if (!this.allPathsReturn(method.body)) {
+          this.emit('Ok(())');
+        }
+      } else {
+        const body = this.generateExpression(method.body);
+        this.emit(`Ok(${body})`);
+      }
+      
+      // Restore previous context
+      this.structFields = previousStructFields;
+      this.structMethods = previousStructMethods;
+      this.inStructMethod = previousInStructMethod;
+      
+      this.dedent();
+      this.emit(`}`);
+      this.emit('');
+    }
+    
+    this.dedent();
+    this.emit('}');
+    this.emit('');
+    
+    // Generate the wrapper function
+    this.emit(`let ${name} = |${outerParams.map(p => `${p.name}: ${p.type}`).join(', ')}| -> Result<(), String> {`);
+    this.indent();
+    this.emit(`let mut instance = ${structName}::new(${outerParams.map(p => p.name).join(', ')});`);
+    
+    // Track that we're in a struct wrapper and what methods are available
+    const previousStructMethods = this.structMethods;
+    const previousInStructWrapper = this.inStructWrapper;
+    this.structMethods = new Set(methods.map(m => m.name));
+    this.inStructWrapper = true;
+    
+    // Generate the other statements (calls to the methods)
+    for (const statement of otherStatements) {
+      // Replace standalone calls with instance.method() calls
+      this.generateStatement(statement);
+    }
+    
+    // Restore previous context
+    this.structMethods = previousStructMethods;
+    this.inStructWrapper = previousInStructWrapper;
+    
+    this.emit('Ok(())');
+    this.dedent();
+    this.emit('};');
+    this.emit('');
+  }
+  
+  /**
+   * Check if a method needs &mut self by analyzing if it assigns to captured variables
+   */
+  private methodNeedsMutableSelf(func: ts.ArrowFunction): boolean {
+    let needsMutable = false;
+    
+    const visit = (node: ts.Node) => {
+      // Check for assignments to identifiers (board[i] = x, etc.)
+      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+        needsMutable = true;
+      }
+      
+      // Check for compound assignments (x++, x--, +=, -=, etc.)
+      if (ts.isPostfixUnaryExpression(node) || ts.isPrefixUnaryExpression(node)) {
+        if (node.operator === ts.SyntaxKind.PlusPlusToken || 
+            node.operator === ts.SyntaxKind.MinusMinusToken) {
+          needsMutable = true;
+        }
+      }
+      
+      ts.forEachChild(node, visit);
+    };
+    
+    if (ts.isBlock(func.body)) {
+      visit(func.body);
+    }
+    
+    return needsMutable;
+  }
+  
+  /**
+   * Find which parameters are mutated in a function
+   */
+  private findMutableParams(func: ts.ArrowFunction, paramNames: string[]): Set<string> {
+    const mutableParams = new Set<string>();
+    
+    const visit = (node: ts.Node) => {
+      // Check for assignments to parameters
+      if (ts.isBinaryExpression(node) && 
+          (node.operatorToken.kind === ts.SyntaxKind.EqualsToken ||
+           node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken ||
+           node.operatorToken.kind === ts.SyntaxKind.MinusEqualsToken)) {
+        if (ts.isIdentifier(node.left) && paramNames.includes(node.left.getText())) {
+          mutableParams.add(node.left.getText());
+        }
+      }
+      
+      // Check for ++ and -- on parameters
+      if (ts.isPostfixUnaryExpression(node) || ts.isPrefixUnaryExpression(node)) {
+        if (node.operator === ts.SyntaxKind.PlusPlusToken || 
+            node.operator === ts.SyntaxKind.MinusMinusToken) {
+          if (ts.isIdentifier(node.operand) && paramNames.includes(node.operand.getText())) {
+            mutableParams.add(node.operand.getText());
+          }
+        }
+      }
+      
+      ts.forEachChild(node, visit);
+    };
+    
+    if (ts.isBlock(func.body)) {
+      visit(func.body);
+    }
+    
+    return mutableParams;
+  }
+  
+  /**
+   * Capitalize first letter of a string
+   */
+  private capitalize(str: string): string {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+  
+  /**
    * Generate binary expression
    */
   private generateBinaryExpression(expr: ts.BinaryExpression): string {
@@ -2366,8 +3047,24 @@ export class RustCodegen {
     // Check if we're comparing with an integer variable
     const useIntegerLiterals = this.shouldUseIntegerLiterals(expr);
     
-    const left = this.generateExpression(expr.left, useIntegerLiterals);
-    const right = this.generateExpression(expr.right, useIntegerLiterals);
+    // Handle mixed usize/f64 arithmetic - cast usize to f64
+    const leftIsInteger = ts.isIdentifier(expr.left) && this.integerVariables.has(expr.left.getText());
+    const rightIsInteger = ts.isIdentifier(expr.right) && this.integerVariables.has(expr.right.getText());
+    
+    let left = this.generateExpression(expr.left, useIntegerLiterals);
+    let right = this.generateExpression(expr.right, useIntegerLiterals);
+    
+    // In arithmetic operations with mixed types (one usize, one f64), cast usize to f64
+    const op = expr.operatorToken.getText();
+    if ((op === '+' || op === '-' || op === '*' || op === '/' || op === '%') &&
+        (leftIsInteger !== rightIsInteger)) {
+      // One side is integer, the other is not - cast the integer to f64
+      if (leftIsInteger) {
+        left = `${left} as f64`;
+      } else if (rightIsInteger) {
+        right = `${right} as f64`;
+      }
+    }
     
     // Translate JavaScript operators to Rust
     if (operator === '===') {
@@ -2533,6 +3230,19 @@ export class RustCodegen {
         }
       }
       
+      // String.fromCharCode -> char::from_u32().unwrap().to_string()
+      if (object === 'String' && property === 'fromCharCode') {
+        const args = expr.arguments.map(arg => this.generateExpression(arg));
+        if (args.length === 1) {
+          // Cast the entire argument expression to u32
+          // This handles both simple values and arithmetic like (96.0 + x)
+          return `char::from_u32((${args[0]}) as u32).unwrap_or('?').to_string()`;
+        }
+        // Multiple char codes - convert each to char and collect into string
+        const chars = args.map((arg, i) => `char::from_u32((${arg}) as u32).unwrap_or('?')`).join(', ');
+        return `vec![${chars}].iter().collect::<String>()`;
+      }
+      
       // Array methods: map, filter, forEach, etc.
       if (property === 'map') {
         return this.generateArrayMap(objectExpr, expr.arguments);
@@ -2544,6 +3254,8 @@ export class RustCodegen {
         return this.generateArrayReduce(objectExpr, expr.arguments);
       } else if (property === 'join') {
         return this.generateArrayJoin(objectExpr, expr.arguments);
+      } else if (property === 'slice') {
+        return this.generateArraySlice(objectExpr, expr.arguments);
       }
       
       // .toString() -> .to_string()
@@ -2554,7 +3266,23 @@ export class RustCodegen {
       }
     }
     
-    const func = this.generateExpression(expr.expression);
+    // Check if this is a recursive call (calling the current recursive function from inside itself)
+    let func = this.generateExpression(expr.expression);
+    if (this.currentRecursiveFunctionName && 
+        ts.isIdentifier(expr.expression) && 
+        expr.expression.getText() === this.currentRecursiveFunctionName) {
+      // Replace with the _clone reference
+      func = `${this.currentRecursiveFunctionName}_clone.borrow().as_ref().unwrap()`;
+    }
+    
+    // Check if this is a struct method call (when in struct wrapper or struct method)
+    if ((this.inStructWrapper || this.inStructMethod) && 
+        ts.isIdentifier(expr.expression) && 
+        this.structMethods.has(expr.expression.getText())) {
+      // Prefix with instance. or self. depending on context
+      const prefix = this.inStructMethod ? 'self' : 'instance';
+      func = `${prefix}.${expr.expression.getText()}`;
+    }
     
     // Handle function arguments, including spread
     const args = expr.arguments.map(arg => {
@@ -2563,7 +3291,15 @@ export class RustCodegen {
         // In Rust, we just pass the Vec directly
         return this.generateExpression(arg.expression);
       } else {
-        return this.generateExpression(arg);
+        const argExpr = this.generateExpression(arg);
+        
+        // If the argument is an identifier that's tracked as an integer variable (usize),
+        // cast it to f64 for function calls since GoodScript numbers are f64
+        if (ts.isIdentifier(arg) && this.integerVariables.has(arg.getText())) {
+          return `${argExpr} as f64`;
+        }
+        
+        return argExpr;
       }
     }).join(', ');
     
@@ -2677,6 +3413,29 @@ export class RustCodegen {
     }
     
     return `${arrayCode}.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(${separator})`;
+  }
+  
+  /**
+   * Generate array.slice() -> Vec slice conversion
+   * JavaScript: arr.slice(start, end) becomes
+   * Rust: arr[start as usize..end as usize].to_vec()
+   */
+  private generateArraySlice(array: ts.Expression, args: readonly ts.Expression[]): string {
+    const arrayCode = this.generateExpression(array);
+    
+    if (args.length === 0) {
+      // slice() with no args clones the array
+      return `${arrayCode}.clone()`;
+    } else if (args.length === 1) {
+      // slice(start) - from start to end
+      const start = this.generateExpression(args[0]);
+      return `${arrayCode}[(${start}) as usize..].to_vec()`;
+    } else {
+      // slice(start, end)
+      const start = this.generateExpression(args[0]);
+      const end = this.generateExpression(args[1]);
+      return `${arrayCode}[(${start}) as usize..(${end}) as usize].to_vec()`;
+    }
   }
   
   /**
@@ -3173,6 +3932,9 @@ export class RustCodegen {
     } else if (type === 'Set') {
       this.addImport('use std::collections::HashSet;');
       return 'HashSet::new()';
+    } else if (type === 'Array') {
+      // new Array<T>() -> Vec<T>::new()
+      return 'Vec::new()';
     }
     
     return `${type}::new(${args})`;
@@ -3432,17 +4194,14 @@ export class RustCodegen {
     // This is a heuristic - ideally we'd use type checking
     if (ts.isIdentifier(expr.argumentExpression)) {
       const varName = expr.argumentExpression.getText();
-      // Check if this looks like a string variable (simple heuristic)
-      // In the future, use actual type information
       const index = this.generateExpression(expr.argumentExpression);
       
-      // If it's clearly numeric context (in integerVariables), use usize
+      // If it's clearly numeric context (in integerVariables), use without cast
       if (this.integerVariables.has(varName)) {
         return `${object}[${index}]`;
       }
       
       // Default: assume it might be f64, cast to usize for array indexing
-      // Note: This won't work for HashMap, but we don't support those yet
       return `${object}[${index} as usize]`;
     }
     
@@ -3452,9 +4211,21 @@ export class RustCodegen {
       return `${object}[${index}]`;
     }
     
-    // Complex expression - cast to usize
+    // Complex expression (arithmetic, etc.) - generate and wrap entire expression in cast
     const index = this.generateExpression(expr.argumentExpression);
-    return `${object}[${index} as usize]`;
+    
+    // If the index already contains \"as usize\", don't double-cast
+    if (index.includes(' as usize')) {
+      return `${object}[${index}]`;
+    }
+    
+    // If it's a simple integer, use directly
+    if (/^\d+$/.test(index)) {
+      return `${object}[${index}]`;
+    }
+    
+    // Otherwise wrap the entire expression in usize cast
+    return `${object}[(${index}) as usize]`;
   }
 
   /**

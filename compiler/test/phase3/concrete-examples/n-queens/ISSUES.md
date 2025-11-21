@@ -2,33 +2,115 @@
 
 This document tracks the Rust code generation issues exposed by the N-Queens example.
 
-## Current Status
+## Current Status (Updated)
 
-❌ Rust compilation fails with multiple errors
-✅ JavaScript/TypeScript compilation and execution works correctly
+**Completed Fixes:**
+- ✅ Validator now checks actual function return types (not assuming all functions return boolean)
+- ✅ String literals now use double quotes
+- ✅ `new Array()` → `Vec::new()`  
+- ✅ `array.slice()` method implemented with proper parentheses for arithmetic
+- ✅ `String.fromCharCode()` → `char::from_u32((expr) as u32).unwrap_or('?').to_string()`
+- ✅ For-loop ranges with f64 variables → Cast to usize: `0..(N) as usize`
+- ✅ Array indexing with f64 arithmetic → Cast to usize: `board[(x + y * N) as usize]`
+- ✅ Auto-cast usize loop variables to f64 when passed to functions  
+- ✅ Mixed type arithmetic (usize * f64) → Cast usize to f64
+- ✅ Return type inference for arrow functions using TypeChecker
+- ✅ if/else return types in Result-returning functions (allPathsReturn check)
 
-## Identified Issues
+**Current Issue:**
+- ❌ Recursive closures (Rust limitation - closures can't call themselves)
 
-### 1. **String Literal vs Character Literal** (CRITICAL)
+**Compilation Status:** Reduced from ~15 errors to **1 error**
+
+## Known Limitations
+
+### Recursive Closures
+**Issue**: Rust closures cannot call themselves directly because they're anonymous.
+
+**Example**:
+```typescript
+const place = (id: number): boolean => {
+  if (id < N) {
+    if (place(id + 1)) {  // ❌ Can't call itself
+      return true;
+    }
+  }
+  return false;
+};
+```
+
+**Workaround Options**:
+1. Convert to named function declarations (not arrow functions)
+2. Use a different algorithm that doesn't require recursion
+3. Manually convert to iteration with a stack
+
+**Status**: Tracked as known limitation. Future enhancement could auto-detect and convert to local functions.
+
+## Fixed Issues
+
+### 1. ✅ **String Literal vs Character Literal**
 ```rust
-// Generated (WRONG):
+// Before:
 String::from('failed')
 
-// Should be:
+// After:
 String::from("failed")
 ```
-**Fix needed**: String literals should use double quotes in Rust, not single quotes.
+**Fix**: Modified `generateExpression` to use `expr.text` instead of `expr.getText()`, ensuring double quotes.
 
-### 2. **Missing Array Type** (CRITICAL)
+### 2. ✅ **Missing Array Type**  
 ```rust
-// Generated:
+// Before:
 let mut board = Array::new();
 
-// Issue: Array type doesn't exist in Rust
+// After:
+let mut board = Vec::new();
 ```
-**Fix needed**: Need to use `Vec<f64>` or implement an `Array` type wrapper. Should translate `new Array<number>()` to `Vec<f64>::new()`.
+**Fix**: Added `Array` case in `generateNewExpression` to return `Vec::new()`.
 
-### 3. **Number Type Mismatch in Ranges** (CRITICAL)
+### 3. ✅ **String.fromCharCode**
+```rust
+// Before:
+String.fromCharCode(96.0 + x)?
+
+// After:
+char::from_u32(96.0 + x as u32).unwrap_or('?').to_string()
+```
+**Fix**: Added special handling in `generateCallExpression` for `String.fromCharCode`.
+
+### 4. ✅ **Array Slice Method**
+```rust
+// Before:
+board.slice(i, i + N)?
+
+// After:
+board[i as usize..i + N as usize].to_vec()
+```
+**Fix**: Implemented `generateArraySlice` method.
+
+### 5. ✅ **For-Loop Ranges with f64**
+```rust
+// Before:
+for i in 0..N * N {  // N is f64, error: expected integer
+
+// After:
+for i in 0..(N * N) as usize {
+```
+**Fix**: Enhanced `convertToIntegerLiteral` to detect complex expressions and wrap in `as usize` cast.
+
+### 6. ✅ **Array Indexing with f64 Arithmetic**
+```rust
+// Before:
+board[x + (y * N) as usize] = id;  // x is f64, can't add f64 + usize
+
+// After:
+board[(x + (y * N)) as usize] = id;
+```
+**Fix**: Modified `generateElementAccess` to wrap entire index arithmetic in parentheses before casting to usize.
+
+## Remaining Issues
+
+### 5. **Number Type Mismatch in Ranges** (CRITICAL - TODO)
 ```rust
 // Generated:
 for i in 0..N * N {  // N is f64, but range needs integer
@@ -38,7 +120,7 @@ for i in 0..(N * N) as usize {
 ```
 **Fix needed**: TypeScript `number` mapped to `f64` in Rust, but for-loop ranges require integers. Need smart type inference or explicit casting.
 
-### 4. **Array Indexing with f64** (CRITICAL)
+### 6. **Array Indexing with f64** (CRITICAL - TODO)
 ```rust
 // Generated:
 board[x + (y * N) as usize] = id;  // x is f64, can't add f64 + usize
@@ -48,7 +130,7 @@ board[(x as usize) + (y * N) as usize] = id;
 ```
 **Fix needed**: Array indices must be `usize` in Rust. Need to cast all arithmetic to integers when used for indexing.
 
-### 5. **Result Type Mismatch in get()** (CRITICAL)
+### 7. **Return Type Inference for Closures** (CRITICAL - LIMITATION)
 ```rust
 // Generated:
 let get = |x: f64, y: f64| -> Result<(), String> {
@@ -60,43 +142,20 @@ let get = |x: f64, y: f64| -> Result<f64, String> {
     Ok(board[(x as usize) + ((y * N) as usize)])
 }
 ```
-**Fix needed**: Return type should match the returned value. `get` returns a `number`, not `void`.
+**Issue**: Without explicit return type annotations in TypeScript, we can't reliably infer the return type.
+**Workaround needed**: Require explicit return type annotations for Rust target, or implement type inference using TypeScript's type checker.
 
-### 6. **Using Result<()> where Result<T> Expected** (CRITICAL)
+### 8. **Using Result<T> in Boolean Context** (CRITICAL - TODO)  
 ```rust
 // Generated:
-if get(x, y)? {  // get returns Result<()>, can't use as bool
+if get(x, y)? {  // get returns Result<f64>, extracted value used as bool
 
 // Should be:
 if get(x, y)? != 0.0 {  // or > 0.0 depending on context
 ```
-**Fix needed**: When a function returns a value that's used in a boolean context, need to generate the comparison explicitly.
+**Fix needed**: When unwrapping Result<number> in boolean context, need to generate explicit comparison.
 
-### 7. **String Methods Don't Exist** (MAJOR)
-```rust
-// Generated:
-String.fromCharCode(96.0 + x)?
-
-// Issue: Rust's String doesn't have fromCharCode
-```
-**Fix needed**: Either provide runtime polyfills or map to Rust equivalents:
-```rust
-char::from_u32((96.0 + x) as u32).unwrap_or('?').to_string()
-```
-
-### 8. **Array Slice Method Missing** (MAJOR)
-```rust
-// Generated:
-board.slice(i, i + N)?
-
-// Issue: Rust Vec doesn't have slice() method
-```
-**Fix needed**: Use Rust's slice syntax:
-```rust
-&board[i as usize..(i + N) as usize]
-```
-
-### 9. **Mutable Variable Capture in Closures** (MAJOR)
+### 9. **Mutable Variable Capture in Closures** (MAJOR - COMPLEX)
 ```rust
 // Generated:
 let clear = || -> Result<(), String> {

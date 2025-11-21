@@ -43,7 +43,7 @@ export class Validator {
     this.checkAnyType(node, sourceFile);
 
     // Check for truthy/falsy conditions
-    this.checkTruthyFalsy(node, sourceFile);
+    this.checkTruthyFalsy(node, sourceFile, checker);
 
     // Check for switch fall-through
     this.checkSwitchFallThrough(node, sourceFile);
@@ -260,39 +260,39 @@ export class Validator {
   /**
    * Check for implicit truthy/falsy conditions (GS110)
    */
-  private checkTruthyFalsy(node: ts.Node, sourceFile: ts.SourceFile): void {
+  private checkTruthyFalsy(node: ts.Node, sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
     // Check if statements
     if (ts.isIfStatement(node)) {
-      this.checkConditionExpression(node.expression, sourceFile);
+      this.checkConditionExpression(node.expression, sourceFile, checker);
     }
 
     // Check while statements
     if (ts.isWhileStatement(node)) {
-      this.checkConditionExpression(node.expression, sourceFile);
+      this.checkConditionExpression(node.expression, sourceFile, checker);
     }
 
     // Check do-while statements
     if (ts.isDoStatement(node)) {
-      this.checkConditionExpression(node.expression, sourceFile);
+      this.checkConditionExpression(node.expression, sourceFile, checker);
     }
 
     // Check for loop conditions
     if (ts.isForStatement(node) && node.condition) {
-      this.checkConditionExpression(node.condition, sourceFile);
+      this.checkConditionExpression(node.condition, sourceFile, checker);
     }
 
     // Check ternary operator conditions
     if (ts.isConditionalExpression(node)) {
-      this.checkConditionExpression(node.condition, sourceFile);
+      this.checkConditionExpression(node.condition, sourceFile, checker);
     }
   }
 
   /**
    * Helper: Check if a condition expression is an implicit truthy/falsy check
    */
-  private checkConditionExpression(expr: ts.Expression, sourceFile: ts.SourceFile): void {
+  private checkConditionExpression(expr: ts.Expression, sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
     // Allow explicit boolean expressions
-    if (this.isExplicitBooleanExpression(expr)) {
+    if (this.isExplicitBooleanExpression(expr, checker)) {
       return;
     }
 
@@ -303,7 +303,7 @@ export class Validator {
 
     // Allow logical NOT of explicit boolean expression
     if (ts.isPrefixUnaryExpression(expr) && expr.operator === ts.SyntaxKind.ExclamationToken) {
-      if (this.isExplicitBooleanExpression(expr.operand)) {
+      if (this.isExplicitBooleanExpression(expr.operand, checker)) {
         return;
       }
     }
@@ -320,7 +320,7 @@ export class Validator {
   /**
    * Helper: Check if expression is an explicit boolean expression
    */
-  private isExplicitBooleanExpression(expr: ts.Expression): boolean {
+  private isExplicitBooleanExpression(expr: ts.Expression, checker: ts.TypeChecker): boolean {
     // Binary comparison operators
     if (ts.isBinaryExpression(expr)) {
       const op = expr.operatorToken.kind;
@@ -338,17 +338,19 @@ export class Validator {
 
     // Prefix unary ! with explicit boolean expression
     if (ts.isPrefixUnaryExpression(expr) && expr.operator === ts.SyntaxKind.ExclamationToken) {
-      return this.isExplicitBooleanExpression(expr.operand);
+      return this.isExplicitBooleanExpression(expr.operand, checker);
     }
 
-    // Function calls that return boolean (we assume they do)
+    // Function calls - check actual return type
     if (ts.isCallExpression(expr)) {
-      return true; // Assume function calls return boolean if used in condition
+      const type = checker.getTypeAtLocation(expr);
+      // Only allow if the function actually returns boolean
+      return (type.flags & ts.TypeFlags.Boolean) !== 0 || (type.flags & ts.TypeFlags.BooleanLiteral) !== 0;
     }
 
     // Parenthesized expressions
     if (ts.isParenthesizedExpression(expr)) {
-      return this.isExplicitBooleanExpression(expr.expression);
+      return this.isExplicitBooleanExpression(expr.expression, checker);
     }
 
     return false;
