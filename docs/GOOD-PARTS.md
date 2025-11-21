@@ -571,6 +571,48 @@ const getValue = (): undefined => {
 
 ---
 
+### 15. No Primitive Constructors (GS116)
+
+**Restriction:** Cannot use `String()`, `Number()`, or `Boolean()` constructors (either as functions or with `new`).
+
+**Rationale:**
+- Confusing dual behavior: `String(x)` returns primitive, `new String(x)` returns object wrapper
+- Object wrappers (`new String()`, etc.) behave differently from primitives in equality checks
+- Implicit type coercion - hides programmer intent
+- Inconsistent with GS201 (no implicit type coercion)
+- Better alternatives exist for every use case
+
+**Example:**
+```typescript
+// ❌ Not allowed
+const str = String(42);           // Function call
+const num = Number("123");        // Type coercion
+const bool = Boolean(value);      // Truthy/falsy conversion
+const obj = new String("hello");  // Object wrapper
+
+// ✅ Correct alternatives
+const str = (42).toString();              // Explicit conversion
+const str2 = `${42}`;                     // Template literal
+const num = parseInt("123", 10);          // Explicit parsing
+const num2 = parseFloat("3.14");          // Explicit parsing
+const num3 = +"123";                      // Unary plus operator
+const bool = value !== null && value !== undefined;  // Explicit check
+const bool2 = array.length > 0;           // Explicit comparison
+```
+
+**Why this matters:**
+- `typeof String("x")` → `"string"` but `typeof new String("x")` → `"object"`
+- `String("x") === "x"` is true, but `new String("x") === "x"` is false
+- `Number("123")` looks like a constructor call but performs type coercion
+- Forces developers to be explicit about their intent
+
+**Alternatives by use case:**
+- **Number to string:** Use `.toString()` or template literals
+- **String to number:** Use `parseInt(str, 10)` or `parseFloat(str)` or `+str`
+- **Boolean conversion:** Use explicit comparisons (`!== null`, `> 0`, etc.)
+
+---
+
 ## Additional Type System Requirements
 
 GoodScript enforces strict static typing through the restrictions above. Additional best practices include:
@@ -625,6 +667,7 @@ These restrictions transform TypeScript from a gradually-typed superset of JavaS
 | GS112 | Comma operator | Use separate statements |
 | GS113 | Switch fall-through | End each case with `break`, `return`, `throw`, or `continue` |
 | GS115 | `void` operator | Use `undefined` directly |
+| GS116 | Primitive constructors | Use `.toString()`, template literals, `parseInt/parseFloat`, or explicit comparisons |
 | GS201 | Implicit type coercion | Use template literals or explicit conversion |
 
 ---

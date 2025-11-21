@@ -80,6 +80,30 @@ export class Validator {
       }
     }
 
+    // No String, Number, or Boolean constructors (GS116)
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+      const name = node.expression.text;
+      if (name === 'String' || name === 'Number' || name === 'Boolean') {
+        this.addError(
+          `The "${name}" constructor is not allowed. Use template literals, .toString(), or explicit conversion methods instead`,
+          location,
+          'GS116'
+        );
+      }
+    }
+
+    // No String, Number, or Boolean constructors with 'new'
+    if (ts.isNewExpression(node) && ts.isIdentifier(node.expression)) {
+      const name = node.expression.text;
+      if (name === 'String' || name === 'Number' || name === 'Boolean') {
+        this.addError(
+          `The "${name}" constructor with "new" is not allowed. Use primitive types instead`,
+          location,
+          'GS116'
+        );
+      }
+    }
+
     // No 'arguments' object (in non-arrow functions)
     if (ts.isIdentifier(node) && node.text === 'arguments') {
       const func = this.findContainingFunction(node);

@@ -37,6 +37,8 @@ The second part leverages what is now an enterprise level, fully statically type
 
 ## Clean TypeScript
 
+> Thanks to TypeScript the world moved on from plain JavaScript. It's time to get rid of its baggage too.
+
 GoodScript can be **incrementally adopted** in existing TypeScript projects. Use the `.gs.ts` file extension for GoodScript sources (or `.gs.tsx` for React/JSX components) and continue using `.ts` for standard TypeScript files—they work side by side seamlessly.
 
 Simply replace `tsc` with `gsc` in your build process:
@@ -93,6 +95,8 @@ Configure in `tsconfig.json`:
 **Note**: For TypeScript/JavaScript compilation (the default), level defaults to `"clean"` since ownership analysis provides no runtime benefit in garbage-collected environments.
 
 ## Rust transpiler
+
+> Clean TypeScript can in fact be a proper, excellent enterprise-level language.
 
 In **Phase 3** (now in progress), GoodScript transpiles to **optimized Rust source code**, delivering:
 
@@ -180,6 +184,7 @@ GoodScript is being developed in phases, with each phase corresponding to a lang
 - GS101-GS108: Language features (`with`, `eval`, `arguments`, `for-in`, `var`, `==`, `!=`, function declarations)
 - GS109-GS112: Type safety (`any` type, truthy/falsy, `delete`, comma operator)
 - GS115: `void` operator
+- GS116: Primitive constructors (`String`, `Number`, `Boolean`)
 - GS201: Implicit type coercion
 
 **Phase 2** adds ownership tracking and cycle detection (see [docs/DAG-DETECTION.md](docs/DAG-DETECTION.md)):

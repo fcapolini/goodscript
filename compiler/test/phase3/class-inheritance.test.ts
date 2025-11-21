@@ -263,7 +263,7 @@ describe('Phase 3 - Class Inheritance', () => {
       
       class Dog extends Animal {
         getInfo(): string {
-          return this.name + " is " + String(this.age) + " years old";
+          return this.name + " is " + this.age.toString() + " years old";
         }
       }
       

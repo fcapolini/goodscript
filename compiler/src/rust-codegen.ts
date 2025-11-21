@@ -2545,15 +2545,16 @@ export class RustCodegen {
       } else if (property === 'join') {
         return this.generateArrayJoin(objectExpr, expr.arguments);
       }
+      
+      // .toString() -> .to_string()
+      if (property === 'toString') {
+        // JavaScript: x.toString() -> Rust: x.to_string()
+        // Note: to_string() returns String directly, not Result<String, E>
+        return `${object}.to_string()`;
+      }
     }
     
     const func = this.generateExpression(expr.expression);
-    
-    // Special handling for String() constructor calls
-    if (func === 'String' && expr.arguments.length === 1) {
-      const arg = this.generateExpression(expr.arguments[0]);
-      return `${arg}.to_string()`;
-    }
     
     // Handle function arguments, including spread
     const args = expr.arguments.map(arg => {

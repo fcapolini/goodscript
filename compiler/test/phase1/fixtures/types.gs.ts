@@ -27,7 +27,7 @@ const calculateArea = (rect: Rectangle): number => {
 };
 
 const parseNumber = (input: string): Result<number> => {
-  const parsed = Number(input);
+  const parsed = parseFloat(input);
   
   if (Number.isNaN(parsed)) {
     return { success: false, error: 'Invalid number' };
