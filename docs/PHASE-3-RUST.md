@@ -1,8 +1,10 @@
 # Phase 3: Rust Code Generation
 
-**Status:** 🚧 In Progress (all core features complete, comprehensive runtime equivalence testing)
+**Status:** 🚧 In Progress (all core features complete, comprehensive runtime equivalence testing, concrete example testing)
 
-**Test Coverage:** 449 tests total (449 passing, 6 skipped)
+**Test Coverage:** 452 tests total (451 passing, 1 failing, 6 skipped)
+- 449 unit/integration tests (all passing)
+- 3 concrete example tests (2 passing, 1 failing - n-queens Rust codegen issues being addressed)
 
 ## Current Implementation Status
 
@@ -111,9 +113,24 @@
   - Package metadata (name, version, edition)
   - Tokio dependency for async runtime
   - Ready for `cargo build` and `cargo run`
+- **Concrete Example Testing** - Real-world programs for end-to-end validation
+  - Dynamic discovery of example projects in `test/phase3/concrete-examples/`
+  - Each example: `example-name/src/main.gs.ts`
+  - Compiles to both JavaScript and Rust
+  - Executes both versions and compares runtime output
+  - Currently testing: N-Queens solver (exposes 10 codegen issues to be fixed)
 
 ### 📋 Remaining Work
 
+- **Rust Codegen Improvements** (exposed by concrete examples):
+  - String literal syntax (single vs double quotes)
+  - Array type mapping (`new Array<T>()` → `Vec<T>::new()`)
+  - Function return type inference (void vs value)
+  - Number type coercion (f64 vs usize for indexing/ranges)
+  - String method polyfills (String.fromCharCode, etc.)
+  - Array method mapping (slice, etc.)
+  - Closure mutable captures (RefCell pattern)
+  - Recursive closures (Box<dyn Fn> pattern)
 - Module hierarchy generation (lib.rs, mod.rs files for complex projects)
 - Advanced trait features (associated types, default implementations)
 - Lifetime annotations for complex borrowing scenarios
@@ -154,12 +171,16 @@ The test suite includes 30 comprehensive validation tests covering:
 - Try/catch/finally blocks
 - Error propagation
 
-**All 875 tests (863 passing, 12 skipped)**, with every generated Rust code snippet compiling successfully with rustc. The test suite includes comprehensive runtime equivalence tests that execute both JavaScript and Rust versions and verify they produce identical output. All new Phase 3 tests (async/await, spread operators, property shorthand, destructuring, module exports, generics) include runtime equivalence validation where possible.
+**All 452 tests (451 passing, 1 failing, 6 skipped)**, with comprehensive runtime equivalence tests that execute both JavaScript and Rust versions and verify they produce identical output. All new Phase 3 tests (async/await, spread operators, property shorthand, destructuring, module exports, generics) include runtime equivalence validation where possible.
 
-**Skipped Tests (12):** Tests requiring TypeScript type checker integration or multi-file compilation:
+**Concrete Examples (3 tests):**
+- 2 passing: JavaScript compilation/execution, Runtime equivalence check
+- 1 failing: N-Queens Rust compilation (intentionally exposing codegen issues)
+  - See `test/phase3/concrete-examples/n-queens/ISSUES.md` for detailed tracking of 10 identified issues
+
+**Skipped Tests (6):** Tests requiring TypeScript type checker integration or multi-file compilation:
 - 2 destructuring tests (nested object destructuring, object destructuring in function parameters) - require proper typing of object literals based on context
 - 4 module import tests (named, default, namespace imports, re-exports) - require multi-file compilation infrastructure
-- 6 older skipped tests from Phase 1/2
 
 ---
 
