@@ -10,16 +10,45 @@ Each example should follow this structure:
 example-name/
   src/
     main.gs.ts    # Entry point (must be .gs.ts extension)
+  tsconfig.json   # TypeScript configuration
+  .gitignore      # Ignore dist/ directory
+  dist/           # Generated outputs (git-ignored)
+    main.js       # Compiled JavaScript
+    main.rs       # Compiled Rust source
+    example-name  # Compiled Rust binary (executable)
+    Cargo.toml    # Rust project metadata
 ```
+
+## Building Examples Locally
+
+To build an example's dist directory for inspection:
+
+```bash
+cd example-name
+npx gsc src/main.gs.ts --out-dir dist
+```
+
+To compile the Rust binary:
+
+```bash
+cd example-name/dist
+rustc main.rs -o example-name
+./example-name  # Run the binary
+```
+
+Note: The `dist/` directory is git-ignored since it contains generated code and binaries.
 
 ## How Tests Work
 
 The `concrete-examples.test.ts` file:
 
 1. **Discovers** all directories in this folder automatically
-2. **Compiles** each `src/main.gs.ts` to both JavaScript and Rust
-3. **Executes** both versions
-4. **Compares** the runtime outputs for equivalence
+2. **Compiles** each `src/main.gs.ts` to both JavaScript and Rust (output to `example-name/dist/`)
+3. **Compiles** the Rust source to a native binary (saved in dist/)
+4. **Executes** both JavaScript (via Node.js) and Rust (native binary) versions
+5. **Compares** the runtime outputs for equivalence
+
+All generated files (JS, Rust source, and compiled binaries) are preserved in each example's `dist/` directory for inspection.
 
 ## Adding New Examples
 
@@ -33,19 +62,49 @@ The test suite will automatically discover and test your new example.
 
 ## Current Examples
 
+### cli-args
+
+Command-line argument parser demonstrating:
+- Classes with constructors and methods
+- HashMap/Map usage for key-value storage
+- String methods (startsWith, substring, indexOf)
+- Mutable methods requiring `&mut self`
+- Option<T> return types and null safety
+- Option<String> in template literals with automatic unwrapping
+- Method signatures with owned vs borrowed parameters
+
+**Output**:
+```
+Verbose mode enabled
+Total positional args: 2
+Output file: output.txt
+Format: json
+Input file: input.txt
+```
+
 ### n-queens
 
 Classic N-Queens solver demonstrating:
+- Closures with mutable captures
+- Array element access and assignment
+- Vec<T> manipulation
 - Recursive algorithms
-- Array manipulation
-- Closures
 - Control flow (while, for, if)
 - String interpolation
 - Console output
+
+**Output**:
+```
+• • c •
+a • • •
+• • • d
+• b • •
+```
 
 ## Notes
 
 - All examples must use the `.gs.ts` extension
 - The entry point must be named `main.gs.ts`
 - Examples should produce console output for validation
-- Rust equivalence is a work in progress for complex features
+- ✅ Both examples now produce **identical output** in JavaScript and Rust
+- Compiled binaries are ~500KB (unoptimized debug builds)

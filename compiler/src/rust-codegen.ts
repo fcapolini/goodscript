@@ -34,6 +34,7 @@ export class RustCodegen {
   private structFields = new Set<string>();  // Track field names when generating struct-based methods
   private inStructWrapper = false;  // Track if we're inside the wrapper function of a struct
   private inStructMethod = false;  // Track if we're inside a struct method
+  private currentFunctionReturnType?: string;  // Track current function's return type for Option wrapping
   // Track interface traits and their required fields for automatic trait implementation
   private interfaceTraits = new Map<string, Array<{name: string, type: string}>>();  // Maps TraitName -> [{fieldName, fieldType}]
   private syntheticTypeCounter = 0;  // Counter for generating unique synthetic type names
@@ -50,6 +51,7 @@ export class RustCodegen {
   private classes = new Map<string, {
     fields: Array<{ name: string; type: string; initializer?: string }>;
     methods: Array<{ name: string; method: ts.MethodDeclaration }>;
+    constructor?: ts.ConstructorDeclaration;
     baseClass?: string;
   }>();
   
@@ -975,6 +977,14 @@ export class RustCodegen {
                 value = `Some(${value})`;
               }
             }
+          } else if (decl.initializer && ts.isCallExpression(decl.initializer) && this.checker) {
+            // Infer Option type from call expression return type
+            const type = this.checker.getTypeAtLocation(decl.initializer);
+            const typeStr = this.checker.typeToString(type);
+            // Check for T | null | undefined pattern (which becomes Option<T> in Rust)
+            if (typeStr.includes(' | null') || typeStr.includes(' | undefined')) {
+              this.optionVariables.add(name);
+            }
           }
           
           // Wrap value in ownership constructor if needed (but not for arrow functions)
@@ -1317,6 +1327,10 @@ export class RustCodegen {
         method,
       }));
     
+    // Collect constructor
+    const constructor = classDecl.members
+      .filter(ts.isConstructorDeclaration)[0];
+    
     // Get base class if it exists
     let baseClass: string | undefined;
     if (classDecl.heritageClauses) {
@@ -1328,7 +1342,7 @@ export class RustCodegen {
       }
     }
     
-    this.classes.set(name, { fields, methods, baseClass });
+    this.classes.set(name, { fields, methods, constructor, baseClass });
   }
 
   /**
@@ -1376,7 +1390,9 @@ export class RustCodegen {
         let modifiesSelf = false;
         if (method.body) {
           const bodyText = method.body.getText();
-          modifiesSelf = /this\.\w+\s*=/.test(bodyText);
+          // Check for direct field assignments OR mutating method calls (set, insert, push, etc.)
+          modifiesSelf = /this\.\w+\s*=/.test(bodyText) || 
+                        /this\.\w+\.(set|insert|delete|clear|push|pop|splice|shift|unshift)\(/.test(bodyText);
         }
         
         const params = this.generateParameters(method.parameters, true, modifiesSelf);
@@ -1386,6 +1402,10 @@ export class RustCodegen {
         this.emit(`fn ${methodName}(${params}) -> ${resultType} {`);
         this.indent();
         
+        // Track the return type for this function
+        const previousReturnType = this.currentFunctionReturnType;
+        this.currentFunctionReturnType = returnType;
+        
         if (method.body) {
           this.generateBlock(method.body);
           
@@ -1394,6 +1414,9 @@ export class RustCodegen {
             this.emit('Ok(())');
           }
         }
+        
+        // Restore previous return type
+        this.currentFunctionReturnType = previousReturnType;
         
         this.dedent();
         this.emit('}');
@@ -1407,6 +1430,8 @@ export class RustCodegen {
     
     // Generate impl block for constructor and methods
     const allMethods = this.collectAllMethods(name);
+    const constructor = classInfo?.constructor;
+    
     if (typeParams) {
       this.emit(`impl${typeParams} ${name}${typeParams} {`);
     } else {
@@ -1415,22 +1440,51 @@ export class RustCodegen {
     this.indent();
     
     // Generate constructor (new method)
-    this.emit(`fn new() -> Self {`);
-    this.indent();
-    this.emit(`${name} {`);
-    this.indent();
-    
-    // Initialize all fields (including inherited) with their default values
-    for (const field of allFields) {
-      if (field.initializer) {
-        this.emit(`${field.name}: ${field.initializer},`);
-      } else {
-        this.emit(`${field.name}: ${this.getDefaultValue(field.type)},`);
+    if (constructor && constructor.parameters.length > 0) {
+      // Constructor has parameters
+      const params = this.generateParameters(constructor.parameters, false, false);
+      this.emit(`fn new(${params}) -> Self {`);
+      this.indent();
+      
+      // Don't generate constructor body - we'll just initialize the struct
+      // Return the struct instance
+      this.emit(`${name} {`);
+      this.indent();
+      
+      for (const field of allFields) {
+        // Check if there's a parameter with the same name as the field
+        const param = constructor.parameters.find(p => ts.isIdentifier(p.name) && p.name.getText() === field.name);
+        if (param) {
+          // Use the parameter value
+          this.emit(`${field.name}: ${field.name},`);
+        } else if (field.initializer) {
+          this.emit(`${field.name}: ${field.initializer},`);
+        } else {
+          this.emit(`${field.name}: ${this.getDefaultValue(field.type)},`);
+        }
       }
+      
+      this.dedent();
+      this.emit('}');
+    } else {
+      // No constructor or no parameters - generate default
+      this.emit(`fn new() -> Self {`);
+      this.indent();
+      this.emit(`${name} {`);
+      this.indent();
+      
+      // Initialize all fields (including inherited) with their default values
+      for (const field of allFields) {
+        if (field.initializer) {
+          this.emit(`${field.name}: ${field.initializer},`);
+        } else {
+          this.emit(`${field.name}: ${this.getDefaultValue(field.type)},`);
+        }
+      }
+      
+      this.dedent();
+      this.emit('}');
     }
-    
-    this.dedent();
-    this.emit('}');
     this.dedent();
     this.emit('}');
     this.emit('');
@@ -1476,7 +1530,9 @@ export class RustCodegen {
       let modifiesSelf = false;
       if (method.body) {
         const bodyText = method.body.getText();
-        modifiesSelf = /this\.\w+\s*=/.test(bodyText);
+        // Check for direct field assignments OR mutating method calls (set, insert, push, etc.)
+        modifiesSelf = /this\.\w+\s*=/.test(bodyText) || 
+                      /this\.\w+\.(set|insert|delete|clear|push|pop|splice|shift|unshift)\(/.test(bodyText);
       }
       
       const params = this.generateParameters(method.parameters, true, modifiesSelf);
@@ -1516,7 +1572,9 @@ export class RustCodegen {
       let modifiesSelf = false;
       if (method.body) {
         const bodyText = method.body.getText();
-        modifiesSelf = /this\.\w+\s*=/.test(bodyText);
+        // Check for direct field assignments OR mutating method calls (set, insert, push, etc.)
+        modifiesSelf = /this\.\w+\s*=/.test(bodyText) || 
+                      /this\.\w+\.(set|insert|delete|clear|push|pop|splice|shift|unshift)\(/.test(bodyText);
       }
       
       const params = this.generateParameters(method.parameters, true, modifiesSelf);
@@ -1525,6 +1583,10 @@ export class RustCodegen {
       
       this.emit(`fn ${methodName}(${params}) -> ${resultType} {`);
       this.indent();
+      
+      // Track the return type for this function
+      const previousReturnType = this.currentFunctionReturnType;
+      this.currentFunctionReturnType = returnType;
       
       // Generate the method body directly (not delegating)
       if (method.body) {
@@ -1535,6 +1597,9 @@ export class RustCodegen {
           this.emit('Ok(())');
         }
       }
+      
+      // Restore previous return type
+      this.currentFunctionReturnType = previousReturnType;
       
       this.dedent();
       this.emit('}');
@@ -1564,7 +1629,9 @@ export class RustCodegen {
     let modifiesSelf = false;
     if (method.body) {
       const bodyText = method.body.getText();
-      modifiesSelf = /this\.\w+\s*=/.test(bodyText);
+      // Check for direct field assignments OR mutating method calls (set, insert, push, etc.)
+      modifiesSelf = /this\.\w+\s*=/.test(bodyText) || 
+                    /this\.\w+\.(set|insert|delete|clear|push|pop|splice|shift|unshift)\(/.test(bodyText);
     }
     
     const params = this.generateParameters(method.parameters, true, modifiesSelf);
@@ -1582,6 +1649,10 @@ export class RustCodegen {
     this.emit(`${asyncModifier}fn ${name}(${params}) -> ${resultType} {`);
     this.indent();
     
+    // Track the return type for this function
+    const previousReturnType = this.currentFunctionReturnType;
+    this.currentFunctionReturnType = returnType;
+    
     if (method.body) {
       this.generateBlock(method.body);
       
@@ -1591,6 +1662,9 @@ export class RustCodegen {
         this.emit('Ok(())');
       }
     }
+    
+    // Restore previous return type
+    this.currentFunctionReturnType = previousReturnType;
     
     this.dedent();
     this.emit('}');
@@ -1823,7 +1897,21 @@ export class RustCodegen {
    */
   private generateReturnStatement(statement: ts.ReturnStatement): void {
     if (statement.expression) {
-      const expr = this.generateExpression(statement.expression);
+      let expr = this.generateExpression(statement.expression);
+      
+      // If the current function returns Option<T> and we're returning a non-Option value,
+      // wrap it in Some()
+      if (this.currentFunctionReturnType && this.currentFunctionReturnType.startsWith('Option<')) {
+        // Check if the expression is already None or Some() or an if-expression with None branch
+        const isAlreadyOption = expr === 'None' || 
+                               expr.startsWith('Some(') ||
+                               (expr.includes('if ') && expr.includes(' None'));
+        
+        if (!isAlreadyOption) {
+          expr = `Some(${expr})`;
+        }
+      }
+      
       this.emit(`return Ok(${expr});`);
     } else {
       this.emit('return Ok(());');
@@ -2393,6 +2481,23 @@ export class RustCodegen {
       // The async keyword on the function handles the future wrapper
       this.hasAsync = true;
       return this.generateType(type.typeArguments[0]);
+    } else if (typeName === 'Map') {
+      // Map<K, V> -> HashMap<K, V>
+      this.addImport('use std::collections::HashMap;');
+      if (type.typeArguments && type.typeArguments.length >= 2) {
+        const keyType = this.generateType(type.typeArguments[0]);
+        const valueType = this.generateType(type.typeArguments[1]);
+        return `HashMap<${keyType}, ${valueType}>`;
+      }
+      return 'HashMap<String, String>'; // Default if no type args
+    } else if (typeName === 'Set') {
+      // Set<T> -> HashSet<T>
+      this.addImport('use std::collections::HashSet;');
+      if (type.typeArguments && type.typeArguments.length > 0) {
+        const innerType = this.generateType(type.typeArguments[0]);
+        return `HashSet<${innerType}>`;
+      }
+      return 'HashSet<String>'; // Default if no type args
     }
     
     // Handle standard generic types
@@ -2407,7 +2512,7 @@ export class RustCodegen {
   /**
    * Generate expression
    */
-  private generateExpression(expr: ts.Expression, useIntegerLiterals = false): string {
+  private generateExpression(expr: ts.Expression, useIntegerLiterals = false, isLValue = false): string {
     if (ts.isNumericLiteral(expr)) {
       const text = expr.getText();
       // Add .0 if it's an integer literal (for f64 compatibility)
@@ -2451,7 +2556,7 @@ export class RustCodegen {
     } else if (ts.isCallExpression(expr)) {
       return this.generateCallExpression(expr);
     } else if (ts.isPropertyAccessExpression(expr)) {
-      return this.generatePropertyAccess(expr);
+      return this.generatePropertyAccess(expr, isLValue);
     } else if (ts.isObjectLiteralExpression(expr)) {
       return this.generateObjectLiteral(expr);
     } else if (ts.isArrayLiteralExpression(expr)) {
@@ -2459,7 +2564,7 @@ export class RustCodegen {
     } else if (ts.isNewExpression(expr)) {
       return this.generateNewExpression(expr);
     } else if (ts.isElementAccessExpression(expr)) {
-      return this.generateElementAccess(expr);
+      return this.generateElementAccess(expr, isLValue);
     } else if (ts.isPrefixUnaryExpression(expr)) {
       return this.generatePrefixUnaryExpression(expr);
     } else if (ts.isPostfixUnaryExpression(expr)) {
@@ -2469,7 +2574,7 @@ export class RustCodegen {
     } else if (ts.isTemplateExpression(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) {
       return this.generateTemplateLiteral(expr);
     } else if (ts.isParenthesizedExpression(expr)) {
-      return `(${this.generateExpression(expr.expression)})`;
+      return `(${this.generateExpression(expr.expression, useIntegerLiterals, isLValue)})`;
     } else if (ts.isAwaitExpression(expr)) {
       return this.generateAwaitExpression(expr);
     } else {
@@ -3169,8 +3274,11 @@ export class RustCodegen {
     const leftIsInteger = ts.isIdentifier(expr.left) && this.integerVariables.has(expr.left.getText());
     const rightIsInteger = ts.isIdentifier(expr.right) && this.integerVariables.has(expr.right.getText());
     
-    let left = this.generateExpression(expr.left, useIntegerLiterals);
-    let right = this.generateExpression(expr.right, useIntegerLiterals);
+    // For assignments, the left-hand side should be an lvalue (no .clone())
+    const isAssignment = operator === '=' || operator === '+=' || operator === '-=' || 
+                        operator === '*=' || operator === '/=' || operator === '%=';
+    let left = this.generateExpression(expr.left, useIntegerLiterals, isAssignment);
+    let right = this.generateExpression(expr.right, useIntegerLiterals, false);
     
     // In arithmetic operations with mixed types (one usize, one f64), cast usize to f64
     const op = expr.operatorToken.getText();
@@ -3361,6 +3469,71 @@ export class RustCodegen {
         return `vec![${chars}].iter().collect::<String>()`;
       }
       
+      // String methods
+      if (property === 'startsWith' || property === 'starts_with') {
+        // str.startsWith(prefix) -> str.starts_with(prefix.as_str())
+        const args = expr.arguments.map(arg => {
+          const argCode = this.generateExpression(arg);
+          // Convert String::from("...") to "..." for starts_with
+          if (argCode.startsWith('String::from(')) {
+            return argCode.slice('String::from('.length, -1);
+          }
+          return `${argCode}.as_str()`;
+        });
+        return `${object}.starts_with(${args.join(', ')})`;
+      }
+      
+      if (property === 'endsWith' || property === 'ends_with') {
+        // str.endsWith(suffix) -> str.ends_with(suffix.as_str())
+        const args = expr.arguments.map(arg => {
+          const argCode = this.generateExpression(arg);
+          // Convert String::from("...") to "..." for ends_with
+          if (argCode.startsWith('String::from(')) {
+            return argCode.slice('String::from('.length, -1);
+          }
+          return `${argCode}.as_str()`;
+        });
+        return `${object}.ends_with(${args.join(', ')})`;
+      }
+      
+      if (property === 'substring') {
+        // str.substring(start) -> &str[start as usize..]
+        // str.substring(start, end) -> &str[start as usize..end as usize]
+        const args = expr.arguments.map(arg => this.generateExpression(arg));
+        if (args.length === 1) {
+          return `${object}[(${args[0]}) as usize..].to_string()`;
+        } else if (args.length >= 2) {
+          return `${object}[(${args[0]}) as usize..(${args[1]}) as usize].to_string()`;
+        }
+        return object;
+      }
+      
+      if (property === 'indexOf') {
+        // str.indexOf(search) -> str.find(search).map(|i| i as f64).unwrap_or(-1.0)
+        const args = expr.arguments.map(arg => this.generateExpression(arg));
+        return `${object}.find(${args[0]}.as_str()).map(|i| i as f64).unwrap_or(-1.0)`;
+      }
+      
+      // Map/HashMap methods
+      if (property === 'set') {
+        // map.set(key, value) -> map.insert(key, value); (returns Option<V>)
+        const args = expr.arguments.map(arg => this.generateExpression(arg));
+        // insert returns Option<V>, but we ignore it and return Ok(())
+        return `{ ${object}.insert(${args.join(', ')}); Ok::<(), String>(()) }`;
+      }
+      
+      if (property === 'get') {
+        // map.get(key) -> map.get(&key).cloned()
+        const args = expr.arguments.map(arg => this.generateExpression(arg));
+        return `${object}.get(&${args[0]}).cloned()`;
+      }
+      
+      if (property === 'has') {
+        // map.has(key) -> map.contains_key(&key)
+        const args = expr.arguments.map(arg => this.generateExpression(arg));
+        return `${object}.contains_key(&${args[0]})`;
+      }
+      
       // Array methods: map, filter, forEach, etc.
       if (property === 'map') {
         return this.generateArrayMap(objectExpr, expr.arguments);
@@ -3381,6 +3554,12 @@ export class RustCodegen {
         // JavaScript: x.toString() -> Rust: x.to_string()
         // Note: to_string() returns String directly, not Result<String, E>
         return `${object}.to_string()`;
+      }
+      
+      // Vec methods that return (), not Result
+      if (property === 'push') {
+        const args = expr.arguments.map(arg => this.generateExpression(arg)).join(', ');
+        return `${object}.push(${args})`;
       }
     }
     
@@ -3617,7 +3796,7 @@ export class RustCodegen {
   /**
    * Generate property access
    */
-  private generatePropertyAccess(expr: ts.PropertyAccessExpression): string {
+  private generatePropertyAccess(expr: ts.PropertyAccessExpression, isLValue = false): string {
     const object = this.generateExpression(expr.expression);
     const property = expr.name.getText();
     
@@ -3636,7 +3815,8 @@ export class RustCodegen {
     // If we're accessing a field on self, we need to clone it for non-Copy types
     // This is because we can't move out of &self
     // For now, we'll clone String fields when accessed on self
-    if (object === 'self' && this.checker) {
+    // But not when it's an lvalue (left-hand side of assignment)
+    if (!isLValue && object === 'self' && this.checker) {
       const type = this.checker.getTypeAtLocation(expr);
       const typeStr = this.checker.typeToString(type);
       
@@ -4116,7 +4296,20 @@ export class RustCodegen {
     for (const span of expr.templateSpans) {
       // Add placeholder for this expression
       formatStr += '{}';
-      expressions.push(this.generateExpression(span.expression));
+      
+      // Generate the expression
+      let exprCode = this.generateExpression(span.expression);
+      
+      // If the expression is a variable that's an Option type, unwrap it
+      // This is safe because we're inside a null-check (if opt !== null)
+      if (ts.isIdentifier(span.expression)) {
+        const varName = span.expression.getText();
+        if (this.optionVariables.has(varName)) {
+          exprCode = `${exprCode}.unwrap()`;
+        }
+      }
+      
+      expressions.push(exprCode);
       
       // Add the literal text after the expression
       formatStr += span.literal.text;
@@ -4299,7 +4492,7 @@ export class RustCodegen {
   /**
    * Generate element access expression (array/object indexing)
    */
-  private generateElementAccess(expr: ts.ElementAccessExpression): string {
+  private generateElementAccess(expr: ts.ElementAccessExpression, isLValue = false): string {
     const object = this.generateExpression(expr.expression);
     
     // Check if index is a string (for HashMap/map access)
@@ -4316,17 +4509,18 @@ export class RustCodegen {
       
       // If it's clearly numeric context (in integerVariables), use without cast
       if (this.integerVariables.has(varName)) {
-        return `${object}[${index}]`;
+        // Don't add .clone() for lvalues (left-hand side of assignment)
+        return isLValue ? `${object}[${index}]` : `${object}[${index}].clone()`;
       }
       
       // Default: assume it might be f64, cast to usize for array indexing
-      return `${object}[${index} as usize]`;
+      return isLValue ? `${object}[${index} as usize]` : `${object}[${index} as usize].clone()`;
     }
     
     // Numeric literal - use as integer
     if (ts.isNumericLiteral(expr.argumentExpression)) {
       const index = this.generateExpression(expr.argumentExpression, true);
-      return `${object}[${index}]`;
+      return isLValue ? `${object}[${index}]` : `${object}[${index}].clone()`;
     }
     
     // Complex expression (arithmetic, etc.) - generate and wrap entire expression in cast
@@ -4334,16 +4528,16 @@ export class RustCodegen {
     
     // If the index already contains \"as usize\", don't double-cast
     if (index.includes(' as usize')) {
-      return `${object}[${index}]`;
+      return isLValue ? `${object}[${index}]` : `${object}[${index}].clone()`;
     }
     
     // If it's a simple integer, use directly
     if (/^\d+$/.test(index)) {
-      return `${object}[${index}]`;
+      return isLValue ? `${object}[${index}]` : `${object}[${index}].clone()`;
     }
     
     // Otherwise wrap the entire expression in usize cast
-    return `${object}[(${index}) as usize]`;
+    return isLValue ? `${object}[(${index}) as usize]` : `${object}[(${index}) as usize].clone()`;
   }
 
   /**
@@ -4367,6 +4561,10 @@ export class RustCodegen {
         // For complex types like Vec, Box, Rc, Option
         if (rustType.startsWith('Vec<')) {
           return 'vec![]';
+        } else if (rustType.startsWith('HashMap<')) {
+          return 'HashMap::new()';
+        } else if (rustType.startsWith('HashSet<')) {
+          return 'HashSet::new()';
         } else if (rustType.startsWith('Box<')) {
           const inner = rustType.slice(4, -1);
           return `Box::new(${this.getDefaultValue(inner)})`;

@@ -2,8 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Compiler } from '../../src/compiler.js';
 import { writeFileSync, mkdirSync, existsSync, readFileSync, rmSync, readdirSync, statSync } from 'fs';
 import { tmpdir } from 'os';
-import { join, dirname } from 'path';
+import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 import { executeJS, executeRust, compareOutputs, isRustcAvailable } from './runtime-helpers.js';
 
 /**
@@ -42,6 +43,28 @@ const discoverExamples = (): string[] => {
     .sort();
 };
 
+/**
+ * Compile Rust source to binary and keep it in the dist directory
+ */
+const compileRustBinary = (rustFile: string, outDir: string, exampleName: string): boolean => {
+  if (!isRustcAvailable()) {
+    return false;
+  }
+  
+  const binFile = join(outDir, exampleName);
+  
+  try {
+    execSync(
+      `rustc ${rustFile} -o ${binFile} 2>&1`,
+      { encoding: 'utf-8', timeout: 30000 }
+    );
+    return true;
+  } catch (error: any) {
+    console.error(`Failed to compile Rust binary for ${exampleName}:`, error.stdout || error.stderr || error.message);
+    return false;
+  }
+};
+
 describe('Phase 3: Concrete Examples', () => {
   let tmpDir: string;
   let compiler: Compiler;
@@ -67,28 +90,42 @@ describe('Phase 3: Concrete Examples', () => {
   } => {
     const exampleDir = join(EXAMPLES_DIR, exampleName);
     const srcFile = join(exampleDir, 'src', 'main.gs.ts');
-    const outDir = join(tmpDir, exampleName, 'dist');
+    // Use the example's own dist directory
+    const outDir = join(exampleDir, 'dist');
     
     if (!existsSync(srcFile)) {
       throw new Error(`Example ${exampleName} missing src/main.gs.ts`);
     }
     
-    // Create a temporary tsconfig.json for this example
-    const tsconfigPath = join(tmpDir, exampleName, 'tsconfig.json');
-    mkdirSync(join(tmpDir, exampleName), { recursive: true });
-    writeFileSync(tsconfigPath, JSON.stringify({
-      compilerOptions: {
-        target: 'ES2020',
-        module: 'commonjs',
-        lib: ['ES2020'],
-        strict: true,
-        esModuleInterop: true,
-        skipLibCheck: true,
-        forceConsistentCasingInFileNames: true,
-        outDir: './dist',
-      },
-      include: [join(exampleDir, 'src/**/*')],
-    }, null, 2), 'utf-8');
+    // Ensure the dist directory exists
+    mkdirSync(outDir, { recursive: true });
+    
+    // Use the example's tsconfig.json if it exists, otherwise create a temporary one
+    const exampleTsconfigPath = join(exampleDir, 'tsconfig.json');
+    const tsconfigPath = existsSync(exampleTsconfigPath) 
+      ? exampleTsconfigPath
+      : join(tmpDir, exampleName, 'tsconfig.json');
+    
+    // Create temporary tsconfig only if the example doesn't have one
+    if (!existsSync(exampleTsconfigPath)) {
+      mkdirSync(join(tmpDir, exampleName), { recursive: true });
+      writeFileSync(tsconfigPath, JSON.stringify({
+        compilerOptions: {
+          target: 'ES2020',
+          module: 'commonjs',
+          lib: ['ES2020'],
+          strict: true,
+          esModuleInterop: true,
+          skipLibCheck: true,
+          forceConsistentCasingInFileNames: true,
+          outDir: './dist',
+        },
+        goodscript: {
+          level: 'rust',
+        },
+        include: [join(exampleDir, 'src/**/*')],
+      }, null, 2), 'utf-8');
+    }
     
     // Compile to JavaScript
     const jsCompileResult = compiler.compile({
@@ -111,6 +148,12 @@ describe('Phase 3: Concrete Examples', () => {
     
     const rustFile = join(outDir, 'main.rs');
     const rustCode = existsSync(rustFile) ? readFileSync(rustFile, 'utf-8') : '';
+    
+    // Compile Rust binary and keep it in the dist directory
+    let rustBinaryCompiled = false;
+    if (isRustcAvailable() && rustCode) {
+      rustBinaryCompiled = compileRustBinary(rustFile, outDir, exampleName);
+    }
     
     // Execute JavaScript
     const jsResult = executeJS(jsCode);
