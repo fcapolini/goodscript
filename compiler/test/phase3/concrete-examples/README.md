@@ -101,6 +101,28 @@ a • • •
 • b • •
 ```
 
+### json-parser
+
+Complete JSON tokenizer and parser demonstrating:
+- Enums with multiple variants (TokenType)
+- Recursive descent parsing
+- Complex state management (position tracking, token buffering)
+- Character-by-character string parsing
+- Ownership types (`Unique<T>` for tokenizer and input strings)
+- Nullable return types (`string | null`, `JsonValue | null`)
+- Static factory methods
+- Map<K,V> and Array manipulation
+- String methods (charAt, substring, comparisons)
+- Complex control flow (nested while loops, if-else chains)
+- Union type pattern (JsonValue with multiple internal representations)
+- Method mutability detection (conservative `&mut self`)
+- Option<T> unwrapping after null checks
+
+**Output**:
+```
+Parsed JSON kind: object
+```
+
 ## Notes
 
 - All examples must use the `.gs.ts` extension
