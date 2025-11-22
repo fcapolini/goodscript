@@ -27,15 +27,19 @@ A comprehensive JSON tokenizer and parser implemented in GoodScript that demonst
 - Executes successfully with Node.js
 - Produces expected output
 
-### ⚠️ Rust Compilation
-Compiles to Rust code but reveals some edge cases in the Rust code generator that need fixing:
+### ✅ Rust Compilation
+- **Compiles successfully with 0 errors!** (38 naming convention warnings)
+- Executes correctly and produces identical output to TypeScript
+- All major codegen features working:
+  - ✅ Rust keyword escaping (`type` → `r#type`)
+  - ✅ Variable mutability detection (conservative approach)
+  - ✅ Option<T> unwrapping after null checks
+  - ✅ Smart constructor generation with Result<Self, String>
+  - ✅ Box<T> wrapping for Unique<T> types
+  - ✅ Enum access with `::` operator
+  - ✅ `&mut self` for methods with state mutation
 
-1. ~~**Keyword escaping in parameters**: The parameter name `type` is a Rust keyword and needs to be escaped as `r#type`~~ ✅ **FIXED** - Systematic keyword escaping implemented!
-2. **Enum member access**: Uses `.` instead of `::` for enum variants (e.g., `TokenType.EOF` should be `TokenType::EOF`)
-3. **Mutable self references**: Methods that mutate state need `&mut self` instead of `&self`
-4. **Option unwrapping**: Some nullable checks need proper Option handling
-
-These are known limitations in the current Rust codegen implementation and will be addressed in future iterations.
+This example validates Session 26's improvements to the Rust code generator.
 
 ## Building and Running
 
@@ -53,7 +57,7 @@ Expected output:
 Parsed JSON kind: object
 ```
 
-### Rust (when codegen is complete)
+### Rust
 ```bash
 # Compile to Rust
 gsc src/main.gs.ts --out-dir dist --target rust
@@ -63,6 +67,11 @@ rustc dist/main.rs -o json-parser
 
 # Run
 ./json-parser
+```
+
+Expected output:
+```
+Parsed JSON kind: object
 ```
 
 ## Code Structure
