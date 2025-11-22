@@ -1047,9 +1047,69 @@ export class CppCodegen {
     
     // Template spans
     for (const span of expr.templateSpans) {
-      // Expression
+      // Expression - handle different types appropriately
       const exprStr = this.generateExpression(span.expression);
-      parts.push(`std::to_string(${exprStr})`);
+      
+      // Determine the type of the expression to decide how to convert to string
+      let convertedExpr = exprStr;
+      
+      if (this.checker) {
+        const type = this.checker.getTypeAtLocation(span.expression);
+        const typeStr = this.checker.typeToString(type);
+        
+        // For identifiers, also check their declared type (not narrowed type)
+        let declaredTypeStr = typeStr;
+        if (ts.isIdentifier(span.expression)) {
+          const symbol = this.checker.getSymbolAtLocation(span.expression);
+          if (symbol && symbol.valueDeclaration) {
+            const declaredType = this.checker.getTypeOfSymbolAtLocation(symbol, symbol.valueDeclaration);
+            declaredTypeStr = this.checker.typeToString(declaredType);
+          }
+        }
+        
+        // Debug: log what type we're seeing
+        // console.log(`[Template Literal] Expression: ${exprStr}, Type: ${typeStr}, Declared: ${declaredTypeStr}`);
+        
+        // Use declared type for checking if it's optional
+        const checkTypeStr = declaredTypeStr;
+        
+        // Check if it's a string type (or optional string)
+        if (checkTypeStr === 'string') {
+          // Plain string - no conversion needed
+          convertedExpr = exprStr;
+        } else if (checkTypeStr.includes('string') && (checkTypeStr.includes('null') || checkTypeStr.includes('undefined'))) {
+          // Optional string - extract value
+          // If we're in a narrowed context (typeStr is 'string'), use .value(), otherwise .value_or("")
+          if (typeStr === 'string' && checkTypeStr !== 'string') {
+            // Narrowed to non-null, can use .value()
+            convertedExpr = `${exprStr}.value()`;
+          } else {
+            convertedExpr = `${exprStr}.value_or("")`;
+          }
+        } else if (checkTypeStr === 'number') {
+          // Number - convert to string
+          convertedExpr = `std::to_string(${exprStr})`;
+        } else if (checkTypeStr.includes('number') && (checkTypeStr.includes('null') || checkTypeStr.includes('undefined'))) {
+          // Optional number - extract value then convert
+          if (typeStr === 'number' && checkTypeStr !== 'number') {
+            // Narrowed to non-null, can use .value()
+            convertedExpr = `std::to_string(${exprStr}.value())`;
+          } else {
+            convertedExpr = `std::to_string(${exprStr}.value_or(0))`;
+          }
+        } else if (checkTypeStr === 'boolean') {
+          // Boolean - convert to string via stream
+          convertedExpr = `(${exprStr} ? "true" : "false")`;
+        } else {
+          // Default: try std::to_string
+          convertedExpr = `std::to_string(${exprStr})`;
+        }
+      } else {
+        // No type checker available - use std::to_string as fallback
+        convertedExpr = `std::to_string(${exprStr})`;
+      }
+      
+      parts.push(convertedExpr);
       
       // Literal
       if (span.literal.text) {
