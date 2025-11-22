@@ -56,6 +56,7 @@ export class RustCodegen {
   private currentFunctionReturnType?: string;  // Track current function's return type for Option wrapping
   private currentMethodName?: string;  // Track current method name for recursive call detection
   private inConstructorBody = false;  // Track if we're generating constructor body statements
+  private boxedLocalVars = new Set<string>();  // Track local variables that are already Box<T> (don't need wrapping)
   // Track interface traits and their required fields for automatic trait implementation
   private interfaceTraits = new Map<string, Array<{name: string, type: string}>>();  // Maps TraitName -> [{fieldName, fieldType}]
   private syntheticTypeCounter = 0;  // Counter for generating unique synthetic type names
@@ -452,9 +453,11 @@ export class RustCodegen {
             break;
           }
           
-          // Replace uses of the variable as an argument with .unwrap()
-          // Match varName when it's NOT followed by a dot (which would be a method call)
-          // and IS followed by ) or , or ;
+          // Check if the line contains .insert( or .push( with our variable
+          const hasInsert = line.includes(`.insert(`) && line.includes(varName);
+          const hasPush = line.includes(`.push(`) && line.includes(varName);
+          
+          // For all variables in is_some() blocks, add .unwrap()
           const regex = new RegExp(`\\b(${varName})(?!\\.)([,;\\)])`, 'g');
           line = line.replace(regex, `${varName}.unwrap()$2`);
           
@@ -1671,7 +1674,12 @@ export class RustCodegen {
         for (const field of allFields) {
           if (assignedFields.has(field.name)) {
             // Field was assigned in constructor body, use local variable
-            this.emit(`${field.name},`);
+            // If field type is Box<T> and variable is not already boxed, wrap it
+            if (field.type.startsWith('Box<') && !this.boxedLocalVars.has(field.name)) {
+              this.emit(`${field.name}: Box::new(${field.name}),`);
+            } else {
+              this.emit(`${field.name},`);
+            }
           } else {
             // Check if there's a parameter with the same name
             const rawFieldName = field.name.startsWith('r#') ? field.name.slice(2) : field.name;
@@ -1692,6 +1700,9 @@ export class RustCodegen {
         }
         this.dedent();
         this.emit('})');
+        
+        // Clear the boxed variables set for next constructor
+        this.boxedLocalVars.clear();
       } else {
         // No constructor body - just initialize the struct
         this.emit(`Ok(${name} {`);
@@ -2191,14 +2202,24 @@ export class RustCodegen {
       const fieldName = this.escapeIdentifier(statement.expression.left.name.getText());
       let value = this.generateExpression(statement.expression.right);
       
-      // Find the field's type in the class declaration to check if we need to wrap
-      // But don't wrap if the value is already a parameter with a matching ownership type
-      if (this.checker && !ts.isIdentifier(statement.expression.right)) {
+      // Check if the field has a Unique type and the value is already a method call
+      // that returns a Unique type (which is already Box<T> after the ?)
+      // In that case, don't wrap it again
+      if (this.checker && ts.isCallExpression(statement.expression.right)) {
         const symbol = this.checker.getSymbolAtLocation(statement.expression.left);
         if (symbol && symbol.valueDeclaration && ts.isPropertyDeclaration(symbol.valueDeclaration)) {
           const fieldType = symbol.valueDeclaration.type;
-          if (fieldType) {
-            value = this.wrapInOwnershipConstructor(value, fieldType);
+          if (fieldType && ts.isTypeReferenceNode(fieldType) && 
+              fieldType.typeName.getText() === 'Unique') {
+            // Field is Unique<T>
+            // Check if the RHS is a call expression that returns Unique<T>
+            // We need to check the actual return type annotation, not the TypeChecker type
+            const methodReturnType = this.getMethodReturnTypeFromSource(statement.expression.right);
+            if (methodReturnType && methodReturnType.startsWith('Unique<')) {
+              // The value is already a Unique (Box) after the ?, don't wrap it
+              // Track this variable as already boxed
+              this.boxedLocalVars.add(fieldName);
+            }
           }
         }
       }
@@ -3830,6 +3851,27 @@ export class RustCodegen {
     let left = this.generateExpression(expr.left, useIntegerLiterals, isAssignment);
     let right = this.generateExpression(expr.right, useIntegerLiterals, false);
     
+    // For assignments to Option<T> fields, wrap the RHS in Some() if needed
+    if (operator === '=' && ts.isPropertyAccessExpression(expr.left) && this.checker) {
+      // Check if the left-hand side is an Option<T> type
+      const leftType = this.checker.getTypeAtLocation(expr.left);
+      const leftTypeStr = this.checker.typeToString(leftType);
+      
+      // If it's a nullable type (contains | null or | undefined), it becomes Option<T> in Rust
+      if (leftTypeStr.includes('| null') || leftTypeStr.includes('| undefined') || 
+          leftTypeStr.includes('|null') || leftTypeStr.includes('|undefined')) {
+        // Check if the RHS is NOT already None, Some(), or another Option
+        const rightIsNull = expr.right.kind === ts.SyntaxKind.NullKeyword || 
+                           expr.right.kind === ts.SyntaxKind.UndefinedKeyword ||
+                           (ts.isIdentifier(expr.right) && (expr.right.getText() === 'null' || expr.right.getText() === 'undefined'));
+        
+        if (!rightIsNull && !right.startsWith('Some(') && !right.startsWith('None')) {
+          // Wrap in Some()
+          right = `Some(${right})`;
+        }
+      }
+    }
+    
     // In arithmetic operations with mixed types (one usize, one f64), cast usize to f64
     if ((op === '+' || op === '-' || op === '*' || op === '/' || op === '%') &&
         (leftIsInteger !== rightIsInteger)) {
@@ -3849,11 +3891,11 @@ export class RustCodegen {
       const leftIsIntLiteral = ts.isNumericLiteral(expr.left) && !expr.left.getText().includes('.');
       const rightIsIntLiteral = ts.isNumericLiteral(expr.right) && !expr.right.getText().includes('.');
       
-      if (leftHasFloat && rightIsIntLiteral) {
-        // Right side is int literal, left has float - add .0 to right
+      if (leftHasFloat && rightIsIntLiteral && !right.includes('.')) {
+        // Right side is int literal without decimal point, left has float - add .0 to right
         right = right + '.0';
-      } else if (rightHasFloat && leftIsIntLiteral) {
-        // Left side is int literal, right has float - add .0 to left
+      } else if (rightHasFloat && leftIsIntLiteral && !left.includes('.')) {
+        // Left side is int literal without decimal point, right has float - add .0 to left
         left = left + '.0';
       }
     }
@@ -4131,7 +4173,61 @@ export class RustCodegen {
       // Map/HashMap methods
       if (property === 'set') {
         // map.set(key, value) -> map.insert(key, value); (returns Option<V>)
-        const args = expr.arguments.map(arg => this.generateExpression(arg));
+        const args = expr.arguments.map((arg, index) => {
+          let argCode = this.generateExpression(arg);
+          
+          // For the value argument (index 1), check the Map's value type from AST
+          if (index === 1 && this.checker && ts.isPropertyAccessExpression(expr.expression)) {
+            // Get the property access expression (e.g., this.cache)
+            const mapObj = expr.expression.expression;
+            
+            // Try to get the field type from the AST (preserves Shared<T> annotations)
+            let mapTypeText: string | undefined;
+            if (ts.isPropertyAccessExpression(mapObj) && 
+                mapObj.expression.kind === ts.SyntaxKind.ThisKeyword) {
+              // It's this.fieldName - look up the field in the class
+              const fieldName = mapObj.name.getText();
+              const symbol = this.checker.getSymbolAtLocation(mapObj);
+              if (symbol && symbol.valueDeclaration && ts.isPropertyDeclaration(symbol.valueDeclaration)) {
+                mapTypeText = symbol.valueDeclaration.type?.getText();
+              }
+            }
+            
+            // Check if Map value type is Shared<T> -> needs Rc::new wrapping
+            if (mapTypeText) {
+              const sharedMatch = mapTypeText.match(/Map<[^,]+,\s*Shared<([^>]+)>>/);
+              if (sharedMatch) {
+                // Map expects Shared<T> values, wrap in Rc::new
+                if (!argCode.startsWith('Rc::new(')) {
+                  this.addImport('use std::rc::Rc;');
+                  argCode = `Rc::new(${argCode})`;
+                }
+                return argCode;
+              }
+            }
+            
+            // Check if it's a nullable type (becomes Option<T> in Rust)
+            const argType = this.checker.getTypeAtLocation(arg);
+            const argTypeStr = this.checker.typeToString(argType);
+            const isNullable = argTypeStr.includes('null') || argTypeStr.includes('undefined');
+            
+            if (isNullable && ts.isIdentifier(arg)) {
+              // Extract the base type (before | null/undefined)
+              const baseType = argTypeStr.split('|')[0].trim();
+              const isPrimitive = baseType === 'string' || baseType === 'number' || baseType === 'boolean' || baseType === 'void';
+              
+              if (!isPrimitive) {
+                // It's Option<Box<T>>, needs *unwrap()
+                argCode = `*${argCode}.unwrap()`;
+              } else {
+                // Primitive Option type
+                argCode = `${argCode}.unwrap()`;
+              }
+            }
+          }
+          
+          return argCode;
+        });
         // insert returns Option<V>, but we ignore it and return Ok(())
         return `{ ${object}.insert(${args.join(', ')}); Ok::<(), String>(()) }`;
       }
@@ -4178,7 +4274,73 @@ export class RustCodegen {
       
       // Vec methods that return (), not Result
       if (property === 'push') {
-        const args = expr.arguments.map(arg => this.generateExpression(arg)).join(', ');
+        const args = expr.arguments.map(arg => {
+          let argCode = this.generateExpression(arg);
+          
+          // Check the Vec's element type for Shared<T> wrapping from AST
+          if (this.checker && ts.isPropertyAccessExpression(expr.expression)) {
+            const vecObj = expr.expression.expression;
+            
+            // Try to get the field type from the AST (preserves Shared<T> annotations)
+            let vecTypeText: string | undefined;
+            if (ts.isPropertyAccessExpression(vecObj) && 
+                vecObj.expression.kind === ts.SyntaxKind.ThisKeyword) {
+              // It's this.fieldName - look up the field in the class
+              const fieldName = vecObj.name.getText();
+              const symbol = this.checker.getSymbolAtLocation(vecObj);
+              if (symbol && symbol.valueDeclaration && ts.isPropertyDeclaration(symbol.valueDeclaration)) {
+                vecTypeText = symbol.valueDeclaration.type?.getText();
+              }
+            }
+            
+            // Check if Vec element type is Shared<T> -> needs Rc::new wrapping
+            if (vecTypeText) {
+              const sharedMatch = vecTypeText.match(/Shared<([^>]+)>\[\]/);
+              if (sharedMatch) {
+                // Vec expects Shared<T> elements
+                // Check if the argument is already Shared<T> (don't double-wrap)
+                let needsWrapping = true;
+                if (ts.isIdentifier(arg) && this.checker) {
+                  const argSymbol = this.checker.getSymbolAtLocation(arg);
+                  if (argSymbol && argSymbol.valueDeclaration && ts.isParameter(argSymbol.valueDeclaration)) {
+                    const paramType = argSymbol.valueDeclaration.type;
+                    if (paramType && ts.isTypeReferenceNode(paramType) && 
+                        paramType.typeName.getText() === 'Shared') {
+                      // Argument is already Shared<T>, don't wrap
+                      needsWrapping = false;
+                    }
+                  }
+                }
+                
+                if (needsWrapping && !argCode.startsWith('Rc::new(')) {
+                  this.addImport('use std::rc::Rc;');
+                  argCode = `Rc::new(${argCode})`;
+                }
+                return argCode;
+              }
+            }
+            
+            // Check if this is a nullable type that needs unwrapping/dereferencing
+            const argType = this.checker.getTypeAtLocation(arg);
+            const argTypeStr = this.checker.typeToString(argType);
+            const isNullable = argTypeStr.includes('null') || argTypeStr.includes('undefined');
+            
+            if (isNullable) {
+              const baseType = argTypeStr.split('|')[0].trim();
+              const isPrimitive = baseType === 'string' || baseType === 'number' || baseType === 'boolean' || baseType === 'void';
+              
+              if (!isPrimitive) {
+                // It's Option<Box<T>>, needs *unwrap()
+                argCode = `*${argCode}.unwrap()`;
+              } else {
+                // Primitive Option type
+                argCode = `${argCode}.unwrap()`;
+              }
+            }
+          }
+          
+          return argCode;
+        }).join(', ');
         return `${object}.push(${args})`;
       }
     }
@@ -4202,7 +4364,7 @@ export class RustCodegen {
     }
     
     // Handle function arguments, including spread
-    const args = expr.arguments.map(arg => {
+    const args = expr.arguments.map((arg, index) => {
       if (ts.isSpreadElement(arg)) {
         // Spread in function call: sum(...args) -> sum(args)
         // In Rust, we just pass the Vec directly
@@ -4221,6 +4383,33 @@ export class RustCodegen {
           const varName = arg.getText();
           if (this.optionVariables.has(varName) && this.unwrappedOptions.has(varName)) {
             argExpr = `${argExpr}.unwrap()`;
+          }
+        }
+        
+        // Check if the parameter expects a Shared<T> (Rc<T>) type
+        // and the argument is not already an Rc
+        if (this.checker) {
+          const signature = this.checker.getResolvedSignature(expr);
+          if (signature && signature.parameters && index < signature.parameters.length) {
+            const param = signature.parameters[index];
+            if (param.valueDeclaration && ts.isParameter(param.valueDeclaration)) {
+              const paramType = param.valueDeclaration.type;
+              if (paramType && ts.isTypeReferenceNode(paramType) && 
+                  paramType.typeName.getText() === 'Shared') {
+                // Parameter expects Shared<T> (Rc<T>)
+                // Check if the argument is already Shared<T> or if it needs wrapping
+                const argType = this.checker.getTypeAtLocation(arg);
+                const argTypeStr = this.checker.typeToString(argType);
+                
+                // If argument is not already Shared<T>, wrap it in Rc::new()
+                // Clone the value before wrapping to avoid moving
+                if (!argTypeStr.startsWith('Shared<') && !argExpr.startsWith('Rc::new(')) {
+                  this.addImport('use std::rc::Rc;');
+                  // Add Clone trait to make struct cloneable
+                  argExpr = `Rc::new(${argExpr}.clone())`;
+                }
+              }
+            }
           }
         }
         
@@ -4925,9 +5114,49 @@ export class RustCodegen {
             const param = classInfo.constructor!.parameters[index];
             const paramType = param.type;
             
+            // If parameter is Shared<T>, wrap the argument in Rc::new() or convert from Box to Rc
+            if (paramType && ts.isTypeReferenceNode(paramType) && 
+                paramType.typeName.getText() === 'Shared') {
+              
+              // Check if argument is Unique<T> (Box<T>) and needs conversion to Shared<T> (Rc<T>)
+              if (ts.isIdentifier(arg) && this.checker) {
+                const symbol = this.checker.getSymbolAtLocation(arg);
+                if (symbol && symbol.valueDeclaration && ts.isParameter(symbol.valueDeclaration)) {
+                  const argParamType = symbol.valueDeclaration.type;
+                  if (argParamType && ts.isTypeReferenceNode(argParamType) && 
+                      argParamType.typeName.getText() === 'Unique') {
+                    // Convert Box<T> to Rc<T>: Rc::new(*box_value) - clone not needed since we're consuming the Box
+                    this.addImport('use std::rc::Rc;');
+                    argCode = `Rc::new(*${argCode})`;
+                    return argCode;
+                  }
+                }
+              }
+              
+              // Otherwise, check if it's already Shared or needs wrapping
+              let argAlreadyShared = argCode.startsWith('Rc::new(');
+              
+              if (!argAlreadyShared && ts.isIdentifier(arg) && this.checker) {
+                const symbol = this.checker.getSymbolAtLocation(arg);
+                if (symbol && symbol.valueDeclaration && ts.isParameter(symbol.valueDeclaration)) {
+                  const argParamType = symbol.valueDeclaration.type;
+                  if (argParamType && ts.isTypeReferenceNode(argParamType) && 
+                      argParamType.typeName.getText() === 'Shared') {
+                    argAlreadyShared = true;
+                  }
+                }
+              }
+              
+              if (!argAlreadyShared) {
+                this.addImport('use std::rc::Rc;');
+                // Clone the value before wrapping to avoid move errors
+                argCode = `Rc::new(${argCode}.clone())`;
+              }
+            }
+            
             // If parameter is Unique<T>, wrap the argument in Box::new()
             // But only if the argument isn't already a Unique type itself
-            if (paramType && ts.isTypeReferenceNode(paramType) && 
+            else if (paramType && ts.isTypeReferenceNode(paramType) && 
                 paramType.typeName.getText() === 'Unique') {
               
               // Check if the argument is a simple identifier that might be a Unique parameter
@@ -4938,9 +5167,9 @@ export class RustCodegen {
                 // Check if this identifier refers to a Unique parameter
                 const symbol = this.checker.getSymbolAtLocation(arg);
                 if (symbol && symbol.valueDeclaration && ts.isParameter(symbol.valueDeclaration)) {
-                  const paramType = symbol.valueDeclaration.type;
-                  if (paramType && ts.isTypeReferenceNode(paramType) && 
-                      paramType.typeName.getText() === 'Unique') {
+                  const argParamType = symbol.valueDeclaration.type;
+                  if (argParamType && ts.isTypeReferenceNode(argParamType) && 
+                      argParamType.typeName.getText() === 'Unique') {
                     argAlreadyUnique = true;
                   }
                 }

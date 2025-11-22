@@ -2,9 +2,9 @@
 
 **Status:** 🚧 In Progress (all core features complete, comprehensive runtime equivalence testing, multiple successful Rust executables!)
 
-**Test Coverage:** 921 tests total (918 passing, 3 failing)
+**Test Coverage:** 921 tests total (920 passing, 1 failing)
 - 906 unit/integration tests (all passing - all core features working!)
-- 15 concrete example tests (12 passing - cli-args, n-queens, json-parser, lru-cache, unique-sharing-test generate code successfully!)
+- 15 concrete example tests (14 passing - cli-args, n-queens, json-parser, lru-cache, unique-sharing-test all compile!)
 
 ## Current Implementation Status
 

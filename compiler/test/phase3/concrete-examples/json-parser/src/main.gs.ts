@@ -179,16 +179,16 @@ class JsonValue {
   stringValue: string;
   numberValue: number;
   booleanValue: boolean;
-  objectValue: Map<string, JsonValue>;
-  arrayValue: JsonValue[];
+  objectValue: Map<string, Unique<JsonValue>> | null;
+  arrayValue: Unique<JsonValue>[] | null;
   
   constructor(kind: string) {
     this.kind = kind;
     this.stringValue = "";
     this.numberValue = 0;
     this.booleanValue = false;
-    this.objectValue = new Map();
-    this.arrayValue = [];
+    this.objectValue = null;
+    this.arrayValue = null;
   }
   
   static fromString(value: string): JsonValue {
@@ -213,13 +213,13 @@ class JsonValue {
     return new JsonValue("null");
   }
   
-  static fromObject(value: Map<string, JsonValue>): JsonValue {
+  static fromObject(value: Map<string, Unique<JsonValue>>): JsonValue {
     const result = new JsonValue("object");
     result.objectValue = value;
     return result;
   }
   
-  static fromArray(value: JsonValue[]): JsonValue {
+  static fromArray(value: Unique<JsonValue>[]): JsonValue {
     const result = new JsonValue("array");
     result.arrayValue = value;
     return result;
@@ -275,7 +275,7 @@ class Parser {
   }
   
   private parseObject(): JsonValue {
-    const obj = new Map<string, JsonValue>();
+    const obj = new Map<string, Unique<JsonValue>>();
     this.advance(); // Skip {
     
     while (!this.expect(TokenType.RightBrace) && !this.expect(TokenType.EOF)) {
@@ -307,7 +307,7 @@ class Parser {
   }
   
   private parseArray(): JsonValue {
-    const arr: JsonValue[] = [];
+    const arr: Unique<JsonValue>[] = [];
     this.advance(); // Skip [
     
     while (!this.expect(TokenType.RightBracket) && !this.expect(TokenType.EOF)) {
