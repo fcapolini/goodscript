@@ -126,6 +126,19 @@ export class CppCodegen {
     lines.push('  return (pos != std::string::npos) ? static_cast<int>(pos) : -1;');
     lines.push('}');
     lines.push('');
+    lines.push('// String helper: fromCharCode');
+    lines.push('inline std::string from_char_code(int code) {');
+    lines.push('  return std::string(1, static_cast<char>(code));');
+    lines.push('}');
+    lines.push('');
+    lines.push('// Number helper: format integer without decimal point');
+    lines.push('inline std::string to_string_int(double value) {');
+    lines.push('  if (value == static_cast<int>(value)) {');
+    lines.push('    return std::to_string(static_cast<int>(value));');
+    lines.push('  }');
+    lines.push('  return std::to_string(value);');
+    lines.push('}');
+    lines.push('');
     lines.push('// Map helper: get (returns optional)');
     lines.push('template<typename K, typename V>');
     lines.push('std::optional<V> map_get(const std::unordered_map<K, V>& map, const K& key) {');
@@ -307,6 +320,8 @@ export class CppCodegen {
       this.generateFunctionDeclaration(statement);
     } else if (ts.isClassDeclaration(statement)) {
       this.generateClassDeclaration(statement);
+    } else if (ts.isEnumDeclaration(statement)) {
+      this.generateEnumDeclaration(statement);
     } else if (ts.isInterfaceDeclaration(statement)) {
       // Interfaces become structs in C++
       this.generateInterfaceDeclaration(statement);
@@ -490,6 +505,26 @@ export class CppCodegen {
         this.emit(`${fieldType} ${fieldName};`);
       }
     }
+    
+    this.dedent();
+    this.emit('};');
+    this.emit('');
+  }
+  
+  /**
+   * Generate enum declaration
+   */
+  private generateEnumDeclaration(enumDecl: ts.EnumDeclaration): void {
+    const name = this.escapeIdentifier(enumDecl.name.getText());
+    this.emit(`enum class ${name} {`);
+    this.indent();
+    
+    const members = enumDecl.members;
+    members.forEach((member, index) => {
+      const memberName = this.escapeIdentifier(member.name.getText());
+      const isLast = index === members.length - 1;
+      this.emit(`${memberName}${isLast ? '' : ','}`);
+    });
     
     this.dedent();
     this.emit('};');
@@ -792,6 +827,8 @@ export class CppCodegen {
       return this.generateConditionalExpression(expr);
     } else if (ts.isArrowFunction(expr)) {
       return this.generateArrowFunction(expr);
+    } else if (ts.isParenthesizedExpression(expr)) {
+      return `(${this.generateExpression(expr.expression)})`;
     }
     
     return '/* unsupported expression */';
@@ -820,6 +857,15 @@ export class CppCodegen {
    */
   private generateCallExpression(expr: ts.CallExpression): string {
     const args = expr.arguments.map(arg => this.generateExpression(arg)).join(', ');
+    
+    // Handle String.fromCharCode early (before general property access handling)
+    if (ts.isPropertyAccessExpression(expr.expression)) {
+      const obj = expr.expression.expression.getText();
+      const method = expr.expression.name.getText();
+      if (obj === 'String' && method === 'fromCharCode') {
+        return `gs::from_char_code(${args})`;
+      }
+    }
     
     // Handle method calls on objects
     if (ts.isPropertyAccessExpression(expr.expression)) {
@@ -857,6 +903,35 @@ export class CppCodegen {
       // Array methods
       if (methodName === 'push') {
         return `${object}${accessor}push_back(${args})`;
+      }
+      
+      if (methodName === 'slice') {
+        // array.slice(start, end)
+        const argArray = expr.arguments.map(arg => this.generateExpression(arg));
+        if (argArray.length === 2) {
+          this.addInclude('<algorithm>');
+          const start = argArray[0];
+          const end = argArray[1];
+          // Create a new vector from the slice
+          return `std::vector<decltype(${object})::value_type>(${object}.begin() + ${start}, ${object}.begin() + ${end})`;
+        }
+      }
+      
+      if (methodName === 'map') {
+        // array.map(lambda)
+        const lambda = expr.arguments[0];
+        const lambdaStr = this.generateExpression(lambda);
+        this.addInclude('<algorithm>');
+        // Transform the array using std::transform
+        return `[&]() { std::vector<std::string> __result; std::transform(${object}.begin(), ${object}.end(), std::back_inserter(__result), ${lambdaStr}); return __result; }()`;
+      }
+      
+      if (methodName === 'join') {
+        // array.join(separator)
+        const separator = expr.arguments.length > 0 ? this.generateExpression(expr.arguments[0]) : '\" \"';
+        this.addInclude('<algorithm>');
+        // Join array elements with separator
+        return `[&]() { std::string __result; for (size_t __i = 0; __i < ${object}.size(); __i++) { if (__i > 0) __result += ${separator}; __result += ${object}[__i]; } return __result; }()`;
       }
       
       // String methods
@@ -923,6 +998,11 @@ export class CppCodegen {
       // Set constructor
       if (className === 'Set') {
         return '{}';
+      }
+      
+      // Array constructor without type arguments
+      if (className === 'Array') {
+        return 'std::vector<double>()';
       }
       
       const escapedName = this.escapeIdentifier(className);
@@ -1087,26 +1167,26 @@ export class CppCodegen {
             convertedExpr = `${exprStr}.value_or("")`;
           }
         } else if (checkTypeStr === 'number') {
-          // Number - convert to string
-          convertedExpr = `std::to_string(${exprStr})`;
+          // Number - convert to string (use to_string_int to avoid .000000 for integers)
+          convertedExpr = `gs::to_string_int(${exprStr})`;
         } else if (checkTypeStr.includes('number') && (checkTypeStr.includes('null') || checkTypeStr.includes('undefined'))) {
           // Optional number - extract value then convert
           if (typeStr === 'number' && checkTypeStr !== 'number') {
             // Narrowed to non-null, can use .value()
-            convertedExpr = `std::to_string(${exprStr}.value())`;
+            convertedExpr = `gs::to_string_int(${exprStr}.value())`;
           } else {
-            convertedExpr = `std::to_string(${exprStr}.value_or(0))`;
+            convertedExpr = `gs::to_string_int(${exprStr}.value_or(0))`;
           }
         } else if (checkTypeStr === 'boolean') {
           // Boolean - convert to string via stream
           convertedExpr = `(${exprStr} ? "true" : "false")`;
         } else {
-          // Default: try std::to_string
-          convertedExpr = `std::to_string(${exprStr})`;
+          // Default: use to_string_int
+          convertedExpr = `gs::to_string_int(${exprStr})`;
         }
       } else {
-        // No type checker available - use std::to_string as fallback
-        convertedExpr = `std::to_string(${exprStr})`;
+        // No type checker available - use to_string_int as fallback
+        convertedExpr = `gs::to_string_int(${exprStr})`;
       }
       
       parts.push(convertedExpr);
