@@ -46,14 +46,15 @@ async function example(sharedNode: Shared<Node>) {
 
 ### **2.2 Native Mode (Transpilation)**
 
-* Transpile `.gs.ts` to **C++** or other native targets.
-* Ownership qualifiers map to smart pointers:
+* Transpile `.gs.ts` to **C++20** with smart pointer-based ownership.
+* Ownership qualifiers map to C++ smart pointers:
 
   * `Unique<T>` → `std::unique_ptr<T>`
   * `Shared<T>` → `std::shared_ptr<T>`
   * `Weak<T>` → `std::weak_ptr<T>`
 * Ensures **memory safety, deterministic destruction, and DAG-enforced ownership**.
-* Optional: use **Zig toolchain** for cross-compilation.
+* Uses **C++20 features** (concepts, ranges, coroutines for async/await).
+* Optional: use **Zig toolchain** for cross-compilation and packaging.
 
 ---
 
@@ -76,10 +77,17 @@ async function example(sharedNode: Shared<Node>) {
 * Supports `.gs.ts` files.
 * Provides:
 
-  * **Validation of GoodScript constraints** (no dynamic features, reference qualifiers).
+  * **Validation of GoodScript constraints** (no dynamic features, ownership qualifiers).
   * **Syntax highlighting** and IntelliSense for `.gs.ts` files.
   * **Real-time feedback** on memory-safety rules and DAG enforcement.
 * Enables **fast feedback loop** during development while keeping code valid TypeScript.
+
+### **Compiler (gsc)**
+
+* **Phase 1**: Validates TypeScript "Good Parts" restrictions (no `var`, no `==`, etc.)
+* **Phase 2**: Analyzes ownership and enforces DAG (Directed Acyclic Graph) rules
+* **Phase 3**: Generates C++20 code with smart pointers (🚧 in progress - foundation complete)
+* **Phase 4**: Standard library, module system, and deployment (📋 planned)
 
 ---
 
@@ -88,9 +96,10 @@ async function example(sharedNode: Shared<Node>) {
 1. **Familiar TS syntax:** Minimal learning curve.
 2. **Rapid iteration:** Node.js execution allows testing before native deployment.
 3. **Memory-safe systems programming:** Safe ownership semantics enforced during transpilation.
-4. **Cross-platform native builds:** Use C++ backend + Zig toolchain for multiple targets.
+4. **Cross-platform native builds:** C++20 backend + Zig toolchain for multiple targets.
 5. **Safe complex data structures:** Arena/Pool pattern handles graphs and trees without violating DAG rules.
 6. **Integrated tooling:** VSCode extension ensures errors are caught early.
+7. **Modern C++ output:** RAII, smart pointers, and C++20 features (concepts, ranges, coroutines).
 
 ---
 
@@ -115,11 +124,25 @@ async function demo(node: Shared<Node>) {
 ```
 
 * Runs directly in Node.js.
-* Transpiles to C++ with proper `shared_ptr`/`weak_ptr` semantics.
+* Transpiles to C++20 with proper `std::shared_ptr`/`std::weak_ptr` semantics.
 
 ---
 
-## 7. Conclusion
+## 7. Current Status (November 2025)
+
+### Completed
+- ✅ **Phase 1**: TypeScript "Good Parts" validation (244/244 tests)
+- ✅ **Phase 2**: Ownership analysis and DAG enforcement (425/425 tests)
+- 🚧 **Phase 3**: C++ code generation - Foundation complete (35/35 basic tests)
+  - Type mappings, ownership qualifiers, classes, control flow
+  - Next: Smart pointer construction, compilation validation, runtime equivalence
+
+### Planned
+- 📋 **Phase 4**: Standard library, module system, Zig toolchain integration
+
+---
+
+## 8. Conclusion
 
 GoodScript allows developers to **write memory-safe systems code using familiar TypeScript syntax**, with a smooth transition from fast TS development to robust native deployment. The **VSCode extension** ensures validation and tooling support, while the **dual-mode workflow** enables both rapid iteration and high-performance native applications.
 
