@@ -169,13 +169,6 @@ export class OwnershipAnalyzer {
       else if (ts.isPropertyDeclaration(node) || ts.isPropertySignature(node)) {
         this.analyzePropertyForOwnership(node, sourceFile, checker);
       }
-      // Check function/method parameters for naked class references
-      else if (ts.isParameter(node) && node.type) {
-        const paramName = node.name.getText(sourceFile);
-        const location = Parser.getLocation(node, sourceFile);
-        this.checkForNakedClassReference(node.type, `parameter '${paramName}'`, location, sourceFile, checker);
-        ts.forEachChild(node, visit);
-      }
       // Check method declarations to visit their parameters
       else if (ts.isMethodDeclaration(node) || ts.isFunctionDeclaration(node) || ts.isArrowFunction(node)) {
         // Visit parameters explicitly
@@ -857,9 +850,22 @@ export class OwnershipAnalyzer {
       return;
     }
 
+    // Handle array types (T[])
+    // Arrays are containers - check their element type, not the array itself
+    if (ts.isArrayTypeNode(typeNode)) {
+      this.checkForNakedClassReference(typeNode.elementType, fieldName, location, sourceFile, checker);
+      return;
+    }
+
+    // Allow primitive keyword types (number, boolean, string)
+    if (typeNode.kind === ts.SyntaxKind.NumberKeyword || 
+        typeNode.kind === ts.SyntaxKind.BooleanKeyword ||
+        typeNode.kind === ts.SyntaxKind.StringKeyword) {
+      return;
+    }
+
     // Check if it's a type reference
     if (!ts.isTypeReferenceNode(typeNode)) {
-      // Primitive types (number, string, boolean) are fine
       return;
     }
 
@@ -867,6 +873,22 @@ export class OwnershipAnalyzer {
 
     // If it's already wrapped in ownership type, it's fine
     if (typeName === 'Unique' || typeName === 'Shared' || typeName === 'Weak') {
+      return;
+    }
+
+    // Built-in container types are fine - they're wrappers, check their type arguments
+    const containers = ['Array', 'Map', 'Set', 'WeakMap', 'WeakSet'];
+    if (containers.includes(typeName) && typeNode.typeArguments) {
+      // Recursively check type arguments
+      for (const typeArg of typeNode.typeArguments) {
+        this.checkForNakedClassReference(typeArg, fieldName, location, sourceFile, checker);
+      }
+      return;
+    }
+
+    // Other built-in heap types are allowed without qualification (pragmatic)
+    const builtinTypes = ['Promise', 'RegExp', 'Date', 'Error', 'Function', 'String', 'Number', 'Boolean'];
+    if (builtinTypes.includes(typeName)) {
       return;
     }
 
@@ -880,12 +902,22 @@ export class OwnershipAnalyzer {
     // Check if any declaration is a class
     const isClass = declarations.some(decl => ts.isClassDeclaration(decl));
     if (!isClass) {
-      // Not a class - could be interface, type alias, or built-in type
-      // Interfaces and type aliases are fine, built-in types like Array, Map are fine
+      // Not a class - could be interface or type alias, which are fine
       return;
     }
 
     // This is a naked class reference - report error
+    this.reportMissingOwnershipQualifier(typeName, fieldName, location);
+  }
+
+  /**
+   * Report error for heap-allocated type without ownership qualifier
+   */
+  private reportMissingOwnershipQualifier(
+    typeName: string,
+    fieldName: string,
+    location: SourceLocation
+  ): void {
     // Format the field name appropriately (handles both "fieldName" and "parameter 'paramName'")
     const formattedFieldName = fieldName.startsWith('parameter ') 
       ? fieldName.charAt(0).toUpperCase() + fieldName.slice(1)  // "parameter 'd'" → "Parameter 'd'"
@@ -894,7 +926,7 @@ export class OwnershipAnalyzer {
     this.diagnostics.push({
       severity: 'error',
       code: 'GS303',
-      message: `${formattedFieldName} has class type '${typeName}' without ownership annotation. ` +
+      message: `${formattedFieldName} has heap-allocated type '${typeName}' without ownership annotation. ` +
                `Use Unique<${typeName}>, Shared<${typeName}>, or Weak<${typeName}> to specify ownership semantics.`,
       location,
     });

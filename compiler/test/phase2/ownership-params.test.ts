@@ -7,14 +7,14 @@ import { compileWithOwnership } from './test-helpers';
 import { Diagnostic } from '../../src/types';
 
 describe('Ownership Parameter Validation', () => {
-  it('should reject naked class parameters', () => {
+  it('should allow unqualified class parameters (implicitly Shared<T>)', () => {
     const source = `
       class Data {
         value: number = 0;
       }
       
       class Handler {
-        process(d: Data): void {  // ERROR: naked class parameter
+        process(d: Data): void {  // OK: implicitly Shared<Data>
           console.log(d.value);
         }
       }
@@ -23,9 +23,8 @@ describe('Ownership Parameter Validation', () => {
     const result = compileWithOwnership(source);
     const errors = result.diagnostics.filter((d: Diagnostic) => d.code === 'GS303');
     
-    expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0].message).toContain("Parameter 'd'");
-    expect(errors[0].message).toContain('Data');
+    // Unqualified parameters are implicitly Shared<T> (shared ownership)
+    expect(errors.length).toBe(0);
   });
 
   it('should accept Unique<T> parameters', () => {

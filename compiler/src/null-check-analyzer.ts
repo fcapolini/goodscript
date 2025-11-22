@@ -113,6 +113,8 @@ export class NullCheckAnalyzer {
     }
     if (ts.isParameter(decl)) {
       if (decl.type) {
+        // Only treat explicitly Weak<T> annotated parameters as nullable
+        // Unqualified parameters are treated as borrowed (non-owning but non-null)
         return this.hasWeakAnnotation(decl.type, sourceFile, checker);
       }
     }

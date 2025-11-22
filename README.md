@@ -148,7 +148,85 @@ The compiler enforces that `Shared<T>` references form a **Directed Acyclic Grap
 
 ### Phase 2: Ownership Rules
 
-When using language level `"dag"` or `"rust"`, all references to heap-allocated types (objects, arrays, strings) **must be qualified** with an ownership annotation:
+When using language level `"dag"` or `"rust"`, GoodScript enforces explicit ownership semantics for heap-allocated types to enable compile-time memory safety.
+
+#### Where Ownership Qualifiers Are Required
+
+**Class and Interface Fields** (GS303)
+
+All heap-allocated type fields must be explicitly qualified:
+
+```typescript
+class Node {
+  // ❌ Error: Missing ownership annotation
+  data: string;
+  children: Node[];
+  metadata: Map<string, string>;
+
+  // ✅ Correct: Explicit ownership
+  data: Unique<string>;
+  children: Shared<Node>[];
+  metadata: Unique<Map<string, string>>;
+  
+  // ✅ Primitives don't need qualification
+  count: number;
+  active: boolean;
+}
+```
+
+**Heap-Allocated Types:**
+- `string` - Always heap-allocated
+- `Array<T>` or `T[]` - Collections
+- `Map<K, V>`, `Set<T>` - Standard containers
+- User-defined classes - Custom types
+- Built-in objects: `Date`, `RegExp`, `Promise`, `Error`, etc.
+
+**Value Types** (no qualification needed):
+- `number` - All numeric values
+- `boolean` - True/false values
+
+#### Where Ownership Qualifiers Are Optional
+
+**Function/Method Parameters**
+
+Unqualified heap-type parameters are treated as **implicitly `Shared<T>`** (shared ownership with reference counting):
+
+```typescript
+// ✅ Unqualified parameters are implicitly Shared<T>
+put(key: string, value: number): void {
+  this.cache.set(key, value);  // Shared reference passed
+}
+
+// ✅ Explicit Weak<T> for nullable parameters
+find(key: Weak<string>): Data | null {
+  // Must check: Weak<T> is implicitly nullable
+  if (key === null) return null;
+  return this.cache.get(key);
+}
+
+// ✅ Explicit Unique<T> for exclusive ownership transfer
+store(data: Unique<Data>): void {
+  this.items.push(data);  // Takes exclusive ownership
+}
+```
+
+**Rationale:** Shared ownership is the most flexible default for parameters - functions can use the value, store it, or pass it along without additional conversions. The reference count increments on call and decrements on return.
+
+**Local Variables**
+
+Heap allocations in local variables are implicitly `Unique<T>`:
+
+```typescript
+const testCache = (): void => {
+  // ✅ Implicitly Unique<LRUCache>
+  const cache = new LRUCache(100);
+  
+  // ✅ Implicitly Unique<string>
+  const key = "user_123";
+  
+  cache.put(key, 42);  // Borrowed reference
+};
+```
 
 #### Reference Types
 
