@@ -146,10 +146,17 @@ export class OwnershipAnalyzer {
       if (ts.isClassDeclaration(node) && node.name) {
         this.analyzeClassWithInheritance(node, sourceFile, checker);
         // Don't continue visiting - analyzeClassWithInheritance already processed properties
-        // But we DO need to visit methods for their parameters
+        // But we DO need to visit methods for their parameters and bodies
         for (const member of node.members) {
           if (ts.isMethodDeclaration(member) || ts.isConstructorDeclaration(member) || ts.isGetAccessor(member) || ts.isSetAccessor(member)) {
-            ts.forEachChild(member, visit);
+            // Visit parameters
+            for (const param of member.parameters) {
+              visit(param);
+            }
+            // Visit method body for assignments
+            if (member.body) {
+              ts.forEachChild(member.body, visit);
+            }
           }
         }
       }
@@ -180,6 +187,12 @@ export class OwnershipAnalyzer {
       // Validate ownership type assignments
       else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
         this.checkOwnershipAssignment(node, sourceFile, checker);
+        ts.forEachChild(node, visit);
+      }
+      // Validate function/method call arguments
+      else if (ts.isCallExpression(node)) {
+        this.checkCallArguments(node, sourceFile, checker);
+        ts.forEachChild(node, visit);
       }
       else {
         ts.forEachChild(node, visit);
@@ -890,11 +903,19 @@ export class OwnershipAnalyzer {
   /**
    * Check that assignments to ownership-typed fields have compatible source types
    * GS304: Ownership type mismatch in assignment
+   * GS305: Invalid ownership derivation
    * 
    * Rules:
    * - Unique<T> field: source must be Unique<T>, new T(), or null
-   * - Shared<T> field: source must be Shared<T>, new T(), or null
-   * - Weak<T> field: source must be Weak<T> or null
+   * - Shared<T> field: source must be Shared<T> or null (NOT from Unique<T> or new T())
+   * - Weak<T> field: source must be Weak<T> or null (can derive from Unique/Shared via conversion API)
+   * 
+   * Derivation rules (explicit conversion APIs required):
+   * 1. From Unique<T> can only create Weak<T> (no Shared<T>)
+   * 2. From Shared<T> can create Shared<T> or Weak<T>
+   * 3. From Weak<T> can only create Weak<T> (no promotion to owning references)
+   * 
+   * Note: new T() implicitly creates Unique<T>, can only assign to Unique<T> fields
    */
   private checkOwnershipAssignment(
     assignment: ts.BinaryExpression,
@@ -906,17 +927,28 @@ export class OwnershipAnalyzer {
       return;
     }
 
-    // Get the type of the left-hand side (the property being assigned to)
-    const leftType = checker.getTypeAtLocation(assignment.left);
-    const leftTypeStr = checker.typeToString(leftType);
+    // Get the property symbol to find its declared type
+    const symbol = checker.getSymbolAtLocation(assignment.left.name);
+    if (!symbol) return;
+
+    const declarations = symbol.getDeclarations();
+    if (!declarations || declarations.length === 0) return;
+
+    // Get the type annotation from the declaration
+    const decl = declarations[0];
+    if (!ts.isPropertyDeclaration(decl) && !ts.isPropertySignature(decl)) return;
+    if (!decl.type) return;  // No type annotation
+
+    // Get the type text directly from the source
+    const leftTypeText = decl.type.getText(sourceFile);
 
     // Check if it's an ownership-typed field
-    const ownershipMatch = leftTypeStr.match(/^(Unique|Shared|Weak)<(.+)>( \| null)?$/);
+    const ownershipMatch = leftTypeText.match(/^(Unique|Shared|Weak)<(.+)>$/);
     if (!ownershipMatch) {
       return; // Not an ownership type, no validation needed
     }
 
-    const [, ownershipKind, innerType] = ownershipMatch;
+    const [, targetOwnership, innerType] = ownershipMatch;
     const rightNode = assignment.right;
 
     // Allow null/undefined assignments
@@ -925,29 +957,115 @@ export class OwnershipAnalyzer {
       return;
     }
 
-    // Allow new expressions (new T() creates ownership)
+    // Allow new expressions (new T() creates Unique<T> by default)
     if (ts.isNewExpression(rightNode)) {
+      // new T() is Unique<T>, can assign to Unique<T> fields only
+      if (targetOwnership === 'Shared' || targetOwnership === 'Weak') {
+        this.diagnostics.push({
+          severity: 'error',
+          code: 'GS305',
+          message: `Cannot assign 'new ${innerType}()' (implicitly Unique<${innerType}>) to ${targetOwnership}<${innerType}>. ` +
+                   `From Unique<T> can only derive Weak<T>. Use explicit conversion API (future feature).`,
+          location: Parser.getLocation(assignment, sourceFile),
+        });
+      }
       return;
     }
 
-    // Get the type of the right-hand side
-    const rightType = checker.getTypeAtLocation(rightNode);
-    const rightTypeStr = checker.typeToString(rightType);
+    // Get the type text of the right-hand side
+    // Try to get it from the source first, fall back to type checker
+    let rightTypeText = '';
+    
+    if (ts.isPropertyAccessExpression(rightNode)) {
+      // Get the symbol and its declaration
+      const rightSymbol = checker.getSymbolAtLocation(rightNode.name);
+      if (rightSymbol) {
+        const rightDecls = rightSymbol.getDeclarations();
+        if (rightDecls && rightDecls.length > 0) {
+          const rightDecl = rightDecls[0];
+          if ((ts.isPropertyDeclaration(rightDecl) || ts.isPropertySignature(rightDecl)) && rightDecl.type) {
+            rightTypeText = rightDecl.type.getText(sourceFile);
+          }
+        }
+      }
+    }
+    
+    if (!rightTypeText) {
+      // Fall back to type checker (less precise but better than nothing)
+      const rightType = checker.getTypeAtLocation(rightNode);
+      rightTypeText = checker.typeToString(rightType);
+    }
 
-    // Check if right side is wrapped in the same ownership type
-    const rightOwnershipMatch = rightTypeStr.match(/^(Unique|Shared|Weak)<(.+)>$/);
+    // Check if right side is wrapped in ownership type
+    const rightOwnershipMatch = rightTypeText.match(/^(Unique|Shared|Weak)<(.+)>$/);
     
     if (rightOwnershipMatch) {
-      const [, rightOwnershipKind] = rightOwnershipMatch;
-      if (rightOwnershipKind === ownershipKind) {
-        return; // Same ownership type, OK
+      const [, sourceOwnership] = rightOwnershipMatch;
+      
+      // Check ownership derivation rules
+      if (sourceOwnership === 'Unique') {
+        // From Unique<T> can only derive Weak<T>
+        if (targetOwnership === 'Shared') {
+          this.diagnostics.push({
+            severity: 'error',
+            code: 'GS305',
+            message: `Cannot assign Unique<${innerType}> to Shared<${innerType}>. ` +
+                     `From Unique<T> can only derive Weak<T>. Use explicit conversion API (future feature).`,
+            location: Parser.getLocation(assignment, sourceFile),
+          });
+          return;
+        }
+        if (targetOwnership === 'Unique') {
+          // Unique→Unique is a move, which we don't support yet
+          // For now, allow it but this will need refinement
+          return;
+        }
+        // Unique→Weak is OK
+        return;
       }
       
-      // Different ownership types - error
+      if (sourceOwnership === 'Shared') {
+        // From Shared<T> can derive Shared<T> or Weak<T>
+        if (targetOwnership === 'Shared' || targetOwnership === 'Weak') {
+          return; // OK
+        }
+        if (targetOwnership === 'Unique') {
+          this.diagnostics.push({
+            severity: 'error',
+            code: 'GS305',
+            message: `Cannot assign Shared<${innerType}> to Unique<${innerType}>. ` +
+                     `Shared ownership cannot be converted to unique ownership.`,
+            location: Parser.getLocation(assignment, sourceFile),
+          });
+          return;
+        }
+      }
+      
+      if (sourceOwnership === 'Weak') {
+        // Weak<T> can only assign to Weak<T>
+        if (targetOwnership === 'Weak') {
+          return; // OK
+        }
+        this.diagnostics.push({
+          severity: 'error',
+          code: 'GS305',
+          message: `Cannot assign Weak<${innerType}> to ${targetOwnership}<${innerType}>. ` +
+                   `Weak references cannot be promoted to owning references.`,
+          location: Parser.getLocation(assignment, sourceFile),
+        });
+        return;
+      }
+      
+      // Same ownership type
+      if (sourceOwnership === targetOwnership) {
+        return; // OK
+      }
+      
+      // Different ownership types - generic error
       this.diagnostics.push({
         severity: 'error',
         code: 'GS304',
-        message: `Cannot assign ${rightOwnershipKind}<T> to ${ownershipKind}<T> field. ` +
+        message: `Cannot assign ${sourceOwnership}<T> to ${targetOwnership}<T> field. ` +
                  `Ownership types must match exactly.`,
         location: Parser.getLocation(assignment, sourceFile),
       });
@@ -959,9 +1077,159 @@ export class OwnershipAnalyzer {
     this.diagnostics.push({
       severity: 'error',
       code: 'GS304',
-      message: `Cannot assign '${rightTypeStr}' to '${leftTypeStr}'. ` +
-               `Expected ${ownershipKind}<${innerType}>, new ${innerType}(), or null.`,
+      message: `Cannot assign '${rightTypeText}' to '${leftTypeText}'. ` +
+               `Expected ${targetOwnership}<${innerType}>, new ${innerType}(), or null.`,
       location: Parser.getLocation(assignment, sourceFile),
     });
+  }
+
+  /**
+   * Check that function/method call arguments respect ownership derivation rules
+   * GS305: Invalid ownership derivation in argument passing
+   * 
+   * Same rules as assignment:
+   * 1. From Unique<T> can only pass to Weak<T> parameters
+   * 2. From Shared<T> can pass to Shared<T> or Weak<T> parameters
+   * 3. From Weak<T> can only pass to Weak<T> parameters
+   */
+  private checkCallArguments(
+    callExpr: ts.CallExpression,
+    sourceFile: ts.SourceFile,
+    checker: ts.TypeChecker
+  ): void {
+    // Get the signature of the called function/method
+    const signature = checker.getResolvedSignature(callExpr);
+    if (!signature) return;
+
+    const parameters = signature.getParameters();
+    if (parameters.length === 0) return;
+
+    // Check each argument
+    for (let i = 0; i < callExpr.arguments.length && i < parameters.length; i++) {
+      const arg = callExpr.arguments[i];
+      const param = parameters[i];
+
+      // Get parameter's declared type from its declaration
+      const paramDecls = param.getDeclarations();
+      if (!paramDecls || paramDecls.length === 0) continue;
+
+      const paramDecl = paramDecls[0];
+      if (!ts.isParameter(paramDecl)) continue;
+      if (!paramDecl.type) continue;
+
+      // Get parameter type text from source
+      const paramTypeText = paramDecl.type.getText(paramDecl.getSourceFile());
+
+      // Check if parameter has ownership type
+      const paramOwnershipMatch = paramTypeText.match(/^(Unique|Shared|Weak)<(.+)>$/);
+      if (!paramOwnershipMatch) continue; // Not an ownership-typed parameter
+
+      const [, targetOwnership, innerType] = paramOwnershipMatch;
+
+      // Allow null/undefined arguments
+      if (arg.kind === ts.SyntaxKind.NullKeyword || 
+          arg.kind === ts.SyntaxKind.UndefinedKeyword) {
+        continue;
+      }
+
+      // Check new expressions
+      if (ts.isNewExpression(arg)) {
+        // new T() is implicitly Unique<T>
+        if (targetOwnership === 'Shared' || targetOwnership === 'Weak') {
+          this.diagnostics.push({
+            severity: 'error',
+            code: 'GS305',
+            message: `Cannot pass 'new ${innerType}()' (implicitly Unique<${innerType}>) to ${targetOwnership}<${innerType}> parameter. ` +
+                     `From Unique<T> can only derive Weak<T>. Use explicit conversion API (future feature).`,
+            location: Parser.getLocation(arg, sourceFile),
+          });
+        }
+        continue;
+      }
+
+      // Get argument type
+      let argTypeText = '';
+      
+      if (ts.isPropertyAccessExpression(arg)) {
+        // Get the symbol and its declaration
+        const argSymbol = checker.getSymbolAtLocation(arg.name);
+        if (argSymbol) {
+          const argDecls = argSymbol.getDeclarations();
+          if (argDecls && argDecls.length > 0) {
+            const argDecl = argDecls[0];
+            if ((ts.isPropertyDeclaration(argDecl) || ts.isPropertySignature(argDecl)) && argDecl.type) {
+              argTypeText = argDecl.type.getText(argDecl.getSourceFile());
+            }
+          }
+        }
+      } else if (ts.isIdentifier(arg)) {
+        // Local variable or parameter - get its declaration
+        const argSymbol = checker.getSymbolAtLocation(arg);
+        if (argSymbol) {
+          const argDecls = argSymbol.getDeclarations();
+          if (argDecls && argDecls.length > 0) {
+            const argDecl = argDecls[0];
+            if (ts.isVariableDeclaration(argDecl) && argDecl.type) {
+              argTypeText = argDecl.type.getText(argDecl.getSourceFile());
+            } else if (ts.isParameter(argDecl) && argDecl.type) {
+              argTypeText = argDecl.type.getText(argDecl.getSourceFile());
+            }
+          }
+        }
+      }
+
+      if (!argTypeText) {
+        // Fall back to type checker
+        const argType = checker.getTypeAtLocation(arg);
+        argTypeText = checker.typeToString(argType);
+      }
+
+      // Check if argument has ownership type
+      const argOwnershipMatch = argTypeText.match(/^(Unique|Shared|Weak)<(.+)>$/);
+      if (!argOwnershipMatch) {
+        // Argument is not ownership-typed - might need error
+        continue;
+      }
+
+      const [, sourceOwnership] = argOwnershipMatch;
+
+      // Check ownership derivation rules (same as assignment)
+      if (sourceOwnership === 'Unique') {
+        if (targetOwnership === 'Shared') {
+          this.diagnostics.push({
+            severity: 'error',
+            code: 'GS305',
+            message: `Cannot pass Unique<${innerType}> to Shared<${innerType}> parameter. ` +
+                     `From Unique<T> can only derive Weak<T>. Use explicit conversion API (future feature).`,
+            location: Parser.getLocation(arg, sourceFile),
+          });
+        }
+        // Unique→Unique is OK (would be a move)
+        // Unique→Weak is OK
+      } else if (sourceOwnership === 'Shared') {
+        if (targetOwnership === 'Unique') {
+          this.diagnostics.push({
+            severity: 'error',
+            code: 'GS305',
+            message: `Cannot pass Shared<${innerType}> to Unique<${innerType}> parameter. ` +
+                     `Shared ownership cannot be converted to unique ownership.`,
+            location: Parser.getLocation(arg, sourceFile),
+          });
+        }
+        // Shared→Shared is OK
+        // Shared→Weak is OK
+      } else if (sourceOwnership === 'Weak') {
+        if (targetOwnership !== 'Weak') {
+          this.diagnostics.push({
+            severity: 'error',
+            code: 'GS305',
+            message: `Cannot pass Weak<${innerType}> to ${targetOwnership}<${innerType}> parameter. ` +
+                     `Weak references cannot be promoted to owning references.`,
+            location: Parser.getLocation(arg, sourceFile),
+          });
+        }
+        // Weak→Weak is OK
+      }
+    }
   }
 }

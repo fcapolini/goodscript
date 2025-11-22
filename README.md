@@ -155,21 +155,39 @@ When using language level `"dag"` or `"rust"`, all references to heap-allocated 
 **`Unique<T>` - Exclusive Ownership**
 - **Default for `new T()` expressions** - newly created objects are implicitly `Unique<T>`
 - The element is **automatically deallocated** when the variable goes out of scope
-- From a `Unique<T>` reference, you can derive **only `Weak<T>` references**
-- No ownership transfer - `Unique<T>` cannot be reassigned or passed around
+- **Derivation rule**: From `Unique<T>` can only create `Weak<T>` (no `Shared<T>`)
+- No ownership transfer - `Unique<T>` cannot be reassigned or moved
+- Best for single-owner scenarios with optional weak observers
 
 **`Shared<T>` - Reference Counted Ownership**
 - Used for shared ownership with automatic reference counting
 - Each derived `Shared<T>` reference to the same element **increases the ref count** at creation
 - Ref count **decreases** when the reference goes out of scope
-- From a `Shared<T>` reference, you can derive **both `Shared<T>` and `Weak<T>` references**
+- **Derivation rule**: From `Shared<T>` can create both `Shared<T>` and `Weak<T>`
 - Element is deallocated when the last `Shared<T>` reference is dropped
+- Best for arena patterns and shared ownership scenarios
 
 **`Weak<T>` - Non-Owning References**
-- Can be derived from `Unique<T>`, `Shared<T>`, or another `Weak<T>` reference
+- Can be derived from `Unique<T>` or `Shared<T>` (via conversion API - future feature)
+- **Derivation rule**: From `Weak<T>` can only create another `Weak<T>` (no promotion to owning)
 - **Does not participate in reference counting**
 - Must be **dereferenced conditionally** (checked for `null`/`undefined` before use)
 - Does not prevent deallocation - may become `null` if the owned reference is dropped
+- Best for observer patterns and non-owning pointers
+
+#### Ownership Derivation Rules (GS305)
+
+The compiler enforces strict rules about how ownership can flow:
+
+1. **`Unique<T>` → `Weak<T>` only** - Cannot convert to `Shared<T>`
+2. **`Shared<T>` → `Shared<T>` or `Weak<T>`** - Can share or create weak references
+3. **`Weak<T>` → `Weak<T>` only** - Cannot promote to owning reference
+
+These rules apply to:
+- Field assignments: `this.field = value`
+- Function/method calls: `function(arg)`
+- Return statements (future)
+- Array/collection operations (future)
 
 #### Example
 
@@ -218,6 +236,7 @@ GoodScript is being developed in phases, with each phase corresponding to a lang
 - GS302: Null-check enforcement for `Weak<T>` references
 - GS303: Missing ownership annotation (naked class references)
 - GS304: Ownership type mismatch in assignment
+- GS305: Invalid ownership derivation (violates reference rules)
 - Type alias resolution, inheritance tracking, generic type instantiation
 - Nested generic analysis, call argument validation, type inference
 

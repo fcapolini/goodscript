@@ -17,11 +17,36 @@ interface CompileSourceResult extends CompileResult {
 
 /**
  * Compile source code string for testing
+ * @param source Source code to compile
+ * @param levelOrFileName Language level ('clean', 'dag', 'rust') or filename (defaults to 'clean')
  */
-export function compileSource(source: string, fileName: string = 'test.gs.ts'): CompileSourceResult {
+export function compileSource(source: string, levelOrFileName: string = 'clean'): CompileSourceResult {
+  // Determine if second parameter is a level or filename
+  const isLevel = levelOrFileName === 'clean' || levelOrFileName === 'dag' || levelOrFileName === 'rust';
+  const level = isLevel ? levelOrFileName : 'clean';
+  const fileName = isLevel ? 'test.gs.ts' : levelOrFileName;
+  
   // Create a temporary file
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goodscript-test-'));
   const filePath = path.join(tmpDir, fileName);
+  
+  // Create a tsconfig.json with the specified level
+  const tsconfigPath = path.join(tmpDir, 'tsconfig.json');
+  const tsconfig = {
+    compilerOptions: {
+      target: 'ES2020',
+      module: 'commonjs',
+      strict: true,
+      esModuleInterop: true,
+      skipLibCheck: true,
+      forceConsistentCasingInFileNames: true,
+      lib: ['ES2020']
+    },
+    goodscript: {
+      level
+    }
+  };
+  fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2));
   
   try {
     fs.writeFileSync(filePath, source);
@@ -29,14 +54,14 @@ export function compileSource(source: string, fileName: string = 'test.gs.ts'): 
     const compiler = new Compiler();
     const result = compiler.compile({
       files: [filePath],
-      skipOwnershipChecks: true  // Phase 1 tests don't care about ownership
+      project: tsconfigPath  // Use tsconfig with specified level
     });
     
     // Generate TypeScript output for testing
     let output: string | undefined;
     if (fileName.endsWith('.gs.ts') || fileName.endsWith('.gs.tsx') || fileName.endsWith('.gs')) {
       const parser = new Parser();
-      parser.createProgram([filePath], undefined, null);
+      parser.createProgram([filePath], undefined, tsconfigPath);
       const program = parser.getProgram();
       const sourceFile = program.getSourceFile(filePath);
       
@@ -54,6 +79,7 @@ export function compileSource(source: string, fileName: string = 'test.gs.ts'): 
     // Cleanup
     try {
       fs.unlinkSync(filePath);
+      fs.unlinkSync(tsconfigPath);
       fs.rmdirSync(tmpDir);
     } catch (e) {
       // Ignore cleanup errors
