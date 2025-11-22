@@ -133,11 +133,73 @@ export class CppCodegen {
     lines.push('namespace gs {');
     lines.push('');
     
-    // Add generated code
-    lines.push(...this.output);
+    // Add generated code (but exclude main function if present)
+    const outputWithoutMain: string[] = [];
+    let inMainFunction = false;
+    let braceCount = 0;
+    
+    for (const line of this.output) {
+      if (line.includes('int main() {')) {
+        inMainFunction = true;
+        braceCount = 1;
+        continue;
+      }
+      
+      if (inMainFunction) {
+        // Track braces to know when main() ends
+        for (const char of line) {
+          if (char === '{') braceCount++;
+          if (char === '}') braceCount--;
+        }
+        
+        if (braceCount === 0) {
+          inMainFunction = false;
+        }
+        continue;
+      }
+      
+      outputWithoutMain.push(line);
+    }
+    
+    lines.push(...outputWithoutMain);
     
     lines.push('');
     lines.push('} // namespace gs');
+    
+    // Add main() function OUTSIDE the namespace if there was one
+    if (this.output.some(line => line.includes('int main() {'))) {
+      lines.push('');
+      lines.push('int main() {');
+      
+      // Extract and add main body
+      inMainFunction = false;
+      braceCount = 0;
+      
+      for (const line of this.output) {
+        if (line.includes('int main() {')) {
+          inMainFunction = true;
+          braceCount = 1;
+          continue;
+        }
+        
+        if (inMainFunction) {
+          // Track braces
+          for (const char of line) {
+            if (char === '{') braceCount++;
+            if (char === '}') braceCount--;
+          }
+          
+          if (braceCount === 0) {
+            break;
+          }
+          
+          lines.push(line);
+        }
+      }
+      
+      lines.push('  return 0;');
+      lines.push('}');
+    }
     
     return lines.join('\n');
   }
@@ -160,8 +222,43 @@ export class CppCodegen {
    * Generate code for the entire source file
    */
   private generateSourceFile(sourceFile: ts.SourceFile): void {
+    // Separate top-level statements into declarations and executable statements
+    const declarations: ts.Statement[] = [];
+    const executableStatements: ts.Statement[] = [];
+    
     for (const statement of sourceFile.statements) {
+      // Skip type declarations (they're erased in runtime)
+      if (ts.isTypeAliasDeclaration(statement)) {
+        continue;
+      }
+      
+      if (ts.isFunctionDeclaration(statement) || 
+          ts.isClassDeclaration(statement) || 
+          ts.isInterfaceDeclaration(statement)) {
+        declarations.push(statement);
+      } else {
+        executableStatements.push(statement);
+      }
+    }
+    
+    // Generate declarations first
+    for (const statement of declarations) {
       this.generateStatement(statement);
+    }
+    
+    // If there are executable statements, wrap them in main()
+    if (executableStatements.length > 0) {
+      this.emit('');
+      this.emit('int main() {');
+      this.indent();
+      
+      for (const statement of executableStatements) {
+        this.generateStatement(statement);
+      }
+      
+      this.emit('return 0;');
+      this.dedent();
+      this.emit('}');
     }
   }
   
@@ -680,7 +777,8 @@ export class CppCodegen {
     
     // Special handling for console.log
     if (callee === 'console.log') {
-      return `std::cout << ${args} << std::endl`;
+      // Need to use std::boolalpha to print true/false instead of 1/0
+      return `std::cout << std::boolalpha << ${args} << std::endl`;
     }
     
     return `${callee}(${args})`;

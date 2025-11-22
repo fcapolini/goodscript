@@ -399,26 +399,26 @@ export class Compiler {
         // Compute relative path from root directory
         const relativePath = path.relative(rootDir, sourceFilePath);
         
-        // Convert .gs.ts or .gs to .rs extension
+        // Convert .gs.ts or .gs to .cpp extension
         let outputPath = relativePath;
         if (outputPath.endsWith('.gs.ts')) {
-          outputPath = outputPath.slice(0, -6) + '.rs';  // .gs.ts -> .rs
+          outputPath = outputPath.slice(0, -6) + '.cpp';  // .gs.ts -> .cpp
         } else if (outputPath.endsWith('.gs.tsx')) {
-          outputPath = outputPath.slice(0, -7) + '.rs';  // .gs.tsx -> .rs
+          outputPath = outputPath.slice(0, -7) + '.cpp';  // .gs.tsx -> .cpp
         } else if (outputPath.endsWith('.gs')) {
-          outputPath = outputPath.slice(0, -3) + '.rs';  // .gs -> .rs
+          outputPath = outputPath.slice(0, -3) + '.cpp';  // .gs -> .cpp
         }
         
-        const rsPath = path.join(outDir, outputPath);
+        const cppPath = path.join(outDir, outputPath);
         
         // Create directory structure if needed
-        const rsDir = path.dirname(rsPath);
-        if (!fs.existsSync(rsDir)) {
-          fs.mkdirSync(rsDir, { recursive: true });
+        const cppDir = path.dirname(cppPath);
+        if (!fs.existsSync(cppDir)) {
+          fs.mkdirSync(cppDir, { recursive: true });
         }
         
         // Write C++ file
-        fs.writeFileSync(rsPath, cppCode, 'utf-8');
+        fs.writeFileSync(cppPath, cppCode, 'utf-8');
       }
     }
   }
