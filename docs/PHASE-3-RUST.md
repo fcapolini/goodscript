@@ -2,9 +2,9 @@
 
 **Status:** 🚧 In Progress (all core features complete, comprehensive runtime equivalence testing, multiple successful Rust executables!)
 
-**Test Coverage:** 923 tests total (916 passing, 6 skipped, 1 todo)
-- 914 unit/integration tests (910 passing - all core features working!)
-- 9 concrete example tests (all passing - N-Queens and JSON parser successfully compile and run!)
+**Test Coverage:** 921 tests total (918 passing, 3 failing)
+- 906 unit/integration tests (all passing - all core features working!)
+- 15 concrete example tests (12 passing - cli-args, n-queens, json-parser, lru-cache, unique-sharing-test generate code successfully!)
 
 ## Current Implementation Status
 
@@ -138,14 +138,25 @@
   - Each example: `example-name/src/main.gs.ts`
   - Compiles to both JavaScript and Rust
   - Executes both versions and compares runtime output
-  - ✅ **N-Queens solver** - First successful Rust executable! Compiles cleanly, produces correct output
-  - ✅ **JSON parser** - Complex example with recursion, ownership, and nullability - compiles and runs correctly!
+  - ✅ **cli-args** - Command-line argument parsing (3/3 tests passing)
+  - ✅ **N-Queens solver** - Backtracking algorithm (3/3 tests passing)
+  - 🔄 **JSON parser** - Tokenizer and recursive parser (2/3 tests - JS works, Rust generates but has Box/unbox issues in collections)
+  - 🔄 **lru-cache** - LRU cache with doubly-linked list (2/3 tests - JS works, Rust generates but has Box/unbox issues)
+  - 🔄 **unique-sharing-test** - Ownership semantics demo (2/3 tests - JS works, Rust generates but has execution issues)
 - **Smart Constructor Code Generation** - Intelligent handling of constructor patterns
   - All constructors return `Result<Self, String>` for consistency with error propagation
   - Automatic `Box::new()` wrapping when assigning to `Unique<T>` fields
   - Detects `Unique<T>` parameters to avoid double-wrapping when passing arguments
   - Constructor body assignments check field types and wrap values appropriately
   - Proper `?` operator placement on constructor calls
+- **Smart Return Statement Box Wrapping** - TypeChecker-based wrapping for ownership types
+  - Detects when function returns `Box<T>` or `Option<Box<T>>`
+  - Uses TypeChecker to read source type annotations (Unique<T>, Shared<T>, etc.)
+  - Compares called method return type with current function return type
+  - Automatically wraps static method calls: `Type::fromX()` → `Box::new(Type::fromX())`
+  - Avoids double-wrapping when types match: `parseValue()` returns `Option<Box<T>>` → no wrapping needed
+  - Handles both `Box<T>` and `Option<Box<T>>` return types correctly
+  - Prevents recursive call double-wrapping by tracking current method name
 - **Variable Mutability Detection** - Conservative but safe approach
   - Variables with any method calls marked as `mut` (method calls may require `&mut self`)
   - Detects `this.field.method()` pattern in constructor bodies

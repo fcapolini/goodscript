@@ -10,7 +10,7 @@
  * Full implementation would require runtime support for Shared→Weak conversion.
  */
 
-/// <reference path="../../../../../../lib/goodscript.d.ts" />
+/// <reference path="../../../../../lib/goodscript.d.ts" />
 
 class CacheNode {
   key: string;

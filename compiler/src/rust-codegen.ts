@@ -54,6 +54,7 @@ export class RustCodegen {
   private inStructWrapper = false;  // Track if we're inside the wrapper function of a struct
   private inStructMethod = false;  // Track if we're inside a struct method
   private currentFunctionReturnType?: string;  // Track current function's return type for Option wrapping
+  private currentMethodName?: string;  // Track current method name for recursive call detection
   private inConstructorBody = false;  // Track if we're generating constructor body statements
   // Track interface traits and their required fields for automatic trait implementation
   private interfaceTraits = new Map<string, Array<{name: string, type: string}>>();  // Maps TraitName -> [{fieldName, fieldType}]
@@ -1587,9 +1588,11 @@ export class RustCodegen {
         this.emit(`fn ${methodName}(${params}) -> ${resultType} {`);
         this.indent();
         
-        // Track the return type for this function
+        // Track the return type and method name for this function
         const previousReturnType = this.currentFunctionReturnType;
+        const previousMethodName = this.currentMethodName;
         this.currentFunctionReturnType = returnType;
+        this.currentMethodName = methodName;
         
         if (method.body) {
           this.generateBlock(method.body);
@@ -1600,8 +1603,9 @@ export class RustCodegen {
           }
         }
         
-        // Restore previous return type
+        // Restore previous return type and method name
         this.currentFunctionReturnType = previousReturnType;
+        this.currentMethodName = previousMethodName;
         
         this.dedent();
         this.emit('}');
@@ -2219,6 +2223,73 @@ export class RustCodegen {
   private generateReturnStatement(statement: ts.ReturnStatement): void {
     if (statement.expression) {
       let expr = this.generateExpression(statement.expression);
+      
+      // Check if we need Box wrapping for Unique<T> returns
+      let needsBoxWrapping = false;
+      let innerBoxType = '';
+      
+      if (this.currentFunctionReturnType) {
+        // Handle Box<T> returns
+        if (this.currentFunctionReturnType.startsWith('Box<')) {
+          needsBoxWrapping = true;
+          innerBoxType = this.currentFunctionReturnType.slice(4, -1); // Extract T from Box<T>
+        }
+        // Handle Option<Box<T>> returns
+        else if (this.currentFunctionReturnType.startsWith('Option<Box<')) {
+          needsBoxWrapping = true;
+          innerBoxType = this.currentFunctionReturnType.slice(11, -2); // Extract T from Option<Box<T>>
+        }
+      }
+      
+      // Wrap in Box::new() if needed
+      if (needsBoxWrapping) {
+        // Check if the expression is a static method call (Type::new() or Type::fromX())
+        // that returns the unwrapped type
+        const isStaticMethodCall = /^[A-Z]\w*::\w+\(.*\)\?$/.test(expr) && !expr.startsWith('Box::new(');
+        
+        // For method calls, use TypeChecker to determine the actual return type
+        let needsWrapping = isStaticMethodCall;
+        
+        // Check if this is a method call on self
+        const methodCallMatch = expr.match(/^self\.(\w+)\(.*\)\?$/);
+        if (methodCallMatch && statement.expression && ts.isCallExpression(statement.expression)) {
+          // Use TypeChecker to get the actual return type of the method from source
+          const methodReturnType = this.getMethodReturnTypeFromSource(statement.expression);
+          if (methodReturnType) {
+            // Convert the source type to Rust type to compare with current function return type
+            const rustMethodReturnType = this.convertSourceTypeToRust(methodReturnType);
+            
+            // If the method return type matches the current function return type, no wrapping needed
+            if (rustMethodReturnType === this.currentFunctionReturnType) {
+              needsWrapping = false;
+            }
+            // If current function returns Option<Box<T>> and method returns T (not nullable)
+            // we need to wrap in Box::new() and then Some()
+            else if (this.currentFunctionReturnType && 
+                     this.currentFunctionReturnType.startsWith('Option<Box<') && 
+                     !methodReturnType.includes('|') && !methodReturnType.includes('null')) {
+              needsWrapping = true;
+            }
+            // If current function returns Box<T> and method returns Unique<T>
+            else if (this.currentFunctionReturnType && 
+                     this.currentFunctionReturnType.startsWith('Box<') && 
+                     methodReturnType.startsWith('Unique<')) {
+              needsWrapping = false;  // Unique<T> becomes Box<T>, no wrapping needed
+            }
+            // Otherwise check if method doesn't return a boxed/unique type
+            else {
+              needsWrapping = !methodReturnType.startsWith('Unique<') && 
+                             !methodReturnType.startsWith('Box<');
+            }
+          }
+        }
+        
+        if (needsWrapping) {
+          // Remove the trailing ? and wrap in Box::new, then add ? back
+          const withoutQuestion = expr.slice(0, -1);
+          expr = `Box::new(${withoutQuestion}?)`;
+        }
+      }
       
       // If the current function returns Option<T> and we're returning a non-Option value,
       // wrap it in Some()
@@ -4364,22 +4435,19 @@ export class RustCodegen {
     
     let object = this.generateExpression(expr.expression);
     
-    // Check if the object itself is a property access that might be an Option
-    // For example, node.prev where prev is Option<Box<CacheNode>>
-    let needsUnwrap = false;
-    
     // If the object is an unwrapped Option variable, add .unwrap()
     if (ts.isIdentifier(expr.expression)) {
       const varName = expr.expression.getText();
       if (this.optionVariables.has(varName) && this.unwrappedOptions.has(varName)) {
         object = `${object}.unwrap()`;
       }
-    } else if (ts.isPropertyAccessExpression(expr.expression)) {
-      // Check if this property access is on an Option field
-      // We need to unwrap it to access nested properties
-      // Use as_mut() for lvalues (assignments), as_ref() for rvalues (reads)
-      needsUnwrap = true;
     }
+    
+    // NOTE: We used to add .as_ref().unwrap() for chained property accesses,
+    // but Box<T> (from Unique<T>) and Rc<T> (from Shared<T>) implement Deref,
+    // so we can access their fields and methods directly without unwrapping.
+    // Option<T> types need unwrapping, but that's handled separately via
+    // null-check analysis and the optionVariables/unwrappedOptions sets.
     
     // Map JavaScript property names to Rust equivalents
     if (property === 'length') {
@@ -4433,17 +4501,6 @@ export class RustCodegen {
       
       if (needsClone) {
         return `${object}.${property}.clone()`;
-      }
-    }
-    
-    // If we're accessing a nested property through an Option, unwrap it
-    if (needsUnwrap) {
-      // For lvalues, unwrap to get a mutable reference
-      // For rvalues, just unwrap
-      if (isLValue) {
-        return `${object}.as_mut().unwrap().${property}`;
-      } else {
-        return `${object}.as_ref().unwrap().${property}`;
       }
     }
     
@@ -5277,5 +5334,67 @@ export class RustCodegen {
         // Default to a comment indicating manual initialization needed
         return `/* TODO: initialize ${rustType} */`;
     }
+  }
+
+  /**
+   * Get the return type of a method from its source type annotation.
+   * This reads the actual Unique<T>/Shared<T>/Weak<T> annotations from source,
+   * not the unwrapped types that TypeChecker gives us.
+   */
+  private getMethodReturnTypeFromSource(callExpr: ts.CallExpression): string | undefined {
+    if (!this.checker) {
+      return undefined;
+    }
+    
+    // Get the method declaration
+    const signature = this.checker.getResolvedSignature(callExpr);
+    if (!signature || !signature.declaration) {
+      return undefined;
+    }
+
+    const decl = signature.declaration;
+    
+    // For method declarations, check the type annotation
+    if (ts.isMethodDeclaration(decl) && decl.type) {
+      return decl.type.getText();
+    }
+    
+    return undefined;
+  }
+
+  /**
+   * Convert a GoodScript source type to its Rust equivalent.
+   * E.g., "Unique<Token>" -> "Box<Token>"
+   *       "JsonValue | null" -> "Option<Box<JsonValue>>"
+   */
+  private convertSourceTypeToRust(sourceType: string): string {
+    // Handle nullable types (T | null becomes Option<Box<T>> if T is a class)
+    if (sourceType.includes('| null') || sourceType.includes('|null')) {
+      const baseType = sourceType.split('|')[0].trim();
+      // For now, assume non-primitive types become Box<T>
+      // This is a simplification - in reality we'd need to check if it's a class
+      if (baseType !== 'string' && baseType !== 'number' && baseType !== 'boolean') {
+        return `Option<Box<${baseType}>>`;
+      }
+      return `Option<${baseType}>`;
+    }
+    
+    // Handle ownership types
+    if (sourceType.startsWith('Unique<')) {
+      const inner = sourceType.slice(7, -1);
+      return `Box<${inner}>`;
+    }
+    if (sourceType.startsWith('Shared<')) {
+      const inner = sourceType.slice(7, -1);
+      return `Rc<${inner}>`;
+    }
+    if (sourceType.startsWith('Weak<')) {
+      const inner = sourceType.slice(5, -1);
+      return `Weak<${inner}>`;
+    }
+    
+    // For plain class types, assume they become Box<T> when returned
+    // This is also a simplification
+    return sourceType;
   }
 }

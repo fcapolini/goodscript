@@ -976,7 +976,53 @@ export class OwnershipAnalyzer {
     // Try to get it from the source first, fall back to type checker
     let rightTypeText = '';
     
-    if (ts.isPropertyAccessExpression(rightNode)) {
+    if (ts.isCallExpression(rightNode)) {
+      // Handle method/function calls - get the return type from the declaration
+      if (ts.isPropertyAccessExpression(rightNode.expression)) {
+        // Method call: obj.method()
+        const methodSymbol = checker.getSymbolAtLocation(rightNode.expression.name);
+        if (methodSymbol) {
+          const methodDecls = methodSymbol.getDeclarations();
+          if (methodDecls && methodDecls.length > 0) {
+            const methodDecl = methodDecls[0];
+            if (ts.isMethodDeclaration(methodDecl) || ts.isMethodSignature(methodDecl)) {
+              if (methodDecl.type) {
+                rightTypeText = methodDecl.type.getText(sourceFile);
+              }
+            }
+          }
+        }
+      } else if (ts.isIdentifier(rightNode.expression)) {
+        // Function call: func()
+        const funcSymbol = checker.getSymbolAtLocation(rightNode.expression);
+        if (funcSymbol) {
+          const funcDecls = funcSymbol.getDeclarations();
+          if (funcDecls && funcDecls.length > 0) {
+            const funcDecl = funcDecls[0];
+            if (ts.isFunctionDeclaration(funcDecl) && funcDecl.type) {
+              rightTypeText = funcDecl.type.getText(sourceFile);
+            }
+          }
+        }
+      }
+    } else if (ts.isIdentifier(rightNode)) {
+      // Handle identifiers (parameters, variables, etc.)
+      const rightSymbol = checker.getSymbolAtLocation(rightNode);
+      if (rightSymbol) {
+        const rightDecls = rightSymbol.getDeclarations();
+        if (rightDecls && rightDecls.length > 0) {
+          const rightDecl = rightDecls[0];
+          // Check for parameters, variable declarations, property declarations
+          if (ts.isParameter(rightDecl) && rightDecl.type) {
+            rightTypeText = rightDecl.type.getText(sourceFile);
+          } else if (ts.isVariableDeclaration(rightDecl) && rightDecl.type) {
+            rightTypeText = rightDecl.type.getText(sourceFile);
+          } else if ((ts.isPropertyDeclaration(rightDecl) || ts.isPropertySignature(rightDecl)) && rightDecl.type) {
+            rightTypeText = rightDecl.type.getText(sourceFile);
+          }
+        }
+      }
+    } else if (ts.isPropertyAccessExpression(rightNode)) {
       // Get the symbol and its declaration
       const rightSymbol = checker.getSymbolAtLocation(rightNode.name);
       if (rightSymbol) {

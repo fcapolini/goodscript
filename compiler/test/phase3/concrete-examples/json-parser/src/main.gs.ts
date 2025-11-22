@@ -37,10 +37,10 @@ class Token {
 }
 
 class Tokenizer {
-  private input: Unique<string>;
+  private input: Shared<string>;
   private pos: number;
   
-  constructor(input: Unique<string>) {
+  constructor(input: Shared<string>) {
     this.input = input;
     this.pos = 0;
   }
@@ -124,7 +124,7 @@ class Tokenizer {
     return result;
   }
   
-  nextToken(): Token {
+  nextToken(): Unique<Token> {
     this.skipWhitespace();
     
     if (this.pos >= this.input.length) {

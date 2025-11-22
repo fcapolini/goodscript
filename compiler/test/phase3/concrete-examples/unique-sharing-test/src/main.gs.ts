@@ -4,7 +4,7 @@
  * Correct approach: Use Shared<T> for reference-counted sharing
  */
 
-/// <reference path="../../../../../../lib/goodscript.d.ts" />
+/// <reference path="../../../../../lib/goodscript.d.ts" />
 
 // Scenario: Multiple caches want to share the same data
 class SharedData {
