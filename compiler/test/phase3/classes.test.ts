@@ -131,7 +131,7 @@ describe('Phase 3 - Rust Code Generation - Classes', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('fn getValue(&self) -> Result<f64, String>');
+      expect(result.rustCode).toContain('fn getValue(&mut self) -> Result<f64, String>');
     });
 
     it('should handle methods with parameters', () => {
@@ -146,7 +146,7 @@ describe('Phase 3 - Rust Code Generation - Classes', () => {
       `);
       
       expect(result.success).toBe(true);
-      expect(result.rustCode).toContain('fn add(&self, a: f64, b: f64) -> Result<f64, String>');
+      expect(result.rustCode).toContain('fn add(&mut self, a: f64, b: f64) -> Result<f64, String>');
     });
   });
 

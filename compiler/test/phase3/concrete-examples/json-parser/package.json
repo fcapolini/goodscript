@@ -1,0 +1,13 @@
+{
+  "name": "json-parser-example",
+  "version": "1.0.0",
+  "description": "JSON parser example in GoodScript",
+  "type": "module",
+  "scripts": {
+    "build": "gsc src/main.gs.ts --out-dir dist",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "goodscript": "file:../../../.."
+  }
+}

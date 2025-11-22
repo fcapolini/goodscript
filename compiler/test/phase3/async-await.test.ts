@@ -215,7 +215,7 @@ describe('Phase 3 - Async/Await', () => {
       
       expect(result.errors.length).toBe(0);
       expect(result.rustCode).toContain('async fn loadUser');
-      expect(result.rustCode).toContain('&self');
+      expect(result.rustCode).toContain('&mut self');
       expect(result.rustCode).toContain('id: f64');
       expect(result.rustCode).toContain('Result<String, String>');
       expect(result.rustCode).toContain('use tokio;');
