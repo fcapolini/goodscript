@@ -19,7 +19,7 @@ interface CompileSourceResult extends CompileResult {
 export function compileWithOwnership(
   source: string, 
   fileName: string = 'test.gs.ts',
-  level: 'dag' | 'rust' = 'dag'
+  level: 'dag' | 'native' = 'dag'
 ): CompileSourceResult {
     // Create a temporary directory
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goodscript-phase2-'));
@@ -69,7 +69,7 @@ export function compileWithOwnership(
  */
 export function compileMultipleWithOwnership(
   files: { name: string, source: string }[],
-  level: 'dag' | 'rust' = 'dag'
+  level: 'dag' | 'native' = 'dag'
 ): CompileSourceResult {
   // Create a temporary directory
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goodscript-phase2-'));

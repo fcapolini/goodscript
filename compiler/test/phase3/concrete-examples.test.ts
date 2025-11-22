@@ -5,22 +5,22 @@ import { tmpdir } from 'os';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
-import { executeJS, executeRust, compareOutputs, isRustcAvailable } from './runtime-helpers.js';
+import { executeJS, executeCpp, compareOutputs, isCppCompilerAvailable } from './runtime-helpers.js';
 
 /**
  * Concrete Examples - Real-world GoodScript programs
  * 
  * These tests dynamically discover example projects in the concrete-examples/
  * directory and validate that GoodScript can compile them to both TypeScript
- * and Rust, with equivalent runtime behavior.
+ * and native, with equivalent runtime behavior.
  * 
  * Each example project should have the structure:
  *   example-name/
  *     src/
  *       main.gs.ts - Entry point source file
  * 
- * NOTE: Full Rust equivalence is a work in progress for complex examples
- * involving arrays, closures with mutable captures, and string methods.
+ * NOTE: Full native equivalence is a work in progress for complex examples
+ * involving arrays, closures, and string methods.
  */
 
 const __filename = fileURLToPath(import.meta.url);
@@ -44,10 +44,10 @@ const discoverExamples = (): string[] => {
 };
 
 /**
- * Compile Rust source to binary and keep it in the dist directory
+ * Compile C++ source to binary and keep it in the dist directory
  */
-const compileRustBinary = (rustFile: string, outDir: string, exampleName: string): boolean => {
-  if (!isRustcAvailable()) {
+const compileCppBinary = (cppFile: string, outDir: string, exampleName: string): boolean => {
+  if (!isCppCompilerAvailable()) {
     return false;
   }
   
@@ -55,12 +55,12 @@ const compileRustBinary = (rustFile: string, outDir: string, exampleName: string
   
   try {
     execSync(
-      `rustc ${rustFile} -o ${binFile} 2>&1`,
+      `g++ ${cppFile} -o ${binFile} 2>&1`,
       { encoding: 'utf-8', timeout: 30000 }
     );
     return true;
   } catch (error: any) {
-    console.error(`Failed to compile Rust binary for ${exampleName}:`, error.stdout || error.stderr || error.message);
+    console.error(`Failed to compile C++ binary for ${exampleName}:`, error.stdout || error.stderr || error.message);
     return false;
   }
 };
@@ -83,9 +83,9 @@ describe('Phase 3: Concrete Examples', () => {
 
   const compileAndExecuteExample = (exampleName: string): {
     jsCode: string;
-    rustCode: string;
+    cppCode: string;
     jsResult: ReturnType<typeof executeJS>;
-    rustResult: ReturnType<typeof executeRust> | null;
+    nativeResult: ReturnType<typeof executeCpp> | null;
     equivalent: boolean;
   } => {
     const exampleDir = join(EXAMPLES_DIR, exampleName);
@@ -121,7 +121,7 @@ describe('Phase 3: Concrete Examples', () => {
           outDir: './dist',
         },
         goodscript: {
-          level: 'rust',
+          level: 'native',
         },
         include: [join(exampleDir, 'src/**/*')],
       }, null, 2), 'utf-8');
@@ -138,40 +138,40 @@ describe('Phase 3: Concrete Examples', () => {
     const jsFile = join(outDir, 'main.js');
     const jsCode = existsSync(jsFile) ? readFileSync(jsFile, 'utf-8') : '';
     
-    // Compile to Rust
-    const rustCompileResult = compiler.compile({
+    // Compile to C++
+    const cppCompileResult = compiler.compile({
       files: [srcFile],
       outDir,
-      target: 'rust',
+      target: 'native',
       project: tsconfigPath,
     });
     
-    const rustFile = join(outDir, 'main.rs');
-    const rustCode = existsSync(rustFile) ? readFileSync(rustFile, 'utf-8') : '';
+    const cppFile = join(outDir, 'main.cpp');
+    const cppCode = existsSync(cppFile) ? readFileSync(cppFile, 'utf-8') : '';
     
-    // Compile Rust binary and keep it in the dist directory
-    let rustBinaryCompiled = false;
-    if (isRustcAvailable() && rustCode) {
-      rustBinaryCompiled = compileRustBinary(rustFile, outDir, exampleName);
+    // Compile native binary and keep it in the dist directory
+    let nativeBinaryCompiled = false;
+    if (isCppCompilerAvailable() && cppCode) {
+      nativeBinaryCompiled = compileCppBinary(cppFile, outDir, exampleName);
     }
     
     // Execute JavaScript
     const jsResult = executeJS(jsCode);
     
-    // Execute Rust (only if rustc is available)
-    let rustResult = null;
+    // Execute native (only if C++ compiler is available)
+    let nativeResult = null;
     let equivalent = false;
     
-    if (isRustcAvailable() && rustCode) {
-      rustResult = executeRust(rustCode);
-      equivalent = compareOutputs(jsResult, rustResult);
+    if (isCppCompilerAvailable() && cppCode && nativeBinaryCompiled) {
+      nativeResult = executeCpp(cppCode, join(outDir, exampleName));
+      equivalent = compareOutputs(jsResult, nativeResult);
     }
     
     return {
       jsCode,
-      rustCode,
+      cppCode,
       jsResult,
-      rustResult,
+      nativeResult,
       equivalent,
     };
   };
@@ -208,60 +208,60 @@ describe('Phase 3: Concrete Examples', () => {
         expect(result.jsResult.stdout).toBeTruthy();
       });
 
-      it.skipIf(skipDueToGS303)('should compile to Rust and execute', () => {
+      it.skipIf(skipDueToGS303)('should compile to C++ and execute', () => {
         const result = compileAndExecuteExample(exampleName);
         
-        // Rust code should be generated
-        expect(result.rustCode).toBeTruthy();
+        // C++ code should be generated
+        expect(result.cppCode).toBeTruthy();
         
-        // If rustc is available, Rust should compile and execute
-        if (isRustcAvailable()) {
-          expect(result.rustResult).not.toBeNull();
+        // If C++ compiler is available, C++ should compile and execute
+        if (isCppCompilerAvailable()) {
+          expect(result.nativeResult).not.toBeNull();
           
-          if (result.rustResult) {
-            // Rust compilation should succeed
-            if (!result.rustResult.success) {
-              console.error('\n=== Rust Compilation/Execution Failed ===');
-              console.error('STDERR:', result.rustResult.stderr);
-              console.error('STDOUT:', result.rustResult.stdout);
-              console.error('Error:', result.rustResult.error);
-              console.error('\n=== Generated Rust Code (first 50 lines) ===');
-              console.error(result.rustCode.split('\n').slice(0, 50).join('\n'));
+          if (result.nativeResult !== null) {
+            // C++ compilation should succeed
+            if (!result.nativeResult.success) {
+              console.error('\n=== C++ Compilation/Execution Failed ===');
+              console.error('STDERR:', result.nativeResult.stderr);
+              console.error('STDOUT:', result.nativeResult.stdout);
+              console.error('Error:', result.nativeResult.error);
+              console.error('\n=== Generated C++ Code (first 50 lines) ===');
+              console.error(result.cppCode.split('\n').slice(0, 50).join('\n'));
             }
-            expect(result.rustResult.success).toBe(true);
+            expect(result.nativeResult.success).toBe(true);
             
             // Should produce output
-            if (result.rustResult.success) {
-              expect(result.rustResult.stdout).toBeTruthy();
+            if (result.nativeResult.success) {
+              expect(result.nativeResult.stdout).toBeTruthy();
             }
           }
         }
       });
 
-      it.skipIf(skipDueToGS303)('should produce equivalent JavaScript and Rust output', () => {
+      it.skipIf(skipDueToGS303)('should produce equivalent JavaScript and C++ output', () => {
         const result = compileAndExecuteExample(exampleName);
         
         // Both should compile
         expect(result.jsCode).toBeTruthy();
-        expect(result.rustCode).toBeTruthy();
+        expect(result.cppCode).toBeTruthy();
         
         // JavaScript should execute successfully
         expect(result.jsResult.success).toBe(true);
         
-        // If Rust is available and executes successfully, outputs should match
-        if (isRustcAvailable() && result.rustResult !== null) {
-          if (result.rustResult.success) {
+        // If C++ is available and executes successfully, outputs should match
+        if (isCppCompilerAvailable() && result.nativeResult !== null) {
+          if (result.nativeResult.success) {
             expect(result.equivalent).toBe(true);
             
             // If not equivalent, show the difference for debugging
             if (!result.equivalent) {
               console.log('\n=== JavaScript Output ===');
               console.log(result.jsResult.stdout);
-              console.log('\n=== Rust Output ===');
-              console.log(result.rustResult.stdout);
+              console.log('\n=== C++ Output ===');
+              console.log(result.nativeResult.stdout);
               console.log('\n=== Difference ===');
               console.log('JS lines:', result.jsResult.stdout.trim().split('\n').length);
-              console.log('Rust lines:', result.rustResult.stdout.trim().split('\n').length);
+              console.log('C++ lines:', result.nativeResult.stdout.trim().split('\n').length);
             }
           }
         }

@@ -18,11 +18,11 @@ interface CompileSourceResult extends CompileResult {
 /**
  * Compile source code string for testing
  * @param source Source code to compile
- * @param levelOrFileName Language level ('clean', 'dag', 'rust') or filename (defaults to 'clean')
+ * @param levelOrFileName Language level ('clean', 'dag', 'native') or filename (defaults to 'clean')
  */
 export function compileSource(source: string, levelOrFileName: string = 'clean'): CompileSourceResult {
   // Determine if second parameter is a level or filename
-  const isLevel = levelOrFileName === 'clean' || levelOrFileName === 'dag' || levelOrFileName === 'rust';
+  const isLevel = levelOrFileName === 'clean' || levelOrFileName === 'dag' || levelOrFileName === 'native';
   const level = isLevel ? levelOrFileName : 'clean';
   const fileName = isLevel ? 'test.gs.ts' : levelOrFileName;
   

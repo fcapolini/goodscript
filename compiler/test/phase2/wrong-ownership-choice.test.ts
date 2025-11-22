@@ -150,7 +150,7 @@ describe('Phase 2: Wrong Ownership Choices', () => {
   
   describe('Real consequences in generated code', () => {
     
-    it('demonstrates the issue: Shared<T> cycle would leak in Rust', () => {
+    it('demonstrates the issue: Shared<T> cycle would leak in native target', () => {
       // This is what developers might try:
       const source = `
         class LRUCache {
@@ -170,7 +170,7 @@ describe('Phase 2: Wrong Ownership Choices', () => {
       // Compiler catches this!
       expect(hasError(result.diagnostics, 'GS301')).toBe(true);
       
-      // In Rust, this would compile but leak memory:
+      // In native target, this would compile but leak memory:
       // - Each Node is Rc<Node>
       // - prev/next create circular Rc references
       // - Reference count never reaches zero
@@ -199,12 +199,6 @@ describe('Phase 2: Wrong Ownership Choices', () => {
       // No ownership errors!
       expect(hasError(result.diagnostics, 'GS301')).toBe(false);
       expect(hasError(result.diagnostics, 'GS303')).toBe(false);
-      
-      // In Rust this becomes:
-      // - nodes: Vec<Box<Node>>  (arena owns with unique ownership)
-      // - head/tail/prev/next: Option<Weak<Node>>  (non-owning)
-      // - No reference cycles possible
-      // - Memory cleaned up when LRUCache is dropped
     });
   });
 });

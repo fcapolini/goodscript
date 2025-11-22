@@ -14,9 +14,9 @@ export interface GoodScriptPluginOptions {
    * Language level to enforce
    * - 'clean': TypeScript good parts only (default for TS target)
    * - 'dag': Level 1 + ownership/DAG validation
-   * - 'rust': Full validation for native compilation
+   * - 'native': Full validation for native compilation
    */
-  level?: 'clean' | 'dag' | 'rust';
+  level?: 'clean' | 'dag' | 'native';
   
   /**
    * Glob patterns for files to include
@@ -32,7 +32,7 @@ export interface GoodScriptPluginOptions {
   
   /**
    * Skip ownership analysis (Phase 2 checks)
-   * @default false for level 'clean', true for 'dag'/'rust'
+   * @default false for level 'clean', true for 'dag'/'native'
    */
   skipOwnershipChecks?: boolean;
 }

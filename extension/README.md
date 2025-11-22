@@ -63,7 +63,7 @@ This provides:
 - ✅ JSX syntax highlighting and auto-completion (`.gs.tsx` only)
 - ✅ All IDE features work out of the box
 
-**Note**: `.gs.tsx` files compile to TypeScript/JavaScript only (not Rust). They're for web development workflows.
+**Note**: `.gs.tsx` files compile to TypeScript/JavaScript only (not C++). They're for web development workflows.
 
 ## Automatic Configuration
 

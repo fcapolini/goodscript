@@ -7,7 +7,7 @@ export { Parser } from './parser';
 export { OwnershipAnalyzer } from './ownership-analyzer';
 export { Validator } from './validator';
 export { TypeScriptCodegen } from './ts-codegen';
-export { RustCodegen } from './rust-codegen';
+export { CppCodegen } from './cpp-codegen';
 export {
   OwnershipKind,
   OwnershipInfo,

@@ -18,7 +18,7 @@ const VERSION = packageJson.version;
 interface CliOptions {
   files: string[];
   outDir?: string;
-  target?: 'typescript' | 'rust';
+  target?: 'typescript' | 'native';
   emit?: 'js' | 'ts' | 'both';
   skipOwnershipChecks?: boolean;
   verbose?: boolean;
@@ -48,10 +48,10 @@ function parseArgs(args: string[]): CliOptions {
       const targetValue = args[++i];
       if (targetValue === 'typescript' || targetValue === 'ts') {
         options.target = 'typescript';
-      } else if (targetValue === 'rust' || targetValue === 'rs') {
-        options.target = 'rust';
+      } else if (targetValue === 'native' || targetValue === 'cpp') {
+        options.target = 'native';
       } else {
-        console.error(`Error: Invalid target '${targetValue}'. Use 'typescript' or 'rust'`);
+        console.error(`Error: Invalid target '${targetValue}'. Use 'typescript' or 'native'`);
         process.exit(1);
       }
     } else if (arg === '--emit' || arg === '-e') {
@@ -81,7 +81,7 @@ function parseArgs(args: string[]): CliOptions {
 function printHelp(): void {
   console.log(`
 GoodScript Compiler v${VERSION}
-Rust performance for the rest of us
+Native performance for the rest of us
 
 Usage: gsc [options] [files...]
 
@@ -96,7 +96,7 @@ Options:
   -V, --version               Show version number
   -o, --out-dir <dir>         Output directory for compiled files
   -p, --project <file>        Path to tsconfig.json (auto-detected from input files if not specified)
-  -t, --target <target>       Target language: 'typescript' (default) or 'rust'
+  -t, --target <target>       Target language: 'typescript' (default) or 'native'
   -e, --emit <format>         Output format: 'js' (default), 'ts', or 'both'
   --no-ownership-checks       Skip ownership analysis ("Clean TypeScript" mode)
   --json-output               Output diagnostics in JSON format (for IDE integration)
@@ -117,7 +117,7 @@ Examples:
   gsc -e ts -o dist main.gs.ts        Compile to TypeScript only
   gsc -e both -o dist main.gs.ts      Emit both .ts and .js files
   gsc --no-ownership-checks -o dist main.gs.ts   Skip ownership checks
-  gsc -t rust -o dist main.gs.ts      Compile to Rust (Phase 3)
+  gsc -t native -o dist main.gs.ts    Compile to native (Phase 3)
   `);
 }
 

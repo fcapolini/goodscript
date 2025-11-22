@@ -3,7 +3,7 @@ import { Compiler } from '../../src/compiler';
 import { writeFileSync, mkdirSync, existsSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { executeJS, executeRust, compareOutputs, normalizeOutput, isRustcAvailable } from './runtime-helpers';
+import { executeJS, executeCpp, compareOutputs, normalizeOutput, isCppCompilerAvailable } from './runtime-helpers';
 
 describe('Phase 3 - Runtime Equivalence Tests', () => {
   let tmpDir: string;
@@ -23,9 +23,9 @@ describe('Phase 3 - Runtime Equivalence Tests', () => {
 
   const compileAndExecute = (source: string): {
     jsCode: string;
-    rustCode: string;
+    cppCode: string;
     jsResult: ReturnType<typeof executeJS>;
-    rustResult: ReturnType<typeof executeRust>;
+    nativeResult: ReturnType<typeof executeCpp>;
     equivalent: boolean;
   } => {
     const srcFile = join(tmpDir, 'test.gs.ts');
@@ -43,37 +43,37 @@ describe('Phase 3 - Runtime Equivalence Tests', () => {
     const jsFile = join(outDir, 'test.js');
     const jsCode = existsSync(jsFile) ? readFileSync(jsFile, 'utf-8') : '';
     
-    // Compile to Rust
-    const rustCompileResult = compiler.compile({
+    // Compile to C++
+    const cppCompileResult = compiler.compile({
       files: [srcFile],
       outDir,
-      target: 'rust',
+      target: 'native',
     });
     
-    const rsFile = join(outDir, 'test.rs');
-    const rustCode = existsSync(rsFile) ? readFileSync(rsFile, 'utf-8') : '';
+    const cppFile = join(outDir, 'test.cpp');
+    const cppCode = existsSync(cppFile) ? readFileSync(cppFile, 'utf-8') : '';
     
     // Execute both
     const jsResult = executeJS(jsCode);
-    const rustResult = isRustcAvailable() 
-      ? executeRust(rustCode)
-      : { success: false, stdout: '', stderr: 'rustc not available', exitCode: 1 };
+    const nativeResult = isCppCompilerAvailable() 
+      ? executeCpp(cppCode, outDir)
+      : { success: false, stdout: '', stderr: 'C++ compiler not available', exitCode: 1 };
     
-    const equivalent = compareOutputs(jsResult, rustResult);
+    const equivalent = compareOutputs(jsResult, nativeResult);
     
     return {
       jsCode,
-      rustCode,
+      cppCode,
       jsResult,
-      rustResult,
+      nativeResult,
       equivalent,
     };
   };
 
   describe('Basic Types', () => {
     it('should produce equivalent output for number arithmetic', () => {
-      if (!isRustcAvailable()) {
-        console.log('Skipping runtime test: rustc not available');
+      if (!isCppCompilerAvailable()) {
+        console.log('Skipping runtime test: C++ compiler not available');
         return;
       }
 
@@ -89,21 +89,21 @@ describe('Phase 3 - Runtime Equivalence Tests', () => {
         console.log('JS code:', result.jsCode);
       }
       
-      if (!result.rustResult.success) {
-        console.log('Rust failed:', result.rustResult.stderr);
-        console.log('Rust code:', result.rustCode);
+      if (!result.nativeResult.success) {
+        console.log('C++ failed:', result.nativeResult.stderr);
+        console.log('C++ code:', result.cppCode);
       }
       
       expect(result.jsResult.success).toBe(true);
-      expect(result.rustResult.success).toBe(true);
+      expect(result.nativeResult.success).toBe(true);
       expect(normalizeOutput(result.jsResult.stdout)).toBe('30');
-      expect(normalizeOutput(result.rustResult.stdout)).toBe('30');
+      expect(normalizeOutput(result.nativeResult.stdout)).toBe('30');
       expect(result.equivalent).toBe(true);
     });
 
     it('should produce equivalent output for string concatenation', () => {
-      if (!isRustcAvailable()) {
-        console.log('Skipping runtime test: rustc not available');
+      if (!isCppCompilerAvailable()) {
+        console.log('Skipping runtime test: C++ compiler not available');
         return;
       }
 
@@ -119,21 +119,21 @@ describe('Phase 3 - Runtime Equivalence Tests', () => {
         console.log('JS code:', result.jsCode);
       }
       
-      if (!result.rustResult.success) {
-        console.log('Rust failed:', result.rustResult.stderr);
-        console.log('Rust stdout:', result.rustResult.stdout);
-        console.log('Rust code:', result.rustCode);
+      if (!result.nativeResult.success) {
+        console.log('C++ failed:', result.nativeResult.stderr);
+        console.log('C++ stdout:', result.nativeResult.stdout);
+        console.log('C++ code:', result.cppCode);
       }
       
       expect(result.jsResult.success).toBe(true);
-      expect(result.rustResult.success).toBe(true);
+      expect(result.nativeResult.success).toBe(true);
       expect(normalizeOutput(result.jsResult.stdout)).toBe('Hello World');
       expect(result.equivalent).toBe(true);
     });
 
     it('should produce equivalent output for boolean logic', () => {
-      if (!isRustcAvailable()) {
-        console.log('Skipping runtime test: rustc not available');
+      if (!isCppCompilerAvailable()) {
+        console.log('Skipping runtime test: C++ compiler not available');
         return;
       }
 
@@ -150,12 +150,12 @@ describe('Phase 3 - Runtime Equivalence Tests', () => {
         console.log('JS failed:', result.jsResult.stderr);
       }
       
-      if (!result.rustResult.success) {
-        console.log('Rust failed:', result.rustResult.stderr);
+      if (!result.nativeResult.success) {
+        console.log('C++ failed:', result.nativeResult.stderr);
       }
       
       expect(result.jsResult.success).toBe(true);
-      expect(result.rustResult.success).toBe(true);
+      expect(result.nativeResult.success).toBe(true);
       expect(normalizeOutput(result.jsResult.stdout)).toBe('false\ntrue');
       expect(result.equivalent).toBe(true);
     });
@@ -163,8 +163,8 @@ describe('Phase 3 - Runtime Equivalence Tests', () => {
 
   describe('Control Flow', () => {
     it('should produce equivalent output for if/else', () => {
-      if (!isRustcAvailable()) {
-        console.log('Skipping runtime test: rustc not available');
+      if (!isCppCompilerAvailable()) {
+        console.log('Skipping runtime test: C++ compiler not available');
         return;
       }
 
@@ -182,21 +182,21 @@ describe('Phase 3 - Runtime Equivalence Tests', () => {
         console.log('JS code:', result.jsCode);
       }
       
-      if (!result.rustResult.success) {
-        console.log('Rust failed:', result.rustResult.stderr);
-        console.log('Rust stdout:', result.rustResult.stdout);
-        console.log('Rust code:', result.rustCode);
+      if (!result.nativeResult.success) {
+        console.log('C++ failed:', result.nativeResult.stderr);
+        console.log('C++ stdout:', result.nativeResult.stdout);
+        console.log('C++ code:', result.cppCode);
       }
       
       expect(result.jsResult.success).toBe(true);
-      expect(result.rustResult.success).toBe(true);
+      expect(result.nativeResult.success).toBe(true);
       expect(normalizeOutput(result.jsResult.stdout)).toBe('greater');
       expect(result.equivalent).toBe(true);
     });
 
     it('should produce equivalent output for for-of loop', () => {
-      if (!isRustcAvailable()) {
-        console.log('Skipping runtime test: rustc not available');
+      if (!isCppCompilerAvailable()) {
+        console.log('Skipping runtime test: C++ compiler not available');
         return;
       }
 
@@ -212,14 +212,14 @@ describe('Phase 3 - Runtime Equivalence Tests', () => {
         console.log('JS code:', result.jsCode);
       }
       
-      if (!result.rustResult.success) {
-        console.log('Rust failed:', result.rustResult.stderr);
-        console.log('Rust stdout:', result.rustResult.stdout);
-        console.log('Rust code:', result.rustCode);
+      if (!result.nativeResult.success) {
+        console.log('C++ failed:', result.nativeResult.stderr);
+        console.log('C++ stdout:', result.nativeResult.stdout);
+        console.log('C++ code:', result.cppCode);
       }
       
       expect(result.jsResult.success).toBe(true);
-      expect(result.rustResult.success).toBe(true);
+      expect(result.nativeResult.success).toBe(true);
       expect(normalizeOutput(result.jsResult.stdout)).toBe('1\n2\n3');
       expect(result.equivalent).toBe(true);
     });

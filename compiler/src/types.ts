@@ -4,14 +4,13 @@
 
 /**
  * Ownership kind for variables and parameters
- * Maps to Rust types: Unique -> Box<T>, Shared -> Rc<T>, Weak -> Weak<T>
  */
 export enum OwnershipKind {
-  /** Exclusive ownership - maps to Box<T> in Rust */
+  /** Exclusive ownership */
   Unique = 'unique',
-  /** Shared ownership with reference counting - maps to Rc<T> in Rust */
+  /** Shared ownership with reference counting */
   Shared = 'shared',
-  /** Non-owning weak reference - maps to Weak<T> in Rust */
+  /** Non-owning weak reference */
   Weak = 'weak',
 }
 
@@ -73,7 +72,7 @@ export interface ValidationResult {
 /**
  * GoodScript language level
  */
-export type LanguageLevel = 'clean' | 'dag' | 'rust';
+export type LanguageLevel = 'clean' | 'dag' | 'native';
 
 /**
  * GoodScript-specific configuration from tsconfig.json
@@ -83,7 +82,7 @@ export interface GoodScriptConfig {
    * Language level (determines which features are enabled)
    * - 'clean': Phase 1 restrictions only (TypeScript "good parts")
    * - 'dag': Phase 1 + ownership/DAG validation
-   * - 'rust': Full validation for Rust compilation
+   * - 'native': Full validation for native compilation
    * Default: 'clean'
    */
   level?: LanguageLevel;

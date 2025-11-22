@@ -39,8 +39,7 @@
     "memory-management",
     "tsc",
     "strict-typescript",
-    "rust",
-    "wasm",
+    "cpp",
     "systems-programming"
   ],
   "author": "Fabio Capolini",

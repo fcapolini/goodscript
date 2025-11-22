@@ -1,4 +1,4 @@
-# DAG detection
+# DAG analysis
 
 This are the rules for the **Directed Acyclic Graph (DAG) Check** which forms the central safety mechanism of the language. These rules must be applied during **Phase 2 (Ownership Analysis)** by traversing the Abstract Syntax Tree (AST) after basic type checking.
 

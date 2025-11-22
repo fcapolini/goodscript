@@ -36,7 +36,7 @@ test/
 │   ├── test-helpers.ts               # Phase 2 test utilities
 │   └── README.md                     # Phase 2 test documentation
 │
-└── phase3/          # Phase 3: Rust Code Generation (TBD)
+└── phase3/          # Phase 3: C++ Code Generation (TBD)
     └── (codegen tests go here)
 ```
 
@@ -145,9 +145,9 @@ Phase 1 tests use shared helpers from `test-helpers.ts`:
 **Status**: Core implementation complete (54 tests passing, 7 skipped due to known limitations)
 
 Phase 2 introduces ownership semantics with three-tier ownership system:
-- **`Unique<T>`** - Exclusive ownership (maps to Rust's `Box<T>`)
-- **`Shared<T>`** - Shared ownership with reference counting (maps to `Rc<T>`)
-- **`Weak<T>`** - Non-owning references (maps to `Weak<T>`) - implicitly nullable
+- **`Unique<T>`** - Exclusive ownership
+- **`Shared<T>`** - Shared ownership with reference counting
+- **`Weak<T>`** - Non-owning references - implicitly nullable
 
 See [test/phase2/README.md](phase2/README.md) for detailed test documentation.
 
@@ -191,10 +191,10 @@ All 23 tests passing:
 - Improved `Weak<T>` type detection via symbol declarations
 - Fixed control flow analysis double-recursion issue
 
-## Phase 3: Rust Code Generation (Future)
+## Phase 3: C++ Code Generation (Future)
 
 Tests for:
-- TypeScript to Rust transpilation
+- TypeScript to C++ transpilation
 - Ownership mapping (Box<T>, Rc<T>, Weak<T>)
 - Generated code correctness
 - Performance characteristics

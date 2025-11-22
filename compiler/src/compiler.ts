@@ -11,13 +11,13 @@ import { OwnershipAnalyzer } from './ownership-analyzer';
 import { Validator } from './validator';
 import { NullCheckAnalyzer } from './null-check-analyzer';
 import { TypeScriptCodegen } from './ts-codegen';
-import { RustCodegen } from './rust-codegen';
+import { CppCodegen } from './cpp-codegen';
 import { Diagnostic } from './types';
 
 export interface CompileOptions {
   files: string[];
   outDir?: string;
-  target?: 'typescript' | 'rust';  // Default: typescript
+  target?: 'typescript' | 'native';  // Default: typescript
   emit?: 'js' | 'ts' | 'both';  // Default: js (ts+js, emit both intermediate .ts and final .js)
   skipOwnershipChecks?: boolean;  // Skip ownership analysis ("Clean TypeScript" mode)
   project?: string;  // Path to tsconfig.json
@@ -39,7 +39,7 @@ export class Compiler {
   private nullCheckAnalyzer: NullCheckAnalyzer;
   private validator: Validator;
   private tsCodegen: TypeScriptCodegen;
-  private rustCodegen: RustCodegen;
+  private cppCodegen: CppCodegen;
 
   constructor() {
     this.parser = new Parser();
@@ -47,7 +47,7 @@ export class Compiler {
     this.nullCheckAnalyzer = new NullCheckAnalyzer();
     this.validator = new Validator();
     this.tsCodegen = new TypeScriptCodegen();
-    this.rustCodegen = new RustCodegen();
+    this.cppCodegen = new CppCodegen();
   }
 
   /**
@@ -80,8 +80,8 @@ export class Compiler {
     
     // Determine language level
     // - For TypeScript target: default to 'clean' (Phase 1 only)
-    // - For Rust target: default to 'rust' (full validation)
-    const defaultLevel = target === 'rust' ? 'rust' : 'clean';
+    // - For C++ target: default to 'native' (full validation)
+    const defaultLevel = target === 'native' ? 'native' : 'clean';
     const level = goodscriptConfig?.level ?? defaultLevel;
     
     // For backwards compatibility, check deprecated skipOwnership flag
@@ -90,8 +90,8 @@ export class Compiler {
     // Determine if ownership analysis should run based on level
     // - 'clean': no ownership analysis (Phase 1 only)
     // - 'dag': ownership + DAG validation (Phase 2)
-    // - 'rust': full validation (Phase 3)
-    const shouldAnalyzeOwnership = level === 'dag' || level === 'rust';
+    // - 'native': full validation (Phase 3)
+    const shouldAnalyzeOwnership = level === 'dag' || level === 'native';
     const effectiveSkipOwnership = explicitSkipOwnership ?? !shouldAnalyzeOwnership;
 
     // Get TypeScript diagnostics
@@ -159,11 +159,11 @@ export class Compiler {
     const hasErrors = allDiagnostics.some(d => d.severity === 'error');
 
     // If successful and outDir specified, generate code
-    // For Rust target, emit code even if there are TypeScript module resolution errors
+    // For C++ target, emit code even if there are TypeScript module resolution errors
     // (we're not actually running the code, just generating it)
     const shouldEmit = options.outDir && (
       !hasErrors || 
-      (target === 'rust' && allDiagnostics.every(d => 
+      (target === 'native' && allDiagnostics.every(d => 
         d.severity !== 'error' || 
         d.code === 'TS2307' ||  // Module not found
         d.code === 'TS2792' ||  // Cannot find module (ESM)
@@ -176,14 +176,14 @@ export class Compiler {
       
       if (target === 'typescript') {
         this.emitTypeScript(program, options.outDir, emit);
-      } else if (target === 'rust') {
-        this.emitRust(program, options.outDir);
+      } else if (target === 'native') {
+        this.emitCpp(program, options.outDir);
       }
     }
 
-    // For Rust target with only module resolution errors, consider it successful
+    // For C++ target with only module resolution errors, consider it successful
     const isSuccessful = !hasErrors || (
-      target === 'rust' && allDiagnostics.every(d => 
+      target === 'native' && allDiagnostics.every(d => 
         d.severity !== 'error' || 
         d.code === 'TS2307' ||  // Module not found
         d.code === 'TS2792' ||  // Cannot find module (ESM)
@@ -376,9 +376,9 @@ export class Compiler {
   }
 
   /**
-   * Emit Rust code from GoodScript source files
+   * Emit C++ code from GoodScript source files
    */
-  private emitRust(program: ts.Program, outDir: string): void {
+  private emitCpp(program: ts.Program, outDir: string): void {
     // Create output directory if it doesn't exist
     if (!fs.existsSync(outDir)) {
       fs.mkdirSync(outDir, { recursive: true });
@@ -393,8 +393,8 @@ export class Compiler {
       if (!sourceFile.isDeclarationFile && this.isGoodScriptFile(sourceFile.fileName)) {
         const sourceFilePath = path.resolve(sourceFile.fileName);
         
-        // Generate Rust code with type checker for type inference
-        const rustCode = this.rustCodegen.generate(sourceFile, checker);
+        // Generate C++ code with type checker for type inference
+        const cppCode = this.cppCodegen.generate(sourceFile, checker);
         
         // Compute relative path from root directory
         const relativePath = path.relative(rootDir, sourceFilePath);
@@ -417,29 +417,9 @@ export class Compiler {
           fs.mkdirSync(rsDir, { recursive: true });
         }
         
-        // Write Rust file
-        fs.writeFileSync(rsPath, rustCode, 'utf-8');
+        // Write C++ file
+        fs.writeFileSync(rsPath, cppCode, 'utf-8');
       }
     }
-    
-    // Generate Cargo.toml
-    this.generateCargoToml(outDir);
-  }
-  
-  /**
-   * Generate Cargo.toml for a Rust project
-   */
-  private generateCargoToml(outDir: string): void {
-    const cargoToml = `[package]
-name = "goodscript-project"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-tokio = { version = "1.0", features = ["full"] }
-`;
-    
-    const cargoPath = path.join(outDir, 'Cargo.toml');
-    fs.writeFileSync(cargoPath, cargoToml, 'utf-8');
   }
 }

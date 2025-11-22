@@ -1,15 +1,15 @@
 # GoodScript Compiler
 
-The GoodScript compiler (`gsc`) transforms GoodScript (`.gs.ts` and `.gs.tsx`) files into JavaScript/TypeScript or Rust, enforcing ownership semantics and memory safety guarantees.
+The GoodScript compiler (`gsc`) transforms GoodScript (`.gs.ts` and `.gs.tsx`) files into JavaScript/TypeScript or C++, enforcing ownership semantics and memory safety guarantees.
 
 ## Overview
 
 The compiler implements GoodScript in four phases:
 
-- **Phase 1** (✅ Complete): Strict TypeScript semantics - eliminates JavaScript "bad parts" (244 tests) - [Details](../docs/PHASE-1-CLEAN.md)
-- **Phase 2** (✅ Complete): Ownership analysis and DAG validation (425 tests, 100% coverage) - [Details](../docs/PHASE-2-DAG.md)
-- **Phase 3** (🚧 In Progress): Rust code generation - **First successful executable!** N-Queens compiles and runs correctly (906/912 tests passing) - [Details](../docs/PHASE-3-RUST.md)
-- **Phase 4** (📋 Planned): Ecosystem integration - Cargo, standard library, WASM, deployment tools - [Details](../docs/PHASE-4-ECOSYSTEM.md)
+- **Phase 1** (✅ Complete): Strict TypeScript semantics - eliminates JavaScript "bad parts" (244 tests) - [Details](../docs/GOOD-PARTS.md)
+- **Phase 2** (✅ Complete): Ownership analysis and DAG validation (425 tests, 100% coverage) - [Details](../docs/DAG-ANALYSIS.md)
+- **Phase 3** (🚧 In Progress): C++ code generation - [Details](../docs/COMPILATION-TARGET.md)
+- **Phase 4** (📋 Planned): Ecosystem integration - standard library and more - [Details](../docs/MINIMAL-STD-LIB.md)
 
 ## Installation
 
@@ -68,13 +68,13 @@ if (result.diagnostics.length > 0) {
 ```
 compiler/
 ├── src/
-│   ├── compiler.ts           # Main compilation orchestrator
+│   ├── compiler.ts            # Main compilation orchestrator
+│   ├── cpp-codegen.ts         # C++ code generator (Phase 3)
 │   ├── parser.ts              # TypeScript AST parser
 │   ├── validator.ts           # Phase 1 restrictions enforcer
 │   ├── ownership-analyzer.ts  # Phase 2 ownership tracking
 │   ├── null-check-analyzer.ts # Null safety enforcement
 │   ├── ts-codegen.ts          # TypeScript code generator
-│   ├── rust-codegen.ts        # Rust code generator (Phase 3)
 │   ├── gsc.ts                 # CLI compiler entry point
 │   └── gs.ts                  # CLI runner entry point
 │
@@ -150,15 +150,15 @@ The compiler enforces that `Shared<T>` references form a **Directed Acyclic Grap
 
 See [../docs/LANGUAGE.md](../docs/LANGUAGE.md) for the complete ownership specification.
 
-## Phase 3: Rust Code Generation
+## Phase 3: C++ Code Generation
 
-Phase 3 (planned) will transpile GoodScript to Rust, mapping ownership types to native Rust primitives:
+Phase 3 (planned) will transpile GoodScript to C++, mapping ownership types to native C++ primitives:
 
 - `Unique<T>` → `Box<T>`
 - `Shared<T>` → `Rc<T>`
 - `Weak<T>` → `Weak<T>`
 
-The result: Rust-level performance with deterministic memory management and no garbage collection.
+The result: native performance with deterministic memory management and no garbage collection.
 
 ## Contributing
 

@@ -10,7 +10,7 @@
     "outDir": "./dist"
   },
   "goodscript": {
-    "level": "rust"
+    "level": "native"
   },
   "include": ["src/**/*"]
 }

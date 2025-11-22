@@ -277,7 +277,7 @@ const result = operations.add(x, y);
 - Hides bugs that TypeScript would otherwise catch
 - Makes code unpredictable - value could be anything at runtime
 - Prevents IDE autocomplete and refactoring tools
-- Cannot transpile to Rust without knowing actual types
+- Cannot transpile to native without knowing actual types
 - `unknown` type is a safer alternative when type is truly unknown
 
 **Example:**
@@ -643,7 +643,7 @@ These restrictions transform TypeScript from a gradually-typed superset of JavaS
 - ✅ Better IDE support and tooling
 - ✅ Catches more bugs at compile time
 - ✅ More maintainable codebases
-- ✅ Prepares code for Rust transpilation
+- ✅ Prepares code for native compilation
 
 **Philosophy:** If experienced developers can be surprised by a language feature, that feature doesn't belong in GoodScript.
 

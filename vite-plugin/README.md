@@ -68,13 +68,13 @@ export default defineConfig({
 ## Options
 
 ### `level`
-- **Type**: `'clean' | 'dag' | 'rust'`
+- **Type**: `'clean' | 'dag' | 'native'`
 - **Default**: `'clean'`
 
 Language level to enforce:
 - `'clean'`: TypeScript good parts only (Phase 1 restrictions)
 - `'dag'`: Level 1 + ownership/DAG validation (Phase 2)
-- `'rust'`: Full validation for native compilation (Phase 3)
+- `'native'`: Full validation for native compilation (Phase 3)
 
 ### `include`
 - **Type**: `string[]`
@@ -90,7 +90,7 @@ Glob patterns for files to exclude from processing.
 
 ### `skipOwnershipChecks`
 - **Type**: `boolean`
-- **Default**: `false` for level `'clean'`, `true` for `'dag'`/`'rust'`
+- **Default**: `false` for level `'clean'`, `true` for `'dag'`/`'native'`
 
 Skip ownership analysis (Phase 2 checks). Automatically set based on `level` if not specified.
 

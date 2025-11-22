@@ -19,27 +19,15 @@ A comprehensive JSON tokenizer and parser implemented in GoodScript that demonst
 ### ✅ GoodScript Validation
 - Passes all Phase 1 (clean) restrictions
 - Passes all Phase 2 (dag) ownership checks
-- Ready for Phase 3 (rust) compilation
-- Uses natural naming (e.g., `type` field) - Rust keywords automatically escaped to `r#type`
+- Ready for Phase 3 (native) compilation
+- Uses natural naming (uses C++ "gs" namespace)
 
 ### ✅ TypeScript Compilation
 - Generates valid TypeScript/JavaScript code
 - Executes successfully with Node.js
 - Produces expected output
 
-### ✅ Rust Compilation
-- **Compiles successfully with 0 errors!** (38 naming convention warnings)
-- Executes correctly and produces identical output to TypeScript
-- All major codegen features working:
-  - ✅ Rust keyword escaping (`type` → `r#type`)
-  - ✅ Variable mutability detection (conservative approach)
-  - ✅ Option<T> unwrapping after null checks
-  - ✅ Smart constructor generation with Result<Self, String>
-  - ✅ Box<T> wrapping for Unique<T> types
-  - ✅ Enum access with `::` operator
-  - ✅ `&mut self` for methods with state mutation
-
-This example validates Session 26's improvements to the Rust code generator.
+### ✅ Native Compilation
 
 ## Building and Running
 
@@ -57,13 +45,13 @@ Expected output:
 Parsed JSON kind: object
 ```
 
-### Rust
+### Native
 ```bash
-# Compile to Rust
-gsc src/main.gs.ts --out-dir dist --target rust
+# Compile to C++
+gsc src/main.gs.ts --out-dir dist --target native
 
-# Compile Rust to binary
-rustc dist/main.rs -o json-parser
+# Compile C++ to binary
+gcc dist/main.cpp -o json-parser
 
 # Run
 ./json-parser

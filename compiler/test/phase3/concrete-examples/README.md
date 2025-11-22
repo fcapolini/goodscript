@@ -1,6 +1,6 @@
 # Concrete Examples
 
-This directory contains complete, real-world GoodScript programs used for testing end-to-end compilation and runtime equivalence between TypeScript and Rust targets.
+This directory contains complete, real-world GoodScript programs used for testing end-to-end compilation and runtime equivalence between TypeScript and C++ targets.
 
 ## Structure
 
@@ -14,9 +14,8 @@ example-name/
   .gitignore      # Ignore dist/ directory
   dist/           # Generated outputs (git-ignored)
     main.js       # Compiled JavaScript
-    main.rs       # Compiled Rust source
-    example-name  # Compiled Rust binary (executable)
-    Cargo.toml    # Rust project metadata
+    main.cpp      # Compiled C++ source
+    example-name  # Compiled C++ binary (executable)
 ```
 
 ## Building Examples Locally
@@ -28,11 +27,11 @@ cd example-name
 npx gsc src/main.gs.ts --out-dir dist
 ```
 
-To compile the Rust binary:
+To compile the C++ binary:
 
 ```bash
 cd example-name/dist
-rustc main.rs -o example-name
+gcc main.cpp -o example-name
 ./example-name  # Run the binary
 ```
 
@@ -43,12 +42,12 @@ Note: The `dist/` directory is git-ignored since it contains generated code and 
 The `concrete-examples.test.ts` file:
 
 1. **Discovers** all directories in this folder automatically
-2. **Compiles** each `src/main.gs.ts` to both JavaScript and Rust (output to `example-name/dist/`)
-3. **Compiles** the Rust source to a native binary (saved in dist/)
-4. **Executes** both JavaScript (via Node.js) and Rust (native binary) versions
+2. **Compiles** each `src/main.gs.ts` to both JavaScript and C++ (output to `example-name/dist/`)
+3. **Compiles** the C++ source to a native binary (saved in dist/)
+4. **Executes** both JavaScript (via Node.js) and C++ (native binary) versions
 5. **Compares** the runtime outputs for equivalence
 
-All generated files (JS, Rust source, and compiled binaries) are preserved in each example's `dist/` directory for inspection.
+All generated files (JS, C++ source, and compiled binaries) are preserved in each example's `dist/` directory for inspection.
 
 ## Adding New Examples
 
@@ -128,5 +127,5 @@ Parsed JSON kind: object
 - All examples must use the `.gs.ts` extension
 - The entry point must be named `main.gs.ts`
 - Examples should produce console output for validation
-- ✅ Both examples now produce **identical output** in JavaScript and Rust
+- ✅ Both examples now produce **identical output** in JavaScript and C++
 - Compiled binaries are ~500KB (unoptimized debug builds)

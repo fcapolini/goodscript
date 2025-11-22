@@ -1,133 +1,105 @@
-# GoodScript: A Strongly Typed, Memory-Safe Language
+# GoodScript Language Description for Implementors
 
-GoodScript is a specialized dialect of TypeScript designed for **systems programming** and **large-scale enterprise applications**. Its primary goal is to combine the **developer productivity and syntax familiarity of TypeScript** with the **deterministic performance and memory safety guarantees of Rust**.
+**Audience:** Compiler engineers and language toolchain developers
 
-It achieves this by removing the unsafe, dynamic features of JavaScript and replacing implicit memory management with an explicit, compiler-enforced **Three-Tiered Ownership System**.
-
-## Core Design Principles
-
-The language is founded on the following strict rules:
-
-1.  **Strict Static Typing:** All dynamic, runtime-changing aspects of standard JavaScript (like implicit coercion, `any`, and runtime type changes) are forbidden. All types must be known and fixed at compile time.
-2.  **Explicit Ownership:** All complex, heap-allocated types (Objects, Arrays, Strings) must explicitly declare their lifetime management via an ownership qualifier.
-3.  **Compile-Time Safety:** The language guarantees the elimination of memory leaks caused by ownership cycles by strictly enforcing that the graph of shared objects ($\text{shared}<T>$) is a **Directed Acyclic Graph (DAG)**.
-4.  **Zero-Cost Abstraction:** When possible, the language maps ownership concepts to **zero-overhead Rust primitives** (like `Box<T>`), deferring to slower reference counting only when necessary.
-
-***
-
-## The Three-Tiered Ownership System
-
-The core innovation is the requirement that all heap-allocated reference types (excluding primitives like `number` and `boolean`) must use one of these three ownership qualifiers.
-
-### 1. Unique Ownership: $\text{unique}<T>$
-
-* **Syntax Example:** `config: Unique<Settings>`
-* **Purpose:** Denotes **exclusive ownership**. The variable is the sole owner of the data on the heap.
-* **Rust Mapping (Phase 3):** `std::boxed::Box<T>`
-* **Memory Guarantee:** **Zero-Cost Abstraction.** The data is deallocated immediately when the `Unique<T>` variable goes out of scope. Sharing or cloning is forbidden.
+**Purpose:** Provide a detailed, implementor-oriented overview of GoodScript, a TypeScript specialization designed for safe systems programming with deterministic memory management.
 
 ---
 
-### 2. Shared Ownership: $\text{shared}<T>$
+## 1. Language Overview
 
-* **Syntax Example:** `nodes: Shared<TreeNode>[]`
-* **Purpose:** Denotes **co-ownership** where multiple variables may access and manage the lifetime of the same data. The data is only deallocated when the last co-owner is dropped.
-* **Rust Mapping (Phase 3):** `std::rc::Rc<T>`
-* **Memory Guarantee:** **Requires Static Analysis.** The compiler must verify that no path of `Shared<T>` references leads back to itself (the **DAG Check**). If a cycle is detected, the definition is forbidden, and the developer must break the cycle using $\text{weak}<T>$. This is the foundation of the language's memory safety.
+GoodScript is a **statically typed, memory-safe, single-threaded language** derived from TypeScript. It preserves the overall **TypeScript syntax and semantics** while removing dynamic features and introducing explicit memory management through ownership qualifiers.
+
+**Key Design Goals:**
+
+* Enable **safe systems programming** for TypeScript developers.
+* Provide **deterministic destruction and memory safety** without garbage collection.
+* Maintain familiar TypeScript syntax for easy adoption.
+* Integrate **unique/shared/weak ownership semantics** for heap-allocated values.
+* Support cross-compilation and C++ code generation.
 
 ---
 
-### 3. Non-Owning Reference: $\text{weak}<T>$
+## 2. Type System
 
-* **Syntax Example:** `parent: Weak<TreeNode>`
-* **Purpose:** Denotes a non-owning pointer used only for access. It does **not** contribute to the shared reference count.
-* **Rust Mapping (Phase 3):** `std::rc::Weak<T>`
-* **Memory Guarantee:** **Cycle Breaking.** Because it does not count towards the lifetime, it is used for back-pointers (e.g., Child $\to$ Parent) in complex structures, ensuring that shared ownership cycles cannot form. The reference must always be **conditionally dereferenced** (checked for existence) before use.
+### 2.1 Ownership Qualifiers
 
-***
+All heap-allocated values must be **qualified** with one of the following:
 
-## Implementation Strategy (Phased Approach)
+| Qualifier   | Semantics                                                                                                 |
+| ----------- | --------------------------------------------------------------------------------------------------------- |
+| `unique<T>` | Exclusive ownership; cannot be copied; destroyed deterministically.                                       |
+| `shared<T>` | Reference-counted ownership; multiple shared owners allowed; destroyed when last owner goes out of scope. |
+| `weak<T>`   | Non-owning reference; can be upgraded to `shared<T>` conditionally if object is still alive.              |
 
-The language will be implemented incrementally, focusing on safety and correctness before optimization.
+### 2.2 Rules and Constraints
 
-| Phase | Core Goal | Output Target | Primary Value Delivered |
-| :--- | :--- | :--- | :--- |
-| **[Phase 1: Strict Semantics](./PHASE-1-CLEAN.md)** | Remove all dynamic/unsafe JS features; enforce explicit ownership syntax. | Standard JavaScript/TypeScript | **Enterprise Safety.** Provides a cleaner, bug-resistant syntax and a valid value proposition immediately. |
-| **[Phase 2: Ownership Analysis](./PHASE-2-DAG.md)** | Implement the **DAG Check** on $\text{shared}<T>$ links within the TypeScript AST. | Standard JavaScript/TypeScript | **Compile-Time Safety.** Proves the memory model is sound before code generation. |
-| **[Phase 3: Rust Code Generation](./PHASE-3-RUST.md)** | Transpile the verified AST to optimized Rust source code. | Rust | **Performance & Final Safety.** Delivers the zero-cost binary using `Box<T>`, `Rc<T>`, and `Weak<T>`. |
-| **[Phase 4: Ecosystem Integration](./PHASE-4-ECOSYSTEM.md)** | Build tooling, standard library, and deployment support for Rust target. | Production-ready Rust | **Real-World Usability.** Makes Rust compilation practical for production applications. |
+* The compiler performs **DAG analysis** on all owning references to prevent cycles.
+* Reference derivation rules:
 
-***
+  * From `unique<T>` → only `weak<T>` can be derived.
+  * From `shared<T>` → `shared<T>` or `weak<T>` can be derived.
+  * From `weak<T>` → only `weak<T>` can be derived.
+* These rules guarantee **memory safety and correct destruction**.
 
-## 🔢 Primitive vs. Reference Types
+### 2.3 Optional Access
 
-Only the following **Value Types** can be used without an explicit qualifier:
+* Weak references can be accessed conditionally using the **optional chaining operator** `?.`, e.g., `w?.value`.
+* This corresponds to upgrading the weak reference to a strong reference in the generated C++ code, only if the object exists.
 
-* `number` (mapped to `f64` in Rust)
-* `boolean`
+---
 
-All other complex types, including **Strings** and **Arrays**, are treated as heap-allocated **Reference Types** and **must** be qualified (e.g., `let s: Unique<string>`).
+## 3. Language Features
 
-> **Future Evolution**: Additional numeric types (like dedicated integer types) may be added in post-Phase 3 releases.
+### 3.1 Core Language Features
 
-***
+* Full TypeScript **syntax and type system** minus dynamic features (no `any`, `eval`, `with`, `prototype` manipulation).
+* Strongly typed functions, classes, interfaces, generics.
+* Modules, imports, and exports are preserved.
 
-## Null and Undefined Handling
+### 3.2 Memory Management
 
-GoodScript treats `null` and `undefined` as **synonyms** representing the absence of a value. This design decision prioritizes developer ergonomics while maintaining type safety:
+* Heap allocation must use `new` with explicit ownership qualifier.
+* Compiler enforces correct usage of `unique`, `shared`, and `weak`.
+* No runtime garbage collection; destruction is deterministic.
+* Cycles are prevented via DAG ownership checks; for complex structures, the **Arena/Pool pattern** is recommended.
 
-### Unified Null Semantics
+### 3.3 Concurrency Model
 
-* **Both `null` and `undefined` are valid** and can be used interchangeably in GoodScript code
-* **Type system equivalence:** `T | null` and `T | undefined` are treated as identical types
-* **Equality semantics:** Both `==` and `===` treat `null` and `undefined` as equal values
-* **Null checks accept either:** Checking `if (x !== null)` or `if (x !== undefined)` both satisfy the compiler's null-safety requirements
+* **Single-threaded execution**; parallelism via workers/isolates only.
+* No shared-memory concurrency; therefore, thread-safety guarantees like Rust’s `Send`/`Sync` are unnecessary.
 
-### Rationale
+---
 
-JavaScript's distinction between `null` and `undefined` is a historical artifact that adds cognitive overhead without providing meaningful type safety benefits. TypeScript's built-in APIs (like `Map.get()`, `Array.find()`, optional properties) return `undefined`, while developers often use `null` for explicit absence.
+## 4. Interoperability and Backend
 
-By treating them as synonyms, GoodScript:
-1. **Eliminates conversion boilerplate** - No need for `?? null` when using standard library APIs
-2. **Maintains compatibility** - Works naturally with TypeScript's type system and standard library
-3. **Simplifies mental model** - One concept for "no value" instead of two
-4. **Follows industry practice** - Languages like Kotlin, Swift, and Rust have a single null/nil/None concept
+* GoodScript can be transpiled to **C++** using `unique_ptr`, `shared_ptr`, and `weak_ptr` for memory management.
+* Optionally, **Zig toolchain** can be used to compile the generated C++ code to multiple platforms.
+* Weak reference upgrades map to conditional dereferencing (`?.`) in GoodScript, and `lock()` checks in C++.
 
-### Example
+---
 
-```typescript
-const map = new Map<string, number>();
-map.set("a", 42);
+## 5. Developer Experience Considerations
 
-// Both patterns are valid and equivalent
-const value1 = map.get("b");  // Type: number | undefined
-if (value1 !== undefined) {
-  console.log(value1);
-}
+* Ownership qualifiers are mostly inferred in simple cases.
+* For complex graphs, developers use **Arena/Pool** to centralize ownership and express relationships as weak references.
+* Compiler provides diagnostics if DAG rules are violated or if unsafe operations are attempted.
+* Familiar TypeScript syntax reduces the learning curve.
 
-const value2 = map.get("c");  // Type: number | undefined (treated as number | null)
-if (value2 !== null) {
-  console.log(value2);
-}
+---
 
-// Optional chaining works naturally
-console.log(map.get("d")?.toString());
-```
+## 6. Summary
 
-### Weak Reference Null Safety
+GoodScript is a **deterministic, memory-safe, single-threaded TypeScript variant** that:
 
-All `Weak<T>` references are implicitly nullable (either `null` or `undefined` may occur at runtime). The compiler enforces null checks before dereferencing:
+* Augments TypeScript with `unique<T>`, `shared<T>`, and `weak<T>` ownership generics.
+* Eliminates dynamic features for safer compilation.
+* Guarantees safe memory handling via DAG enforcement.
+* Provides optional conditional access for weak references.
+* Integrates cleanly with C++ backends and cross-compilation toolchains like Zig.
 
-```typescript
-class Node {
-  parent: Weak<Node>;  // Implicitly nullable
-  
-  getParentValue(): string {
-    // Must check before access
-    if (this.parent !== null) {  // or !== undefined
-      return this.parent.value;
-    }
-    return "no parent";
-  }
-}
-```
+This design allows TypeScript developers to safely write **systems-level code** while maintaining familiar syntax and idioms.
+
+---
+
+*End of document.*

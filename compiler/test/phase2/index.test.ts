@@ -151,7 +151,7 @@ describe('Phase 2: Ownership Analysis Overview', () => {
   
   describe('Phase 2 vs Phase 1 differences', () => {
     
-    it('should enforce ownership rules only in dag/rust level', () => {
+    it('should enforce ownership rules only in dag/native level', () => {
       const source = `
         class Node {
           next: Shared<Node> | null = null;
