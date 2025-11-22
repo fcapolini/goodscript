@@ -185,9 +185,14 @@ describe('Phase 3: Concrete Examples', () => {
     });
   }
 
+  // No examples currently have unresolved GS303 errors
+  const examplesWithGS303Errors = new Set<string>();
+
   for (const exampleName of examples) {
     describe(exampleName, () => {
-      it('should compile to JavaScript and execute', () => {
+      const skipDueToGS303 = examplesWithGS303Errors.has(exampleName);
+      
+      it.skipIf(skipDueToGS303)('should compile to JavaScript and execute', () => {
         const result = compileAndExecuteExample(exampleName);
         
         // JavaScript compilation should succeed
@@ -203,7 +208,7 @@ describe('Phase 3: Concrete Examples', () => {
         expect(result.jsResult.stdout).toBeTruthy();
       });
 
-      it('should compile to Rust and execute', () => {
+      it.skipIf(skipDueToGS303)('should compile to Rust and execute', () => {
         const result = compileAndExecuteExample(exampleName);
         
         // Rust code should be generated
@@ -233,7 +238,7 @@ describe('Phase 3: Concrete Examples', () => {
         }
       });
 
-      it('should produce equivalent JavaScript and Rust output', () => {
+      it.skipIf(skipDueToGS303)('should produce equivalent JavaScript and Rust output', () => {
         const result = compileAndExecuteExample(exampleName);
         
         // Both should compile

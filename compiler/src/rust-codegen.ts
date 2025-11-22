@@ -2815,7 +2815,17 @@ export class RustCodegen {
             return text !== 'null' && text !== 'undefined';
           });
           if (innerType) {
-            return `Option<${this.generateType(innerType)}>`;
+            const rustInnerType = this.generateType(innerType);
+            // For struct/class types (not primitives), wrap in Box to avoid infinite size
+            // Primitives: f64, String, bool, ()
+            // Collections like Vec, HashMap are already on heap
+            if (this.isPrimitiveOrHeapType(rustInnerType)) {
+              return `Option<${rustInnerType}>`;
+            } else {
+              // Struct/class type - wrap in Box
+              this.addImport('use std::boxed::Box;');
+              return `Option<Box<${rustInnerType}>>`;
+            }
           }
         }
       }
@@ -3729,9 +3739,10 @@ export class RustCodegen {
                         (ts.isIdentifier(expr.right) && (expr.right.getText() === 'null' || expr.right.getText() === 'undefined'));
     
     if ((op === '===' || op === '!==' || op === '==' || op === '!=') && 
-        (leftIsNull || rightIsNull) && 
-        ts.isIdentifier(leftIsNull ? expr.right : expr.left)) {
-      const optionExpr = this.generateExpression(leftIsNull ? expr.right : expr.left, useIntegerLiterals, false);
+        (leftIsNull || rightIsNull)) {
+      // Get the non-null side expression (could be identifier or property access)
+      const nonNullExpr = leftIsNull ? expr.right : expr.left;
+      const optionExpr = this.generateExpression(nonNullExpr, useIntegerLiterals, false);
       
       if (op === '===' || op === '==') {
         // x === null, x == null, null === x, null == x -> x.is_none()
@@ -4066,6 +4077,12 @@ export class RustCodegen {
         return `${object}.contains_key(&${args[0]})`;
       }
       
+      if (property === 'delete') {
+        // map.delete(key) -> map.remove(&key)
+        const args = expr.arguments.map(arg => this.generateExpression(arg));
+        return `${object}.remove(&${args[0]})`;
+      }
+      
       // Array methods: map, filter, forEach, etc.
       if (property === 'map') {
         return this.generateArrayMap(objectExpr, expr.arguments);
@@ -4347,12 +4364,21 @@ export class RustCodegen {
     
     let object = this.generateExpression(expr.expression);
     
+    // Check if the object itself is a property access that might be an Option
+    // For example, node.prev where prev is Option<Box<CacheNode>>
+    let needsUnwrap = false;
+    
     // If the object is an unwrapped Option variable, add .unwrap()
     if (ts.isIdentifier(expr.expression)) {
       const varName = expr.expression.getText();
       if (this.optionVariables.has(varName) && this.unwrappedOptions.has(varName)) {
         object = `${object}.unwrap()`;
       }
+    } else if (ts.isPropertyAccessExpression(expr.expression)) {
+      // Check if this property access is on an Option field
+      // We need to unwrap it to access nested properties
+      // Use as_mut() for lvalues (assignments), as_ref() for rvalues (reads)
+      needsUnwrap = true;
     }
     
     // Map JavaScript property names to Rust equivalents
@@ -4407,6 +4433,17 @@ export class RustCodegen {
       
       if (needsClone) {
         return `${object}.${property}.clone()`;
+      }
+    }
+    
+    // If we're accessing a nested property through an Option, unwrap it
+    if (needsUnwrap) {
+      // For lvalues, unwrap to get a mutable reference
+      // For rvalues, just unwrap
+      if (isLValue) {
+        return `${object}.as_mut().unwrap().${property}`;
+      } else {
+        return `${object}.as_ref().unwrap().${property}`;
       }
     }
     
@@ -5176,6 +5213,31 @@ export class RustCodegen {
     return isLValue ? `${object}[(${index}) as usize]` : `${object}[(${index}) as usize].clone()`;
   }
 
+  /**
+   * Check if a Rust type is a primitive or already heap-allocated
+   * Returns true for types that don't need Box wrapping inside Option
+   */
+  private isPrimitiveOrHeapType(rustType: string): boolean {
+    // Primitive types
+    if (['f64', 'i32', 'i64', 'u32', 'u64', 'bool', 'String', '()'].includes(rustType)) {
+      return true;
+    }
+    
+    // Heap-allocated types (already have indirection)
+    if (rustType.startsWith('Vec<') || 
+        rustType.startsWith('HashMap<') || 
+        rustType.startsWith('HashSet<') ||
+        rustType.startsWith('Box<') ||
+        rustType.startsWith('Rc<') ||
+        rustType.startsWith('Arc<') ||
+        rustType.startsWith('Option<')) {
+      return true;
+    }
+    
+    // Everything else (structs, enums, etc.) needs Box wrapping
+    return false;
+  }
+  
   /**
    * Get default value for a Rust type
    */

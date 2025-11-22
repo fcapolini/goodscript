@@ -138,12 +138,20 @@ export class OwnershipAnalyzer {
    * Collect ownership edges by analyzing Shared<T> fields
    * Implements Rules 1.1, 1.2, and 1.3 from DAG-DETECTION.md
    * Also tracks inherited fields from base classes/interfaces
+   * Additionally validates assignment compatibility for ownership types
    */
   private collectOwnershipEdges(sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
     const visit = (node: ts.Node) => {
       // Analyze class declarations to include inherited fields
       if (ts.isClassDeclaration(node) && node.name) {
         this.analyzeClassWithInheritance(node, sourceFile, checker);
+        // Don't continue visiting - analyzeClassWithInheritance already processed properties
+        // But we DO need to visit methods for their parameters
+        for (const member of node.members) {
+          if (ts.isMethodDeclaration(member) || ts.isConstructorDeclaration(member) || ts.isGetAccessor(member) || ts.isSetAccessor(member)) {
+            ts.forEachChild(member, visit);
+          }
+        }
       }
       // Analyze interface declarations for their own properties
       else if (ts.isInterfaceDeclaration(node)) {
@@ -153,6 +161,25 @@ export class OwnershipAnalyzer {
       // Only analyze property declarations/signatures
       else if (ts.isPropertyDeclaration(node) || ts.isPropertySignature(node)) {
         this.analyzePropertyForOwnership(node, sourceFile, checker);
+      }
+      // Check function/method parameters for naked class references
+      else if (ts.isParameter(node) && node.type) {
+        const paramName = node.name.getText(sourceFile);
+        const location = Parser.getLocation(node, sourceFile);
+        this.checkForNakedClassReference(node.type, `parameter '${paramName}'`, location, sourceFile, checker);
+        ts.forEachChild(node, visit);
+      }
+      // Check method declarations to visit their parameters
+      else if (ts.isMethodDeclaration(node) || ts.isFunctionDeclaration(node) || ts.isArrowFunction(node)) {
+        // Visit parameters explicitly
+        for (const param of node.parameters) {
+          visit(param);
+        }
+        ts.forEachChild(node, visit);
+      }
+      // Validate ownership type assignments
+      else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+        this.checkOwnershipAssignment(node, sourceFile, checker);
       }
       else {
         ts.forEachChild(node, visit);
@@ -229,6 +256,7 @@ export class OwnershipAnalyzer {
 
   /**
    * Analyze a property declaration/signature for Shared<T> ownership
+   * Also validates that class-type fields use ownership annotations
    */
   private analyzePropertyForOwnership(
     node: ts.PropertyDeclaration | ts.PropertySignature,
@@ -243,6 +271,9 @@ export class OwnershipAnalyzer {
 
     const fieldName = node.name.getText(sourceFile);
     const location = Parser.getLocation(node, sourceFile);
+
+    // Check for naked class references (class types without ownership wrappers)
+    this.checkForNakedClassReference(node.type, fieldName, location, sourceFile, checker);
 
     // Extract all Shared<T> ownership relationships from the field type
     const ownedTypes = this.extractSharedOwnership(node.type, sourceFile, checker);
@@ -779,6 +810,158 @@ export class OwnershipAnalyzer {
       code: 'GS301',
       message,
       location: cycleEdge.location,
+    });
+  }
+
+  /**
+   * Check if a type is a naked class reference (class type without ownership wrapper)
+   * Reports GS303 error if a class-type field doesn't use Unique/Shared/Weak
+   */
+  private checkForNakedClassReference(
+    typeNode: ts.TypeNode,
+    fieldName: string,
+    location: SourceLocation,
+    sourceFile: ts.SourceFile,
+    checker: ts.TypeChecker
+  ): void {
+    // Handle union types (e.g., CacheNode | null)
+    if (ts.isUnionTypeNode(typeNode)) {
+      for (const unionMember of typeNode.types) {
+        // Skip null/undefined in unions
+        const text = unionMember.getText(sourceFile);
+        if (text !== 'null' && text !== 'undefined') {
+          this.checkForNakedClassReference(unionMember, fieldName, location, sourceFile, checker);
+        }
+      }
+      return;
+    }
+
+    // Handle intersection types
+    if (ts.isIntersectionTypeNode(typeNode)) {
+      for (const intersectionMember of typeNode.types) {
+        this.checkForNakedClassReference(intersectionMember, fieldName, location, sourceFile, checker);
+      }
+      return;
+    }
+
+    // Check if it's a type reference
+    if (!ts.isTypeReferenceNode(typeNode)) {
+      // Primitive types (number, string, boolean) are fine
+      return;
+    }
+
+    const typeName = typeNode.typeName.getText(sourceFile);
+
+    // If it's already wrapped in ownership type, it's fine
+    if (typeName === 'Unique' || typeName === 'Shared' || typeName === 'Weak') {
+      return;
+    }
+
+    // Check if this is a class type
+    const symbol = checker.getSymbolAtLocation(typeNode.typeName);
+    if (!symbol) return;
+
+    const declarations = symbol.getDeclarations();
+    if (!declarations || declarations.length === 0) return;
+
+    // Check if any declaration is a class
+    const isClass = declarations.some(decl => ts.isClassDeclaration(decl));
+    if (!isClass) {
+      // Not a class - could be interface, type alias, or built-in type
+      // Interfaces and type aliases are fine, built-in types like Array, Map are fine
+      return;
+    }
+
+    // This is a naked class reference - report error
+    // Format the field name appropriately (handles both "fieldName" and "parameter 'paramName'")
+    const formattedFieldName = fieldName.startsWith('parameter ') 
+      ? fieldName.charAt(0).toUpperCase() + fieldName.slice(1)  // "parameter 'd'" → "Parameter 'd'"
+      : `Field '${fieldName}'`;  // "item" → "Field 'item'"
+    
+    this.diagnostics.push({
+      severity: 'error',
+      code: 'GS303',
+      message: `${formattedFieldName} has class type '${typeName}' without ownership annotation. ` +
+               `Use Unique<${typeName}>, Shared<${typeName}>, or Weak<${typeName}> to specify ownership semantics.`,
+      location,
+    });
+  }
+
+  /**
+   * Check that assignments to ownership-typed fields have compatible source types
+   * GS304: Ownership type mismatch in assignment
+   * 
+   * Rules:
+   * - Unique<T> field: source must be Unique<T>, new T(), or null
+   * - Shared<T> field: source must be Shared<T>, new T(), or null
+   * - Weak<T> field: source must be Weak<T> or null
+   */
+  private checkOwnershipAssignment(
+    assignment: ts.BinaryExpression,
+    sourceFile: ts.SourceFile,
+    checker: ts.TypeChecker
+  ): void {
+    // Only check property access assignments (e.g., this.data = ...)
+    if (!ts.isPropertyAccessExpression(assignment.left)) {
+      return;
+    }
+
+    // Get the type of the left-hand side (the property being assigned to)
+    const leftType = checker.getTypeAtLocation(assignment.left);
+    const leftTypeStr = checker.typeToString(leftType);
+
+    // Check if it's an ownership-typed field
+    const ownershipMatch = leftTypeStr.match(/^(Unique|Shared|Weak)<(.+)>( \| null)?$/);
+    if (!ownershipMatch) {
+      return; // Not an ownership type, no validation needed
+    }
+
+    const [, ownershipKind, innerType] = ownershipMatch;
+    const rightNode = assignment.right;
+
+    // Allow null/undefined assignments
+    if (rightNode.kind === ts.SyntaxKind.NullKeyword || 
+        rightNode.kind === ts.SyntaxKind.UndefinedKeyword) {
+      return;
+    }
+
+    // Allow new expressions (new T() creates ownership)
+    if (ts.isNewExpression(rightNode)) {
+      return;
+    }
+
+    // Get the type of the right-hand side
+    const rightType = checker.getTypeAtLocation(rightNode);
+    const rightTypeStr = checker.typeToString(rightType);
+
+    // Check if right side is wrapped in the same ownership type
+    const rightOwnershipMatch = rightTypeStr.match(/^(Unique|Shared|Weak)<(.+)>$/);
+    
+    if (rightOwnershipMatch) {
+      const [, rightOwnershipKind] = rightOwnershipMatch;
+      if (rightOwnershipKind === ownershipKind) {
+        return; // Same ownership type, OK
+      }
+      
+      // Different ownership types - error
+      this.diagnostics.push({
+        severity: 'error',
+        code: 'GS304',
+        message: `Cannot assign ${rightOwnershipKind}<T> to ${ownershipKind}<T> field. ` +
+                 `Ownership types must match exactly.`,
+        location: Parser.getLocation(assignment, sourceFile),
+      });
+      return;
+    }
+
+    // Right side is not wrapped in ownership type
+    // This is only valid for new expressions (already checked above)
+    this.diagnostics.push({
+      severity: 'error',
+      code: 'GS304',
+      message: `Cannot assign '${rightTypeStr}' to '${leftTypeStr}'. ` +
+               `Expected ${ownershipKind}<${innerType}>, new ${innerType}(), or null.`,
+      location: Parser.getLocation(assignment, sourceFile),
     });
   }
 }

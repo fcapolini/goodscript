@@ -228,7 +228,7 @@ class JsonValue {
 
 class Parser {
   private tokenizer: Unique<Tokenizer>;
-  private current: Token;
+  private current: Unique<Token>;
   
   constructor(input: Unique<string>) {
     this.tokenizer = new Tokenizer(input);

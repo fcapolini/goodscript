@@ -23,6 +23,9 @@ describe('JSON Parser Example', () => {
     });
 
     expect(result.success).toBe(true);
+    if (!result.success) {
+      console.error('Compilation errors:', result.diagnostics);
+    }
   });
 
   it('should compile to Rust without GoodScript errors', () => {
@@ -34,6 +37,9 @@ describe('JSON Parser Example', () => {
     });
 
     expect(result.success).toBe(true);
+    if (!result.success) {
+      console.error('Compilation errors:', result.diagnostics);
+    }
   });
 
   it.todo('should generate Rust code that compiles with rustc', () => {

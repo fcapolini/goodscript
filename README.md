@@ -146,6 +146,53 @@ The compiler enforces that `Shared<T>` references form a **Directed Acyclic Grap
 
 **Null handling:** GoodScript treats `null` and `undefined` as synonyms. All `Weak<T>` references are implicitly nullable (`T | null | undefined`), and checking for either satisfies null-safety requirements.
 
+### Phase 2: Ownership Rules
+
+When using language level `"dag"` or `"rust"`, all references to heap-allocated types (objects, arrays, strings) **must be qualified** with an ownership annotation:
+
+#### Reference Types
+
+**`Unique<T>` - Exclusive Ownership**
+- **Default for `new T()` expressions** - newly created objects are implicitly `Unique<T>`
+- The element is **automatically deallocated** when the variable goes out of scope
+- From a `Unique<T>` reference, you can derive **only `Weak<T>` references**
+- No ownership transfer - `Unique<T>` cannot be reassigned or passed around
+
+**`Shared<T>` - Reference Counted Ownership**
+- Used for shared ownership with automatic reference counting
+- Each derived `Shared<T>` reference to the same element **increases the ref count** at creation
+- Ref count **decreases** when the reference goes out of scope
+- From a `Shared<T>` reference, you can derive **both `Shared<T>` and `Weak<T>` references**
+- Element is deallocated when the last `Shared<T>` reference is dropped
+
+**`Weak<T>` - Non-Owning References**
+- Can be derived from `Unique<T>`, `Shared<T>`, or another `Weak<T>` reference
+- **Does not participate in reference counting**
+- Must be **dereferenced conditionally** (checked for `null`/`undefined` before use)
+- Does not prevent deallocation - may become `null` if the owned reference is dropped
+
+#### Example
+
+```typescript
+// Create object - implicitly Unique<T> (no annotation needed)
+const data = new Data();
+
+// Can explicitly use Unique<T> in type annotations
+const item: Unique<Data> = new Data();
+
+// Store in arena with shared ownership
+const arena: Shared<Data>[] = [];
+arena.push(data);  // Converts to Shared<Data>
+
+// Create weak reference for non-owning pointer
+let current: Weak<Data> = data;
+
+// Must check before use
+if (current !== null) {
+  console.log(current.value);
+}
+```
+
 **📖 See [docs/LANGUAGE.md](docs/LANGUAGE.md) for complete language specification**
 
 ## Implementation Status
@@ -169,6 +216,8 @@ GoodScript is being developed in phases, with each phase corresponding to a lang
 **Phase 2** adds ownership tracking and cycle detection (see [docs/DAG-DETECTION.md](docs/DAG-DETECTION.md)):
 - GS301: Ownership cycle detection (DAG enforcement)
 - GS302: Null-check enforcement for `Weak<T>` references
+- GS303: Missing ownership annotation (naked class references)
+- GS304: Ownership type mismatch in assignment
 - Type alias resolution, inheritance tracking, generic type instantiation
 - Nested generic analysis, call argument validation, type inference
 

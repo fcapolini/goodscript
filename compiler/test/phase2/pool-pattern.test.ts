@@ -174,7 +174,7 @@ describe('Phase 2: Pool Pattern', () => {
         class SceneNode {
           children: Weak<SceneNode>[] = [];
           parent: Weak<SceneNode> = null;
-          transform: Transform = new Transform();
+          transform: Unique<Transform> = new Transform();
         }
         
         class Transform {
