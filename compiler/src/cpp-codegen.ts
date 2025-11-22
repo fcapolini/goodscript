@@ -109,6 +109,38 @@ export class CppCodegen {
   }
   
   /**
+   * Add helper functions for GoodScript runtime
+   */
+  private addHelperFunctions(lines: string[]): void {
+    lines.push('// GoodScript runtime helper functions');
+    lines.push('namespace gs {');
+    lines.push('');
+    lines.push('// String helper: startsWith');
+    lines.push('inline bool starts_with(const std::string& str, const std::string& prefix) {');
+    lines.push('  return str.size() >= prefix.size() && str.substr(0, prefix.size()) == prefix;');
+    lines.push('}');
+    lines.push('');
+    lines.push('// String helper: indexOf (returns -1 if not found, matching JavaScript)');
+    lines.push('inline int index_of(const std::string& str, const std::string& search) {');
+    lines.push('  auto pos = str.find(search);');
+    lines.push('  return (pos != std::string::npos) ? static_cast<int>(pos) : -1;');
+    lines.push('}');
+    lines.push('');
+    lines.push('// Map helper: get (returns optional)');
+    lines.push('template<typename K, typename V>');
+    lines.push('std::optional<V> map_get(const std::unordered_map<K, V>& map, const K& key) {');
+    lines.push('  auto it = map.find(key);');
+    lines.push('  if (it != map.end()) {');
+    lines.push('    return it->second;');
+    lines.push('  }');
+    lines.push('  return std::nullopt;');
+    lines.push('}');
+    lines.push('');
+    lines.push('} // namespace gs');
+    lines.push('');
+  }
+  
+  /**
    * Build final output with includes and namespace wrapper
    */
   private buildOutput(): string {
@@ -128,6 +160,9 @@ export class CppCodegen {
     }
     
     lines.push('');
+    
+    // Add helper functions
+    this.addHelperFunctions(lines);
     
     // Wrap everything in gs namespace
     lines.push('namespace gs {');
@@ -310,7 +345,15 @@ export class CppCodegen {
       
       const name = this.escapeIdentifier(decl.name.getText());
       const type = decl.type ? this.generateType(decl.type) : 'auto';
-      const qualifier = isConst ? 'const ' : '';
+      
+      // In C++, skip const for object types to avoid issues with lambdas and object mutation
+      // For primitives (double, bool, std::string literals), keep const
+      const isPrimitive = type === 'double' || type === 'bool' || 
+                         (decl.initializer && (ts.isNumericLiteral(decl.initializer) || 
+                          ts.isStringLiteral(decl.initializer) ||
+                          decl.initializer.kind === ts.SyntaxKind.TrueKeyword ||
+                          decl.initializer.kind === ts.SyntaxKind.FalseKeyword));
+      const qualifier = (isConst && isPrimitive) ? 'const ' : '';
       
       if (decl.initializer) {
         const value = this.generateExpression(decl.initializer);
@@ -479,25 +522,16 @@ export class CppCodegen {
       // Check if it's a nullable type (T | null | undefined)
       const hasNull = type.types.some(t => 
         t.kind === ts.SyntaxKind.NullKeyword || 
-        t.kind === ts.SyntaxKind.UndefinedKeyword
+        t.kind === ts.SyntaxKind.UndefinedKeyword ||
+        (ts.isLiteralTypeNode(t) && t.literal.kind === ts.SyntaxKind.NullKeyword)
       );
       
-      if (hasNull && type.types.length === 2) {
-        // T | null or T | undefined
+      if (hasNull) {
+        // Find the non-null type
         const nonNullType = type.types.find(t => 
           t.kind !== ts.SyntaxKind.NullKeyword && 
-          t.kind !== ts.SyntaxKind.UndefinedKeyword
-        );
-        
-        if (nonNullType) {
-          const innerType = this.generateType(nonNullType);
-          return `std::optional<${innerType}>`;
-        }
-      } else if (hasNull && type.types.length === 3) {
-        // T | null | undefined
-        const nonNullType = type.types.find(t => 
-          t.kind !== ts.SyntaxKind.NullKeyword && 
-          t.kind !== ts.SyntaxKind.UndefinedKeyword
+          t.kind !== ts.SyntaxKind.UndefinedKeyword &&
+          !(ts.isLiteralTypeNode(t) && t.literal.kind === ts.SyntaxKind.NullKeyword)
         );
         
         if (nonNullType) {
@@ -719,22 +753,33 @@ export class CppCodegen {
       return expr.text;
     } else if (ts.isStringLiteral(expr)) {
       return `"${expr.text}"`;
+    } else if (ts.isTemplateExpression(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) {
+      return this.generateTemplateLiteral(expr);
     } else if (expr.kind === ts.SyntaxKind.TrueKeyword) {
       return 'true';
     } else if (expr.kind === ts.SyntaxKind.FalseKeyword) {
       return 'false';
     } else if (expr.kind === ts.SyntaxKind.NullKeyword) {
       return 'std::nullopt';
+    } else if (expr.kind === ts.SyntaxKind.UndefinedKeyword) {
+      return 'std::nullopt';
     } else if (expr.kind === ts.SyntaxKind.ThisKeyword) {
       return 'this';
     } else if (ts.isIdentifier(expr)) {
-      return this.escapeIdentifier(expr.getText());
+      const text = expr.getText();
+      // Map JavaScript 'undefined' identifier to std::nullopt
+      if (text === 'undefined') {
+        return 'std::nullopt';
+      }
+      return this.escapeIdentifier(text);
     } else if (ts.isBinaryExpression(expr)) {
       return this.generateBinaryExpression(expr);
     } else if (ts.isCallExpression(expr)) {
       return this.generateCallExpression(expr);
     } else if (ts.isPropertyAccessExpression(expr)) {
       return this.generatePropertyAccess(expr);
+    } else if (ts.isElementAccessExpression(expr)) {
+      return this.generateElementAccess(expr);
     } else if (ts.isNewExpression(expr)) {
       return this.generateNewExpression(expr);
     } else if (ts.isArrayLiteralExpression(expr)) {
@@ -745,6 +790,8 @@ export class CppCodegen {
       return this.generatePostfixUnaryExpression(expr);
     } else if (ts.isConditionalExpression(expr)) {
       return this.generateConditionalExpression(expr);
+    } else if (ts.isArrowFunction(expr)) {
+      return this.generateArrowFunction(expr);
     }
     
     return '/* unsupported expression */';
@@ -772,15 +819,68 @@ export class CppCodegen {
    * Generate call expression
    */
   private generateCallExpression(expr: ts.CallExpression): string {
-    const callee = this.generateExpression(expr.expression);
     const args = expr.arguments.map(arg => this.generateExpression(arg)).join(', ');
     
-    // Special handling for console.log
-    if (callee === 'console.log') {
-      // Need to use std::boolalpha to print true/false instead of 1/0
-      return `std::cout << std::boolalpha << ${args} << std::endl`;
+    // Handle method calls on objects
+    if (ts.isPropertyAccessExpression(expr.expression)) {
+      const object = this.generateExpression(expr.expression.expression);
+      const methodName = expr.expression.name.getText();
+      const accessor = (object === 'this') ? '->' : '.';
+      
+      // Special handling for console.log
+      if (object === 'console' && methodName === 'log') {
+        return `std::cout << std::boolalpha << ${args} << std::endl`;
+      }
+      
+      // Map method
+      if (methodName === 'set') {
+        // map.set(key, value) -> map[key] = value or map.insert({key, value})
+        const argArray = expr.arguments.map(arg => this.generateExpression(arg));
+        if (argArray.length === 2) {
+          return `${object}${accessor}insert({${argArray[0]}, ${argArray[1]}})`;
+        }
+      }
+      
+      if (methodName === 'get') {
+        // map.get(key) - returns optional in our case
+        const argArray = expr.arguments.map(arg => this.generateExpression(arg));
+        if (argArray.length === 1) {
+          return `gs::map_get(${object}, ${argArray[0]})`;
+        }
+      }
+      
+      if (methodName === 'has') {
+        // map.has(key) -> map.find(key) != map.end()
+        return `(${object}${accessor}find(${args}) != ${object}${accessor}end())`;
+      }
+      
+      // Array methods
+      if (methodName === 'push') {
+        return `${object}${accessor}push_back(${args})`;
+      }
+      
+      // String methods
+      if (methodName === 'startsWith') {
+        return `gs::starts_with(${object}, ${args})`;
+      }
+      
+      if (methodName === 'substring') {
+        const argArray = expr.arguments.map(arg => this.generateExpression(arg));
+        if (argArray.length === 1) {
+          return `${object}${accessor}substr(${argArray[0]})`;
+        } else if (argArray.length === 2) {
+          return `${object}${accessor}substr(${argArray[0]}, ${argArray[1]} - ${argArray[0]})`;
+        }
+      }
+      
+      if (methodName === 'indexOf') {
+        return `gs::index_of(${object}, ${args})`;
+      }
+      
+      return `${object}${accessor}${methodName}(${args})`;
     }
     
+    const callee = this.generateExpression(expr.expression);
     return `${callee}(${args})`;
   }
   
@@ -789,22 +889,48 @@ export class CppCodegen {
    */
   private generatePropertyAccess(expr: ts.PropertyAccessExpression): string {
     const object = this.generateExpression(expr.expression);
-    const property = this.escapeIdentifier(expr.name.getText());
+    const propertyName = expr.name.getText();
+    const property = this.escapeIdentifier(propertyName);
     
-    // Handle smart pointer dereferencing
-    // For now, assume direct access - we'll refine this as we go
-    return `${object}.${property}`;
+    // Special handling for 'this' - it's a pointer in C++
+    const accessor = (object === 'this') ? '->' : '.';
+    
+    // Map TypeScript/JavaScript property names to C++ equivalents
+    if (propertyName === 'length') {
+      // array.length -> array.size()
+      return `${object}${accessor}size()`;
+    }
+    
+    return `${object}${accessor}${property}`;
   }
   
   /**
    * Generate new expression
    */
   private generateNewExpression(expr: ts.NewExpression): string {
-    const className = this.generateExpression(expr.expression);
     const args = expr.arguments?.map(arg => this.generateExpression(arg)).join(', ') || '';
     
-    // Check if this should be wrapped in a smart pointer based on context
-    // For now, use regular construction - we'll refine based on ownership types
+    // Handle special constructors
+    if (ts.isIdentifier(expr.expression)) {
+      const className = expr.expression.getText();
+      
+      // Map constructor
+      if (className === 'Map') {
+        // new Map() -> {} (default initialization)
+        return '{}';
+      }
+      
+      // Set constructor
+      if (className === 'Set') {
+        return '{}';
+      }
+      
+      const escapedName = this.escapeIdentifier(className);
+      // Classes defined in the code need gs:: prefix when used in main()
+      return `gs::${escapedName}(${args})`;
+    }
+    
+    const className = this.generateExpression(expr.expression);
     return `${className}(${args})`;
   }
   
@@ -813,6 +939,15 @@ export class CppCodegen {
    */
   private generateArrayLiteral(expr: ts.ArrayLiteralExpression): string {
     const elements = expr.elements.map(el => this.generateExpression(el)).join(', ');
+    
+    // Check if all elements are strings to determine type
+    const allStrings = expr.elements.every(el => ts.isStringLiteral(el));
+    
+    if (allStrings && expr.elements.length > 0) {
+      // Explicitly create a vector of strings
+      return `std::vector<std::string>{${elements}}`;
+    }
+    
     return `{${elements}}`;
   }
   
@@ -843,4 +978,87 @@ export class CppCodegen {
     const whenFalse = this.generateExpression(expr.whenFalse);
     return `(${condition} ? ${whenTrue} : ${whenFalse})`;
   }
+  
+  /**
+   * Generate element access (array/map indexing)
+   */
+  private generateElementAccess(expr: ts.ElementAccessExpression): string {
+    const object = this.generateExpression(expr.expression);
+    const index = this.generateExpression(expr.argumentExpression);
+    const accessor = (object === 'this') ? '->' : '.';
+    
+    // For now, use [] operator directly
+    // Could be array access or map access
+    if (object === 'this') {
+      // this->member[index] needs to be this->member.at(index) for safety
+      // But for simplicity, use []
+      return `${object}->${index}`;
+    }
+    
+    return `${object}[${index}]`;
+  }
+  
+  /**
+   * Generate arrow function
+   */
+  private generateArrowFunction(func: ts.ArrowFunction): string {
+    // For now, generate as a lambda expression
+    const params = this.generateParameters(func.parameters);
+    const returnType = func.type ? this.generateType(func.type) : 'auto';
+    
+    // Generate lambda
+    let body = '';
+    if (ts.isBlock(func.body)) {
+      // Block body - generate statements
+      const statements: string[] = [];
+      for (const stmt of func.body.statements) {
+        // Temporarily generate to a buffer
+        const oldOutput = this.output;
+        this.output = [];
+        this.generateStatement(stmt);
+        statements.push(...this.output);
+        this.output = oldOutput;
+      }
+      body = statements.join(' ');
+    } else {
+      // Expression body
+      const expr = this.generateExpression(func.body);
+      body = `return ${expr};`;
+    }
+    
+    return `[&](${params}) -> ${returnType} { ${body} }`;
+  }
+  
+  /**
+   * Generate template literal (string interpolation)
+   */
+  private generateTemplateLiteral(expr: ts.TemplateExpression | ts.NoSubstitutionTemplateLiteral): string {
+    if (ts.isNoSubstitutionTemplateLiteral(expr)) {
+      return `"${expr.text}"`;
+    }
+    
+    // Build concatenation expression
+    const parts: string[] = [];
+    
+    // Head
+    if (expr.head.text) {
+      parts.push(`"${expr.head.text}"`);
+    }
+    
+    // Template spans
+    for (const span of expr.templateSpans) {
+      // Expression
+      const exprStr = this.generateExpression(span.expression);
+      parts.push(`std::to_string(${exprStr})`);
+      
+      // Literal
+      if (span.literal.text) {
+        parts.push(`"${span.literal.text}"`);
+      }
+    }
+    
+    // Concatenate all parts
+    return parts.join(' + ');
+  }
 }
+

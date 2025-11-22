@@ -71,7 +71,7 @@ export const executeCpp = (cppCode: string, outDir: string): ExecutionResult => 
   try {
     // Compile the C++ code
     execSync(
-      `g++ ${cppFile} -o ${binFile} 2>&1`,
+      `g++ -std=c++17 ${cppFile} -o ${binFile} 2>&1`,
       { encoding: 'utf-8', timeout: 10000 }
     );
     

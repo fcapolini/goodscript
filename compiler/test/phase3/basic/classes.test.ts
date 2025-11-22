@@ -52,8 +52,8 @@ describe('Phase 3: Classes', () => {
     const cpp = compileToCpp(source);
     
     expect(cpp).toContain('Point(double x, double y) {');
-    expect(cpp).toContain('this.x = x;');
-    expect(cpp).toContain('this.y = y;');
+    expect(cpp).toContain('this->x = x;');
+    expect(cpp).toContain('this->y = y;');
   });
   
   it('should generate class with methods', () => {
