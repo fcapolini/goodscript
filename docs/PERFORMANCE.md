@@ -13,7 +13,7 @@ GoodScript is a **statically typed, memory-safe TypeScript variant**. When trans
 Key factors contributing to efficiency:
 
 * Fully static typing eliminates runtime type checks.
-* Ownership qualifiers (`Unique<T>`, `Shared<T>`, `Weak<T>`) enable deterministic memory management.
+* Ownership qualifiers (`own<T>`, `share<T>`, `use<T>`) enable deterministic memory management.
 * DAG-based ownership analysis prevents cycles, minimizing reference-counting overhead.
 * Arena/Pool pattern optimizes allocation and deallocation for complex data structures.
 * C++20 coroutines map async/await to efficient native suspension points.

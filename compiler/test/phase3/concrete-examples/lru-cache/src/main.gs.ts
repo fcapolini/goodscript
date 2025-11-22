@@ -25,8 +25,8 @@ class CacheNode {
 class LRUCache {
   private capacity: number;
   private size: number;
-  private nodes: Shared<CacheNode>[];  // Arena owns all nodes with shared ownership
-  private cache: Map<string, Shared<CacheNode>>;  // Map stores shared references
+  private nodes: share<CacheNode>[];  // Arena owns all nodes with shared ownership
+  private cache: Map<string, share<CacheNode>>;  // Map stores shared references
   
   constructor(capacity: number) {
     this.capacity = capacity;
@@ -35,7 +35,7 @@ class LRUCache {
     this.cache = new Map();
   }
   
-  private addNode(node: Shared<CacheNode>): void {
+  private addNode(node: share<CacheNode>): void {
     this.nodes.push(node);  // Arena owns it with shared ownership
   }
   

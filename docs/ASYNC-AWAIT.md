@@ -65,7 +65,7 @@ cppcoro::task<void> mainTask() {
 GoodScript:
 
 ```ts
-async function processNode(node: shared<Node>) {
+async function processNode(node: share<Node>) {
     node.value += 1;
 }
 ```
@@ -81,9 +81,9 @@ cppcoro::task<void> processNode(std::shared_ptr<Node> node) {
 
 **Notes:**
 
-* `shared<T>` maps to `std::shared_ptr<T>`.
+* `share<T>` maps to `std::shared_ptr<T>`.
 * Safe to capture across suspension points.
-* `unique<T>` should be moved in or allocated in arena if it persists across `co_await`.
+* `own<T>` should be moved in or allocated in arena if it persists across `co_await`.
 
 ---
 
@@ -92,7 +92,7 @@ cppcoro::task<void> processNode(std::shared_ptr<Node> node) {
 GoodScript:
 
 ```ts
-async function maybeUpdateNode(node: weak<Node>) {
+async function maybeUpdateNode(node: use<Node>) {
     node?.value += 1;
 }
 ```
@@ -110,7 +110,7 @@ cppcoro::task<void> maybeUpdateNode(std::weak_ptr<Node> node) {
 
 **Notes:**
 
-* `weak<T>` → `std::weak_ptr<T>`.
+* `use<T>` → `std::weak_ptr<T>`.
 * `?.` → `lock()` check in C++.
 * Safe even if the object was destroyed before the coroutine resumes.
 
@@ -149,7 +149,7 @@ cppcoro::task<int> sumValues() {
 1. **Lifetimes:** Use `shared_ptr` or arena allocation for any object that persists across suspension points.
 2. **Exception handling:** Translate GoodScript `throw` and `try/catch` directly to C++ exceptions.
 3. **Workers:** If GoodScript workers are used, each worker can have its own coroutine scheduler.
-4. **Templates / Generics:** Map `unique<T>`, `shared<T>`, `weak<T>` to `unique_ptr<T>`, `shared_ptr<T>`, `weak_ptr<T>` in coroutine code.
+4. **Templates / Generics:** Map `own<T>`, `share<T>`, `use<T>` to `unique_ptr<T>`, `shared_ptr<T>`, `weak_ptr<T>` in coroutine code.
 
 ---
 

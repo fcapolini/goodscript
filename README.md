@@ -10,16 +10,16 @@
 
 GoodScript is a **TypeScript specialization** designed to enable safe systems programming with deterministic memory management. It retains **TypeScript syntax** while augmenting the language with **ownership qualifiers**:
 
-* `Unique<T>` — exclusive ownership of a value.
-* `Shared<T>` — reference-counted shared ownership.
-* `Weak<T>` — non-owning references (may be `null` or `undefined`).
+* `own<T>` — exclusive ownership of a value.
+* `share<T>` — reference-counted shared ownership.
+* `use<T>` — non-owning references (may be `null` or `undefined`).
 
 These types are **transparent in TypeScript**, making GoodScript code valid TS code for development and prototyping.
 
 ```ts
-declare type Unique<T> = T;
-declare type Shared<T> = T;
-declare type Weak<T> = T | null | undefined;
+declare type own<T> = T;
+declare type share<T> = T;
+declare type use<T> = T | null | undefined;
 ```
 
 ---
@@ -38,8 +38,8 @@ GoodScript supports **two modes of execution**:
 Example:
 
 ```ts
-async function example(sharedNode: Shared<Node>) {
-    let weakNode: Weak<Node> = sharedNode;
+async function example(sharedNode: share<Node>) {
+    let weakNode: use<Node> = sharedNode;
     console.log(weakNode?.value); // Safe access in TS
 }
 ```
@@ -49,9 +49,9 @@ async function example(sharedNode: Shared<Node>) {
 * Transpile `.gs.ts` to **C++20** with smart pointer-based ownership.
 * Ownership qualifiers map to C++ smart pointers:
 
-  * `Unique<T>` → `std::unique_ptr<T>`
-  * `Shared<T>` → `std::shared_ptr<T>`
-  * `Weak<T>` → `std::weak_ptr<T>`
+  * `own<T>` → `std::unique_ptr<T>`
+  * `share<T>` → `std::shared_ptr<T>`
+  * `use<T>` → `std::weak_ptr<T>`
 * Ensures **memory safety, deterministic destruction, and DAG-enforced ownership**.
 * Uses **C++20 features** (concepts, ranges, coroutines for async/await).
 * Optional: use **Zig toolchain** for cross-compilation and packaging.
@@ -63,9 +63,9 @@ async function example(sharedNode: Shared<Node>) {
 * All heap-allocated values must have **explicit reference qualification**.
 * Reference derivation rules prevent cycles and unsafe memory access:
 
-  * From `Unique<T>` → only `Weak<T>` can be derived.
-  * From `Shared<T>` → `Shared<T>` or `Weak<T>`.
-  * From `Weak<T>` → only `Weak<T>`.
+  * From `own<T>` → only `use<T>` can be derived.
+  * From `share<T>` → `share<T>` or `use<T>`.
+  * From `use<T>` → only `use<T>`.
 * Weak references are accessed with optional chaining (`?.`) in TS, which maps to safe upgrade in native code.
 
 ---
@@ -107,18 +107,18 @@ async function example(sharedNode: Shared<Node>) {
 
 ```ts
 // .gs.ts file
-declare type Shared<T> = T;
-declare type Weak<T> = T | null | undefined;
+declare type share<T> = T;
+declare type use<T> = T | null | undefined;
 
 class Node {
     value: number;
-    parent: Weak<Node>;
-    children: Shared<Node>[];
+    parent: use<Node>;
+    children: share<Node>[];
 }
 
-async function demo(node: Shared<Node>) {
-    let child: Shared<Node> = node;
-    let weakRef: Weak<Node> = child;
+async function demo(node: share<Node>) {
+    let child: share<Node> = node;
+    let weakRef: use<Node> = child;
     console.log(weakRef?.value);
 }
 ```

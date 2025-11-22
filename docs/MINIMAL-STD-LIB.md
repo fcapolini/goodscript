@@ -77,9 +77,9 @@ Map GoodScript reference qualifiers to C++ smart pointers.
 
 | GoodScript  | C++ Wrapper          |
 | ----------- | -------------------- |
-| `Unique<T>` | `std::unique_ptr<T>` |
-| `Shared<T>` | `std::shared_ptr<T>` |
-| `Weak<T>`   | `std::weak_ptr<T>`   |
+| `own<T>` | `std::unique_ptr<T>` |
+| `share<T>` | `std::shared_ptr<T>` |
+| `use<T>`   | `std::weak_ptr<T>`   |
 
 Optional chaining (`?.`) maps to `lock()` on `weak_ptr`.
 

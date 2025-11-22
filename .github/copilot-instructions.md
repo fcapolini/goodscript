@@ -4,7 +4,7 @@
 
 GoodScript is a **TypeScript specialization** for safe systems programming with **deterministic memory management**. It compiles TypeScript code with ownership annotations to C++, providing memory safety without garbage collection.
 
-**Core Innovation**: Ownership qualifiers (`Unique<T>`, `Shared<T>`, `Weak<T>`) that are transparent type aliases in TypeScript but map to C++ smart pointers (unique_ptr, shared_ptr, weak_ptr).
+**Core Innovation**: Ownership qualifiers (`own<T>`, `share<T>`, `use<T>`) that are transparent type aliases in TypeScript but map to C++ smart pointers (unique_ptr, shared_ptr, weak_ptr).
 
 ## Architecture Phases
 
@@ -25,7 +25,7 @@ GoodScript is a **TypeScript specialization** for safe systems programming with 
 
 ### Phase 3: C++ Code Generation (🚧 In Progress - Foundation Complete)
 - Translates TypeScript AST to C++ code
-- Maps ownership types: `Unique<T>` → `std::unique_ptr<T>`, `Shared<T>` → `std::shared_ptr<T>`, `Weak<T>` → `std::weak_ptr<T>`
+- Maps ownership types: `own<T>` → `std::unique_ptr<T>`, `share<T>` → `std::shared_ptr<T>`, `use<T>` → `std::weak_ptr<T>`
 - Generates idiomatic C++ with proper RAII, exception handling
 - All code wrapped in `gs` namespace to avoid keyword conflicts
 - **Status**: 35/35 basic tests passing (primitives, ownership types, classes, control flow)
@@ -44,29 +44,29 @@ GoodScript is a **TypeScript specialization** for safe systems programming with 
 
 **Type Declarations** (transparent in TypeScript):
 ```typescript
-declare type Unique<T> = T;  // Exclusive ownership
-declare type Shared<T> = T;  // Reference-counted shared ownership  
-declare type Weak<T> = T | null | undefined;  // Non-owning reference
+declare type own<T> = T;  // Exclusive ownership
+declare type share<T> = T;  // Reference-counted shared ownership  
+declare type use<T> = T | null | undefined;  // Non-owning reference
 ```
 
 **C++ Mapping**:
 ```cpp
-Unique<T> → std::unique_ptr<T>  // Heap-allocated, single owner
-Shared<T> → std::shared_ptr<T>  // Reference-counted, multiple owners
-Weak<T>   → std::weak_ptr<T>    // Non-owning, prevents cycles
+own<T> → std::unique_ptr<T>  // Heap-allocated, single owner
+share<T> → std::shared_ptr<T>  // Reference-counted, multiple owners
+use<T>   → std::weak_ptr<T>    // Non-owning, prevents cycles
 ```
 
 **Derivation Rules** (enforced in Phase 2):
-- From `Unique<T>` → only `Weak<T>` (no aliasing of exclusive ownership)
-- From `Shared<T>` → `Shared<T>` or `Weak<T>` (can share or downgrade)
-- From `Weak<T>` → only `Weak<T>` (can't upgrade to ownership)
+- From `own<T>` → only `use<T>` (no aliasing of exclusive ownership)
+- From `share<T>` → `share<T>` or `use<T>` (can share or downgrade)
+- From `use<T>` → only `use<T>` (can't upgrade to ownership)
 
 ### 2. DAG Enforcement
 
 **Purpose**: Prevent reference cycles that cause memory leaks in reference-counted systems.
 
 **How it works**:
-1. Build ownership graph: Types are nodes, `Shared<T>` fields are edges
+1. Build ownership graph: Types are nodes, `share<T>` fields are edges
 2. Detect cycles using DFS
 3. Reject code with cycles, forcing use of Pool Pattern
 
@@ -74,15 +74,15 @@ Weak<T>   → std::weak_ptr<T>    // Non-owning, prevents cycles
 ```typescript
 // ❌ Rejected - potential cycle
 class TreeNode {
-  children: Shared<TreeNode>[];  // A -> TreeNode (self-reference)
+  children: share<TreeNode>[];  // A -> TreeNode (self-reference)
 }
 
 // ✅ Accepted - Pool Pattern breaks cycle
 class Tree {
-  nodes: Unique<TreeNode>[];  // Tree owns all nodes
+  nodes: own<TreeNode>[];  // Tree owns all nodes
 }
 class TreeNode {
-  children: Weak<TreeNode>[];  // Non-owning links (no edges)
+  children: use<TreeNode>[];  // Non-owning links (no edges)
 }
 ```
 
@@ -90,14 +90,14 @@ class TreeNode {
 
 **Problem**: TypeScript's type checker erases ownership annotations because they're type aliases.
 ```typescript
-type Shared<T> = T;  // TypeChecker sees just T, not Shared<T>
+type share<T> = T;  // TypeChecker sees just T, not share<T>
 ```
 
 **Solution**: Read types directly from AST using `symbol.valueDeclaration.type?.getText()`
 ```typescript
-// This preserves the source text "Shared<CacheNode>"
+// This preserves the source text "share<CacheNode>"
 const typeText = symbol.valueDeclaration.type?.getText();
-if (typeText?.startsWith('Shared<')) {
+if (typeText?.startsWith('share<')) {
   // We know it's Shared, not just T
 }
 ```
@@ -143,7 +143,7 @@ if (typeText?.startsWith('Shared<')) {
    
    // ✅ Do read from AST
    const typeText = symbol.valueDeclaration.type?.getText();
-   const isShared = typeText?.match(/Shared<([^>]+)>/);
+   const isShared = typeText?.match(/share<([^>]+)>/);
    // Then map to: std::shared_ptr<${elementType}>
    ```
 
@@ -156,8 +156,8 @@ if (typeText?.startsWith('Shared<')) {
    ```typescript
    // Same value needs different treatment based on context:
    // - Constructor field assignment: may need std::make_unique()
-   // - Map insert with Shared<V>: needs std::make_shared()
-   // - Function call with Shared<T> param: needs std::make_shared()
+   // - Map insert with share<V>: needs std::make_shared()
+   // - Function call with share<T> param: needs std::make_shared()
    // - Already wrapped: use std::move() or pass by reference
    ```
 
@@ -170,9 +170,9 @@ if (typeText?.startsWith('Shared<')) {
 ### When Working on Ownership Analysis (`ownership-analyzer.ts`)
 
 1. **Follow DAG rules strictly**:
-   - Only `Shared<T>` creates edges
-   - `Unique<T>` and `Weak<T>` do NOT create edges
-   - Container transitivity: `Array<Shared<T>>`, `Map<K, Shared<V>>`
+   - Only `share<T>` creates edges
+   - `own<T>` and `use<T>` do NOT create edges
+   - Container transitivity: `Array<share<T>>`, `Map<K, share<V>>`
 
 2. **Cycle detection**:
    ```typescript
@@ -185,9 +185,9 @@ if (typeText?.startsWith('Shared<')) {
 3. **Error messages should suggest Pool Pattern**:
    ```typescript
    this.addError(
-     `Type '${typeName}' contains a Shared<T> ownership cycle. ` +
+     `Type '${typeName}' contains a share<T> ownership cycle. ` +
      `Use the Pool Pattern: centralize ownership in a container type ` +
-     `and use Weak<T> references for relationships.`,
+     `and use use<T> references for relationships.`,
      location,
      'GS305'
    );
@@ -243,7 +243,7 @@ private getMethodReturnTypeFromSource(callExpr: ts.CallExpression): string | und
   
   if (ts.isMethodDeclaration(signature.declaration)) {
     const returnTypeNode = signature.declaration.type;
-    return returnTypeNode?.getText();  // Preserves "Unique<Token>"
+    return returnTypeNode?.getText();  // Preserves "own<Token>"
   }
   
   return undefined;
@@ -255,15 +255,15 @@ private getMethodReturnTypeFromSource(callExpr: ts.CallExpression): string | und
 // In constructor body generation:
 this.uniquePtrVars.clear();  // Reset for each constructor
 
-// When finding a method call returning Unique<T>:
+// When finding a method call returning own<T>:
 const returnType = this.getMethodReturnTypeFromSource(callExpr);
-if (returnType?.startsWith('Unique<')) {
+if (returnType?.startsWith('own<')) {
   this.uniquePtrVars.add(localVarName);  // Mark as already unique_ptr
 }
 
 // Later, in member initialization:
 if (field.type.startsWith('std::unique_ptr<') && !this.uniquePtrVars.has(field.name)) {
-  emit(`${field.name}(std::make_unique<${elementType}>(${field.name}))`);
+  emit(`${field.name}(std::make_own<${elementType}>(${field.name}))`);
 } else {
   emit(`${field.name}(std::move(${field.name}))`);
 }
@@ -271,18 +271,18 @@ if (field.type.startsWith('std::unique_ptr<') && !this.uniquePtrVars.has(field.n
 
 **Pattern: Container Type Detection**
 ```typescript
-// Check if std::vector expects Shared<T> elements
+// Check if std::vector expects share<T> elements
 const vecTypeText = symbol.valueDeclaration.type?.getText();
-const sharedMatch = vecTypeText?.match(/Shared<([^>]+)>\[\]/);
+const sharedMatch = vecTypeText?.match(/share<([^>]+)>\[\]/);
 if (sharedMatch) {
   const elementType = sharedMatch[1];
   // std::vector<std::shared_ptr<${elementType}>>
-  // Use push_back(std::make_shared<${elementType}>())
+  // Use push_back(std::make_share<${elementType}>())
 }
 
-// Check if Map expects Shared<V> values  
+// Check if Map expects share<V> values  
 const mapTypeText = symbol.valueDeclaration.type?.getText();
-const sharedMatch = mapTypeText?.match(/Map<[^,]+,\s*Shared<([^>]+)>>/);
+const sharedMatch = mapTypeText?.match(/Map<[^,]+,\s*share<([^>]+)>>/);
 if (sharedMatch) {
   const valueType = sharedMatch[1];
   // std::unordered_map<K, std::shared_ptr<${valueType}>>
@@ -318,27 +318,27 @@ if (sharedMatch) {
 ```typescript
 // ❌ This loses ownership qualifiers
 const type = checker.getTypeAtLocation(expr);
-// type is "CacheNode", not "Shared<CacheNode>"
+// type is "CacheNode", not "share<CacheNode>"
 ```
 
 **✅ Solution**: Read from AST
 ```typescript
 const symbol = checker.getSymbolAtLocation(expr);
 const typeText = symbol.valueDeclaration.type?.getText();
-// typeText is "Shared<CacheNode>"
+// typeText is "share<CacheNode>"
 ```
 
 ### ❌ Pitfall 2: Double-Wrapping
 ```typescript
-// ❌ Constructor returns Unique<T> (already unique_ptr<T>)
+// ❌ Constructor returns own<T> (already unique_ptr<T>)
 const token = tokenizer.nextToken();  // Returns unique_ptr<Token>
-this.current = std::make_unique<Token>(token);  // Double wrap!
+this.current = std::make_own<Token>(token);  // Double wrap!
 ```
 
 **✅ Solution**: Track unique_ptr variables and use std::move
 ```typescript
 const returnType = this.getMethodReturnTypeFromSource(callExpr);
-if (returnType?.startsWith('Unique<')) {
+if (returnType?.startsWith('own<')) {
   this.uniquePtrVars.add('current');
 }
 // Later: if (!this.uniquePtrVars.has('current')) { wrap... } else { std::move... }
@@ -347,15 +347,15 @@ if (returnType?.startsWith('Unique<')) {
 ### ❌ Pitfall 3: Ignoring Context
 ```typescript
 // ❌ Same value needs different treatment
-map.insert(key, value);  // If map is Map<K, Shared<V>>, needs make_shared
-vec.push_back(value);    // If vec is array of Shared<T>, needs make_shared
+map.insert(key, value);  // If map is Map<K, share<V>>, needs make_shared
+vec.push_back(value);    // If vec is array of share<T>, needs make_shared
 ```
 
 **✅ Solution**: Check container element types via AST
 ```typescript
 const mapTypeText = getFieldType(mapSymbol);
-if (mapTypeText?.includes('Shared<')) {
-  value = `std::make_shared<${elementType}>(${value})`;
+if (mapTypeText?.includes('share<')) {
+  value = `std::make_share<${elementType}>(${value})`;
 }
 ```
 
@@ -392,7 +392,7 @@ if (!value.includes('.')) {
 
 ### Type Definitions
 4. **`lib/goodscript.d.ts`** - Type declarations for GoodScript
-   - Defines `Unique<T>`, `Shared<T>`, `Weak<T>`
+   - Defines `own<T>`, `share<T>`, `use<T>`
    - Transparent type aliases for TypeScript compatibility
 
 ### Test Infrastructure
@@ -532,9 +532,9 @@ When implementing new features or fixing bugs:
 ### Ownership Type Mappings
 | GoodScript | TypeScript | C++ | Semantics |
 |-----------|-----------|------|-----------|---|
-| `Unique<T>` | `T` | `std::unique_ptr<T>` | Exclusive ownership |
-| `Shared<T>` | `T` | `std::shared_ptr<T>` | Shared ownership |
-| `Weak<T>` | `T \| null \| undefined` | `std::weak_ptr<T>` | Non-owning reference |
+| `own<T>` | `T` | `std::unique_ptr<T>` | Exclusive ownership |
+| `share<T>` | `T` | `std::shared_ptr<T>` | Shared ownership |
+| `use<T>` | `T \| null \| undefined` | `std::weak_ptr<T>` | Non-owning reference |
 
 ### Error Code Prefixes
 - `GS1XX`: Language restrictions (var, eval, ==, etc.)

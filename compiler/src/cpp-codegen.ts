@@ -419,19 +419,19 @@ export class CppCodegen {
   }
   
   /**
-   * Generate type reference (handles ownership types)
+   * Generate type reference (handles ownership qualifiers)
    */
   private generateTypeReference(type: ts.TypeReferenceNode): string {
     const typeName = type.typeName.getText();
     
     // Handle ownership qualifiers
-    if (typeName === 'Unique' && type.typeArguments && type.typeArguments.length > 0) {
+    if (typeName === 'own' && type.typeArguments && type.typeArguments.length > 0) {
       const innerType = this.generateType(type.typeArguments[0]);
       return `std::unique_ptr<${innerType}>`;
-    } else if (typeName === 'Shared' && type.typeArguments && type.typeArguments.length > 0) {
+    } else if (typeName === 'share' && type.typeArguments && type.typeArguments.length > 0) {
       const innerType = this.generateType(type.typeArguments[0]);
       return `std::shared_ptr<${innerType}>`;
-    } else if (typeName === 'Weak' && type.typeArguments && type.typeArguments.length > 0) {
+    } else if (typeName === 'use' && type.typeArguments && type.typeArguments.length > 0) {
       const innerType = this.generateType(type.typeArguments[0]);
       return `std::weak_ptr<${innerType}>`;
     } else if (typeName === 'Map' && type.typeArguments && type.typeArguments.length === 2) {

@@ -37,10 +37,10 @@ class Token {
 }
 
 class Tokenizer {
-  private input: Shared<string>;
+  private input: share<string>;
   private pos: number;
   
-  constructor(input: Shared<string>) {
+  constructor(input: share<string>) {
     this.input = input;
     this.pos = 0;
   }
@@ -124,7 +124,7 @@ class Tokenizer {
     return result;
   }
   
-  nextToken(): Unique<Token> {
+  nextToken(): own<Token> {
     this.skipWhitespace();
     
     if (this.pos >= this.input.length) {
@@ -179,8 +179,8 @@ class JsonValue {
   stringValue: string;
   numberValue: number;
   booleanValue: boolean;
-  objectValue: Map<string, Unique<JsonValue>> | null;
-  arrayValue: Unique<JsonValue>[] | null;
+  objectValue: Map<string, own<JsonValue>> | null;
+  arrayValue: own<JsonValue>[] | null;
   
   constructor(kind: string) {
     this.kind = kind;
@@ -213,13 +213,13 @@ class JsonValue {
     return new JsonValue("null");
   }
   
-  static fromObject(value: Map<string, Unique<JsonValue>>): JsonValue {
+  static fromObject(value: Map<string, own<JsonValue>>): JsonValue {
     const result = new JsonValue("object");
     result.objectValue = value;
     return result;
   }
   
-  static fromArray(value: Unique<JsonValue>[]): JsonValue {
+  static fromArray(value: own<JsonValue>[]): JsonValue {
     const result = new JsonValue("array");
     result.arrayValue = value;
     return result;
@@ -227,10 +227,10 @@ class JsonValue {
 }
 
 class Parser {
-  private tokenizer: Unique<Tokenizer>;
-  private current: Unique<Token>;
+  private tokenizer: own<Tokenizer>;
+  private current: own<Token>;
   
-  constructor(input: Unique<string>) {
+  constructor(input: own<string>) {
     this.tokenizer = new Tokenizer(input);
     this.current = this.tokenizer.nextToken();
   }
@@ -275,7 +275,7 @@ class Parser {
   }
   
   private parseObject(): JsonValue {
-    const obj = new Map<string, Unique<JsonValue>>();
+    const obj = new Map<string, own<JsonValue>>();
     this.advance(); // Skip {
     
     while (!this.expect(TokenType.RightBrace) && !this.expect(TokenType.EOF)) {
@@ -307,7 +307,7 @@ class Parser {
   }
   
   private parseArray(): JsonValue {
-    const arr: Unique<JsonValue>[] = [];
+    const arr: own<JsonValue>[] = [];
     this.advance(); // Skip [
     
     while (!this.expect(TokenType.RightBracket) && !this.expect(TokenType.EOF)) {

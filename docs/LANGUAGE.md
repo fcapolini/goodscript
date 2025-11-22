@@ -28,18 +28,18 @@ All heap-allocated values must be **qualified** with one of the following:
 
 | Qualifier   | Semantics                                                                                                 |
 | ----------- | --------------------------------------------------------------------------------------------------------- |
-| `unique<T>` | Exclusive ownership; cannot be copied; destroyed deterministically.                                       |
-| `shared<T>` | Reference-counted ownership; multiple shared owners allowed; destroyed when last owner goes out of scope. |
-| `weak<T>`   | Non-owning reference; can be upgraded to `shared<T>` conditionally if object is still alive.              |
+| `own<T>` | Exclusive ownership; cannot be copied; destroyed deterministically.                                       |
+| `share<T>` | Reference-counted ownership; multiple shared owners allowed; destroyed when last owner goes out of scope. |
+| `use<T>`   | Non-owning reference; can be upgraded to `share<T>` conditionally if object is still alive.              |
 
 ### 2.2 Rules and Constraints
 
 * The compiler performs **DAG analysis** on all owning references to prevent cycles.
 * Reference derivation rules:
 
-  * From `unique<T>` → only `weak<T>` can be derived.
-  * From `shared<T>` → `shared<T>` or `weak<T>` can be derived.
-  * From `weak<T>` → only `weak<T>` can be derived.
+  * From `own<T>` → only `use<T>` can be derived.
+  * From `share<T>` → `share<T>` or `use<T>` can be derived.
+  * From `use<T>` → only `use<T>` can be derived.
 * These rules guarantee **memory safety and correct destruction**.
 
 ### 2.3 Optional Access
@@ -92,7 +92,7 @@ All heap-allocated values must be **qualified** with one of the following:
 
 GoodScript is a **deterministic, memory-safe, single-threaded TypeScript variant** that:
 
-* Augments TypeScript with `unique<T>`, `shared<T>`, and `weak<T>` ownership generics.
+* Augments TypeScript with `own<T>`, `share<T>`, and `use<T>` ownership generics.
 * Eliminates dynamic features for safer compilation.
 * Guarantees safe memory handling via DAG enforcement.
 * Provides optional conditional access for weak references.

@@ -107,7 +107,7 @@ Complete JSON tokenizer and parser demonstrating:
 - Recursive descent parsing
 - Complex state management (position tracking, token buffering)
 - Character-by-character string parsing
-- Ownership types (`Unique<T>` for tokenizer and input strings)
+- Ownership types (`own<T>` for tokenizer and input strings)
 - Nullable return types (`string | null`, `JsonValue | null`)
 - Static factory methods
 - Map<K,V> and Array manipulation

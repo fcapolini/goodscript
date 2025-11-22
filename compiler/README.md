@@ -140,13 +140,13 @@ See [../docs/GOOD-PARTS.md](../docs/GOOD-PARTS.md) for detailed rationale and ex
 
 Phase 2 introduces a three-tier ownership system:
 
-- **`Unique<T>`** - Exclusive ownership (Box)
-- **`Shared<T>`** - Shared ownership with reference counting (Rc)
-- **`Weak<T>`** - Non-owning references (Weak, implicitly nullable)
+- **`own<T>`** - Exclusive ownership (Box)
+- **`share<T>`** - Shared ownership with reference counting (Rc)
+- **`use<T>`** - Non-owning references (Weak, implicitly nullable)
 
-The compiler enforces that `Shared<T>` references form a **Directed Acyclic Graph (DAG)**, preventing memory leaks at compile time.
+The compiler enforces that `share<T>` references form a **Directed Acyclic Graph (DAG)**, preventing memory leaks at compile time.
 
-**Null semantics:** `null` and `undefined` are synonyms in GoodScript. All `Weak<T>` types are implicitly `T | null | undefined`.
+**Null semantics:** `null` and `undefined` are synonyms in GoodScript. All `use<T>` types are implicitly `T | null | undefined`.
 
 See [../docs/LANGUAGE.md](../docs/LANGUAGE.md) for the complete ownership specification.
 
@@ -154,9 +154,9 @@ See [../docs/LANGUAGE.md](../docs/LANGUAGE.md) for the complete ownership specif
 
 Phase 3 (planned) will transpile GoodScript to C++, mapping ownership types to native C++ primitives:
 
-- `Unique<T>` → `Box<T>`
-- `Shared<T>` → `Rc<T>`
-- `Weak<T>` → `Weak<T>`
+- `own<T>` → `Box<T>`
+- `share<T>` → `Rc<T>`
+- `use<T>` → `use<T>`
 
 The result: native performance with deterministic memory management and no garbage collection.
 

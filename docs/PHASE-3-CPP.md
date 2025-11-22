@@ -35,9 +35,9 @@ Phase 3 implements the C++ code generator that transforms GoodScript's TypeScrip
 | `T[]` | `std::vector<T>` | Dynamic array |
 | `Map<K,V>` | `std::unordered_map<K,V>` | Hash map |
 | `Set<T>` | `std::unordered_set<T>` | Hash set |
-| `Unique<T>` | `std::unique_ptr<T>` | Exclusive ownership |
-| `Shared<T>` | `std::shared_ptr<T>` | Reference-counted ownership |
-| `Weak<T>` | `std::weak_ptr<T>` | Non-owning reference |
+| `own<T>` | `std::unique_ptr<T>` | Exclusive ownership |
+| `share<T>` | `std::shared_ptr<T>` | Reference-counted ownership |
+| `use<T>` | `std::weak_ptr<T>` | Non-owning reference |
 | `T \| null` | `std::optional<T>` | Nullable value |
 
 #### Statement Generation
@@ -155,7 +155,7 @@ The code generator preserves ownership qualifiers by reading directly from the A
 
 ```typescript
 // GoodScript
-const node: Shared<TreeNode> = new TreeNode();
+const node: share<TreeNode> = new TreeNode();
 ```
 
 ```cpp
@@ -203,7 +203,7 @@ const double x = 42;
 ```typescript
 class Node {
   value: number;
-  next: Unique<Node>;
+  next: own<Node>;
 }
 ```
 ```cpp
@@ -262,9 +262,9 @@ See `docs/COMPILATION-TARGET.md` for detailed analysis.
 ### 3. Smart Pointer Types
 
 **Ownership Mapping**:
-- `Unique<T>` → `std::unique_ptr<T>` - Exclusive, movable ownership
-- `Shared<T>` → `std::shared_ptr<T>` - Reference-counted, copyable
-- `Weak<T>` → `std::weak_ptr<T>` - Non-owning, must lock() before use
+- `own<T>` → `std::unique_ptr<T>` - Exclusive, movable ownership
+- `share<T>` → `std::shared_ptr<T>` - Reference-counted, copyable
+- `use<T>` → `std::weak_ptr<T>` - Non-owning, must lock() before use
 
 **Construction** (planned):
 ```cpp
@@ -352,7 +352,7 @@ export class CppCodegen {
 ```typescript
 // Don't use TypeChecker for ownership types (erases aliases)
 const typeText = symbol.valueDeclaration.type?.getText();
-if (typeText?.startsWith('Shared<')) {
+if (typeText?.startsWith('share<')) {
   // Extract inner type and generate std::shared_ptr
 }
 ```
@@ -374,8 +374,8 @@ if (this.uniquePtrVars.has(varName)) {
 Implement logic to wrap values in smart pointers based on context:
 
 ```typescript
-// Detect return type is Unique<T>
-function create(): Unique<Node> {
+// Detect return type is own<T>
+function create(): own<Node> {
   return new Node();  // Must wrap in make_unique
 }
 ```
@@ -453,7 +453,7 @@ C++ has many more keywords than TypeScript. The `gs::` namespace wrapper prevent
 
 ### 2. AST Reading for Ownership Types
 
-TypeScript's type checker erases type aliases, making it impossible to distinguish `Shared<T>` from `T`. Reading directly from the AST preserves the source text, enabling correct smart pointer generation.
+TypeScript's type checker erases type aliases, making it impossible to distinguish `share<T>` from `T`. Reading directly from the AST preserves the source text, enabling correct smart pointer generation.
 
 ### 3. Incremental Implementation
 

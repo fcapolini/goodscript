@@ -9,9 +9,18 @@ import { CppCodegen } from '../../../src/cpp-codegen';
 import ts from 'typescript';
 
 function compileToCpp(source: string): string {
+  // Prepend type declarations so TypeScript recognizes them
+  const fullSource = `
+    declare type own<T> = T;
+    declare type share<T> = T;
+    declare type use<T> = T | null | undefined;
+    
+    ${source}
+  `;
+  
   const sourceFile = ts.createSourceFile(
     'test.ts',
-    source,
+    fullSource,
     ts.ScriptTarget.ES2020,
     true
   );
@@ -20,8 +29,8 @@ function compileToCpp(source: string): string {
   return codegen.generate(sourceFile);
 }
 
-describe('Phase 3: Ownership - Unique<T>', () => {
-  it('should generate std::unique_ptr for Unique<T>', () => {
+describe('Phase 3: Ownership - own<T>', () => {
+  it('should generate std::unique_ptr for own<T>', () => {
     const source = `
       class Node {
         value: number;
@@ -30,17 +39,17 @@ describe('Phase 3: Ownership - Unique<T>', () => {
         }
       }
       
-      const node: Unique<Node> = new Node(42);
+      const node: own<Node> = new Node(42);
     `;
     const cpp = compileToCpp(source);
     
     expect(cpp).toContain('std::unique_ptr<Node>');
   });
   
-  it('should generate class with Unique<T> field', () => {
+  it('should generate class with own<T> field', () => {
     const source = `
       class Box {
-        value: Unique<number>;
+        value: own<number>;
       }
     `;
     const cpp = compileToCpp(source);
@@ -49,24 +58,24 @@ describe('Phase 3: Ownership - Unique<T>', () => {
   });
 });
 
-describe('Phase 3: Ownership - Shared<T>', () => {
-  it('should generate std::shared_ptr for Shared<T>', () => {
+describe('Phase 3: Ownership - share<T>', () => {
+  it('should generate std::shared_ptr for share<T>', () => {
     const source = `
       class Data {
         count: number;
       }
       
-      const data: Shared<Data> = new Data();
+      const data: share<Data> = new Data();
     `;
     const cpp = compileToCpp(source);
     
     expect(cpp).toContain('std::shared_ptr<Data>');
   });
   
-  it('should generate class with Shared<T> field', () => {
+  it('should generate class with share<T> field', () => {
     const source = `
       class Container {
-        items: Shared<string>[];
+        items: share<string>[];
       }
     `;
     const cpp = compileToCpp(source);
@@ -75,11 +84,11 @@ describe('Phase 3: Ownership - Shared<T>', () => {
   });
 });
 
-describe('Phase 3: Ownership - Weak<T>', () => {
-  it('should generate std::weak_ptr for Weak<T>', () => {
+describe('Phase 3: Ownership - use<T>', () => {
+  it('should generate std::weak_ptr for use<T>', () => {
     const source = `
       class Node {
-        parent: Weak<Node>;
+        parent: use<Node>;
       }
     `;
     const cpp = compileToCpp(source);
@@ -133,13 +142,13 @@ describe('Phase 3: Collection Types', () => {
     expect(cpp).toContain('std::unordered_set<double>');
   });
   
-  it('should handle Map with Shared<T> values', () => {
+  it('should handle Map with share<T> values', () => {
     const source = `
       class Data {
         value: number;
       }
       
-      const cache: Map<string, Shared<Data>> = new Map();
+      const cache: Map<string, share<Data>> = new Map();
     `;
     const cpp = compileToCpp(source);
     

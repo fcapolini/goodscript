@@ -19,9 +19,9 @@ Individual feature tests that verify specific aspects of C++ code generation:
   - C++ keyword escaping
 
 - **`ownership-types.test.ts`** (10 tests)
-  - `Unique<T>` → `std::unique_ptr<T>`
-  - `Shared<T>` → `std::shared_ptr<T>`
-  - `Weak<T>` → `std::weak_ptr<T>`
+  - `own<T>` → `std::unique_ptr<T>`
+  - `share<T>` → `std::shared_ptr<T>`
+  - `use<T>` → `std::weak_ptr<T>`
   - Nullable types (`T | null` → `std::optional<T>`)
   - Collections (`Map<K,V>` → `std::unordered_map`, `Set<T>` → `std::unordered_set`)
   - Smart pointers in containers
@@ -79,9 +79,9 @@ struct Config {
 | `T[]` | `std::vector<T>` | Dynamic array |
 | `Map<K,V>` | `std::unordered_map<K,V>` | Hash map |
 | `Set<T>` | `std::unordered_set<T>` | Hash set |
-| `Unique<T>` | `std::unique_ptr<T>` | Exclusive ownership |
-| `Shared<T>` | `std::shared_ptr<T>` | Shared ownership |
-| `Weak<T>` | `std::weak_ptr<T>` | Non-owning reference |
+| `own<T>` | `std::unique_ptr<T>` | Exclusive ownership |
+| `share<T>` | `std::shared_ptr<T>` | Shared ownership |
+| `use<T>` | `std::weak_ptr<T>` | Non-owning reference |
 | `T \| null` | `std::optional<T>` | Nullable value |
 
 ### 4. Standard Headers

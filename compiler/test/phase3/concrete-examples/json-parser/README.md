@@ -6,7 +6,7 @@ A comprehensive JSON tokenizer and parser implemented in GoodScript that demonst
 
 - **Enums**: `TokenType` enum for token classification
 - **Classes**: `Token`, `Tokenizer`, `Parser`, and `JsonValue` classes
-- **Ownership types**: Uses `Unique<T>` for owned strings and tokenizer
+- **Ownership types**: Uses `own<T>` for owned strings and tokenizer
 - **String manipulation**: Character-by-character parsing with peek/advance pattern
 - **Null handling**: Proper nullable return types (`string | null`, `JsonValue | null`)
 - **Control flow**: Complex while loops, if-else chains, and recursive descent parsing

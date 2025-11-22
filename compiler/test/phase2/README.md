@@ -8,7 +8,7 @@ Phase 2 introduces ownership semantics and enforces the DAG (Directed Acyclic Gr
 test/phase2/
 ├── index.test.ts              # Overview and basic sanity tests
 ├── ownership-cycles.test.ts   # DAG cycle detection tests
-├── null-checks.test.ts        # Weak<T> null-safety tests
+├── null-checks.test.ts        # use<T> null-safety tests
 └── test-helpers.ts            # Phase 2 test utilities
 ```
 
@@ -18,32 +18,32 @@ test/phase2/
 
 Tests for all DAG-DETECTION.md rules:
 
-- **Rule 1.1**: Direct `Shared<T>` field creates edge
+- **Rule 1.1**: Direct `share<T>` field creates edge
   - Direct self-reference (A → A)
   - Mutual cycles (A → B → A)
   - Longer cycles (A → B → C → A)
 
 - **Rule 1.2**: Container transitivity
-  - `Array<Shared<T>>`
-  - `Shared<T>[]` syntax
-  - `Set<Shared<T>>`
-  - `Map<K, Shared<T>>`
+  - `Array<share<T>>`
+  - `share<T>[]` syntax
+  - `Set<share<T>>`
+  - `Map<K, share<T>>`
 
 - **Rule 1.3**: Intermediate wrapper transitivity
   - Transitive ownership chains
   - Deep nesting cycles
 
 - **Rule 2.1**: Self-ownership prohibition
-  - Linked lists with `Shared<T>`
-  - Trees with `Shared<T>` children
-  - Graphs with `Shared<T>` edges
+  - Linked lists with `share<T>`
+  - Trees with `share<T>` children
+  - Graphs with `share<T>` edges
 
-- **Rule 3.1**: `Weak<T>` does NOT create edges
-  - Self-references with `Weak<T>`
+- **Rule 3.1**: `use<T>` does NOT create edges
+  - Self-references with `use<T>`
   - Bidirectional references
   - Weak arrays and containers
 
-- **Rule 3.2**: `Unique<T>` does NOT create edges
+- **Rule 3.2**: `own<T>` does NOT create edges
   - Unique ownership
   - Unique arrays
 
@@ -59,7 +59,7 @@ Additional coverage:
 
 ### Null-Check Analysis (null-checks.test.ts)
 
-Tests for `Weak<T>` null-safety:
+Tests for `use<T>` null-safety:
 
 - **Basic null checks**
   - Property access without check (error)
@@ -116,7 +116,7 @@ npm test -- test/phase2 --watch
   - Reports cycle path (e.g., "A → B → A")
   - Suggests Pool Pattern for self-referential structures
   
-- **GS302**: Null check required for Weak<T>
+- **GS302**: Null check required for use<T>
   - Points to unchecked weak reference usage
   - Suggests using `!== null` or optional chaining
 
@@ -129,7 +129,7 @@ Compiles source with ownership analysis enabled (level='dag' by default).
 ```typescript
 const result = compileWithOwnership(`
   class Node {
-    next: Shared<Node> | null = null;
+    next: share<Node> | null = null;
   }
 `);
 expect(hasError(result.diagnostics, 'GS301')).toBe(true);
@@ -174,14 +174,14 @@ it('should detect my cycle', () => {
 
 Only 1 test currently skipped:
 
-1. **Pool Pattern with Unique<T> arrays** (`index.test.ts`)
-   - TypeScript type compatibility issue with `Unique<Node>[]` initialization
+1. **Pool Pattern with own<T> arrays** (`index.test.ts`)
+   - TypeScript type compatibility issue with `own<Node>[]` initialization
    - Not a bug in ownership/null-check analysis
    - Related to type definition integration
 
 **All core functionality is working**: 60/61 tests passing (98.4% pass rate)
 
-Previous limitations with `Weak<T>` type detection have been resolved by:
+Previous limitations with `use<T>` type detection have been resolved by:
 - Checking symbol declarations directly instead of relying only on `typeToTypeNode()`
 - Properly handling `undefined` as an identifier (not a keyword) in the AST
 - Fixing control flow analysis to avoid double-recursion through handled nodes

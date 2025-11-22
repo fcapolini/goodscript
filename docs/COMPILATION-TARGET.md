@@ -10,7 +10,7 @@
 
 * GoodScript enforces memory safety **intrinsically** through:
 
-  * Explicit reference qualifiers: `Unique<T>`, `Shared<T>`, `Weak<T>`
+  * Explicit reference qualifiers: `own<T>`, `share<T>`, `use<T>`
   * DAG-based ownership analysis preventing cycles
   * Controlled derivation of references (`Unique` → `Weak`, `Shared` → `Shared`/`Weak`, `Weak` → `Weak`)
 
@@ -18,16 +18,16 @@
 
 * **C++ mapping:**
 
-  * `Unique<T>` → `std::unique_ptr<T>`
-  * `Shared<T>` → `std::shared_ptr<T>`
-  * `Weak<T>` → `std::weak_ptr<T>`
+  * `own<T>` → `std::unique_ptr<T>`
+  * `share<T>` → `std::shared_ptr<T>`
+  * `use<T>` → `std::weak_ptr<T>`
   * Direct and intuitive mapping without compiler interference.
 
 * **Rust mapping:**
 
-  * `Unique<T>` → `Box<T>`
-  * `Shared<T>` → `Rc<T>` / `Arc<T>`
-  * `Weak<T>` → `Weak<T>`
+  * `own<T>` → `Box<T>`
+  * `share<T>` → `Rc<T>` / `Arc<T>`
+  * `use<T>` → `use<T>`
   * Borrow checker enforces lifetimes, often requiring additional wrapping and unwrapping.
 
 ---
@@ -58,7 +58,7 @@
   * Deterministic destruction
   * Minimal runtime overhead (weak reference access and reference counting)
 * Rust safety mechanisms provide little additional **runtime performance gain**, since unsafe scenarios are already prevented.
-* C++ smart pointers have **zero-cost moves** for `Unique<T>` and efficient reference counting for `Shared<T>`.
+* C++ smart pointers have **zero-cost moves** for `own<T>` and efficient reference counting for `share<T>`.
 
 ---
 
