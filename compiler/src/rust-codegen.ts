@@ -12,12 +12,31 @@ import * as ts from 'typescript';
  * - Weak<T> -> Weak<T>
  * - T | null | undefined -> Option<T>
  */
+
+/**
+ * Rust reserved keywords that need to be escaped when used as identifiers
+ * Source: https://doc.rust-lang.org/reference/keywords.html
+ */
+const RUST_KEYWORDS = new Set([
+  // Strict keywords (cannot be used as identifiers)
+  'as', 'break', 'const', 'continue', 'crate', 'else', 'enum', 'extern',
+  'false', 'fn', 'for', 'if', 'impl', 'in', 'let', 'loop', 'match', 'mod',
+  'move', 'mut', 'pub', 'ref', 'return', 'self', 'Self', 'static', 'struct',
+  'super', 'trait', 'true', 'type', 'unsafe', 'use', 'where', 'while',
+  // Keywords reserved for future use
+  'abstract', 'become', 'box', 'do', 'final', 'macro', 'override', 'priv',
+  'typeof', 'unsized', 'virtual', 'yield',
+  // Keywords reserved in certain contexts (2018+ edition)
+  'async', 'await', 'dyn', 'try',
+]);
+
 export class RustCodegen {
   private indentLevel = 0;
   private readonly INDENT = '    '; // 4 spaces
   private output: string[] = [];
   private imports = new Set<string>();
   private optionVariables = new Set<string>();  // Track variables with Option<T> type
+  private unwrappedOptions = new Set<string>();  // Track Option variables that are unwrapped in current scope (after is_some check)
   private integerVariables = new Set<string>();  // Track variables with integer type (from for loops)
   private inSwitchCaseClosure = false;  // Track if we're inside a switch case closure (for break handling)
   private currentLabel?: string;  // Track current label for labeled loops
@@ -35,6 +54,7 @@ export class RustCodegen {
   private inStructWrapper = false;  // Track if we're inside the wrapper function of a struct
   private inStructMethod = false;  // Track if we're inside a struct method
   private currentFunctionReturnType?: string;  // Track current function's return type for Option wrapping
+  private inConstructorBody = false;  // Track if we're generating constructor body statements
   // Track interface traits and their required fields for automatic trait implementation
   private interfaceTraits = new Map<string, Array<{name: string, type: string}>>();  // Maps TraitName -> [{fieldName, fieldType}]
   private syntheticTypeCounter = 0;  // Counter for generating unique synthetic type names
@@ -51,12 +71,44 @@ export class RustCodegen {
   private classes = new Map<string, {
     fields: Array<{ name: string; type: string; initializer?: string }>;
     methods: Array<{ name: string; method: ts.MethodDeclaration }>;
+    staticMethods: Array<{ name: string; method: ts.MethodDeclaration }>;
     constructor?: ts.ConstructorDeclaration;
     baseClass?: string;
   }>();
   
   constructor(checker?: ts.TypeChecker) {
     this.checker = checker;
+  }
+  
+  /**
+   * Escape identifier if it collides with a Rust keyword
+   * Uses raw identifier syntax (r#keyword) for reserved words
+   */
+  private escapeIdentifier(name: string): string {
+    // Special case: 'self' and 'Self' are handled separately in context
+    if (name === 'self' || name === 'Self') {
+      return name;
+    }
+    
+    // If it's a Rust keyword, use raw identifier syntax
+    if (RUST_KEYWORDS.has(name)) {
+      return `r#${name}`;
+    }
+    
+    return name;
+  }
+  
+  /**
+   * Escape a string for use in Rust string literals
+   */
+  private escapeRustString(str: string): string {
+    return str
+      .replace(/\\/g, '\\\\')   // Backslash must be first
+      .replace(/"/g, '\\"')      // Double quotes
+      .replace(/\n/g, '\\n')     // Newline
+      .replace(/\r/g, '\\r')     // Carriage return
+      .replace(/\t/g, '\\t')     // Tab
+      .replace(/\0/g, '\\0');    // Null character
   }
   
   /**
@@ -74,6 +126,57 @@ export class RustCodegen {
       }
     });
     
+    return found;
+  }
+  
+  /**
+   * Check if a node contains the ? operator (error propagation in Rust)
+   * This is used to determine if a constructor needs to return Result<Self, String>
+   */
+  private containsQuestionMark(node: ts.Node): boolean {
+    // In our generated Rust code, ? operator comes from:
+    // 1. Call expressions that might fail
+    // 2. Awaits
+    // 3. Other Result-returning operations
+    // We detect this by checking if there are any call expressions
+    // (since all functions return Result in our codegen)
+    
+    let found = false;
+    
+    const visit = (node: ts.Node) => {
+      if (found) return;
+      
+      // Call expressions generate code with ? operator
+      if (ts.isCallExpression(node)) {
+        // Skip console.log and toString() which don't use ?
+        if (ts.isPropertyAccessExpression(node.expression)) {
+          const obj = node.expression.expression;
+          const method = node.expression.name.getText();
+          
+          if ((ts.isIdentifier(obj) && obj.text === 'console' && method === 'log') ||
+              method === 'toString' || method === 'push' || method === 'set') {
+            // These don't use ?, continue searching
+          } else {
+            found = true;
+            return;
+          }
+        } else {
+          // Regular function call - uses ?
+          found = true;
+          return;
+        }
+      }
+      
+      // Await expressions use ?
+      if (ts.isAwaitExpression(node)) {
+        found = true;
+        return;
+      }
+      
+      ts.forEachChild(node, visit);
+    };
+    
+    visit(node);
     return found;
   }
   
@@ -303,7 +406,67 @@ export class RustCodegen {
     // Add generated code
     lines.push(...this.output);
     
-    return lines.join('\n');
+    // Post-process to fix Option unwrapping in if blocks
+    const result = lines.join('\n');
+    return this.postProcessOptionUnwrapping(result);
+  }
+  
+  /**
+   * Post-process generated Rust code to add .unwrap() where needed
+   * 
+   * Pattern: After "if value.is_some() {", any use of "value" as an argument
+   * should be "value.unwrap()"
+   */
+  private postProcessOptionUnwrapping(code: string): string {
+    const codeLines = code.split('\n');
+    const result: string[] = [];
+    
+    for (let i = 0; i < codeLines.length; i++) {
+      let line = codeLines[i];
+      
+      // Check if this line has an is_some() check
+      const isSomeMatch = line.match(/if\s+(\w+)\.is_some\(\)/);
+      if (isSomeMatch) {
+        const varName = isSomeMatch[1];
+        
+        // Add current line
+        result.push(line);
+        i++;
+        
+        // Process lines until we hit the closing brace
+        let braceDepth = 1;
+        while (i < codeLines.length && braceDepth > 0) {
+          line = codeLines[i];
+          
+          // Count braces to track nesting  
+          for (const char of line) {
+            if (char === '{') braceDepth++;
+            if (char === '}') braceDepth--;
+          }
+          
+          // Exit early if we've closed all braces
+          if (braceDepth <= 0) {
+            result.push(line);
+            i++;
+            break;
+          }
+          
+          // Replace uses of the variable as an argument with .unwrap()
+          // Match varName when it's NOT followed by a dot (which would be a method call)
+          // and IS followed by ) or , or ;
+          const regex = new RegExp(`\\b(${varName})(?!\\.)([,;\\)])`, 'g');
+          line = line.replace(regex, `${varName}.unwrap()$2`);
+          
+          result.push(line);
+          i++;
+        }
+        i--; // Back up one since the for loop will increment
+      } else {
+        result.push(line);
+      }
+    }
+    
+    return result.join('\n');
   }
   
   /**
@@ -648,7 +811,7 @@ export class RustCodegen {
       
       for (const decl of declarations) {
         if (ts.isIdentifier(decl.name)) {
-          const name = decl.name.getText();
+          const name = this.escapeIdentifier(decl.name.getText());
           const typeAnnotation = decl.type ? `: ${this.generateType(decl.type)}` : '';
           
           if (decl.initializer) {
@@ -938,7 +1101,8 @@ export class RustCodegen {
         this.generateDestructuringDeclaration(decl, isConst);
       } else {
         // Regular identifier binding
-        const name = decl.name.getText();
+        const rawName = decl.name.getText();
+        const name = this.escapeIdentifier(rawName);
         
         // Check if this arrow function should become a struct with methods
         if (decl.initializer && ts.isArrowFunction(decl.initializer) && 
@@ -948,14 +1112,18 @@ export class RustCodegen {
         }
         
         // Check if this is a recursive arrow function - convert to local function
-        if (decl.initializer && ts.isArrowFunction(decl.initializer) && this.recursiveFunctions.has(name)) {
+        if (decl.initializer && ts.isArrowFunction(decl.initializer) && this.recursiveFunctions.has(rawName)) {
           // Generate as a local function instead of a closure
           this.generateRecursiveFunction(decl.initializer, name);
           continue;  // Skip normal variable generation
         }
         
-        // Make variables mutable if they're not const, OR if they're initialized with a class instance
-        const needsMutable = !isConst || (decl.initializer && ts.isNewExpression(decl.initializer));
+        // Detect if variable will be mutated
+        const willBeMutated = this.willVariableBeMutated(rawName, statement.parent);
+        
+        // Make variables mutable if they're not const, OR if they're initialized with a class instance,
+        // OR if they will be mutated (e.g., arr.push(), map.set())
+        const needsMutable = !isConst || (decl.initializer && ts.isNewExpression(decl.initializer)) || willBeMutated;
         const mutability = needsMutable ? 'mut ' : '';
         const typeAnnotation = decl.type ? `: ${this.generateType(decl.type)}` : '';
         
@@ -993,7 +1161,8 @@ export class RustCodegen {
             const type = this.checker.getTypeAtLocation(decl.initializer);
             const typeStr = this.checker.typeToString(type);
             // Check for T | null | undefined pattern (which becomes Option<T> in Rust)
-            if (typeStr.includes(' | null') || typeStr.includes(' | undefined')) {
+            // Match with or without spaces around the pipe
+            if (typeStr.includes('null') || typeStr.includes('undefined')) {
               this.optionVariables.add(name);
             }
           }
@@ -1325,18 +1494,29 @@ export class RustCodegen {
     const fields = classDecl.members
       .filter(ts.isPropertyDeclaration)
       .map(field => ({
-        name: field.name.getText(),
+        name: this.escapeIdentifier(field.name.getText()),
         type: field.type ? this.generateType(field.type) : 'String',
         initializer: field.initializer ? this.generateExpression(field.initializer) : undefined,
       }));
     
-    // Collect methods
-    const methods = classDecl.members
-      .filter(ts.isMethodDeclaration)
-      .map(method => ({
-        name: method.name.getText(),
-        method,
-      }));
+    // Collect methods (separate static from instance)
+    const methods: Array<{ name: string; method: ts.MethodDeclaration }> = [];
+    const staticMethods: Array<{ name: string; method: ts.MethodDeclaration }> = [];
+    
+    for (const member of classDecl.members) {
+      if (ts.isMethodDeclaration(member)) {
+        const isStatic = member.modifiers?.some(m => m.kind === ts.SyntaxKind.StaticKeyword) || false;
+        const methodInfo = {
+          name: this.escapeIdentifier(member.name.getText()),
+          method: member,
+        };
+        if (isStatic) {
+          staticMethods.push(methodInfo);
+        } else {
+          methods.push(methodInfo);
+        }
+      }
+    }
     
     // Collect constructor
     const constructor = classDecl.members
@@ -1353,7 +1533,7 @@ export class RustCodegen {
       }
     }
     
-    this.classes.set(name, { fields, methods, constructor, baseClass });
+    this.classes.set(name, { fields, methods, staticMethods, constructor, baseClass });
   }
 
   /**
@@ -1396,15 +1576,9 @@ export class RustCodegen {
       
       for (const methodInfo of ownMethods) {
         const method = methodInfo.method;
-        const methodName = method.name.getText();
+        const methodName = this.escapeIdentifier(method.name.getText());
         
-        let modifiesSelf = false;
-        if (method.body) {
-          const bodyText = method.body.getText();
-          // Check for direct field assignments OR mutating method calls (set, insert, push, etc.)
-          modifiesSelf = /this\.\w+\s*=/.test(bodyText) || 
-                        /this\.\w+\.(set|insert|delete|clear|push|pop|splice|shift|unshift)\(/.test(bodyText);
-        }
+        const modifiesSelf = this.methodModifiesSelf(method);
         
         const params = this.generateParameters(method.parameters, true, modifiesSelf);
         const returnType = method.type ? this.generateType(method.type) : '()';
@@ -1454,34 +1628,99 @@ export class RustCodegen {
     if (constructor && constructor.parameters.length > 0) {
       // Constructor has parameters
       const params = this.generateParameters(constructor.parameters, false, false);
-      this.emit(`fn new(${params}) -> Self {`);
+      
+      // Always return Result for consistency - constructors may call other functions
+      const returnType = 'Result<Self, String>';
+      
+      this.emit(`fn new(${params}) -> ${returnType} {`);
       this.indent();
       
-      // Don't generate constructor body - we'll just initialize the struct
-      // Return the struct instance
-      this.emit(`${name} {`);
-      this.indent();
-      
-      for (const field of allFields) {
-        // Check if there's a parameter with the same name as the field
-        const param = constructor.parameters.find(p => ts.isIdentifier(p.name) && p.name.getText() === field.name);
-        if (param) {
-          // Use the parameter value
-          this.emit(`${field.name}: ${field.name},`);
-        } else if (field.initializer) {
-          this.emit(`${field.name}: ${field.initializer},`);
-        } else {
-          this.emit(`${field.name}: ${this.getDefaultValue(field.type)},`);
+      // If constructor has a body with statements, generate them
+      if (constructor.body && constructor.body.statements.length > 0) {
+        // Track which fields are assigned in the constructor body
+        const assignedFields = new Set<string>();
+        
+        // Set flag to indicate we're in constructor body
+        this.inConstructorBody = true;
+        
+        // Generate constructor body statements
+        for (const statement of constructor.body.statements) {
+          // Track field assignments (this.field = value)
+          if (ts.isExpressionStatement(statement) &&
+              ts.isBinaryExpression(statement.expression) &&
+              statement.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+              ts.isPropertyAccessExpression(statement.expression.left) &&
+              statement.expression.left.expression.kind === ts.SyntaxKind.ThisKeyword) {
+            const fieldName = this.escapeIdentifier(statement.expression.left.name.getText());
+            assignedFields.add(fieldName);
+          }
+          this.generateStatement(statement);
         }
+        
+        // Reset flag
+        this.inConstructorBody = false;
+        
+        // Return struct with all fields (assigned ones use their assigned values)
+        const structLiteral = `${name} {`;
+        this.emit(`Ok(${structLiteral}`);
+        this.indent();
+        for (const field of allFields) {
+          if (assignedFields.has(field.name)) {
+            // Field was assigned in constructor body, use local variable
+            this.emit(`${field.name},`);
+          } else {
+            // Check if there's a parameter with the same name
+            const rawFieldName = field.name.startsWith('r#') ? field.name.slice(2) : field.name;
+            const param = constructor.parameters.find(p => {
+              if (!ts.isIdentifier(p.name)) return false;
+              const paramName = p.name.getText();
+              return paramName === rawFieldName || this.escapeIdentifier(paramName) === field.name;
+            });
+            if (param) {
+              const paramName = ts.isIdentifier(param.name) ? this.escapeIdentifier(param.name.getText()) : field.name;
+              this.emit(`${field.name}: ${paramName},`);
+            } else if (field.initializer) {
+              this.emit(`${field.name}: ${field.initializer},`);
+            } else {
+              this.emit(`${field.name}: ${this.getDefaultValue(field.type)},`);
+            }
+          }
+        }
+        this.dedent();
+        this.emit('})');
+      } else {
+        // No constructor body - just initialize the struct
+        this.emit(`Ok(${name} {`);
+        this.indent();
+        
+        for (const field of allFields) {
+          // Check if there's a parameter with the same name as the field
+          // Note: both field.name and parameter names are already escaped, so we need to compare raw names
+          const rawFieldName = field.name.startsWith('r#') ? field.name.slice(2) : field.name;
+          const param = constructor.parameters.find(p => {
+            if (!ts.isIdentifier(p.name)) return false;
+            const paramName = p.name.getText();
+            return paramName === rawFieldName || this.escapeIdentifier(paramName) === field.name;
+          });
+          if (param) {
+            // Use the parameter value (which is also escaped)
+            const paramName = ts.isIdentifier(param.name) ? this.escapeIdentifier(param.name.getText()) : field.name;
+            this.emit(`${field.name}: ${paramName},`);
+          } else if (field.initializer) {
+            this.emit(`${field.name}: ${field.initializer},`);
+          } else {
+            this.emit(`${field.name}: ${this.getDefaultValue(field.type)},`);
+          }
+        }
+        
+        this.dedent();
+        this.emit('})');
       }
-      
-      this.dedent();
-      this.emit('}');
     } else {
-      // No constructor or no parameters - generate default
-      this.emit(`fn new() -> Self {`);
+      // No constructor or no parameters - generate default (also returns Result for consistency)
+      this.emit(`fn new() -> Result<Self, String> {`);
       this.indent();
-      this.emit(`${name} {`);
+      this.emit(`Ok(${name} {`);
       this.indent();
       
       // Initialize all fields (including inherited) with their default values
@@ -1494,15 +1733,21 @@ export class RustCodegen {
       }
       
       this.dedent();
-      this.emit('}');
+      this.emit('})');
     }
     this.dedent();
     this.emit('}');
     this.emit('');
     
-    // Generate all methods (inherited and own)
+    // Generate all instance methods (inherited and own)
     for (const methodInfo of allMethods) {
       this.generateMethodDeclaration(methodInfo.method);
+    }
+    
+    // Generate static methods (without self parameter)
+    const staticMethods = classInfo?.staticMethods || [];
+    for (const methodInfo of staticMethods) {
+      this.generateStaticMethodDeclaration(methodInfo.method);
     }
     
     this.dedent();
@@ -1537,14 +1782,7 @@ export class RustCodegen {
       const method = methodInfo.method;
       const methodName = method.name.getText();
       
-      // Determine if method modifies self
-      let modifiesSelf = false;
-      if (method.body) {
-        const bodyText = method.body.getText();
-        // Check for direct field assignments OR mutating method calls (set, insert, push, etc.)
-        modifiesSelf = /this\.\w+\s*=/.test(bodyText) || 
-                      /this\.\w+\.(set|insert|delete|clear|push|pop|splice|shift|unshift)\(/.test(bodyText);
-      }
+      const modifiesSelf = this.methodModifiesSelf(method);
       
       const params = this.generateParameters(method.parameters, true, modifiesSelf);
       const returnType = method.type ? this.generateType(method.type) : '()';
@@ -1580,13 +1818,7 @@ export class RustCodegen {
       const overridden = classInfo.methods.find(m => m.name === methodName);
       const method = overridden ? overridden.method : baseMethod.method;
       
-      let modifiesSelf = false;
-      if (method.body) {
-        const bodyText = method.body.getText();
-        // Check for direct field assignments OR mutating method calls (set, insert, push, etc.)
-        modifiesSelf = /this\.\w+\s*=/.test(bodyText) || 
-                      /this\.\w+\.(set|insert|delete|clear|push|pop|splice|shift|unshift)\(/.test(bodyText);
-      }
+      const modifiesSelf = this.methodModifiesSelf(method);
       
       const params = this.generateParameters(method.parameters, true, modifiesSelf);
       const returnType = method.type ? this.generateType(method.type) : '()';
@@ -1633,17 +1865,22 @@ export class RustCodegen {
    * Generate method declaration
    * All methods return Result<T, E> for error propagation
    */
+  /**
+   * Determine if a method modifies self
+   * For now, we conservatively assume all methods may need &mut self
+   * This is always safe and avoids the complexity of tracking mutation across method calls
+   * We can optimize later with more sophisticated analysis if needed
+   */
+  private methodModifiesSelf(method: ts.MethodDeclaration): boolean {
+    // Always use &mut self for all instance methods
+    // This is the conservative, safe approach that avoids borrow checker issues
+    return true;
+  }
+  
   private generateMethodDeclaration(method: ts.MethodDeclaration): void {
     const name = method.name.getText();
     
-    // Determine if method modifies self (simple heuristic: check for assignments to this.*)
-    let modifiesSelf = false;
-    if (method.body) {
-      const bodyText = method.body.getText();
-      // Check for direct field assignments OR mutating method calls (set, insert, push, etc.)
-      modifiesSelf = /this\.\w+\s*=/.test(bodyText) || 
-                    /this\.\w+\.(set|insert|delete|clear|push|pop|splice|shift|unshift)\(/.test(bodyText);
-    }
+    const modifiesSelf = this.methodModifiesSelf(method);
     
     const params = this.generateParameters(method.parameters, true, modifiesSelf);
     const returnType = method.type ? this.generateType(method.type) : '()';
@@ -1682,6 +1919,47 @@ export class RustCodegen {
     this.emit('');
   }
   
+  private generateStaticMethodDeclaration(method: ts.MethodDeclaration): void {
+    const name = method.name.getText();
+    
+    // Static methods don't have self parameter
+    const params = this.generateParameters(method.parameters, false, false);
+    const returnType = method.type ? this.generateType(method.type) : '()';
+    // Wrap return type in Result<T, String>
+    const resultType = `Result<${returnType}, String>`;
+    
+    // Check if method is async
+    const isAsync = method.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword);
+    if (isAsync) {
+      this.hasAsync = true;
+    }
+    const asyncModifier = isAsync ? 'async ' : '';
+    
+    this.emit(`${asyncModifier}fn ${name}(${params}) -> ${resultType} {`);
+    this.indent();
+    
+    // Track the return type for this function
+    const previousReturnType = this.currentFunctionReturnType;
+    this.currentFunctionReturnType = returnType;
+    
+    if (method.body) {
+      this.generateBlock(method.body);
+      
+      // Auto-add Ok(()) if method doesn't return on all paths
+      const definitelyReturns = this.allPathsReturn(method.body);
+      if (!definitelyReturns) {
+        this.emit('Ok(())');
+      }
+    }
+    
+    // Restore previous return type
+    this.currentFunctionReturnType = previousReturnType;
+    
+    this.dedent();
+    this.emit('}');
+    this.emit('');
+  }
+
   /**
    * Generate interface declaration (converts to struct)
    */
@@ -1858,6 +2136,7 @@ export class RustCodegen {
     
     if (hasStringValues) {
       // String enum - generate as regular enum
+      this.emit(`#[derive(Clone, Copy, PartialEq, Debug)]`);
       this.emit(`${pubModifier}enum ${name} {`);
       this.indent();
       
@@ -1871,6 +2150,7 @@ export class RustCodegen {
       this.emit('');
     } else {
       // Numeric enum - generate with discriminant values
+      this.emit(`#[derive(Clone, Copy, PartialEq, Debug)]`);
       this.emit(`${pubModifier}enum ${name} {`);
       this.indent();
       
@@ -1897,9 +2177,39 @@ export class RustCodegen {
    * Generate expression statement
    */
   private generateExpressionStatement(statement: ts.ExpressionStatement): void {
-    const expr = this.generateExpression(statement.expression);
-    // Function calls already have ? added, so we just emit with semicolon
-    this.emit(`${expr};`);
+    // Special handling for field assignments in constructor body
+    if (this.inConstructorBody &&
+        ts.isBinaryExpression(statement.expression) &&
+        statement.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+        ts.isPropertyAccessExpression(statement.expression.left) &&
+        statement.expression.left.expression.kind === ts.SyntaxKind.ThisKeyword) {
+      // this.field = value in constructor -> let field = value
+      const fieldName = this.escapeIdentifier(statement.expression.left.name.getText());
+      let value = this.generateExpression(statement.expression.right);
+      
+      // Find the field's type in the class declaration to check if we need to wrap
+      // But don't wrap if the value is already a parameter with a matching ownership type
+      if (this.checker && !ts.isIdentifier(statement.expression.right)) {
+        const symbol = this.checker.getSymbolAtLocation(statement.expression.left);
+        if (symbol && symbol.valueDeclaration && ts.isPropertyDeclaration(symbol.valueDeclaration)) {
+          const fieldType = symbol.valueDeclaration.type;
+          if (fieldType) {
+            value = this.wrapInOwnershipConstructor(value, fieldType);
+          }
+        }
+      }
+      
+      // Check if this variable will be mutated in the constructor
+      const parent = statement.parent;  // Should be the constructor body
+      const willMutate = parent && this.willVariableBeMutated(fieldName, parent);
+      const mutability = willMutate ? 'mut ' : '';
+      
+      this.emit(`let ${mutability}${fieldName} = ${value};`);
+    } else {
+      const expr = this.generateExpression(statement.expression);
+      // Function calls already have ? added, so we just emit with semicolon
+      this.emit(`${expr};`);
+    }
   }
   
   /**
@@ -1914,9 +2224,23 @@ export class RustCodegen {
       // wrap it in Some()
       if (this.currentFunctionReturnType && this.currentFunctionReturnType.startsWith('Option<')) {
         // Check if the expression is already None or Some() or an if-expression with None branch
-        const isAlreadyOption = expr === 'None' || 
+        let isAlreadyOption = expr === 'None' || 
                                expr.startsWith('Some(') ||
                                (expr.includes('if ') && expr.includes(' None'));
+        
+        // If we have a type checker, check if the return expression's type is nullable
+        // If it is, then after wrapping in Result and unwrapping with ?, it will be Option<T>
+        if (!isAlreadyOption && this.checker && statement.expression) {
+          const returnType = this.checker.getTypeAtLocation(statement.expression);
+          const typeStr = this.checker.typeToString(returnType);
+          // Check if the type includes 'null' or 'undefined' (nullable)
+          const isNullable = typeStr.includes('null') || typeStr.includes('undefined');
+          if (isNullable) {
+            // The expression's type is already nullable, so it will become Option<T> in Rust
+            // Don't wrap it again
+            isAlreadyOption = true;
+          }
+        }
         
         if (!isAlreadyOption) {
           expr = `Some(${expr})`;
@@ -1925,7 +2249,7 @@ export class RustCodegen {
       
       this.emit(`return Ok(${expr});`);
     } else {
-      this.emit('return Ok(());');
+      this.emit('return Ok(()));');
     }
   }
   
@@ -1933,15 +2257,27 @@ export class RustCodegen {
    * Generate if statement
    */
   private generateIfStatement(statement: ts.IfStatement): void {
+    // Check if this is a null check for an Option type
+    const unwrappedVar = this.extractUnwrappedVariable(statement.expression);
+    
     const condition = this.generateExpression(statement.expression);
     this.emit(`if ${condition} {`);
     this.indent();
+    
+    // Track that this variable is unwrapped in the then block
+    const previouslyUnwrapped = new Set(this.unwrappedOptions);
+    if (unwrappedVar) {
+      this.unwrappedOptions.add(unwrappedVar);
+    }
     
     if (ts.isBlock(statement.thenStatement)) {
       this.generateBlock(statement.thenStatement);
     } else {
       this.generateStatement(statement.thenStatement);
     }
+    
+    // Restore unwrapped set
+    this.unwrappedOptions = previouslyUnwrapped;
     
     this.dedent();
     
@@ -1960,6 +2296,37 @@ export class RustCodegen {
     } else {
       this.emit('}');
     }
+  }
+  
+  /**
+   * Extract the variable name from a null check expression
+   * Returns the variable name if this is checking an Option variable for Some
+   * Patterns: value !== null, value !== undefined, value.is_some()
+   */
+  private extractUnwrappedVariable(expr: ts.Expression): string | null {
+    // Pattern: value !== null or value !== undefined
+    if (ts.isBinaryExpression(expr)) {
+      if (expr.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken) {
+        const left = expr.left;
+        const right = expr.right;
+        
+        if (ts.isIdentifier(left) && 
+            (right.kind === ts.SyntaxKind.NullKeyword || 
+             (ts.isIdentifier(right) && right.text === 'undefined'))) {
+          const varName = left.text;
+          if (this.optionVariables.has(varName)) {
+            return varName;
+          }
+        }
+      }
+    }
+    
+    // Pattern: value.is_some() (after transformation to Rust)
+    // This would be a CallExpression with PropertyAccessExpression
+    // But since we're checking before transformation, check for TypeScript pattern
+    // In TypeScript: value !== null becomes value.is_some() in Rust
+    
+    return null;
   }
   
   /**
@@ -2382,7 +2749,7 @@ export class RustCodegen {
           isConst: true,  // Parameters are immutable by default
         });
       } else {
-        const name = param.name.getText();
+        const name = this.escapeIdentifier(param.name.getText());
         const type = param.type ? this.generateType(param.type) : 'unknown';
         params.push(`${name}: ${type}`);
       }
@@ -2535,7 +2902,7 @@ export class RustCodegen {
     } else if (ts.isStringLiteral(expr)) {
       // Convert to Rust string literal (with double quotes)
       const text = expr.text; // Gets the string content without quotes
-      return `String::from("${text}")`;  // Always use double quotes for Rust
+      return `String::from("${this.escapeRustString(text)}")`;  // Always use double quotes for Rust
     } else if (expr.kind === ts.SyntaxKind.TrueKeyword) {
       return 'true';
     } else if (expr.kind === ts.SyntaxKind.FalseKeyword) {
@@ -2556,10 +2923,10 @@ export class RustCodegen {
       }
       // If we're in a struct method and this is a field, prefix with self.
       if (this.inStructMethod && this.structFields.has(text)) {
-        return `self.${text}`;
+        return `self.${this.escapeIdentifier(text)}`;
       }
       // If we're in a struct wrapper and this is a method, it's handled in generateCallExpression
-      return text;
+      return this.escapeIdentifier(text);
     } else if (ts.isArrowFunction(expr)) {
       return this.generateArrowFunction(expr);
     } else if (ts.isBinaryExpression(expr)) {
@@ -3138,6 +3505,72 @@ export class RustCodegen {
   }
   
   /**
+   * Check if a variable will be mutated in the current scope
+   * Looks for: assignments, +=, -=, ++, --, .push(), .set(), and any method calls
+   */
+  private willVariableBeMutated(varName: string, scope: ts.Node): boolean {
+    let found = false;
+    
+    const visit = (node: ts.Node) => {
+      if (found) return; // Short circuit
+      
+      // Check for direct assignments: varName = x, varName += x, etc.
+      if (ts.isBinaryExpression(node)) {
+        if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken ||
+            node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken ||
+            node.operatorToken.kind === ts.SyntaxKind.MinusEqualsToken ||
+            node.operatorToken.kind === ts.SyntaxKind.AsteriskEqualsToken ||
+            node.operatorToken.kind === ts.SyntaxKind.SlashEqualsToken) {
+          if (ts.isIdentifier(node.left) && node.left.getText() === varName) {
+            found = true;
+            return;
+          }
+        }
+      }
+      
+      // Check for ++ and --
+      if (ts.isPostfixUnaryExpression(node) || ts.isPrefixUnaryExpression(node)) {
+        if (node.operator === ts.SyntaxKind.PlusPlusToken || 
+            node.operator === ts.SyntaxKind.MinusMinusToken) {
+          if (ts.isIdentifier(node.operand) && node.operand.getText() === varName) {
+            found = true;
+            return;
+          }
+        }
+      }
+      
+      // Check for any method calls on the variable
+      // In Rust, method calls often require &mut self, so we assume all method calls might mutate
+      if (ts.isCallExpression(node)) {
+        if (ts.isPropertyAccessExpression(node.expression)) {
+          const obj = node.expression.expression;
+          
+          if (ts.isIdentifier(obj) && obj.text === varName) {
+            // Any method call on this variable - assume it might need mut
+            found = true;
+            return;
+          }
+          
+          // Also check for this.varName pattern (in constructor body)
+          if (ts.isPropertyAccessExpression(obj) && 
+              obj.expression.kind === ts.SyntaxKind.ThisKeyword &&
+              obj.name.text === varName) {
+            // this.varName.method() - also needs mut
+            found = true;
+            return;
+          }
+        }
+      }
+      
+      ts.forEachChild(node, visit);
+    };
+    
+    visit(scope);
+    return found;
+  }
+
+  
+  /**
    * Analyze how Vec fields are used to determine appropriate initialization size
    * Looks for patterns like:
    * - for (let i = 0; i < N; i++) array[i] = x  →  vec![default; N]
@@ -3285,6 +3718,30 @@ export class RustCodegen {
     const leftIsInteger = ts.isIdentifier(expr.left) && this.integerVariables.has(expr.left.getText());
     const rightIsInteger = ts.isIdentifier(expr.right) && this.integerVariables.has(expr.right.getText());
     
+    // Handle comparisons with null/undefined BEFORE translating operators
+    // This works for any Option<T>, regardless of whether T implements PartialEq
+    const op = expr.operatorToken.getText();
+    
+    // Check if either side is null or undefined (keyword or identifier)
+    const leftIsNull = expr.left.kind === ts.SyntaxKind.NullKeyword || expr.left.kind === ts.SyntaxKind.UndefinedKeyword ||
+                       (ts.isIdentifier(expr.left) && (expr.left.getText() === 'null' || expr.left.getText() === 'undefined'));
+    const rightIsNull = expr.right.kind === ts.SyntaxKind.NullKeyword || expr.right.kind === ts.SyntaxKind.UndefinedKeyword ||
+                        (ts.isIdentifier(expr.right) && (expr.right.getText() === 'null' || expr.right.getText() === 'undefined'));
+    
+    if ((op === '===' || op === '!==' || op === '==' || op === '!=') && 
+        (leftIsNull || rightIsNull) && 
+        ts.isIdentifier(leftIsNull ? expr.right : expr.left)) {
+      const optionExpr = this.generateExpression(leftIsNull ? expr.right : expr.left, useIntegerLiterals, false);
+      
+      if (op === '===' || op === '==') {
+        // x === null, x == null, null === x, null == x -> x.is_none()
+        return `${optionExpr}.is_none()`;
+      } else {
+        // x !== null, x != null, null !== x, null != x -> x.is_some()
+        return `${optionExpr}.is_some()`;
+      }
+    }
+    
     // For assignments, the left-hand side should be an lvalue (no .clone())
     const isAssignment = operator === '=' || operator === '+=' || operator === '-=' || 
                         operator === '*=' || operator === '/=' || operator === '%=';
@@ -3292,7 +3749,6 @@ export class RustCodegen {
     let right = this.generateExpression(expr.right, useIntegerLiterals, false);
     
     // In arithmetic operations with mixed types (one usize, one f64), cast usize to f64
-    const op = expr.operatorToken.getText();
     if ((op === '+' || op === '-' || op === '*' || op === '/' || op === '%') &&
         (leftIsInteger !== rightIsInteger)) {
       // One side is integer, the other is not - cast the integer to f64
@@ -3327,6 +3783,23 @@ export class RustCodegen {
       operator = '!=';
     }
     // Note: &&, ||, and other logical operators are the same in Rust
+    
+    // Handle Option<T> comparisons: if one side is an Option variable and the other is a literal,
+    // wrap the literal in Some()
+    if (operator === '==' || operator === '!=' || operator === '>=' || operator === '<=' || operator === '>' || operator === '<') {
+      const leftIsOption = ts.isIdentifier(expr.left) && this.optionVariables.has(expr.left.getText());
+      const rightIsOption = ts.isIdentifier(expr.right) && this.optionVariables.has(expr.right.getText());
+      const rightIsStringLiteral = ts.isStringLiteral(expr.right);
+      const leftIsStringLiteral = ts.isStringLiteral(expr.left);
+      
+      if (leftIsOption && rightIsStringLiteral) {
+        // left is Option, right is literal - wrap right in Some()
+        right = `Some(${right})`;
+      } else if (rightIsOption && leftIsStringLiteral) {
+        // right is Option, left is literal - wrap left in Some()
+        left = `Some(${left})`;
+      }
+    }
     
     return `${left} ${operator} ${right}`;
   }
@@ -3368,6 +3841,15 @@ export class RustCodegen {
       }
     }
     
+    // Use type checker to determine if this is a string type
+    if (this.checker && ts.isIdentifier(expr)) {
+      const type = this.checker.getTypeAtLocation(expr);
+      const typeStr = this.checker.typeToString(type);
+      if (typeStr === 'string' || typeStr.startsWith('string ') || typeStr.includes('| string') || typeStr.includes('|string')) {
+        return true;
+      }
+    }
+    
     return false;
   }
   
@@ -3376,25 +3858,41 @@ export class RustCodegen {
    */
   private generateStringConcat(expr: ts.BinaryExpression): string {
     // Collect all parts of a chain of string concatenations
-    const parts: string[] = [];
+    const parts: ts.Expression[] = [];
     const collectParts = (e: ts.Expression): void => {
       if (ts.isBinaryExpression(e) && e.operatorToken.getText() === '+') {
         collectParts(e.left);
         collectParts(e.right);
       } else {
-        parts.push(this.generateExpression(e));
+        parts.push(e);
       }
     };
     collectParts(expr);
     
+    // Generate code for each part, unwrapping Options if necessary
+    const generatedParts = parts.map(part => {
+      let code = this.generateExpression(part);
+      
+      // Check if this part is an Option variable that needs unwrapping  
+      if (ts.isIdentifier(part)) {
+        const varName = part.getText();
+        if (this.optionVariables.has(varName)) {
+          // It's a tracked Option<T>, unwrap it
+          code = `${code}.unwrap()`;
+        }
+      }
+      
+      return code;
+    });
+    
     // Use format! for multiple concatenations
-    if (parts.length > 2) {
-      const formatStr = parts.map(() => '{}').join('');
-      return `format!("${formatStr}", ${parts.join(', ')})`;
+    if (generatedParts.length > 2) {
+      const formatStr = generatedParts.map(() => '{}').join('');
+      return `format!("${formatStr}", ${generatedParts.join(', ')})`;
     } else {
       // Simple a + b case - use + with proper borrowing
       // First part is consumed, rest need to be borrowed string slices
-      const [first, ...rest] = parts;
+      const [first, ...rest] = generatedParts;
       let result = first;
       for (const part of rest) {
         // Check if part is a string literal - if so, use the string slice directly
@@ -3498,6 +3996,12 @@ export class RustCodegen {
       }
       
       // String methods
+      if (property === 'charAt') {
+        // str.charAt(index) -> str.chars().nth(index as usize).map(|c| c.to_string()).unwrap_or_default()
+        const args = expr.arguments.map(arg => this.generateExpression(arg));
+        return `${object}.chars().nth((${args[0]}) as usize).map(|c| c.to_string()).unwrap_or_default()`;
+      }
+      
       if (property === 'startsWith' || property === 'starts_with') {
         // str.startsWith(prefix) -> str.starts_with(prefix.as_str())
         const args = expr.arguments.map(arg => {
@@ -3616,12 +4120,20 @@ export class RustCodegen {
         // In Rust, we just pass the Vec directly
         return this.generateExpression(arg.expression);
       } else {
-        const argExpr = this.generateExpression(arg);
+        let argExpr = this.generateExpression(arg);
         
         // If the argument is an identifier that's tracked as an integer variable (usize),
         // cast it to f64 for function calls since GoodScript numbers are f64
         if (ts.isIdentifier(arg) && this.integerVariables.has(arg.getText())) {
-          return `${argExpr} as f64`;
+          argExpr = `${argExpr} as f64`;
+        }
+        
+        // If this is an unwrapped Option variable, add .unwrap()
+        if (ts.isIdentifier(arg)) {
+          const varName = arg.getText();
+          if (this.optionVariables.has(varName) && this.unwrappedOptions.has(varName)) {
+            argExpr = `${argExpr}.unwrap()`;
+          }
         }
         
         return argExpr;
@@ -3825,13 +4337,49 @@ export class RustCodegen {
    * Generate property access
    */
   private generatePropertyAccess(expr: ts.PropertyAccessExpression, isLValue = false): string {
-    const object = this.generateExpression(expr.expression);
-    const property = expr.name.getText();
+    const property = this.escapeIdentifier(expr.name.getText());
+    
+    // In constructor body, this.field refers to local variables, not self.field
+    if (this.inConstructorBody && expr.expression.kind === ts.SyntaxKind.ThisKeyword) {
+      // Just use the field name as a local variable
+      return property;
+    }
+    
+    let object = this.generateExpression(expr.expression);
+    
+    // If the object is an unwrapped Option variable, add .unwrap()
+    if (ts.isIdentifier(expr.expression)) {
+      const varName = expr.expression.getText();
+      if (this.optionVariables.has(varName) && this.unwrappedOptions.has(varName)) {
+        object = `${object}.unwrap()`;
+      }
+    }
     
     // Map JavaScript property names to Rust equivalents
     if (property === 'length') {
       // array.length -> vec.len() as f64 (for comparison with f64 loop variables)
       return `${object}.len() as f64`;
+    }
+    
+    // Check if this is a static method call (ClassName.staticMethod)
+    if (this.checker && ts.isIdentifier(expr.expression)) {
+      const typeName = expr.expression.getText();
+      // Only apply :: for user-defined classes (tracked in this.classes), not built-ins like String
+      if (this.classes.has(typeName)) {
+        return `${object}::${property}`;
+      }
+    }
+    
+    // Check if this is an enum member access (EnumName.Member -> EnumName::Member)
+    if (this.checker && ts.isIdentifier(expr.expression)) {
+      const symbol = this.checker.getSymbolAtLocation(expr.expression);
+      if (symbol) {
+        const declarations = symbol.getDeclarations();
+        if (declarations && declarations.some(d => ts.isEnumDeclaration(d))) {
+          // This is an enum member access - use :: instead of .
+          return `${object}::${property}`;
+        }
+      }
     }
     
     // If we're in a generic function with trait bounds, convert property access to method calls
@@ -3840,16 +4388,24 @@ export class RustCodegen {
       return `${object}.${property}()`;
     }
     
-    // If we're accessing a field on self, we need to clone it for non-Copy types
-    // This is because we can't move out of &self
-    // For now, we'll clone String fields when accessed on self
+    // If we're accessing a field on self (or nested fields like self.current.value),
+    // we need to clone it for non-Copy types like String
+    // This is because we can't move out of &self (or &mut self)
     // But not when it's an lvalue (left-hand side of assignment)
-    if (!isLValue && object === 'self' && this.checker) {
-      const type = this.checker.getTypeAtLocation(expr);
-      const typeStr = this.checker.typeToString(type);
+    if (!isLValue && (object === 'self' || object.startsWith('self.'))) {
+      // Clone String fields - we can detect these by type or by common field names
+      let needsClone = false;
       
-      // Clone String fields accessed on self
-      if (typeStr === 'string') {
+      if (this.checker) {
+        const type = this.checker.getTypeAtLocation(expr);
+        const typeStr = this.checker.typeToString(type);
+        needsClone = typeStr === 'string';
+      } else {
+        // Fallback: clone common String field names
+        needsClone = property === 'value' || property === 'input' || property === 'text' || property === 'name';
+      }
+      
+      if (needsClone) {
         return `${object}.${property}.clone()`;
       }
     }
@@ -4247,11 +4803,8 @@ export class RustCodegen {
    */
   private generateNewExpression(expr: ts.NewExpression): string {
     const type = this.generateExpression(expr.expression);
-    const args = expr.arguments 
-      ? expr.arguments.map(arg => this.generateExpression(arg)).join(', ')
-      : '';
     
-    // Handle common constructors
+    // Handle common constructors that don't return Result
     if (type === 'Map') {
       this.addImport('use std::collections::HashMap;');
       return 'HashMap::new()';
@@ -4263,7 +4816,62 @@ export class RustCodegen {
       return 'Vec::new()';
     }
     
-    return `${type}::new(${args})`;
+    // For class constructors, check parameter types and wrap arguments if needed
+    let args = '';
+    if (expr.arguments && this.checker && ts.isIdentifier(expr.expression)) {
+      const className = expr.expression.text;
+      const classInfo = this.classes.get(className);
+      
+      if (classInfo && classInfo.constructor && classInfo.constructor.parameters.length > 0) {
+        // Wrap arguments based on parameter types
+        const wrappedArgs = expr.arguments.map((arg, index) => {
+          let argCode = this.generateExpression(arg);
+          
+          if (index < classInfo.constructor!.parameters.length) {
+            const param = classInfo.constructor!.parameters[index];
+            const paramType = param.type;
+            
+            // If parameter is Unique<T>, wrap the argument in Box::new()
+            // But only if the argument isn't already a Unique type itself
+            if (paramType && ts.isTypeReferenceNode(paramType) && 
+                paramType.typeName.getText() === 'Unique') {
+              
+              // Check if the argument is a simple identifier that might be a Unique parameter
+              // If so, check the enclosing function's parameters
+              let argAlreadyUnique = argCode.startsWith('Box::new(');
+              
+              if (!argAlreadyUnique && ts.isIdentifier(arg) && this.checker) {
+                // Check if this identifier refers to a Unique parameter
+                const symbol = this.checker.getSymbolAtLocation(arg);
+                if (symbol && symbol.valueDeclaration && ts.isParameter(symbol.valueDeclaration)) {
+                  const paramType = symbol.valueDeclaration.type;
+                  if (paramType && ts.isTypeReferenceNode(paramType) && 
+                      paramType.typeName.getText() === 'Unique') {
+                    argAlreadyUnique = true;
+                  }
+                }
+              }
+              
+              // Only wrap if not already Unique
+              if (!argAlreadyUnique) {
+                argCode = `Box::new(${argCode})`;
+              }
+            }
+          }
+          
+          return argCode;
+        });
+        
+        args = wrappedArgs.join(', ');
+      } else {
+        args = expr.arguments.map(arg => this.generateExpression(arg)).join(', ');
+      }
+    } else if (expr.arguments) {
+      args = expr.arguments.map(arg => this.generateExpression(arg)).join(', ');
+    }
+    
+    // All class constructors return Result<Self, String>, so add ?
+    return `${type}::new(${args})?`;
   }
   
   /**
@@ -4313,7 +4921,7 @@ export class RustCodegen {
     if (ts.isNoSubstitutionTemplateLiteral(expr)) {
       // Simple template literal without substitutions
       const text = expr.text;
-      return `String::from("${text}")`;
+      return `String::from("${this.escapeRustString(text)}")`;
     }
     
     // Template literal with substitutions: `head${expr1}mid${expr2}tail`
@@ -4344,9 +4952,9 @@ export class RustCodegen {
     }
     
     if (expressions.length === 0) {
-      return `String::from("${formatStr}")`;
+      return `String::from("${this.escapeRustString(formatStr)}")`;
     } else {
-      return `format!("${formatStr}", ${expressions.join(', ')})`;
+      return `format!("${this.escapeRustString(formatStr)}", ${expressions.join(', ')})`;
     }
   }
   

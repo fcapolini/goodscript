@@ -1,10 +1,10 @@
 # Phase 3: Rust Code Generation
 
-**Status:** 🚧 In Progress (all core features complete, comprehensive runtime equivalence testing, first successful Rust executable!)
+**Status:** 🚧 In Progress (all core features complete, comprehensive runtime equivalence testing, multiple successful Rust executables!)
 
-**Test Coverage:** 912 tests total (906 passing, 6 skipped)
-- 909 unit/integration tests (906 passing - all core features working!)
-- 3 concrete example tests (all passing - N-Queens successfully compiles and runs!)
+**Test Coverage:** 923 tests total (916 passing, 6 skipped, 1 todo)
+- 914 unit/integration tests (910 passing - all core features working!)
+- 9 concrete example tests (all passing - N-Queens and JSON parser successfully compile and run!)
 
 ## Current Implementation Status
 
@@ -139,6 +139,23 @@
   - Compiles to both JavaScript and Rust
   - Executes both versions and compares runtime output
   - ✅ **N-Queens solver** - First successful Rust executable! Compiles cleanly, produces correct output
+  - ✅ **JSON parser** - Complex example with recursion, ownership, and nullability - compiles and runs correctly!
+- **Smart Constructor Code Generation** - Intelligent handling of constructor patterns
+  - All constructors return `Result<Self, String>` for consistency with error propagation
+  - Automatic `Box::new()` wrapping when assigning to `Unique<T>` fields
+  - Detects `Unique<T>` parameters to avoid double-wrapping when passing arguments
+  - Constructor body assignments check field types and wrap values appropriately
+  - Proper `?` operator placement on constructor calls
+- **Variable Mutability Detection** - Conservative but safe approach
+  - Variables with any method calls marked as `mut` (method calls may require `&mut self`)
+  - Detects `this.field.method()` pattern in constructor bodies
+  - Arrays/collections with `.push()`, `.set()`, etc. marked as `mut`
+  - Variables with assignments, `+=`, `++`, etc. marked as `mut`
+- **Option Type Unwrapping** - Automatic and safe
+  - Tracks variables in scope after null checks (`if value !== null`)
+  - Automatically adds `.unwrap()` when used as function arguments
+  - Automatically adds `.unwrap()` before property access (e.g., `result.kind`)
+  - Scope-aware tracking prevents unwrapping outside null-checked blocks
 
 ### 📋 Remaining Work
 
