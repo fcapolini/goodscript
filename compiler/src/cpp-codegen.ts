@@ -346,6 +346,25 @@ export class CppCodegen {
   }
   
   /**
+   * Check if an arrow function is recursive (calls itself)
+   */
+  private isRecursiveFunction(func: ts.ArrowFunction, varName: string): boolean {
+    let isRecursive = false;
+    
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node)) {
+        if (ts.isIdentifier(node.expression) && node.expression.getText() === varName) {
+          isRecursive = true;
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    
+    visit(func);
+    return isRecursive;
+  }
+  
+  /**
    * Generate variable declaration
    */
   private generateVariableStatement(statement: ts.VariableStatement): void {
@@ -360,6 +379,31 @@ export class CppCodegen {
       
       const name = this.escapeIdentifier(decl.name.getText());
       const type = decl.type ? this.generateType(decl.type) : 'auto';
+      
+      // Check if this is a recursive arrow function
+      if (decl.initializer && ts.isArrowFunction(decl.initializer)) {
+        const func = decl.initializer;
+        if (this.isRecursiveFunction(func, decl.name.getText())) {
+          // Generate as std::function with forward declaration
+          const params = this.generateParameters(func.parameters);
+          const returnType = func.type ? this.generateType(func.type) : 'auto';
+          
+          // Build function signature
+          const paramTypes = func.parameters.map(p => {
+            return p.type ? this.generateType(p.type) : 'auto';
+          }).join(', ');
+          
+          this.addInclude('<functional>');
+          
+          // Forward declare as std::function
+          this.emit(`std::function<${returnType}(${paramTypes})> ${name};`);
+          
+          // Generate the lambda and assign it
+          const value = this.generateArrowFunction(func);
+          this.emit(`${name} = ${value};`);
+          continue;
+        }
+      }
       
       // In C++, skip const for object types to avoid issues with lambdas and object mutation
       // For primitives (double, bool, std::string literals), keep const
@@ -677,9 +721,103 @@ export class CppCodegen {
   }
   
   /**
+   * Check if a for loop is a simple array initialization pattern:
+   * for (let i = 0; i < limit; i++) array[i] = value;
+   * Returns {arrayName, limit, value} if it matches, null otherwise
+   */
+  private detectArrayInitPattern(statement: ts.ForStatement): {arrayName: string, limit: string, value: string} | null {
+    // Check initializer: let i = 0
+    if (!statement.initializer || !ts.isVariableDeclarationList(statement.initializer)) {
+      return null;
+    }
+    
+    const decl = statement.initializer.declarations[0];
+    if (!ts.isIdentifier(decl.name) || !decl.initializer || !ts.isNumericLiteral(decl.initializer)) {
+      return null;
+    }
+    
+    const loopVar = decl.name.getText();
+    const initValue = decl.initializer.getText();
+    
+    if (initValue !== '0') {
+      return null;
+    }
+    
+    // Check condition: i < limit
+    if (!statement.condition || !ts.isBinaryExpression(statement.condition)) {
+      return null;
+    }
+    
+    if (!ts.isIdentifier(statement.condition.left) || statement.condition.left.getText() !== loopVar) {
+      return null;
+    }
+    
+    if (statement.condition.operatorToken.kind !== ts.SyntaxKind.LessThanToken) {
+      return null;
+    }
+    
+    const limit = this.generateExpression(statement.condition.right);
+    
+    // Check increment: i++
+    if (!statement.incrementor || !ts.isPostfixUnaryExpression(statement.incrementor)) {
+      return null;
+    }
+    
+    if (!ts.isIdentifier(statement.incrementor.operand) || statement.incrementor.operand.getText() !== loopVar) {
+      return null;
+    }
+    
+    // Check body: single statement array[i] = value
+    let bodyStmt: ts.Statement | undefined;
+    
+    if (ts.isBlock(statement.statement)) {
+      if (statement.statement.statements.length !== 1) {
+        return null;
+      }
+      bodyStmt = statement.statement.statements[0];
+    } else {
+      bodyStmt = statement.statement;
+    }
+    
+    if (!ts.isExpressionStatement(bodyStmt)) {
+      return null;
+    }
+    
+    const expr = bodyStmt.expression;
+    if (!ts.isBinaryExpression(expr) || expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken) {
+      return null;
+    }
+    
+    // Check left side: array[i]
+    if (!ts.isElementAccessExpression(expr.left)) {
+      return null;
+    }
+    
+    const arrayName = this.generateExpression(expr.left.expression);
+    const indexExpr = expr.left.argumentExpression;
+    
+    if (!ts.isIdentifier(indexExpr) || indexExpr.getText() !== loopVar) {
+      return null;
+    }
+    
+    // Get the value being assigned
+    const value = this.generateExpression(expr.right);
+    
+    return { arrayName, limit, value };
+  }
+  
+  /**
    * Generate for statement
    */
   private generateForStatement(statement: ts.ForStatement): void {
+    // Check if this is an array initialization pattern
+    const initPattern = this.detectArrayInitPattern(statement);
+    if (initPattern) {
+      // Generate as array.resize(limit, value) or array.assign(limit, value)
+      this.emit(`${initPattern.arrayName}.assign(${initPattern.limit}, ${initPattern.value});`);
+      return;
+    }
+    
     let init = '';
     let condition = '';
     let increment = '';
@@ -922,16 +1060,35 @@ export class CppCodegen {
         const lambda = expr.arguments[0];
         const lambdaStr = this.generateExpression(lambda);
         this.addInclude('<algorithm>');
-        // Transform the array using std::transform
-        return `[&]() { std::vector<std::string> __result; std::transform(${object}.begin(), ${object}.end(), std::back_inserter(__result), ${lambdaStr}); return __result; }()`;
+        
+        // Check if object is a simple identifier or a complex expression
+        // If complex (like a method call), we need to store it in a variable first
+        const objectExpr = expr.expression.expression;
+        const isComplexObject = !ts.isIdentifier(objectExpr) || object.includes('(');
+        
+        if (isComplexObject) {
+          // Store the source in a variable to avoid creating it multiple times
+          return `[&]() { auto __src = ${object}; std::vector<std::string> __result; std::transform(__src.begin(), __src.end(), std::back_inserter(__result), ${lambdaStr}); return __result; }()`;
+        } else {
+          // Simple case - object is an identifier
+          return `[&]() { std::vector<std::string> __result; std::transform(${object}.begin(), ${object}.end(), std::back_inserter(__result), ${lambdaStr}); return __result; }()`;
+        }
       }
       
       if (methodName === 'join') {
         // array.join(separator)
         const separator = expr.arguments.length > 0 ? this.generateExpression(expr.arguments[0]) : '\" \"';
         this.addInclude('<algorithm>');
-        // Join array elements with separator
-        return `[&]() { std::string __result; for (size_t __i = 0; __i < ${object}.size(); __i++) { if (__i > 0) __result += ${separator}; __result += ${object}[__i]; } return __result; }()`;
+        
+        // Similar fix for join - store complex objects first
+        const objectExpr = expr.expression.expression;
+        const isComplexObject = !ts.isIdentifier(objectExpr) || object.includes('(');
+        
+        if (isComplexObject) {
+          return `[&]() { auto __src = ${object}; std::string __result; for (size_t __i = 0; __i < __src.size(); __i++) { if (__i > 0) __result += ${separator}; __result += __src[__i]; } return __result; }()`;
+        } else {
+          return `[&]() { std::string __result; for (size_t __i = 0; __i < ${object}.size(); __i++) { if (__i > 0) __result += ${separator}; __result += ${object}[__i]; } return __result; }()`;
+        }
       }
       
       // String methods
@@ -1000,9 +1157,24 @@ export class CppCodegen {
         return '{}';
       }
       
-      // Array constructor without type arguments
+      // Array constructor - check for type arguments
       if (className === 'Array') {
-        return 'std::vector<double>()';
+        let elementType = 'double';  // default
+        
+        // Check if new Array<T>() has type arguments
+        if (expr.typeArguments && expr.typeArguments.length > 0) {
+          elementType = this.generateType(expr.typeArguments[0]);
+        }
+        
+        // If args are provided, use them for size
+        if (args) {
+          return `std::vector<${elementType}>(${args})`;
+        }
+        
+        // Empty array - NOTE: In JS, empty arrays auto-expand on index assignment
+        // In C++, we need explicit sizing. For now, return empty vector.
+        // The user will need to call resize() or use push_back()
+        return `std::vector<${elementType}>()`;
       }
       
       const escapedName = this.escapeIdentifier(className);
@@ -1086,27 +1258,61 @@ export class CppCodegen {
     const params = this.generateParameters(func.parameters);
     const returnType = func.type ? this.generateType(func.type) : 'auto';
     
-    // Generate lambda
-    let body = '';
-    if (ts.isBlock(func.body)) {
-      // Block body - generate statements
+    // Generate lambda - check if it's simple enough for single-line
+    if (!ts.isBlock(func.body)) {
+      // Expression body - single line is fine
+      const expr = this.generateExpression(func.body);
+      return `[&](${params}) -> ${returnType} { return ${expr}; }`;
+    }
+    
+    // Block body - check if it's simple (1-2 statements)
+    const stmtCount = func.body.statements.length;
+    const isSimple = stmtCount <= 1;
+    
+    if (isSimple) {
+      // Generate inline for simple lambdas
       const statements: string[] = [];
       for (const stmt of func.body.statements) {
-        // Temporarily generate to a buffer
         const oldOutput = this.output;
         this.output = [];
         this.generateStatement(stmt);
         statements.push(...this.output);
         this.output = oldOutput;
       }
-      body = statements.join(' ');
-    } else {
-      // Expression body
-      const expr = this.generateExpression(func.body);
-      body = `return ${expr};`;
+      const body = statements.map(s => s.trim()).join(' ');
+      return `[&](${params}) -> ${returnType} { ${body} }`;
     }
     
-    return `[&](${params}) -> ${returnType} { ${body} }`;
+    // Complex lambda - generate multiline with IIFE pattern
+    // Use immediately-invoked lambda to properly format
+    const lines: string[] = [];
+    lines.push(`[&](${params}) -> ${returnType} {`);
+    
+    // Temporarily increase indent and generate body
+    const oldOutput = this.output;
+    const oldIndent = this.indentLevel;
+    this.output = [];
+    this.indentLevel = 0;
+    
+    for (const stmt of func.body.statements) {
+      this.generateStatement(stmt);
+    }
+    
+    // Capture generated statements and restore state
+    const bodyLines = this.output;
+    this.output = oldOutput;
+    this.indentLevel = oldIndent;
+    
+    // Add indented body
+    for (const line of bodyLines) {
+      lines.push('  ' + line);
+    }
+    
+    lines.push('}');
+    
+    // Join with newlines and return as inline block
+    // For now, keep it inline with spaces since we're in expression context
+    return lines.join('\n');
   }
   
   /**
