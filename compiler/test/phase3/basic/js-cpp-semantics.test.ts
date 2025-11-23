@@ -128,13 +128,13 @@ describe('Phase 3: JS/C++ Semantic Equivalence', () => {
     
     // JavaScript: All fields must be present for non-optional members
     // C++ (our implementation): Same - required fields are non-optional types
-    //   - host is std::string (must be initialized)
+    //   - host is gs::String (must be initialized)
     //   - port is double (must be initialized)
     
-    expect(cpp).toContain('std::string host');
+    expect(cpp).toContain('gs::String host');
     expect(cpp).toContain('double port');
     
-    // Note: The generated code includes <optional> for helper functions,
+    // Note: The generated code includes gs_runtime.hpp for helper classes,
     // but the class fields themselves are not optional types
   });
 

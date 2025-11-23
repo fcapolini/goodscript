@@ -80,7 +80,7 @@ describe('Phase 3: Ownership - share<T>', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('std::vector<gs::shared_ptr<std::string>>');
+    expect(cpp).toContain('gs::Array<gs::shared_ptr<gs::String>>');
   });
 });
 
@@ -128,8 +128,7 @@ describe('Phase 3: Collection Types', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('#include <unordered_map>');
-    expect(cpp).toContain('std::unordered_map<std::string, double>');
+    expect(cpp).toContain('gs::Map<gs::String, double>');
   });
   
   it('should generate std::unordered_set for Set<T>', () => {
@@ -138,8 +137,7 @@ describe('Phase 3: Collection Types', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('#include <unordered_set>');
-    expect(cpp).toContain('std::unordered_set<double>');
+    expect(cpp).toContain('gs::Set<double>');
   });
   
   it('should handle Map with share<T> values', () => {
@@ -152,6 +150,6 @@ describe('Phase 3: Collection Types', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('std::unordered_map<std::string, gs::shared_ptr<Data>>');
+    expect(cpp).toContain('gs::Map<gs::String, gs::shared_ptr<Data>>');
   });
 });

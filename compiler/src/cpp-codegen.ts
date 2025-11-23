@@ -476,16 +476,23 @@ export class CppCodegen {
   private buildOutput(): string {
     const lines: string[] = [];
     
-    // Add standard includes
-    lines.push('#include <memory>');
-    lines.push('#include <string>');
-    lines.push('#include <optional>');
-    lines.push('#include <iostream>');
-    lines.push('#include <sstream>');  // For JSON.stringify
+    // Add GoodScript runtime (provides all standard types)
+    lines.push('#include "gs_runtime.hpp"');
     
-    // Add custom includes
+    // Add custom includes (skip ones provided by gs_runtime.hpp)
     if (this.includes.size > 0) {
       for (const include of Array.from(this.includes).sort()) {
+        // Skip includes now provided by gs_runtime.hpp
+        if (include === '<memory>' || 
+            include === '<string>' || 
+            include === '<vector>' ||
+            include === '<unordered_map>' ||
+            include === '<unordered_set>' ||
+            include === '<optional>' ||
+            include === '<iostream>' ||
+            include === '<sstream>') {
+          continue;
+        }
         lines.push(`#include ${include}`);
       }
     }
@@ -1038,7 +1045,7 @@ export class CppCodegen {
     } else if (type.kind === ts.SyntaxKind.NumberKeyword) {
       return 'double';  // Default to double for numbers
     } else if (type.kind === ts.SyntaxKind.StringKeyword) {
-      return 'std::string';
+      return 'gs::String';
     } else if (type.kind === ts.SyntaxKind.BooleanKeyword) {
       return 'bool';
     } else if (type.kind === ts.SyntaxKind.VoidKeyword) {
@@ -1048,9 +1055,9 @@ export class CppCodegen {
     } else if (type.kind === ts.SyntaxKind.UndefinedKeyword) {
       return 'std::nullopt_t';
     } else if (ts.isArrayTypeNode(type)) {
-      this.addInclude('<vector>');
+      // No need to add include - gs_runtime.hpp provides it
       const elementType = this.generateType(type.elementType);
-      return `std::vector<${elementType}>`;
+      return `gs::Array<${elementType}>`;
     } else if (ts.isTupleTypeNode(type)) {
       // Handle tuple types: [T, U] -> std::pair<T, U> (for 2 elements)
       // or std::tuple<T, U, V, ...> (for more elements)
@@ -1117,14 +1124,14 @@ export class CppCodegen {
       const innerType = this.generateType(type.typeArguments[0]);
       return `gs::weak_ptr<${innerType}>`;
     } else if (typeName === 'Map' && type.typeArguments && type.typeArguments.length === 2) {
-      this.addInclude('<unordered_map>');
+      // No need to add include - gs_runtime.hpp provides it
       const keyType = this.generateType(type.typeArguments[0]);
       const valueType = this.generateType(type.typeArguments[1]);
-      return `std::unordered_map<${keyType}, ${valueType}>`;
+      return `gs::Map<${keyType}, ${valueType}>`;
     } else if (typeName === 'Set' && type.typeArguments && type.typeArguments.length > 0) {
-      this.addInclude('<unordered_set>');
+      // No need to add include - gs_runtime.hpp provides it
       const elementType = this.generateType(type.typeArguments[0]);
-      return `std::unordered_set<${elementType}>`;
+      return `gs::Set<${elementType}>`;
     } else if (typeName === 'Promise' && type.typeArguments && type.typeArguments.length > 0) {
       // For now, map Promise<T> to the underlying type
       // TODO: Implement proper async/await with C++20 coroutines
@@ -1651,7 +1658,8 @@ export class CppCodegen {
         .replace(/\n/g, '\\n')
         .replace(/\r/g, '\\r')
         .replace(/\t/g, '\\t');
-      return `"${escaped}"`;
+      // Wrap in gs::String constructor
+      return `gs::String("${escaped}")`;
     } else if (ts.isTemplateExpression(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) {
       return this.generateTemplateLiteral(expr);
     } else if (expr.kind === ts.SyntaxKind.TrueKeyword) {
@@ -2465,8 +2473,8 @@ export class CppCodegen {
     const allStrings = expr.elements.every(el => ts.isStringLiteral(el));
     
     if (allStrings && expr.elements.length > 0) {
-      // Explicitly create a vector of strings
-      return `std::vector<std::string>{${elements}}`;
+      // Explicitly create a gs::Array of gs::Strings
+      return `gs::Array<gs::String>{${elements}}`;
     }
     
     return `{${elements}}`;

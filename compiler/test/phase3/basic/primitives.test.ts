@@ -35,7 +35,7 @@ describe('Phase 3: Primitive Types', () => {
   it('should generate string variable', () => {
     const cpp = compileToCpp(`const name: string = "Alice";`);
     
-    expect(cpp).toContain('const std::string name = "Alice";');
+    expect(cpp).toContain('const gs::String name = gs::String("Alice")');
   });
   
   it('should generate boolean variable', () => {
@@ -47,10 +47,8 @@ describe('Phase 3: Primitive Types', () => {
   it('should include standard headers', () => {
     const cpp = compileToCpp(`const x: number = 1;`);
     
-    expect(cpp).toContain('#include <memory>');
-    expect(cpp).toContain('#include <string>');
-    expect(cpp).toContain('#include <optional>');
-    expect(cpp).toContain('#include <iostream>');
+    // Runtime library provides all necessary headers
+    expect(cpp).toContain('#include "gs_runtime.hpp"');
   });
   
   it('should escape C++ keywords', () => {
@@ -195,8 +193,7 @@ describe('Phase 3: Arrays', () => {
     const source = `const numbers: number[] = [1, 2, 3];`;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('#include <vector>');
-    expect(cpp).toContain('std::vector<double>');
+    expect(cpp).toContain('gs::Array<double>');
   });
   
   it('should generate array literal', () => {

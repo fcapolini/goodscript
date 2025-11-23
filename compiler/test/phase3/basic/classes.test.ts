@@ -95,7 +95,7 @@ describe('Phase 3: Classes', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('std::string template_;');
+    expect(cpp).toContain('gs::String template_;');
   });
 });
 
@@ -126,7 +126,7 @@ describe('Phase 3: Interfaces', () => {
     const cpp = compileToCpp(source);
     
     expect(cpp).toContain('double id;');
-    expect(cpp).toContain('std::string name;');
+    expect(cpp).toContain('gs::String name;');
     expect(cpp).toContain('bool active;');
   });
 });
