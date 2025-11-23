@@ -55,6 +55,9 @@ export class CppCodegen {
   // Track current method return type for smart pointer wrapping
   private currentMethodReturnType?: string;
   
+  // Track Map/Array element types by variable name (for smart pointer wrapping)
+  private containerElementTypes = new Map<string, { elementType: string, isShared: boolean }>();
+  
   constructor(checker?: ts.TypeChecker) {
     this.checker = checker;
   }
@@ -116,6 +119,7 @@ export class CppCodegen {
     this.output = [];
     this.includes = new Set();
     this.uniquePtrVars = new Set();
+    this.containerElementTypes = new Map();
   }
   
   /**
@@ -1206,8 +1210,10 @@ export class CppCodegen {
           const symbol = this.checker.getSymbolAtLocation(objExpr.name);
           if (symbol?.valueDeclaration) {
             const typeText = this.getTypeTextFromSymbol(symbol);
-            if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<') ||
-                typeText?.startsWith('own<') || typeText?.startsWith('std::unique_ptr<')) {
+            // Check if it's a smart pointer but NOT an array (arrays use .)
+            if (typeText && !typeText.includes('[]') &&
+                (typeText.startsWith('share<') || typeText.startsWith('std::shared_ptr<') ||
+                 typeText.startsWith('own<') || typeText.startsWith('std::unique_ptr<'))) {
               accessor = '->';
             }
           }
@@ -1216,8 +1222,10 @@ export class CppCodegen {
           const symbol = this.checker.getSymbolAtLocation(objExpr);
           if (symbol?.valueDeclaration) {
             const typeText = this.getTypeTextFromSymbol(symbol);
-            if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<') ||
-                typeText?.startsWith('own<') || typeText?.startsWith('std::unique_ptr<')) {
+            // Check if it's a smart pointer but NOT an array (arrays use .)
+            if (typeText && !typeText.includes('[]') &&
+                (typeText.startsWith('share<') || typeText.startsWith('std::shared_ptr<') ||
+                 typeText.startsWith('own<') || typeText.startsWith('std::unique_ptr<'))) {
               accessor = '->';
             }
           }
@@ -1231,10 +1239,89 @@ export class CppCodegen {
       
       // Map method
       if (methodName === 'set') {
-        // map.set(key, value) -> map[key] = value or map.insert({key, value})
+        // map.set(key, value) -> map.insert() or map.emplace() depending on value type
         const argArray = expr.arguments.map(arg => this.generateExpression(arg));
         if (argArray.length === 2) {
-          return `${object}${accessor}insert({${argArray[0]}, ${argArray[1]}})`;
+          // Check if the map has smart pointer values
+          const objExpr = expr.expression.expression;
+          let hasSmartPtrValue = false;
+          let valueElementType = '';
+          let isShared = false;
+          
+          if (this.checker) {
+            // Get type from AST to preserve ownership annotations (TypeChecker erases type aliases)
+            const symbol = this.checker.getSymbolAtLocation(objExpr);
+            if (symbol?.valueDeclaration && 'type' in symbol.valueDeclaration) {
+              const typeNode = (symbol.valueDeclaration as any).type as ts.TypeNode | undefined;
+              if (typeNode) {
+                const typeText = typeNode.getText();
+                // Check for Map<K, share<V>> or Map<K, own<V>> patterns in AST text
+                const shareMatch = typeText.match(/Map<[^,]+,\s*share<([^>]+)>>/);
+                const ownMatch = typeText.match(/Map<[^,]+,\s*own<([^>]+)>>/);
+                
+                if (shareMatch) {
+                  hasSmartPtrValue = true;
+                  valueElementType = shareMatch[1];
+                  isShared = true;
+                } else if (ownMatch) {
+                  hasSmartPtrValue = true;
+                  valueElementType = ownMatch[1];
+                  isShared = false;
+                }
+              }
+            }
+          }
+          
+          if (hasSmartPtrValue && valueElementType) {
+            // For smart pointer values, use emplace with make_unique/make_shared
+            let valueArg = argArray[1];
+            
+            // Check if value is already wrapped
+            if (!valueArg.includes('std::make_unique') && !valueArg.includes('std::make_shared') && !valueArg.includes('std::move')) {
+              // Value needs to be wrapped
+              const wrapperFn = isShared ? 'std::make_shared' : 'std::make_unique';
+              
+              // Check if the argument is from a method returning optional
+              // If so, we need to unwrap it first with *value or value.value()
+              let needsUnwrap = false;
+              
+              if (expr.arguments.length >= 2) {
+                const valueArgExpr = expr.arguments[1];
+                
+                // Direct call expression
+                if (ts.isCallExpression(valueArgExpr)) {
+                  const returnType = this.getMethodReturnTypeFromSource(valueArgExpr);
+                  if (returnType && (returnType.includes('| null') || returnType.includes('| undefined'))) {
+                    needsUnwrap = true;
+                  }
+                }
+                // Identifier that was initialized from a call returning optional
+                else if (ts.isIdentifier(valueArgExpr) && this.checker) {
+                  const symbol = this.checker.getSymbolAtLocation(valueArgExpr);
+                  if (symbol?.valueDeclaration && ts.isVariableDeclaration(symbol.valueDeclaration)) {
+                    const init = symbol.valueDeclaration.initializer;
+                    if (init && ts.isCallExpression(init)) {
+                      const returnType = this.getMethodReturnTypeFromSource(init);
+                      if (returnType && (returnType.includes('| null') || returnType.includes('| undefined'))) {
+                        needsUnwrap = true;
+                      }
+                    }
+                  }
+                }
+              }
+              
+              if (needsUnwrap) {
+                valueArg = `*${valueArg}`;
+              }
+              
+              valueArg = `${wrapperFn}<${valueElementType}>(${valueArg})`;
+            }
+            
+            return `${object}${accessor}emplace(${argArray[0]}, ${valueArg})`;
+          } else {
+            // For other types, use insert
+            return `${object}${accessor}insert({${argArray[0]}, ${argArray[1]}})`;
+          }
         }
       }
       
@@ -1253,7 +1340,83 @@ export class CppCodegen {
       
       // Array methods
       if (methodName === 'push') {
-        return `${object}${accessor}push_back(${args})`;
+        // Check if array has smart pointer elements
+        const objExpr = expr.expression.expression;
+        let hasSmartPtrElement = false;
+        let elementType = '';
+        let isShared = false;
+        
+        if (this.checker && ts.isIdentifier(objExpr)) {
+          // Get type from AST to preserve ownership annotations
+          const symbol = this.checker.getSymbolAtLocation(objExpr);
+          if (symbol?.valueDeclaration && 'type' in symbol.valueDeclaration) {
+            const typeNode = (symbol.valueDeclaration as any).type as ts.TypeNode | undefined;
+            if (typeNode) {
+              const typeText = typeNode.getText();
+              // Check for own<T>[] or share<T>[] patterns
+              const ownMatch = typeText.match(/own<([^>]+)>\[\]/);
+              const shareMatch = typeText.match(/share<([^>]+)>\[\]/);
+              
+              if (ownMatch) {
+                hasSmartPtrElement = true;
+                elementType = ownMatch[1];
+                isShared = false;
+              } else if (shareMatch) {
+                hasSmartPtrElement = true;
+                elementType = shareMatch[1];
+                isShared = true;
+              }
+            }
+          }
+        }
+        
+        if (hasSmartPtrElement && elementType) {
+          // Wrap the argument in make_unique/make_shared if needed
+          const argArray = expr.arguments.map(arg => this.generateExpression(arg));
+          let valueArg = argArray[0];
+          
+          if (!valueArg.includes('std::make_unique') && !valueArg.includes('std::make_shared') && !valueArg.includes('std::move')) {
+            const wrapperFn = isShared ? 'std::make_shared' : 'std::make_unique';
+            
+            // Check if the argument is from a method returning optional
+            let needsUnwrap = false;
+            
+            if (expr.arguments.length >= 1) {
+              const valueArgExpr = expr.arguments[0];
+              
+              // Direct call expression
+              if (ts.isCallExpression(valueArgExpr)) {
+                const returnType = this.getMethodReturnTypeFromSource(valueArgExpr);
+                if (returnType && (returnType.includes('| null') || returnType.includes('| undefined'))) {
+                  needsUnwrap = true;
+                }
+              }
+              // Identifier that was initialized from a call returning optional
+              else if (ts.isIdentifier(valueArgExpr) && this.checker) {
+                const symbol = this.checker.getSymbolAtLocation(valueArgExpr);
+                if (symbol?.valueDeclaration && ts.isVariableDeclaration(symbol.valueDeclaration)) {
+                  const init = symbol.valueDeclaration.initializer;
+                  if (init && ts.isCallExpression(init)) {
+                    const returnType = this.getMethodReturnTypeFromSource(init);
+                    if (returnType && (returnType.includes('| null') || returnType.includes('| undefined'))) {
+                      needsUnwrap = true;
+                    }
+                  }
+                }
+              }
+            }
+            
+            if (needsUnwrap) {
+              valueArg = `*${valueArg}`;
+            }
+            
+            valueArg = `${wrapperFn}<${elementType}>(${valueArg})`;
+          }
+          
+          return `${object}${accessor}push_back(${valueArg})`;
+        } else {
+          return `${object}${accessor}push_back(${args})`;
+        }
       }
       
       if (methodName === 'slice') {
@@ -1382,7 +1545,7 @@ export class CppCodegen {
         }
       }
     }
-    // Check if it's a direct identifier that's a shared_ptr or unique_ptr
+    // Check if it's a direct identifier that's a shared_ptr or unique_ptr or optional
     else if (this.checker && ts.isIdentifier(expr.expression)) {
       const symbol = this.checker.getSymbolAtLocation(expr.expression);
       if (symbol?.valueDeclaration) {
@@ -1390,6 +1553,20 @@ export class CppCodegen {
         if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<') ||
             typeText?.startsWith('own<') || typeText?.startsWith('std::unique_ptr<')) {
           accessor = '->';
+        }
+        // Check if it's an optional type (T | null) - needs -> in C++
+        else if (typeText && (typeText.includes('| null') || typeText.includes('| undefined'))) {
+          accessor = '->';
+        }
+        // Also check if variable was initialized from a method returning optional
+        else if (ts.isVariableDeclaration(symbol.valueDeclaration)) {
+          const init = symbol.valueDeclaration.initializer;
+          if (init && ts.isCallExpression(init)) {
+            const returnType = this.getMethodReturnTypeFromSource(init);
+            if (returnType && (returnType.includes('| null') || returnType.includes('| undefined'))) {
+              accessor = '->';
+            }
+          }
         }
       }
     }
@@ -1435,7 +1612,8 @@ export class CppCodegen {
    * Generate new expression
    */
   private generateNewExpression(expr: ts.NewExpression): string {
-    const args = expr.arguments?.map(arg => this.generateExpression(arg)).join(', ') || '';
+    const rawArgs = expr.arguments?.map(arg => this.generateExpression(arg)) || [];
+    let args = rawArgs.join(', ');
     
     // Handle special constructors
     if (ts.isIdentifier(expr.expression)) {
@@ -1443,6 +1621,12 @@ export class CppCodegen {
       
       // Map constructor
       if (className === 'Map') {
+        // Check if we have type arguments to generate the full type
+        if (expr.typeArguments && expr.typeArguments.length === 2) {
+          const keyType = this.generateType(expr.typeArguments[0]);
+          const valueType = this.generateType(expr.typeArguments[1]);
+          return `std::unordered_map<${keyType}, ${valueType}>{}`;
+        }
         // new Map() -> {} (default initialization)
         return '{}';
       }
@@ -1470,6 +1654,55 @@ export class CppCodegen {
         // In C++, we need explicit sizing. For now, return empty vector.
         // The user will need to call resize() or use push_back()
         return `std::vector<${elementType}>()`;
+      }
+      
+      // For user-defined classes, check if constructor parameters need smart pointer wrapping
+      if (this.checker && expr.arguments) {
+        const symbol = this.checker.getSymbolAtLocation(expr.expression);
+        if (symbol) {
+          const declarations = symbol.getDeclarations();
+          if (declarations && declarations.length > 0) {
+            const classDecl = declarations.find(ts.isClassDeclaration);
+            if (classDecl) {
+              const constructor = classDecl.members.find(ts.isConstructorDeclaration);
+              if (constructor && constructor.parameters) {
+                // Wrap arguments that need smart pointers
+                const wrappedArgs = expr.arguments.map((arg, i) => {
+                  if (i >= constructor.parameters.length) return rawArgs[i];
+                  
+                  const param = constructor.parameters[i];
+                  if (param.type && ts.isTypeReferenceNode(param.type)) {
+                    const paramTypeText = param.type.getText();
+                    
+                    // If parameter expects share<string>
+                    if (paramTypeText === 'share<string>') {
+                      // Check if argument is already share<string> (don't double-wrap)
+                      if (ts.isIdentifier(arg) && this.checker) {
+                        const argSymbol = this.checker.getSymbolAtLocation(arg);
+                        if (argSymbol?.valueDeclaration && 'type' in argSymbol.valueDeclaration) {
+                          const argTypeNode = (argSymbol.valueDeclaration as any).type;
+                          if (argTypeNode && argTypeNode.getText() === 'share<string>') {
+                            // Already share<string>, no need to wrap
+                            return rawArgs[i];
+                          }
+                        }
+                      }
+                      
+                      // Otherwise wrap literals/values in make_shared
+                      if (ts.isStringLiteral(arg) || ts.isIdentifier(arg)) {
+                        this.addInclude('<memory>');
+                        return `std::make_shared<std::string>(${rawArgs[i]})`;
+                      }
+                    }
+                  }
+                  
+                  return rawArgs[i];
+                });
+                args = wrappedArgs.join(', ');
+              }
+            }
+          }
+        }
       }
       
       const escapedName = this.escapeIdentifier(className);

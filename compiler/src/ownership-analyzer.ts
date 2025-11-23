@@ -59,6 +59,11 @@ export class OwnershipAnalyzer {
   private diagnostics: Diagnostic[] = [];
   private sourceFiles: ts.SourceFile[] = [];
   
+  // Map from node position to inferred ownership qualifier
+  // Key: `${sourceFile.fileName}:${node.pos}:${node.end}`
+  // Value: { qualifier: 'own' | 'share' | 'use', elementType: string }
+  private inferredQualifiers = new Map<string, { qualifier: 'own' | 'share' | 'use', elementType: string }>();
+  
   /**
    * Reset the analyzer state (call before analyzing a new program)
    */
@@ -70,6 +75,7 @@ export class OwnershipAnalyzer {
     };
     this.diagnostics = [];
     this.sourceFiles = [];
+    this.inferredQualifiers = new Map();
   }
 
   /**
@@ -80,6 +86,7 @@ export class OwnershipAnalyzer {
     this.sourceFiles.push(sourceFile);
     this.collectTypeNodes(sourceFile);
     this.collectOwnershipEdges(sourceFile, checker);
+    this.inferOwnershipQualifiers(sourceFile, checker);
   }
 
   /**
@@ -95,6 +102,15 @@ export class OwnershipAnalyzer {
    */
   getDiagnostics(): Diagnostic[] {
     return this.diagnostics;
+  }
+  
+  /**
+   * Get inferred ownership qualifier for a variable declaration or parameter
+   * Returns the qualifier ('own', 'share', or 'use') and element type if applicable
+   */
+  getInferredQualifier(node: ts.Node, sourceFile: ts.SourceFile): { qualifier: 'own' | 'share' | 'use', elementType: string } | undefined {
+    const key = `${sourceFile.fileName}:${node.pos}:${node.end}`;
+    return this.inferredQualifiers.get(key);
   }
 
   /**
@@ -872,7 +888,9 @@ export class OwnershipAnalyzer {
     const typeName = typeNode.typeName.getText(sourceFile);
 
     // If it's already wrapped in ownership type, it's fine
-    if (typeName === 'Unique' || typeName === 'Shared' || typeName === 'Weak') {
+    // Support both old (Unique/Shared/Weak) and new (own/share/use) naming
+    if (typeName === 'Unique' || typeName === 'Shared' || typeName === 'Weak' ||
+        typeName === 'own' || typeName === 'share' || typeName === 'use') {
       return;
     }
 
@@ -1309,5 +1327,88 @@ export class OwnershipAnalyzer {
         // Weak→Weak is OK
       }
     }
+  }
+  
+  /**
+   * Infer ownership qualifiers for unqualified references
+   * Rules:
+   * - Function parameters: share<T> (caller retains ownership, callee gets shared reference)
+   * - Local var initialization from new expression: own<T> (taking exclusive ownership)
+   * - Local var assignment from reference: use<T> (borrowing, not taking ownership)
+   */
+  private inferOwnershipQualifiers(sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
+    const visit = (node: ts.Node) => {
+      // Function parameters
+      if (ts.isParameter(node) && node.type && this.needsOwnershipQualifier(node.type, sourceFile, checker)) {
+        const elementType = this.extractElementType(node.type, sourceFile);
+        if (elementType) {
+          const key = `${sourceFile.fileName}:${node.pos}:${node.end}`;
+          this.inferredQualifiers.set(key, { qualifier: 'share', elementType });
+        }
+      }
+      
+      // Variable declarations
+      if (ts.isVariableDeclaration(node) && node.type && this.needsOwnershipQualifier(node.type, sourceFile, checker)) {
+        const elementType = this.extractElementType(node.type, sourceFile);
+        if (elementType && node.initializer) {
+          const key = `${sourceFile.fileName}:${node.pos}:${node.end}`;
+          
+          // Check if initializer is a new expression
+          if (ts.isNewExpression(node.initializer)) {
+            // New object -> own<T>
+            this.inferredQualifiers.set(key, { qualifier: 'own', elementType });
+          } else {
+            // Assignment from reference -> use<T>
+            this.inferredQualifiers.set(key, { qualifier: 'use', elementType });
+          }
+        }
+      }
+      
+      ts.forEachChild(node, visit);
+    };
+    
+    visit(sourceFile);
+  }
+  
+  /**
+   * Check if a type node is an unqualified class reference that needs ownership
+   */
+  private needsOwnershipQualifier(typeNode: ts.TypeNode, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
+    // Skip primitives
+    if (typeNode.kind === ts.SyntaxKind.NumberKeyword || 
+        typeNode.kind === ts.SyntaxKind.BooleanKeyword ||
+        typeNode.kind === ts.SyntaxKind.StringKeyword) {
+      return false;
+    }
+    
+    // Check for already qualified types
+    if (ts.isTypeReferenceNode(typeNode)) {
+      const typeName = typeNode.typeName.getText(sourceFile);
+      if (typeName === 'own' || typeName === 'share' || typeName === 'use' ||
+          typeName === 'Unique' || typeName === 'Shared' || typeName === 'Weak') {
+        return false;
+      }
+      
+      // Check if it's a class
+      const symbol = checker.getSymbolAtLocation(typeNode.typeName);
+      if (symbol) {
+        const declarations = symbol.getDeclarations();
+        if (declarations && declarations.some(decl => ts.isClassDeclaration(decl))) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Extract the element type name from a type node
+   */
+  private extractElementType(typeNode: ts.TypeNode, sourceFile: ts.SourceFile): string | undefined {
+    if (ts.isTypeReferenceNode(typeNode)) {
+      return typeNode.typeName.getText(sourceFile);
+    }
+    return undefined;
   }
 }
