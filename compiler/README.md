@@ -7,7 +7,9 @@ The GoodScript compiler (`gsc`) transforms GoodScript (`.gs.ts` and `.gs.tsx`) f
 The compiler implements GoodScript in four phases:
 
 - **Phase 1** (✅ Complete): Strict TypeScript semantics - eliminates JavaScript "bad parts" (244 tests) - [Details](../docs/GOOD-PARTS.md)
-- **Phase 2** (✅ Complete): Ownership analysis and DAG validation (425 tests, 100% coverage) - [Details](../docs/DAG-ANALYSIS.md)
+- **Phase 2** (✅ Complete): Ownership analysis (DAG validation + derivation rules) (231 tests, 100% coverage) - [Details](../docs/DAG-ANALYSIS.md)
+  - DAG cycle detection prevents reference-counted memory leaks
+  - Derivation rules prevent ownership logic mistakes (GS303, GS304, GS305)
 - **Phase 3** (🚧 In Progress): C++ code generation - [Details](../docs/COMPILATION-TARGET.md)
 - **Phase 4** (📋 Planned): Ecosystem integration - standard library and more - [Details](../docs/MINIMAL-STD-LIB.md)
 

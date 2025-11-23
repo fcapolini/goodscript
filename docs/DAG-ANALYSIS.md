@@ -1,8 +1,25 @@
-# DAG analysis
+# DAG Analysis & Ownership Derivation Rules
 
-This are the rules for the **Directed Acyclic Graph (DAG) Check** which forms the central safety mechanism of the language. These rules must be applied during **Phase 2 (Ownership Analysis)** by traversing the Abstract Syntax Tree (AST) after basic type checking.
+## Overview
 
-The analysis focuses exclusively on the **`share<T>`** qualifier, as `own<T>` cannot form cycles and `use<T>` actively breaks them.
+**Phase 2 (Ownership Analysis)** enforces two complementary safety mechanisms:
+
+1. **DAG (Directed Acyclic Graph) Check** — prevents reference cycles that cause memory leaks
+2. **Ownership Derivation Rules** — prevents logic mistakes in ownership transfer
+
+Both are applied by traversing the Abstract Syntax Tree (AST) after Phase 1 validation.
+
+### DAG Check
+
+The DAG analysis focuses exclusively on the **`share<T>`** qualifier, as `own<T>` cannot form cycles and `use<T>` actively breaks them.
+
+### Derivation Rules
+
+Enforced on assignments and function arguments (error codes GS304, GS305):
+- From `own<T>` → only `use<T>` (no aliasing of exclusive ownership)
+- From `share<T>` → `share<T>` or `use<T>` (can share or downgrade)
+- From `use<T>` → only `use<T>` (cannot upgrade to ownership)
+- `new T()` → implicitly `own<T>` (can only assign to `own<T>` fields)
 
 -----
 

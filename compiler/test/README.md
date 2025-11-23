@@ -142,14 +142,37 @@ Phase 1 tests use shared helpers from `test-helpers.ts`:
 
 ## Phase 2: Ownership Analysis
 
-**Status**: Core implementation complete (54 tests passing, 7 skipped due to known limitations)
+**Status**: Complete (231 tests passing)
 
 Phase 2 introduces ownership semantics with three-tier ownership system:
 - **`own<T>`** - Exclusive ownership
 - **`share<T>`** - Shared ownership with reference counting
 - **`use<T>`** - Non-owning references - implicitly nullable
 
+Enforces two complementary safety mechanisms:
+1. **DAG cycle detection** - prevents reference-counted memory leaks (GS301)
+2. **Derivation rules** - prevents ownership logic mistakes (GS303, GS304, GS305)
+
 See [test/phase2/README.md](phase2/README.md) for detailed test documentation.
+
+### Ownership Derivation Rules (ownership-derivation.test.ts)
+
+All 21 tests passing - validates assignment and argument passing:
+
+| Test Category | Tests | Description |
+|---------------|-------|-------------|
+| Rule 1: own<T> → use<T> | 5 | Can only derive weak refs from exclusive ownership |
+| Rule 2: share<T> → share<T>/use<T> | 3 | Can share or downgrade shared ownership |
+| Rule 3: use<T> → use<T> | 3 | Cannot upgrade weak refs to ownership |
+| null assignments | 1 | null allowed for all ownership types |
+| Complex scenarios | 2 | Arena and observer patterns |
+| Function calls | 6 | Derivation rules apply to arguments |
+| Method calls | 1 | User-defined methods respect rules |
+
+**Error codes**:
+- **GS303** - Missing ownership annotation on class-type fields
+- **GS304** - Ownership type mismatch in assignment
+- **GS305** - Invalid ownership derivation
 
 ### DAG Cycle Detection (ownership-cycles.test.ts)
 

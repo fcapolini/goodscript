@@ -1,14 +1,12 @@
 /**
  * Ownership Analyzer
  * 
- * Implements the DAG (Directed Acyclic Graph) check as specified in DAG-DETECTION.md.
+ * Implements comprehensive ownership analysis including:
+ * 1. DAG (Directed Acyclic Graph) cycle detection
+ * 2. Ownership derivation rule enforcement
+ * 3. Assignment compatibility validation
  * 
- * Core Principles:
- * 1. Types are Nodes, Shared<T> relationships are Edges
- * 2. Only Shared<T> creates ownership edges (Unique<T> and Weak<T> do NOT)
- * 3. The entire type graph must be acyclic (DAG)
- * 
- * Rules:
+ * DAG Rules (prevents reference cycles):
  * - Rule 1.1: Direct Shared<T> field creates edge (A -> B)
  * - Rule 1.2: Container transitivity (Array<Shared<B>>, Map<K, Shared<D>>)
  * - Rule 1.3: Intermediate wrapper transitivity (transitive ownership)
@@ -16,6 +14,17 @@
  * - Rule 3.1: Weak<T> is NOT an edge (breaks cycles)
  * - Rule 3.2: Unique<T> is NOT an edge (orthogonal graph)
  * - Rule 4.1: Pool Pattern enforcement (reject potentially cyclic structures)
+ * 
+ * Ownership Derivation Rules (prevents logic mistakes):
+ * - From Unique<T> → only Weak<T> (no aliasing of exclusive ownership)
+ * - From Shared<T> → Shared<T> or Weak<T> (can share or downgrade)
+ * - From Weak<T> → only Weak<T> (cannot upgrade to ownership)
+ * - new T() → implicitly Unique<T> (can only assign to Unique<T> fields)
+ * 
+ * Enforced via:
+ * - GS303: Missing ownership annotation on class-type fields
+ * - GS304: Ownership type mismatch in assignment
+ * - GS305: Invalid ownership derivation (assignment/argument passing)
  */
 
 import * as ts from 'typescript';
