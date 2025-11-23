@@ -72,13 +72,13 @@ struct Config {
 | GoodScript | C++ | Notes |
 |-----------|-----|-------|
 | `number` | `double` | Default floating-point precision |
-| `string` | `std::string` | STL string |
+| `string` | `gs::String` | Runtime library wrapper |
 | `boolean` | `bool` | Native C++ bool |
 | `void` | `void` | Direct mapping |
 | `null` | `std::nullopt` | For std::optional |
-| `T[]` | `std::vector<T>` | Dynamic array |
-| `Map<K,V>` | `std::unordered_map<K,V>` | Hash map |
-| `Set<T>` | `std::unordered_set<T>` | Hash set |
+| `T[]` | `gs::Array<T>` | Runtime library wrapper |
+| `Map<K,V>` | `gs::Map<K,V>` | Runtime library wrapper |
+| `Set<T>` | `gs::Set<T>` | Runtime library wrapper |
 | `own<T>` | `std::unique_ptr<T>` | Exclusive ownership |
 | `share<T>` | `std::shared_ptr<T>` | Shared ownership |
 | `use<T>` | `std::weak_ptr<T>` | Non-owning reference |
@@ -116,7 +116,28 @@ if (y != 10) { }
 
 ## Test Status
 
-**Current Status**: ✅ **35/35 tests passing (100%)**
+**Current Status**: ✅ **94/107 Phase 3 tests passing (88%)**
+- Basic tests: 66/66 passing (100%)
+- Runtime tests: 28/28 passing (100%)
+- Concrete examples: 51/64 passing (80%)
+  - 3 examples with compilation issues (json-parser, lru-cache, n-queens)
+
+## Runtime Library Integration
+
+As of November 2025, code generation uses a runtime library (`runtime/`) with:
+- `gs::String` - String wrapper with TypeScript-like methods
+- `gs::Array<T>` - Dynamic array with `.push()`, `.length()`, operator[]
+- `gs::Map<K,V>` - Hash map with `.set()`, `.get()`, `.has()`, `.delete()`
+- `gs::Set<T>` - Hash set with `.add()`, `.has()`, `.delete()`
+- `gs::JSON` - JSON stringification support
+- `gs::console` - Console logging (`gs::console::log()`)
+
+Key changes:
+- String literals wrapped in `gs::String()` constructor
+- Template literals generate proper `gs::String` concatenation
+- Array access generates `operator[]` with `static_cast<int>()` for indices
+- Method calls use runtime library APIs (e.g., `.push()` not `.push_back()`)
+- Compilation requires: `zig c++ -std=c++20 -O2 -I${RUNTIME_DIR}`
 
 ## Running Tests
 

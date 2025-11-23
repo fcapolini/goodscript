@@ -1669,139 +1669,14 @@ export class CppCodegen {
         return `gs::console::log(${args})`;
       }
       
-      // Map method
+      // Map methods - gs::Map handles all complexity internally
       if (methodName === 'set') {
-        // map.set(key, value) -> map.insert() or map.emplace() depending on value type
-        const argArray = expr.arguments.map(arg => this.generateExpression(arg));
-        if (argArray.length === 2) {
-          // Check if the map has smart pointer values
-          const objExpr = expr.expression.expression;
-          let hasSmartPtrValue = false;
-          let valueElementType = '';
-          let isShared = false;
-          
-          if (this.checker) {
-            // Get type from AST to preserve ownership annotations (TypeChecker erases type aliases)
-            const symbol = this.checker.getSymbolAtLocation(objExpr);
-            if (symbol?.valueDeclaration && 'type' in symbol.valueDeclaration) {
-              const typeNode = (symbol.valueDeclaration as any).type as ts.TypeNode | undefined;
-              if (typeNode) {
-                const typeText = typeNode.getText();
-                // Check for Map<K, share<V>> or Map<K, own<V>> patterns in AST text
-                const shareMatch = typeText.match(/Map<[^,]+,\s*share<([^>]+)>>/);
-                const ownMatch = typeText.match(/Map<[^,]+,\s*own<([^>]+)>>/);
-                
-                if (shareMatch) {
-                  hasSmartPtrValue = true;
-                  valueElementType = shareMatch[1];
-                  isShared = true;
-                } else if (ownMatch) {
-                  hasSmartPtrValue = true;
-                  valueElementType = ownMatch[1];
-                  isShared = false;
-                }
-              }
-            }
-          }
-          
-          if (hasSmartPtrValue && valueElementType) {
-            // For smart pointer values, use emplace with make_unique/make_shared
-            let valueArg = argArray[1];
-            
-            // Check if value is already a smart pointer
-            let alreadySmartPtr = false;
-            if (expr.arguments.length >= 2) {
-              const valueArgExpr = expr.arguments[1];
-              if (ts.isIdentifier(valueArgExpr) && this.checker) {
-                const symbol = this.checker.getSymbolAtLocation(valueArgExpr);
-                if (symbol?.valueDeclaration && ts.isVariableDeclaration(symbol.valueDeclaration)) {
-                  const typeText = this.getTypeTextFromSymbol(symbol);
-                  if (typeText && (typeText.startsWith('share<') || typeText.startsWith('own<') || 
-                      typeText.startsWith('gs::shared_ptr<') || typeText.startsWith('std::unique_ptr<'))) {
-                    alreadySmartPtr = true;
-                  }
-                }
-              }
-            }
-            
-            // Check if value is already wrapped or is already a smart pointer variable
-            if (alreadySmartPtr || valueArg.includes('std::make_unique') || valueArg.includes('gs::make_shared') || valueArg.includes('std::move')) {
-              // Already a smart pointer, just use it as-is
-              return `${object}${accessor}emplace(${argArray[0]}, ${valueArg})`;
-            }
-            
-            // Value needs to be wrapped
-            const wrapperFn = isShared ? 'gs::make_shared' : 'std::make_unique';
-            
-            // Check if the argument is from a method returning optional
-            // If so, we need to unwrap it first with *value or value.value()
-            let needsUnwrap = false;
-            
-            if (expr.arguments.length >= 2) {
-              const valueArgExpr = expr.arguments[1];
-              
-              // Direct call expression
-              if (ts.isCallExpression(valueArgExpr)) {
-                const returnType = this.getMethodReturnTypeFromSource(valueArgExpr);
-                if (returnType && (returnType.includes('| null') || returnType.includes('| undefined'))) {
-                  needsUnwrap = true;
-                }
-              }
-              // Identifier that was initialized from a call returning optional
-              else if (ts.isIdentifier(valueArgExpr) && this.checker) {
-                const symbol = this.checker.getSymbolAtLocation(valueArgExpr);
-                if (symbol?.valueDeclaration && ts.isVariableDeclaration(symbol.valueDeclaration)) {
-                  const init = symbol.valueDeclaration.initializer;
-                  if (init && ts.isCallExpression(init)) {
-                    const returnType = this.getMethodReturnTypeFromSource(init);
-                    if (returnType && (returnType.includes('| null') || returnType.includes('| undefined'))) {
-                      needsUnwrap = true;
-                    }
-                  }
-                }
-              }
-            }
-            
-            if (needsUnwrap) {
-              valueArg = `*${valueArg}`;
-            }
-            
-            valueArg = `${wrapperFn}<${valueElementType}>(${valueArg})`;
-            
-            return `${object}${accessor}emplace(${argArray[0]}, ${valueArg})`;
-          } else {
-            // For other types, use insert
-            return `${object}${accessor}insert({${argArray[0]}, ${argArray[1]}})`;
-          }
-        }
+        return `${object}${accessor}set(${args})`;
       }
       
       if (methodName === 'get') {
-        // Only apply special handling if this is a Map
-        const objExpr = expr.expression.expression;
-        let isMap = false;
-        
-        if (this.checker) {
-          const symbol = this.checker.getSymbolAtLocation(objExpr);
-          if (symbol?.valueDeclaration && 'type' in symbol.valueDeclaration) {
-            const typeNode = (symbol.valueDeclaration as any).type as ts.TypeNode | undefined;
-            if (typeNode) {
-              const typeText = typeNode.getText();
-              isMap = typeText.startsWith('Map<');
-            }
-          }
-        }
-        
-        if (isMap) {
-          // map.get(key) - returns optional in our case
-          const argArray = expr.arguments.map(arg => this.generateExpression(arg));
-          if (argArray.length === 1) {
-            return `gs::map_get(${object}, ${argArray[0]})`;
-          }
-        }
-        // Otherwise, fall through to regular method call
+        return `${object}${accessor}get(${args})`;
       }
-      
       if (methodName === 'has') {
         // Only apply special handling if this is a Map
         const objExpr = expr.expression.expression;
@@ -1875,9 +1750,9 @@ export class CppCodegen {
           let valueArg = this.generateExpression(argExpr);
           
           // Simplified: just call wrap_for_push which handles all the logic
-          return `${object}${accessor}push_back(gs::wrap_for_push<${isShared ? 'gs::shared_ptr' : 'std::unique_ptr'}<${elementType}>>(${valueArg}))`;
+          return `${object}${accessor}push(gs::wrap_for_push<${isShared ? 'gs::shared_ptr' : 'std::unique_ptr'}<${elementType}>>(${valueArg}))`;
         } else {
-          return `${object}${accessor}push_back(${args})`;
+          return `${object}${accessor}push(${args})`;
         }
       }
       
@@ -1931,25 +1806,21 @@ export class CppCodegen {
       
       // String methods
       if (methodName === 'startsWith') {
-        return `gs::starts_with(${object}, ${args})`;
+        return `${object}${accessor}startsWith(${args})`;
       }
       
       if (methodName === 'substring') {
-        const argArray = expr.arguments.map(arg => this.generateExpression(arg));
-        if (argArray.length === 1) {
-          return `${object}${accessor}substr(${argArray[0]})`;
-        } else if (argArray.length === 2) {
-          return `${object}${accessor}substr(${argArray[0]}, ${argArray[1]} - ${argArray[0]})`;
-        }
+        // gs::String has substring() method, pass through
+        return `${object}${accessor}substring(${args})`;
       }
       
       if (methodName === 'indexOf') {
-        return `gs::index_of(${object}, ${args})`;
+        return `${object}${accessor}indexOf(${args})`;
       }
       
       if (methodName === 'charAt') {
-        // string.charAt(index) -> string.substr(index, 1) or string[index]
-        return `${object}${accessor}substr(${args}, 1)`;
+        // gs::String has charAt() method, pass through
+        return `${object}${accessor}charAt(${args})`;
       }
       
       if (methodName === 'charCodeAt') {
@@ -2056,9 +1927,9 @@ export class CppCodegen {
     
     // Map TypeScript/JavaScript property names to C++ equivalents
     if (propertyName === 'length') {
-      // array.length -> array.size()
-      const sizeCall = `${object}${accessor}size()`;
-      return needsOptionalUnwrap ? `(*${object})->size()` : sizeCall;
+      // array.length -> array.length() (gs::Array has length() method)
+      const lengthCall = `${object}${accessor}length()`;
+      return needsOptionalUnwrap ? `(*${object})->length()` : lengthCall;
     }
     
     // If we need to unwrap optional<shared_ptr<T>>, generate (*obj)->property
@@ -2257,8 +2128,18 @@ export class CppCodegen {
    */
   private generateElementAccess(expr: ts.ElementAccessExpression): string {
     const object = this.generateExpression(expr.expression);
-    const index = this.generateExpression(expr.argumentExpression);
+    let index = this.generateExpression(expr.argumentExpression);
     const accessor = (object === 'this') ? '->' : '.';
+    
+    // Cast numeric indices to int to avoid ambiguity between int and size_t overloads
+    // TypeScript numbers are doubles, but array indices should be integers
+    if (this.checker) {
+      const indexType = this.checker.getTypeAtLocation(expr.argumentExpression);
+      const indexTypeStr = this.checker.typeToString(indexType);
+      if (indexTypeStr === 'number' || indexTypeStr.includes('number')) {
+        index = `static_cast<int>(${index})`;
+      }
+    }
     
     // For maps, use [] operator (creates entry if not exists, matching JS behavior)
     // For arrays, use safe accessor that returns default value for out-of-bounds
@@ -2305,14 +2186,13 @@ export class CppCodegen {
       }
     }
     
-    // For arrays (std::vector), use safe accessor
-    // JavaScript returns undefined for out-of-bounds, we return default value (0, false, empty string, etc.)
-    // This matches JS semantics better than throwing exception
+    // For arrays, use operator[] (gs::Array has bounds-checked operator[])
+    // JavaScript returns undefined for out-of-bounds, gs::Array returns std::optional
     if (object === 'this') {
-      return `gs::array_get(${object}${accessor}vec, ${index})`;
+      return `${object}${accessor}vec[${index}]`;
     }
     
-    return `gs::array_get(${object}, ${index})`;
+    return `${object}[${index}]`;
   }
   
   /**
@@ -2397,7 +2277,7 @@ export class CppCodegen {
     if (expr.head.text) {
       // Escape quotes and special characters in string literal
       const escaped = expr.head.text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\t/g, '\\t');
-      parts.push(`"${escaped}"`);
+      parts.push(`gs::String("${escaped}")`);
     }
     
     // Template spans
@@ -2483,7 +2363,7 @@ export class CppCodegen {
       if (span.literal.text) {
         // Escape quotes and special characters in string literal
         const escaped = span.literal.text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\t/g, '\\t');
-        parts.push(`"${escaped}"`);
+        parts.push(`gs::String("${escaped}")`);
       }
     }
     
