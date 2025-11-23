@@ -59,7 +59,7 @@ describe('Phase 3: Ownership - own<T>', () => {
 });
 
 describe('Phase 3: Ownership - share<T>', () => {
-  it('should generate std::shared_ptr for share<T>', () => {
+  it('should generate gs::shared_ptr for share<T>', () => {
     const source = `
       class Data {
         count: number;
@@ -69,7 +69,7 @@ describe('Phase 3: Ownership - share<T>', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('std::shared_ptr<Data>');
+    expect(cpp).toContain('gs::shared_ptr<Data>');
   });
   
   it('should generate class with share<T> field', () => {
@@ -80,7 +80,7 @@ describe('Phase 3: Ownership - share<T>', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('std::vector<std::shared_ptr<std::string>>');
+    expect(cpp).toContain('std::vector<gs::shared_ptr<std::string>>');
   });
 });
 
@@ -152,6 +152,6 @@ describe('Phase 3: Collection Types', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('std::unordered_map<std::string, std::shared_ptr<Data>>');
+    expect(cpp).toContain('std::unordered_map<std::string, gs::shared_ptr<Data>>');
   });
 });

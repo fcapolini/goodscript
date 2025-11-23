@@ -8,11 +8,27 @@
 
 ## 1. What is GoodScript?
 
-GoodScript is a **TypeScript specialization** designed to enable safe systems programming with deterministic memory management. It retains **TypeScript syntax** while augmenting the language with **ownership qualifiers**:
+GoodScript is a **TypeScript specialization** designed to enable safe systems programming with deterministic memory management. It retains **TypeScript syntax** while removing JavaScript dynamic features which would prevent native compilation, and augmenting the language with **ownership qualifiers** which allow for automatic memory management without the need of a garbage collector or complex borrowing rules like in Rust.
+
+This turns TypeScript into an enterprise-level, natively compilable language with deterministic memory management and small footprint, making it ideal for systems programming in alternative to Rust and Go.
+
+### 1.1 Fully Statically Typed Language
+
+TBD
+
+### 1.2 Simple Automatic Memory Management
+
+In GoodScript, reference to heap-allocated values can be qualified using ownership qualifiers:
 
 * `own<T>` — exclusive ownership of a value.
 * `share<T>` — reference-counted shared ownership.
 * `use<T>` — non-owning references (may be `null` or `undefined`).
+
+The compiler checks the correctness of memory ownership rules and performs analysis to ensure no ownership loops can be formed at runtime in compiled apps. This allows GoodScript to reliably use simple and performant reference counting instead of complex and unpredictable garbage collection.
+
+Complex structures which require cross referencing between nodes must be implemented using the Arena/Pool pattern, where node ownership is centralized in a single pool and nodes only keep non-owning references to each other.
+
+This is rarely needed in most application, and is a small price to pay for getting rid of garbage collection and gain in performance and predictability, completely eliminating GC latencies and huge binaries containing complex runtimes.
 
 These types are **transparent in TypeScript**, making GoodScript code valid TS code for development and prototyping.
 

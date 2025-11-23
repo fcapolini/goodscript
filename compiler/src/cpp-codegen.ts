@@ -6,7 +6,7 @@
  * 
  * Ownership mappings:
  * - Unique<T> -> std::unique_ptr<T>
- * - Shared<T> -> std::shared_ptr<T>
+ * - Shared<T> -> gs::shared_ptr<T> (non-atomic for single-threaded performance)
  * - Weak<T> -> std::weak_ptr<T>
  * - T | null | undefined -> std::optional<T>
  * 
@@ -195,6 +195,88 @@ export class CppCodegen {
     lines.push('    return std::to_string(static_cast<int>(value));');
     lines.push('  }');
     lines.push('  return std::to_string(value);');
+    lines.push('}');
+    lines.push('');
+    lines.push('// Lightweight non-atomic shared pointer for single-threaded execution');
+    lines.push('// Replaces gs::shared_ptr with faster non-atomic reference counting');
+    lines.push('template<typename T>');
+    lines.push('class shared_ptr {');
+    lines.push('private:');
+    lines.push('  struct ControlBlock {');
+    lines.push('    T* ptr;');
+    lines.push('    size_t ref_count;');
+    lines.push('    ControlBlock(T* p) : ptr(p), ref_count(1) {}');
+    lines.push('  };');
+    lines.push('  ControlBlock* control;');
+    lines.push('');
+    lines.push('public:');
+    lines.push('  shared_ptr() : control(nullptr) {}');
+    lines.push('  explicit shared_ptr(T* ptr) : control(ptr ? new ControlBlock(ptr) : nullptr) {}');
+    lines.push('');
+    lines.push('  shared_ptr(const shared_ptr& other) : control(other.control) {');
+    lines.push('    if (control) ++control->ref_count;');
+    lines.push('  }');
+    lines.push('');
+    lines.push('  shared_ptr(shared_ptr&& other) noexcept : control(other.control) {');
+    lines.push('    other.control = nullptr;');
+    lines.push('  }');
+    lines.push('');
+    lines.push('  ~shared_ptr() {');
+    lines.push('    if (control && --control->ref_count == 0) {');
+    lines.push('      delete control->ptr;');
+    lines.push('      delete control;');
+    lines.push('    }');
+    lines.push('  }');
+    lines.push('');
+    lines.push('  shared_ptr& operator=(const shared_ptr& other) {');
+    lines.push('    if (this != &other) {');
+    lines.push('      if (control && --control->ref_count == 0) {');
+    lines.push('        delete control->ptr;');
+    lines.push('        delete control;');
+    lines.push('      }');
+    lines.push('      control = other.control;');
+    lines.push('      if (control) ++control->ref_count;');
+    lines.push('    }');
+    lines.push('    return *this;');
+    lines.push('  }');
+    lines.push('');
+    lines.push('  shared_ptr& operator=(shared_ptr&& other) noexcept {');
+    lines.push('    if (this != &other) {');
+    lines.push('      if (control && --control->ref_count == 0) {');
+    lines.push('        delete control->ptr;');
+    lines.push('        delete control;');
+    lines.push('      }');
+    lines.push('      control = other.control;');
+    lines.push('      other.control = nullptr;');
+    lines.push('    }');
+    lines.push('    return *this;');
+    lines.push('  }');
+    lines.push('');
+    lines.push('  T* get() const { return control ? control->ptr : nullptr; }');
+    lines.push('  T& operator*() const { return *control->ptr; }');
+    lines.push('  T* operator->() const { return control->ptr; }');
+    lines.push('  explicit operator bool() const { return control && control->ptr; }');
+    lines.push('  size_t use_count() const { return control ? control->ref_count : 0; }');
+    lines.push('');
+    lines.push('  // Comparison operators for nullptr');
+    lines.push('  bool operator==(std::nullptr_t) const { return !control || !control->ptr; }');
+    lines.push('  bool operator!=(std::nullptr_t) const { return control && control->ptr; }');
+    lines.push('  friend bool operator==(std::nullptr_t, const shared_ptr& ptr) { return ptr == nullptr; }');
+    lines.push('  friend bool operator!=(std::nullptr_t, const shared_ptr& ptr) { return ptr != nullptr; }');
+    lines.push('');
+    lines.push('  void reset() {');
+    lines.push('    if (control && --control->ref_count == 0) {');
+    lines.push('      delete control->ptr;');
+    lines.push('      delete control;');
+    lines.push('    }');
+    lines.push('    control = nullptr;');
+    lines.push('  }');
+    lines.push('};');
+    lines.push('');
+    lines.push('// Factory function for creating shared_ptr (like gs::make_shared)');
+    lines.push('template<typename T, typename... Args>');
+    lines.push('shared_ptr<T> make_shared(Args&&... args) {');
+    lines.push('  return shared_ptr<T>(new T(std::forward<Args>(args)...));');
     lines.push('}');
     lines.push('');
     lines.push('// Map helper: get (returns optional)');
@@ -575,7 +657,7 @@ export class CppCodegen {
         let value = this.generateExpression(decl.initializer);
         
         // Special handling: if variable type is shared_ptr and initializer is new T(), wrap with make_shared
-        if (type.startsWith('std::shared_ptr<') && ts.isNewExpression(decl.initializer) && 
+        if (type.startsWith('gs::shared_ptr<') && ts.isNewExpression(decl.initializer) && 
             ts.isIdentifier(decl.initializer.expression)) {
           const className = decl.initializer.expression.getText();
           // Check if value is gs::ClassName(...)
@@ -583,7 +665,7 @@ export class CppCodegen {
           if (match && match[1] === className) {
             const args = match[2];
             this.addInclude('<memory>');
-            value = `std::make_shared<${className}>(${args})`;
+            value = `gs::make_shared<${className}>(${args})`;
           }
         }
         
@@ -841,7 +923,7 @@ export class CppCodegen {
       return `std::unique_ptr<${innerType}>`;
     } else if (typeName === 'share' && type.typeArguments && type.typeArguments.length > 0) {
       const innerType = this.generateType(type.typeArguments[0]);
-      return `std::shared_ptr<${innerType}>`;
+      return `gs::shared_ptr<${innerType}>`;
     } else if (typeName === 'use' && type.typeArguments && type.typeArguments.length > 0) {
       const innerType = this.generateType(type.typeArguments[0]);
       return `std::weak_ptr<${innerType}>`;
@@ -1165,7 +1247,7 @@ export class CppCodegen {
               typeText.startsWith('share<') || 
               typeText.startsWith('use<') ||
               typeText.startsWith('std::unique_ptr<') ||
-              typeText.startsWith('std::shared_ptr<') ||
+              typeText.startsWith('gs::shared_ptr<') ||
               typeText.startsWith('std::weak_ptr<')) {
             return true;
           }
@@ -1208,7 +1290,7 @@ export class CppCodegen {
           // Check for arrays of smart pointers: own<T>[], share<T>[], etc.
           return typeText.match(/(own|share|use)<[^>]+>\[\]/) !== null ||
                  typeText.includes('std::vector<std::unique_ptr<') ||
-                 typeText.includes('std::vector<std::shared_ptr<') ||
+                 typeText.includes('std::vector<gs::shared_ptr<') ||
                  typeText.includes('std::vector<std::weak_ptr<');
         }
       }
@@ -1342,8 +1424,8 @@ export class CppCodegen {
           }
           
           // If assigning to shared_ptr field, wrap with make_shared
-          else if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<')) {
-            const match = typeText.match(/(share|std::shared_ptr)<(.+)>/);
+          else if (typeText?.startsWith('share<') || typeText?.startsWith('gs::shared_ptr<')) {
+            const match = typeText.match(/(share|gs::shared_ptr)<(.+)>/);
             if (match) {
               const innerType = match[2];
               const classMatch = right.match(/gs::([^(]+)\((.*)\)/);
@@ -1351,7 +1433,7 @@ export class CppCodegen {
                 const className = classMatch[1];
                 const args = classMatch[2];
                 this.addInclude('<memory>');
-                right = `std::make_shared<${className}>(${args})`;
+                right = `gs::make_shared<${className}>(${args})`;
               }
             }
           }
@@ -1478,7 +1560,7 @@ export class CppCodegen {
             const typeText = this.getTypeTextFromSymbol(symbol);
             // Check if it's a smart pointer but NOT an array (arrays use .)
             if (typeText && !typeText.includes('[]') &&
-                (typeText.startsWith('share<') || typeText.startsWith('std::shared_ptr<') ||
+                (typeText.startsWith('share<') || typeText.startsWith('gs::shared_ptr<') ||
                  typeText.startsWith('own<') || typeText.startsWith('std::unique_ptr<'))) {
               accessor = '->';
             }
@@ -1490,7 +1572,7 @@ export class CppCodegen {
             const typeText = this.getTypeTextFromSymbol(symbol);
             // Check if it's a smart pointer but NOT an array (arrays use .)
             if (typeText && !typeText.includes('[]') &&
-                (typeText.startsWith('share<') || typeText.startsWith('std::shared_ptr<') ||
+                (typeText.startsWith('share<') || typeText.startsWith('gs::shared_ptr<') ||
                  typeText.startsWith('own<') || typeText.startsWith('std::unique_ptr<'))) {
               accessor = '->';
             }
@@ -1551,7 +1633,7 @@ export class CppCodegen {
                 if (symbol?.valueDeclaration && ts.isVariableDeclaration(symbol.valueDeclaration)) {
                   const typeText = this.getTypeTextFromSymbol(symbol);
                   if (typeText && (typeText.startsWith('share<') || typeText.startsWith('own<') || 
-                      typeText.startsWith('std::shared_ptr<') || typeText.startsWith('std::unique_ptr<'))) {
+                      typeText.startsWith('gs::shared_ptr<') || typeText.startsWith('std::unique_ptr<'))) {
                     alreadySmartPtr = true;
                   }
                 }
@@ -1559,13 +1641,13 @@ export class CppCodegen {
             }
             
             // Check if value is already wrapped or is already a smart pointer variable
-            if (alreadySmartPtr || valueArg.includes('std::make_unique') || valueArg.includes('std::make_shared') || valueArg.includes('std::move')) {
+            if (alreadySmartPtr || valueArg.includes('std::make_unique') || valueArg.includes('gs::make_shared') || valueArg.includes('std::move')) {
               // Already a smart pointer, just use it as-is
               return `${object}${accessor}emplace(${argArray[0]}, ${valueArg})`;
             }
             
             // Value needs to be wrapped
-            const wrapperFn = isShared ? 'std::make_shared' : 'std::make_unique';
+            const wrapperFn = isShared ? 'gs::make_shared' : 'std::make_unique';
             
             // Check if the argument is from a method returning optional
             // If so, we need to unwrap it first with *value or value.value()
@@ -1701,8 +1783,8 @@ export class CppCodegen {
           const argArray = expr.arguments.map(arg => this.generateExpression(arg));
           let valueArg = argArray[0];
           
-          if (!valueArg.includes('std::make_unique') && !valueArg.includes('std::make_shared') && !valueArg.includes('std::move')) {
-            const wrapperFn = isShared ? 'std::make_shared' : 'std::make_unique';
+          if (!valueArg.includes('std::make_unique') && !valueArg.includes('gs::make_shared') && !valueArg.includes('std::move')) {
+            const wrapperFn = isShared ? 'gs::make_shared' : 'std::make_unique';
             
             // Check if the argument is from a method returning optional
             let needsUnwrap = false;
@@ -2044,7 +2126,7 @@ export class CppCodegen {
                       // Otherwise wrap literals/values in make_shared
                       if (ts.isStringLiteral(arg) || ts.isIdentifier(arg)) {
                         this.addInclude('<memory>');
-                        return `std::make_shared<std::string>(${rawArgs[i]})`;
+                        return `gs::make_shared<std::string>(${rawArgs[i]})`;
                       }
                     }
                   }
