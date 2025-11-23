@@ -67,65 +67,105 @@ Command-line argument parser demonstrating:
 - Classes with constructors and methods
 - HashMap/Map usage for key-value storage
 - String methods (startsWith, substring, indexOf)
-- Mutable methods requiring `&mut self`
 - Option<T> return types and null safety
-- Option<String> in template literals with automatic unwrapping
 - Method signatures with owned vs borrowed parameters
 
-**Output**:
-```
-Verbose mode enabled
-Total positional args: 2
-Output file: output.txt
-Format: json
-Input file: input.txt
-```
+**Status**: ✅ Full JavaScript and C++ equivalence
 
-### n-queens
+### fibonacci
 
-Classic N-Queens solver demonstrating:
-- Closures with mutable captures
-- Array element access and assignment
-- Vec<T> manipulation
-- Recursive algorithms
-- Control flow (while, for, if)
-- String interpolation
-- Console output
+Fibonacci calculator (recursive and iterative) demonstrating:
+- Arrow functions (no function declarations in GoodScript)
+- Simple recursion
+- Number arithmetic
+- For loops and control flow
+- Explicit boolean comparisons (no truthy/falsy)
 
-**Output**:
-```
-• • c •
-a • • •
-• • • d
-• b • •
-```
+**Status**: ✅ Full JavaScript and C++ equivalence
+
+### hash-map
+
+Word frequency counter demonstrating:
+- Map<K, V> usage and iteration
+- for-of loops with Map entries
+- Tuple types [string, number]
+- Bubble sort algorithm
+- String manipulation (split, toLowerCase)
+
+**Status**: ✅ JavaScript works, ⚠️ Known C++ codegen issues:
+- Map.get() returns `std::optional<V>` but arithmetic doesn't unwrap it
+- for-of with Map entries doesn't generate proper `[key, value]` destructuring
+- Tuple return types need proper `std::tuple` or `std::pair` mapping
 
 ### json-parser
 
 Complete JSON tokenizer and parser demonstrating:
-- Enums with multiple variants (TokenType)
-- Recursive descent parsing
 - Complex state management (position tracking, token buffering)
 - Character-by-character string parsing
 - Ownership types (`own<T>` for tokenizer and input strings)
 - Nullable return types (`string | null`, `JsonValue | null`)
 - Static factory methods
 - Map<K,V> and Array manipulation
-- String methods (charAt, substring, comparisons)
-- Complex control flow (nested while loops, if-else chains)
 - Union type pattern (JsonValue with multiple internal representations)
-- Method mutability detection (conservative `&mut self`)
-- Option<T> unwrapping after null checks
 
-**Output**:
-```
-Parsed JSON kind: object
-```
+**Status**: ✅ Full JavaScript and C++ equivalence
+
+### linked-list
+
+Doubly-linked list demonstrating:
+- Pool Pattern for managing cyclic data structures
+- share<Node>[] for shared ownership of nodes
+- Index-based linking (avoids ownership cycles)
+- Bidirectional traversal
+- Array operations (push, length)
+
+**Status**: ✅ JavaScript works, ⚠️ Minor C++ issue
+
+### lru-cache
+
+LRU (Least Recently Used) cache demonstrating:
+- Pool Pattern with shared ownership (`share<T>`)
+- HashMap and doubly-linked list combination
+- Index-based node linking
+- Cache eviction logic
+- Multiple data structure coordination
+
+**Status**: ✅ Full JavaScript and C++ equivalence
+
+### n-queens
+
+Classic N-Queens solver demonstrating:
+- Closures with mutable captures
+- Array element access and assignment
+- Recursive algorithms
+- Control flow (while, for, if)
+- String interpolation
+
+**Status**: ✅ Full JavaScript and C++ equivalence
+
+### string-pool
+
+String interning/deduplication demonstrating:
+- share<string> for heap-allocated shared strings
+- Map with `share<T>` values
+- Reference counting and deduplication
+- String pool pattern
+
+**Status**: ✅ JavaScript works, ⚠️ Known C++ codegen issues:
+- share<string> should map to `gs::shared_ptr<std::string>` with proper construction
+- Map.get() optional handling needs unwrapping
+- String literal wrapping when assigned to share<string>
+
+## Test Statistics
+
+- **Total Examples**: 8
+- **Full Equivalence**: 5 (cli-args, fibonacci, json-parser, lru-cache, n-queens)
+- **JS Only**: 3 (hash-map, linked-list, string-pool - document known C++ codegen bugs)
 
 ## Notes
 
 - All examples must use the `.gs.ts` extension
 - The entry point must be named `main.gs.ts`
 - Examples should produce console output for validation
-- ✅ Both examples now produce **identical output** in JavaScript and C++
-- Compiled binaries are ~500KB (unoptimized debug builds)
+- Examples with known C++ issues serve as test cases for future codegen improvements
+- Compiled binaries are generated in each example's `dist/` directory
