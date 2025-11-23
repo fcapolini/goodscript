@@ -52,6 +52,10 @@ export class CppCodegen {
   // Track variables that are already wrapped in smart pointers
   private uniquePtrVars = new Set<string>();
   
+  // Track variables that are std::optional<T> and have been null-checked
+  // After null check, we can use .value() to unwrap
+  private unwrappedOptionals = new Set<string>();
+  
   // Track current method return type for smart pointer wrapping
   private currentMethodReturnType?: string;
   
@@ -903,6 +907,9 @@ export class CppCodegen {
     const previousReturnType = this.currentMethodReturnType;
     this.currentMethodReturnType = returnType;
     
+    // Clear unwrapped optionals for new method scope
+    this.unwrappedOptionals.clear();
+    
     this.emit(`${staticKeyword}${returnType} ${name}(${params}) {`);
     this.indent();
     
@@ -984,6 +991,24 @@ export class CppCodegen {
       this.addInclude('<vector>');
       const elementType = this.generateType(type.elementType);
       return `std::vector<${elementType}>`;
+    } else if (ts.isTupleTypeNode(type)) {
+      // Handle tuple types: [T, U] -> std::pair<T, U> (for 2 elements)
+      // or std::tuple<T, U, V, ...> (for more elements)
+      if (type.elements.length === 2) {
+        this.addInclude('<utility>'); // for std::pair
+        const first = this.generateType(type.elements[0]);
+        const second = this.generateType(type.elements[1]);
+        return `std::pair<${first}, ${second}>`;
+      } else if (type.elements.length > 2) {
+        this.addInclude('<tuple>');
+        const elementTypes = type.elements.map(el => this.generateType(el)).join(', ');
+        return `std::tuple<${elementTypes}>`;
+      } else {
+        // Single-element tuple or empty tuple - rare but possible
+        this.addInclude('<tuple>');
+        const elementTypes = type.elements.map(el => this.generateType(el)).join(', ');
+        return `std::tuple<${elementTypes}>`;
+      }
     } else if (ts.isUnionTypeNode(type)) {
       // Check if it's a nullable type (T | null | undefined)
       const hasNull = type.types.some(t => 
@@ -1096,16 +1121,45 @@ export class CppCodegen {
    * Generate if statement
    */
   private generateIfStatement(statement: ts.IfStatement): void {
+    // Check if this is a null check on an optional variable
+    // Pattern: if (varName === undefined) or if (varName !== undefined)
+    const nullCheckVar = this.detectNullCheck(statement.expression);
+    
     const condition = this.generateExpression(statement.expression);
     this.emit(`if (${condition}) {`);
     this.indent();
     
-    if (ts.isBlock(statement.thenStatement)) {
-      for (const stmt of statement.thenStatement.statements) {
-        this.generateStatement(stmt);
+    // If this is "if (var !== undefined)", variable is safe to unwrap in then-block
+    if (nullCheckVar && nullCheckVar.isNotNull) {
+      const savedUnwrapped = new Set(this.unwrappedOptionals);
+      this.unwrappedOptionals.add(nullCheckVar.varName);
+      
+      if (ts.isBlock(statement.thenStatement)) {
+        for (const stmt of statement.thenStatement.statements) {
+          this.generateStatement(stmt);
+        }
+      } else {
+        this.generateStatement(statement.thenStatement);
       }
+      
+      this.unwrappedOptionals = savedUnwrapped;
     } else {
-      this.generateStatement(statement.thenStatement);
+      // Check if the then-block has an early return (makes the else-path guaranteed)
+      const hasEarlyReturn = this.hasEarlyReturn(statement.thenStatement);
+      
+      if (ts.isBlock(statement.thenStatement)) {
+        for (const stmt of statement.thenStatement.statements) {
+          this.generateStatement(stmt);
+        }
+      } else {
+        this.generateStatement(statement.thenStatement);
+      }
+      
+      // If there's an early return in "if (var === null)", then after the if,
+      // the variable is guaranteed to be non-null
+      if (nullCheckVar && !nullCheckVar.isNotNull && hasEarlyReturn && !statement.elseStatement) {
+        this.unwrappedOptionals.add(nullCheckVar.varName);
+      }
     }
     
     this.dedent();
@@ -1114,18 +1168,101 @@ export class CppCodegen {
       this.emit('} else {');
       this.indent();
       
-      if (ts.isBlock(statement.elseStatement)) {
-        for (const stmt of statement.elseStatement.statements) {
-          this.generateStatement(stmt);
+      // If this is "if (var === undefined)", variable is safe to unwrap in else-block
+      if (nullCheckVar && !nullCheckVar.isNotNull) {
+        const savedUnwrapped = new Set(this.unwrappedOptionals);
+        this.unwrappedOptionals.add(nullCheckVar.varName);
+        
+        if (ts.isBlock(statement.elseStatement)) {
+          for (const stmt of statement.elseStatement.statements) {
+            this.generateStatement(stmt);
+          }
+        } else {
+          this.generateStatement(statement.elseStatement);
         }
+        
+        this.unwrappedOptionals = savedUnwrapped;
       } else {
-        this.generateStatement(statement.elseStatement);
+        if (ts.isBlock(statement.elseStatement)) {
+          for (const stmt of statement.elseStatement.statements) {
+            this.generateStatement(stmt);
+          }
+        } else {
+          this.generateStatement(statement.elseStatement);
+        }
       }
       
       this.dedent();
     }
     
     this.emit('}');
+  }
+  
+  /**
+   * Check if a statement contains an early return
+   */
+  private hasEarlyReturn(stmt: ts.Statement): boolean {
+    if (ts.isReturnStatement(stmt)) {
+      return true;
+    }
+    if (ts.isBlock(stmt)) {
+      return stmt.statements.some(s => ts.isReturnStatement(s));
+    }
+    return false;
+  }
+  
+  /**
+   * Detect if an expression is a null check on a variable
+   * Returns {varName, isNotNull} if it's a check, null otherwise
+   */
+  private detectNullCheck(expr: ts.Expression): {varName: string, isNotNull: boolean} | null {
+    if (!ts.isBinaryExpression(expr)) {
+      return null;
+    }
+    
+    const op = expr.operatorToken.kind;
+    const isEquality = op === ts.SyntaxKind.EqualsEqualsEqualsToken;
+    const isInequality = op === ts.SyntaxKind.ExclamationEqualsEqualsToken;
+    
+    if (!isEquality && !isInequality) {
+      return null;
+    }
+    
+    // Check if one side is a variable and the other is undefined/null/nullopt
+    let varName: string | null = null;
+    let isNull = false;
+    
+    if (ts.isIdentifier(expr.left)) {
+      varName = expr.left.getText();
+      isNull = this.isNullLiteral(expr.right);
+    } else if (ts.isIdentifier(expr.right)) {
+      varName = expr.right.getText();
+      isNull = this.isNullLiteral(expr.left);
+    }
+    
+    if (!varName || !isNull) {
+      return null;
+    }
+    
+    // if (var === null/undefined) -> then block has null, else block has value
+    // if (var !== null/undefined) -> then block has value, else block has null
+    return {
+      varName: this.escapeIdentifier(varName),
+      isNotNull: isInequality
+    };
+  }
+  
+  /**
+   * Check if an expression is a null/undefined literal
+   */
+  private isNullLiteral(expr: ts.Expression): boolean {
+    if (expr.kind === ts.SyntaxKind.NullKeyword) {
+      return true;
+    }
+    if (ts.isIdentifier(expr) && expr.getText() === 'undefined') {
+      return true;
+    }
+    return false;
   }
   
   /**
@@ -1271,17 +1408,36 @@ export class CppCodegen {
    */
   private generateForOfStatement(statement: ts.ForOfStatement): void {
     let variable = '';
+    let isArrayBinding = false;
+    let bindingElements: string[] = [];
     
     if (ts.isVariableDeclarationList(statement.initializer)) {
       const decl = statement.initializer.declarations[0];
-      if (ts.isIdentifier(decl.name)) {
+      
+      // Check if it's array destructuring: for (const [key, value] of map)
+      if (ts.isArrayBindingPattern(decl.name)) {
+        isArrayBinding = true;
+        bindingElements = decl.name.elements.map(el => {
+          if (ts.isBindingElement(el) && ts.isIdentifier(el.name)) {
+            return this.escapeIdentifier(el.name.getText());
+          }
+          return '';
+        }).filter(name => name !== '');
+      } else if (ts.isIdentifier(decl.name)) {
         variable = this.escapeIdentifier(decl.name.getText());
       }
     }
     
     const iterable = this.generateExpression(statement.expression);
     
-    this.emit(`for (const auto& ${variable} : ${iterable}) {`);
+    // For Map iteration with destructuring, generate: for (const auto& [key, value] : map)
+    if (isArrayBinding && bindingElements.length > 0) {
+      const binding = `[${bindingElements.join(', ')}]`;
+      this.emit(`for (const auto& ${binding} : ${iterable}) {`);
+    } else {
+      this.emit(`for (const auto& ${variable} : ${iterable}) {`);
+    }
+    
     this.indent();
     
     if (ts.isBlock(statement.statement)) {
@@ -1454,7 +1610,14 @@ export class CppCodegen {
       if (text === 'undefined') {
         return 'std::nullopt';
       }
-      return this.escapeIdentifier(text);
+      const escaped = this.escapeIdentifier(text);
+      
+      // If this variable is an unwrapped optional, add .value() to access it
+      if (this.unwrappedOptionals.has(escaped)) {
+        return `${escaped}.value()`;
+      }
+      
+      return escaped;
     } else if (ts.isBinaryExpression(expr)) {
       return this.generateBinaryExpression(expr);
     } else if (ts.isCallExpression(expr)) {
@@ -2325,6 +2488,34 @@ export class CppCodegen {
         }
         return `${object}[${index}]`;
       }
+      
+      // Check if this is a tuple/pair access with numeric literal
+      // TypeScript represents tuples as [T, U] which we map to std::pair or std::tuple
+      // When accessing with numeric literal like entries[j][1], need std::get<N>()
+      if (ts.isNumericLiteral(expr.argumentExpression)) {
+        const indexValue = expr.argumentExpression.text;
+        // Check if the object type is a tuple/pair
+        // If object is array_get(entries, j) where entries is [T,U][], result is std::pair
+        // Or if object directly has tuple type
+        const objectType = this.checker.getTypeAtLocation(expr.expression);
+        const objectTypeString = this.checker.typeToString(objectType);
+        
+        // If type string contains 'pair' or 'tuple', use std::get
+        if (objectTypeString.includes('pair<') || objectTypeString.includes('tuple<')) {
+          return `std::get<${indexValue}>(${object})`;
+        }
+        
+        // Also check if this is accessing result of another element access on tuple array
+        // e.g., entries[j][1] where entries is [T,U][]
+        if (ts.isElementAccessExpression(expr.expression)) {
+          const outerType = this.checker.getTypeAtLocation(expr.expression.expression);
+          const outerTypeStr = this.checker.typeToString(outerType);
+          // Check if it's an array of tuples
+          if (outerTypeStr.match(/\[.*,.*\]\[\]/) || outerTypeStr.includes('pair') || outerTypeStr.includes('tuple')) {
+            return `std::get<${indexValue}>(${object})`;
+          }
+        }
+      }
     }
     
     // For arrays (std::vector), use safe accessor
@@ -2407,7 +2598,9 @@ export class CppCodegen {
    */
   private generateTemplateLiteral(expr: ts.TemplateExpression | ts.NoSubstitutionTemplateLiteral): string {
     if (ts.isNoSubstitutionTemplateLiteral(expr)) {
-      return `"${expr.text}"`;
+      // Escape quotes in string literal
+      const escaped = expr.text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\t/g, '\\t');
+      return `"${escaped}"`;
     }
     
     // Build concatenation expression
@@ -2415,7 +2608,9 @@ export class CppCodegen {
     
     // Head
     if (expr.head.text) {
-      parts.push(`"${expr.head.text}"`);
+      // Escape quotes and special characters in string literal
+      const escaped = expr.head.text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\t/g, '\\t');
+      parts.push(`"${escaped}"`);
     }
     
     // Template spans
@@ -2486,7 +2681,9 @@ export class CppCodegen {
       
       // Literal
       if (span.literal.text) {
-        parts.push(`"${span.literal.text}"`);
+        // Escape quotes and special characters in string literal
+        const escaped = span.literal.text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\t/g, '\\t');
+        parts.push(`"${escaped}"`);
       }
     }
     
