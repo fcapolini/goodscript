@@ -1,10 +1,10 @@
 # GoodScript Compiler
 
-The GoodScript compiler (`gsc`) transforms GoodScript (`.gs.ts` and `.gs.tsx`) files into JavaScript/TypeScript or C++, enforcing ownership semantics and memory safety guarantees.
+The GoodScript compiler (`gsc`) transforms [GoodScript](https://github.com/fcapolini/goodscript) (`.gs.ts` and `.gs.tsx`) files into JavaScript/TypeScript or C++, enforcing ownership semantics and memory safety guarantees.
 
 ## Overview
 
-The compiler implements GoodScript in four phases:
+The project implements GoodScript in four phases:
 
 - **Phase 1** (✅ Complete): Strict TypeScript semantics - eliminates JavaScript "bad parts" (244 tests) - [Details](../docs/GOOD-PARTS.md)
 - **Phase 2** (✅ Complete): Ownership analysis (DAG validation + derivation rules) (231 tests, 100% coverage) - [Details](../docs/DAG-ANALYSIS.md)
@@ -36,6 +36,8 @@ gsc myfile.gs.ts
 # or for React/JSX:
 gsc mycomponent.gs.tsx
 ```
+
+> Why React/JSX? Because this way a complex projects can use the same style of TypeScript with the same rules with no confusion for both the purely JS parts (like the React frontend) and the natively compiled parts. Plus, GoodScript restrictions of JS features help with long term maintainability and common bugs prevention.
 
 Compile with options:
 

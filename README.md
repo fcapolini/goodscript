@@ -12,13 +12,45 @@ GoodScript is a **TypeScript specialization** designed to enable safe systems pr
 
 This turns TypeScript into an enterprise-level, natively compilable language with deterministic memory management and small footprint, making it ideal for systems programming in alternative to Rust and Go.
 
-### 1.1 Fully Statically Typed Language
+> GoodScript's name is inspired by Douglas Crockford's "JavaScript: The Good Parts" as it advocated ignoring the "bad" or dangerous features of the language.
 
-TBD
+### 1.1. Fully Statically Typed Language
 
-### 1.2 Simple Automatic Memory Management
+GoodScript enforces **"The Good Parts"** of TypeScript by removing JavaScript's dynamic features that prevent reliable static analysis and native compilation:
 
-In GoodScript, reference to heap-allocated values can be qualified using ownership qualifiers:
+**Prohibited features:**
+* No `var` keyword (only `const` and `let`)
+* No loose equality operators (`==`, `!=`) — only strict equality (`===`, `!==`)
+* No type coercion or truthy/falsy conversions
+* No `any` type — all types must be explicit
+* No dynamic features: `eval`, `with`, `delete`, `arguments`
+* No `for-in` loops (use `for-of` or explicit iteration)
+
+**Important differences from JavaScript:**
+
+* **Arrays are not sparse** — GoodScript arrays use contiguous memory (`std::vector<T>` in C++). Writing to `arr[1000]` allocates memory for all elements 0-1000, not just index 1000. Avoid large index gaps to prevent excessive memory usage.
+
+  ```ts
+  // ⚠️ Inefficient in GoodScript - allocates 1,000,001 elements
+  const arr: number[] = [];
+  arr[1000000] = 42;  // Resizes to 1,000,001 elements
+  
+  // ✅ Better - use Map for sparse data
+  const map = new Map<number, number>();
+  map.set(1000000, 42);  // Only stores one key-value pair
+  ```
+
+**Why these restrictions?**
+* Enable complete static type inference
+* Guarantee predictable runtime behavior
+* Allow safe transpilation to C++ with deterministic semantics
+* Eliminate entire classes of bugs common in JavaScript
+
+These restrictions make GoodScript code more maintainable and ensure that TypeScript development behavior matches native compilation behavior exactly.
+
+### 1.2. Simple Automatic Memory Management
+
+In GoodScript, reference to heap-allocated values are qualified using ownership qualifiers:
 
 * `own<T>` — exclusive ownership of a value.
 * `share<T>` — reference-counted shared ownership.
@@ -28,7 +60,7 @@ The compiler checks the correctness of memory ownership rules and performs analy
 
 Complex structures which require cross referencing between nodes must be implemented using the Arena/Pool pattern, where node ownership is centralized in a single pool and nodes only keep non-owning references to each other.
 
-This is rarely needed in most application, and is a small price to pay for getting rid of garbage collection and gain in performance and predictability, completely eliminating GC latencies and huge binaries containing complex runtimes.
+This is rarely needed in most application, and it's a small price to pay for getting rid of garbage collection and gain in memory footprint, performance and predictability, completely eliminating GC latencies and huge binaries containing complex runtimes.
 
 These types are **transparent in TypeScript**, making GoodScript code valid TS code for development and prototyping.
 
@@ -63,14 +95,15 @@ async function example(sharedNode: share<Node>) {
 ### **2.2 Native Mode (Transpilation)**
 
 * Transpile `.gs.ts` to **C++20** with smart pointer-based ownership.
-* Ownership qualifiers map to C++ smart pointers:
+* Ownership qualifiers map to optimized C++ smart pointers:
 
   * `own<T>` → `std::unique_ptr<T>`
-  * `share<T>` → `std::shared_ptr<T>`
-  * `use<T>` → `std::weak_ptr<T>`
+  * `share<T>` → `gs::shared_ptr<T>` (lightweight non-atomic refcounting, ~3x faster)
+  * `use<T>` → `gs::weak_ptr<T>` (lightweight non-atomic weak references, ~3x faster)
 * Ensures **memory safety, deterministic destruction, and DAG-enforced ownership**.
 * Uses **C++20 features** (concepts, ranges, coroutines for async/await).
-* Optional: use **Zig toolchain** for cross-compilation and packaging.
+* **Performance optimizations**: Custom smart pointers use non-atomic operations, safe for single-threaded execution.
+* Optional: use **Zig toolchain** for zero-config cross-compilation.
 
 ---
 
@@ -179,7 +212,7 @@ async function demo(node: share<Node>) {
 ```
 
 * Runs directly in Node.js.
-* Transpiles to C++20 with proper `std::shared_ptr`/`std::weak_ptr` semantics.
+* Transpiles to C++20 with optimized `gs::shared_ptr`/`gs::weak_ptr` (3x faster than standard library).
 
 ---
 
