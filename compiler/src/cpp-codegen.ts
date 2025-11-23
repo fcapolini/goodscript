@@ -209,6 +209,9 @@ export class CppCodegen {
     lines.push('');
     lines.push('template<typename T>');
     lines.push('class shared_ptr {');
+    lines.push('public:');
+    lines.push('  using element_type = T;  // Standard typedef for compatibility');
+    lines.push('');
     lines.push('private:');
     lines.push('  struct ControlBlock {');
     lines.push('    T* ptr;');
@@ -407,7 +410,63 @@ export class CppCodegen {
     lines.push('  return T{}; // Default-constructed value (0 for numbers, false for bool, etc.)');
     lines.push('}');
     lines.push('');
+    lines.push('// Helper to wrap value in shared_ptr if needed for push operations');
+    lines.push('template<typename T, typename U>');
+    lines.push('auto wrap_for_push(U&& value) {');
+    lines.push('  if constexpr (std::is_same_v<std::decay_t<T>, shared_ptr<typename std::decay_t<T>::element_type>>) {');
+    lines.push('    // T is shared_ptr<SomeType>');
+    lines.push('    using ElementType = typename std::decay_t<T>::element_type;');
+    lines.push('    if constexpr (std::is_same_v<std::decay_t<U>, ElementType>) {');
+    lines.push('      // Pushing a plain object, wrap it in shared_ptr');
+    lines.push('      return make_shared<ElementType>(std::forward<U>(value));');
+    lines.push('    } else {');
+    lines.push('      // Already wrapped or compatible type');
+    lines.push('      return std::forward<U>(value);');
+    lines.push('    }');
+    lines.push('  } else {');
+    lines.push('    // Plain type, just return as-is');
+    lines.push('    return std::forward<U>(value);');
+    lines.push('  }');
+    lines.push('}');
+    lines.push('');
+    lines.push('// JSON.stringify for number arrays');
+    lines.push('inline std::string json_stringify(const std::vector<double>& arr) {');
+    lines.push('  std::ostringstream oss;');
+    lines.push('  oss << "[";');
+    lines.push('  for (size_t i = 0; i < arr.size(); i++) {');
+    lines.push('    if (i > 0) oss << ",";');
+    lines.push('    // Check if number is actually an integer');
+    lines.push('    if (arr[i] == static_cast<int>(arr[i])) {');
+    lines.push('      oss << static_cast<int>(arr[i]);');
+    lines.push('    } else {');
+    lines.push('      oss << arr[i];');
+    lines.push('    }');
+    lines.push('  }');
+    lines.push('  oss << "]";');
+    lines.push('  return oss.str();');
+    lines.push('}');
+    lines.push('');
+    lines.push('// JSON.stringify for string arrays');
+    lines.push('inline std::string json_stringify(const std::vector<std::string>& arr) {');
+    lines.push('  std::ostringstream oss;');
+    lines.push('  oss << "[";');
+    lines.push('  for (size_t i = 0; i < arr.size(); i++) {');
+    lines.push('    if (i > 0) oss << ",";');
+    lines.push('    oss << "\\"" << arr[i] << "\\"";  // Add quotes around strings');
+    lines.push('  }');
+    lines.push('  oss << "]";');
+    lines.push('  return oss.str();');
+    lines.push('}');
+    lines.push('');
     lines.push('} // namespace gs');
+    lines.push('');
+    lines.push('// JSON namespace for JSON.stringify compatibility');
+    lines.push('namespace JSON {');
+    lines.push('  template<typename T>');
+    lines.push('  std::string stringify(const T& value) {');
+    lines.push('    return gs::json_stringify(value);');
+    lines.push('  }');
+    lines.push('}');
     lines.push('');
   }
   
@@ -422,6 +481,7 @@ export class CppCodegen {
     lines.push('#include <string>');
     lines.push('#include <optional>');
     lines.push('#include <iostream>');
+    lines.push('#include <sstream>');  // For JSON.stringify
     
     // Add custom includes
     if (this.includes.size > 0) {
@@ -1783,6 +1843,15 @@ export class CppCodegen {
   private generateCallExpression(expr: ts.CallExpression): string {
     const args = expr.arguments.map(arg => this.generateExpression(arg)).join(', ');
     
+    // Handle JSON.stringify specially
+    if (ts.isPropertyAccessExpression(expr.expression)) {
+      const obj = expr.expression.expression.getText();
+      const method = expr.expression.name.getText();
+      if (obj === 'JSON' && method === 'stringify') {
+        return `JSON::stringify(${args})`;
+      }
+    }
+    
     // Handle String.fromCharCode early (before general property access handling)
     if (ts.isPropertyAccessExpression(expr.expression)) {
       const obj = expr.expression.expression.getText();
@@ -2021,9 +2090,16 @@ export class CppCodegen {
         let elementType = '';
         let isShared = false;
         
-        if (this.checker && ts.isIdentifier(objExpr)) {
-          // Get type from AST to preserve ownership annotations
-          const symbol = this.checker.getSymbolAtLocation(objExpr);
+        if (this.checker) {
+          let symbol: ts.Symbol | undefined;
+          
+          // Handle both identifier (myArray.push) and property access (this.nodes.push)
+          if (ts.isIdentifier(objExpr)) {
+            symbol = this.checker.getSymbolAtLocation(objExpr);
+          } else if (ts.isPropertyAccessExpression(objExpr)) {
+            symbol = this.checker.getSymbolAtLocation(objExpr.name);
+          }
+          
           if (symbol?.valueDeclaration && 'type' in symbol.valueDeclaration) {
             const typeNode = (symbol.valueDeclaration as any).type as ts.TypeNode | undefined;
             if (typeNode) {
@@ -2046,49 +2122,12 @@ export class CppCodegen {
         }
         
         if (hasSmartPtrElement && elementType) {
-          // Wrap the argument in make_unique/make_shared if needed
-          const argArray = expr.arguments.map(arg => this.generateExpression(arg));
-          let valueArg = argArray[0];
+          // Use wrap_for_push helper to automatically wrap if needed
+          const argExpr = expr.arguments[0];
+          let valueArg = this.generateExpression(argExpr);
           
-          if (!valueArg.includes('std::make_unique') && !valueArg.includes('gs::make_shared') && !valueArg.includes('std::move')) {
-            const wrapperFn = isShared ? 'gs::make_shared' : 'std::make_unique';
-            
-            // Check if the argument is from a method returning optional
-            let needsUnwrap = false;
-            
-            if (expr.arguments.length >= 1) {
-              const valueArgExpr = expr.arguments[0];
-              
-              // Direct call expression
-              if (ts.isCallExpression(valueArgExpr)) {
-                const returnType = this.getMethodReturnTypeFromSource(valueArgExpr);
-                if (returnType && (returnType.includes('| null') || returnType.includes('| undefined'))) {
-                  needsUnwrap = true;
-                }
-              }
-              // Identifier that was initialized from a call returning optional
-              else if (ts.isIdentifier(valueArgExpr) && this.checker) {
-                const symbol = this.checker.getSymbolAtLocation(valueArgExpr);
-                if (symbol?.valueDeclaration && ts.isVariableDeclaration(symbol.valueDeclaration)) {
-                  const init = symbol.valueDeclaration.initializer;
-                  if (init && ts.isCallExpression(init)) {
-                    const returnType = this.getMethodReturnTypeFromSource(init);
-                    if (returnType && (returnType.includes('| null') || returnType.includes('| undefined'))) {
-                      needsUnwrap = true;
-                    }
-                  }
-                }
-              }
-            }
-            
-            if (needsUnwrap) {
-              valueArg = `*${valueArg}`;
-            }
-            
-            valueArg = `${wrapperFn}<${elementType}>(${valueArg})`;
-          }
-          
-          return `${object}${accessor}push_back(${valueArg})`;
+          // Simplified: just call wrap_for_push which handles all the logic
+          return `${object}${accessor}push_back(gs::wrap_for_push<${isShared ? 'gs::shared_ptr' : 'std::unique_ptr'}<${elementType}>>(${valueArg}))`;
         } else {
           return `${object}${accessor}push_back(${args})`;
         }
