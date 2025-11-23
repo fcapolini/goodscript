@@ -63,7 +63,12 @@ export class CppCodegen {
   }
   
   /**
-   * Escape identifier if it collides with C++ keywords
+   * Escape identifier if it collides with C++ keywords or contains unsupported Unicode.
+   * 
+   * Note: Emoji are not valid JavaScript identifiers (per ECMAScript spec),
+   * but we handle them defensively in case of programmatic AST construction.
+   * Unicode letter-based identifiers (Chinese, Japanese, etc.) ARE valid in
+   * JavaScript but may not work in C++20, so we convert them to hex codes.
    */
   private escapeIdentifier(name: string): string {
     // Special keywords that should never be escaped
@@ -71,10 +76,49 @@ export class CppCodegen {
       return 'this';
     }
     
-    if (CPP_KEYWORDS.has(name) || CPP_MACROS.has(name)) {
-      return `${name}_`;  // Append underscore to avoid collision
+    // Sanitize Unicode characters that aren't portable in C++ identifiers
+    // While C++20 supports some Unicode identifiers (letters), emoji and many symbols are not allowed
+    // For maximum portability, we'll transliterate/replace non-ASCII characters
+    let sanitized = name;
+    
+    // Check if contains any non-ASCII characters
+    if (/[^\x00-\x7F]/.test(name)) {
+      // Replace with descriptive names for common emoji/symbols
+      const emojiMap: Record<string, string> = {
+        '🚀': 'rocket',
+        '🎉': 'party',
+        '💡': 'lightbulb',
+        '⚡': 'lightning',
+        '🔥': 'fire',
+        '✨': 'sparkles',
+        '🌟': 'star',
+        '❤️': 'heart',
+        '👍': 'thumbsup',
+        '✅': 'check',
+        '❌': 'cross',
+        '⚠️': 'warning',
+      };
+      
+      // Try to replace known emoji first (before char-by-char conversion)
+      for (const [emoji, replacement] of Object.entries(emojiMap)) {
+        if (sanitized.includes(emoji)) {
+          sanitized = sanitized.replace(new RegExp(emoji, 'g'), replacement);
+        }
+      }
+      
+      // For remaining non-ASCII characters, convert to hex code points
+      // This handles Chinese, Japanese, Arabic, etc., and any emoji not in the map
+      sanitized = sanitized.replace(/[^\x00-\x7F]/gu, (char) => {
+        // Use codePointAt to get the actual code point (handles surrogate pairs)
+        const codePoint = char.codePointAt(0);
+        return `_u${codePoint?.toString(16)}_`;
+      });
     }
-    return name;
+    
+    if (CPP_KEYWORDS.has(sanitized) || CPP_MACROS.has(sanitized)) {
+      return `${sanitized}_`;  // Append underscore to avoid collision
+    }
+    return sanitized;
   }
   
   /**
