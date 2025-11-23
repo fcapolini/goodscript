@@ -6,8 +6,11 @@
 
 import { execSync } from 'child_process';
 import { writeFileSync, unlinkSync, existsSync, mkdirSync, rmSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { tmpdir } from 'os';
+
+// Path to GoodScript runtime headers
+const RUNTIME_DIR = resolve(__dirname, '../../runtime');
 
 export interface ExecutionResult {
   success: boolean;
@@ -69,10 +72,10 @@ export const executeCpp = (cppCode: string, outDir: string): ExecutionResult => 
   writeFileSync(cppFile, cppCode, 'utf-8');
   
   try {
-    // Compile the C++ code using Zig's C++ compiler
-    execSync(
-      `zig c++ -std=c++17 -O3 ${cppFile} -o ${binFile} 2>&1`,
-      { encoding: 'utf-8', timeout: 10000 }
+    // Compile the C++ code using Zig's C++ compiler (C++20 for runtime library features)
+    const compileOutput = execSync(
+      `zig c++ -std=c++20 -I${RUNTIME_DIR} ${cppFile} -o ${binFile}`,
+      { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] }
     );
     
     // Run the compiled binary

@@ -180,6 +180,7 @@ export class CppCodegen {
     lines.push('// Note: String methods (indexOf, startsWith, etc.) are now in gs::String');
     lines.push('// Note: Array methods (push, map, filter, etc.) are now in gs::Array<T>');
     lines.push('// Note: Smart pointers (shared_ptr, weak_ptr) are in gs_runtime.hpp');
+    lines.push('// Note: JSON.stringify is in gs::JSON::stringify');
     lines.push('');
     lines.push('// Number helper: format integer without decimal point');
     lines.push('inline gs::String to_string_int(double value) {');
@@ -190,14 +191,6 @@ export class CppCodegen {
     lines.push('}');
     lines.push('');
     lines.push('} // namespace gs');
-    lines.push('');
-    lines.push('// JSON namespace for JSON.stringify compatibility');
-    lines.push('namespace JSON {');
-    lines.push('  template<typename T>');
-    lines.push('  std::string stringify(const T& value) {');
-    lines.push('    return gs::json_stringify(value);');
-    lines.push('  }');
-    lines.push('}');
     lines.push('');
   }
   
@@ -301,7 +294,11 @@ export class CppCodegen {
         }
       }
       
-      lines.push('  return 0;');
+      // Add return 0 if not already present
+      const lastLine = lines[lines.length - 1]?.trim();
+      if (lastLine !== 'return 0;') {
+        lines.push('  return 0;');
+      }
       lines.push('}');
     }
     
@@ -1599,7 +1596,7 @@ export class CppCodegen {
       const obj = expr.expression.expression.getText();
       const method = expr.expression.name.getText();
       if (obj === 'JSON' && method === 'stringify') {
-        return `JSON::stringify(${args})`;
+        return `gs::JSON::stringify(${args})`;
       }
     }
     
@@ -1669,7 +1666,7 @@ export class CppCodegen {
       
       // Special handling for console.log
       if (object === 'console' && methodName === 'log') {
-        return `std::cout << std::boolalpha << ${args} << std::endl`;
+        return `gs::console::log(${args})`;
       }
       
       // Map method

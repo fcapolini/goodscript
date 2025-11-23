@@ -90,7 +90,11 @@ describe('Phase 3 - Runtime Equivalence Tests', () => {
       }
       
       if (!result.nativeResult.success) {
-        console.log('C++ failed:', result.nativeResult.stderr);
+        console.log('C++ compilation/execution failed!');
+        console.log('C++ stderr:', result.nativeResult.stderr);
+        console.log('C++ stdout:', result.nativeResult.stdout);
+        console.log('C++ exitCode:', result.nativeResult.exitCode);
+        console.log('C++ error:', result.nativeResult.error);
         console.log('C++ code:', result.cppCode);
       }
       
