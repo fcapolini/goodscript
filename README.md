@@ -82,12 +82,51 @@ async function example(sharedNode: share<Node>) {
   * **Real-time feedback** on memory-safety rules and DAG enforcement.
 * Enables **fast feedback loop** during development while keeping code valid TypeScript.
 
-### **Compiler (gsc)**
+### **Compiler (gsc) & Zig Toolchain**
 
+GoodScript uses the **Zig C++ compiler** for native compilation, providing:
+
+* **Zero-config cross-compilation** - Compile for any platform from any platform
+* **No complex toolchain setup** - Single 15MB self-contained binary
+* **Aggressive optimizations** - `-O3`, `-march=native`, `-ffast-math`, `-funroll-loops`
+* **Multiple targets** - Linux, Windows, macOS, WebAssembly, and more
+
+**Installation:**
+```bash
+# macOS
+brew install zig
+
+# Linux/Windows
+# See https://ziglang.org/download/
+```
+
+**Compiler Phases:**
 * **Phase 1**: Validates TypeScript "Good Parts" restrictions (no `var`, no `==`, etc.)
 * **Phase 2**: Analyzes ownership and enforces DAG (Directed Acyclic Graph) rules
-* **Phase 3**: Generates C++20 code with smart pointers (🚧 in progress - foundation complete)
+* **Phase 3**: ✅ Generates C++20 code with smart pointers (foundation complete)
+  * C++ source generation
+  * Native binary compilation with Zig
+  * Cross-compilation to any platform
 * **Phase 4**: Standard library, module system, and deployment (📋 planned)
+
+**CLI Examples:**
+
+```bash
+# Compile to JavaScript (TypeScript mode)
+gsc -o dist src/main.gs.ts
+
+# Generate C++ source
+gsc -t native -o dist src/main.gs.ts
+
+# Compile to native binary
+gsc -t native -b -o dist src/main.gs.ts
+
+# Cross-compile to Linux
+gsc -t native -b -a x86_64-linux -o dist src/main.gs.ts
+
+# Cross-compile to WebAssembly
+gsc -t native -b -a wasm32-wasi -o dist src/main.gs.ts
+```
 
 ---
 

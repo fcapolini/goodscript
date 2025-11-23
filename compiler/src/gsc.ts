@@ -25,6 +25,8 @@ interface CliOptions {
   help?: boolean;
   project?: string;
   jsonOutput?: boolean;
+  compileBinary?: boolean;
+  arch?: string;
 }
 
 function parseArgs(args: string[]): CliOptions {
@@ -68,6 +70,10 @@ function parseArgs(args: string[]): CliOptions {
       options.skipOwnershipChecks = true;
     } else if (arg === '--json-output') {
       options.jsonOutput = true;
+    } else if (arg === '--compile-binary' || arg === '-b') {
+      options.compileBinary = true;
+    } else if (arg === '--arch' || arg === '-a') {
+      options.arch = args[++i];
     } else if (arg === '--verbose' || arg === '-v') {
       options.verbose = true;
     } else if (!arg.startsWith('-')) {
@@ -98,6 +104,8 @@ Options:
   -p, --project <file>        Path to tsconfig.json (auto-detected from input files if not specified)
   -t, --target <target>       Target language: 'typescript' (default) or 'native'
   -e, --emit <format>         Output format: 'js' (default), 'ts', or 'both'
+  -b, --compile-binary        Compile C++ to native binary (requires Zig, use with -t native)
+  -a, --arch <architecture>   Target architecture for cross-compilation (e.g., x86_64-linux, aarch64-macos, wasm32-wasi)
   --no-ownership-checks       Skip ownership analysis ("Clean TypeScript" mode)
   --json-output               Output diagnostics in JSON format (for IDE integration)
   -v, --verbose               Verbose output
@@ -115,9 +123,13 @@ Examples:
   gsc src/**/*.ts                     Compile mixed .ts and .gs.ts files
   gsc -o dist main.gs.ts              Compile to JavaScript in dist/
   gsc -e ts -o dist main.gs.ts        Compile to TypeScript only
-  gsc -e both -o dist main.gs.ts      Emit both .ts and .js files
+  gsc -e both -o dist main.gs.ts        Emit both .ts and .js files
   gsc --no-ownership-checks -o dist main.gs.ts   Skip ownership checks
-  gsc -t native -o dist main.gs.ts    Compile to native (Phase 3)
+  gsc -t native -o dist main.gs.ts    Compile to C++ source
+  gsc -t native -b -o dist main.gs.ts Compile to native binary (requires Zig)
+  gsc -t native -b -a x86_64-linux -o dist main.gs.ts   Cross-compile for Linux x64
+  gsc -t native -b -a aarch64-macos -o dist main.gs.ts  Cross-compile for macOS ARM64
+  gsc -t native -b -a wasm32-wasi -o dist main.gs.ts    Compile to WebAssembly
   `);
 }
 
@@ -192,6 +204,8 @@ function main(): void {
     emit: options.emit,
     skipOwnershipChecks: options.skipOwnershipChecks,
     project: options.project,
+    compileBinary: options.compileBinary,
+    arch: options.arch,
   };
 
   const result = compiler.compile(compileOptions);

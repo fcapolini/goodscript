@@ -199,7 +199,7 @@ export class CppCodegen {
     lines.push('');
     lines.push('// Map helper: get (returns optional)');
     lines.push('template<typename K, typename V>');
-    lines.push('std::optional<V> map_get(const std::unordered_map<K, V>& map, const K& key) {');
+    lines.push('inline std::optional<V> map_get(const std::unordered_map<K, V>& map, const K& key) {');
     lines.push('  auto it = map.find(key);');
     lines.push('  if (it != map.end()) {');
     lines.push('    return it->second;');
@@ -210,7 +210,7 @@ export class CppCodegen {
     lines.push('// Array helper: safe get (returns element or default value, matching JavaScript undefined behavior)');
     lines.push('// For primitive types, returns 0/false/empty; could be enhanced to return optional');
     lines.push('template<typename T>');
-    lines.push('T array_get(const std::vector<T>& arr, size_t index) {');
+    lines.push('inline T array_get(const std::vector<T>& arr, size_t index) {');
     lines.push('  if (index < arr.size()) {');
     lines.push('    return arr[index];');
     lines.push('  }');

@@ -6,6 +6,7 @@
 import * as ts from 'typescript';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 import { Parser } from './parser';
 import { OwnershipAnalyzer } from './ownership-analyzer';
 import { Validator } from './validator';
@@ -21,6 +22,8 @@ export interface CompileOptions {
   emit?: 'js' | 'ts' | 'both';  // Default: js (ts+js, emit both intermediate .ts and final .js)
   skipOwnershipChecks?: boolean;  // Skip ownership analysis ("Clean TypeScript" mode)
   project?: string;  // Path to tsconfig.json
+  compileBinary?: boolean;  // Compile C++ to native binary (requires Zig)
+  arch?: string;  // Target architecture (e.g., 'x86_64-linux', 'aarch64-macos', 'wasm32-wasi')
 }
 
 export interface CompileResult {
@@ -195,7 +198,15 @@ export class Compiler {
         // Add TypeScript→JavaScript compilation errors
         allDiagnostics.push(...tsDiagnostics);
       } else if (target === 'native') {
-        this.emitCpp(program, options.outDir);
+        try {
+          this.emitCpp(program, options.outDir, options.compileBinary, options.arch);
+        } catch (error: any) {
+          allDiagnostics.push({
+            severity: 'error',
+            message: error.message,
+            location: { fileName: '', line: 0, column: 0 },
+          });
+        }
       }
     }
 
@@ -420,9 +431,60 @@ export class Compiler {
   }
 
   /**
+   * Check if Zig C++ compiler is available
+   */
+  private isZigAvailable(): boolean {
+    try {
+      execSync('zig version', { stdio: 'ignore' });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Compile C++ file to native binary using Zig
+   */
+  private compileCppToBinary(cppFile: string, outFile: string, targetArch?: string): void {
+    if (!this.isZigAvailable()) {
+      throw new Error(
+        'Zig compiler not found. To compile C++ to native binaries, please install Zig:\n' +
+        '\n' +
+        'macOS:   brew install zig\n' +
+        'Linux:   https://ziglang.org/download/\n' +
+        'Windows: https://ziglang.org/download/\n' +
+        '\n' +
+        'Zig provides a cross-platform C++ compiler with zero additional dependencies.\n' +
+        'Alternatively, use --target native without --compile-binary to generate C++ source only.'
+      );
+    }
+
+    try {
+      // Build compilation command
+      let cmd = 'zig c++ -std=c++20';
+      
+      // Add target architecture if specified (for cross-compilation)
+      if (targetArch) {
+        cmd += ` -target ${targetArch}`;
+        // When cross-compiling, don't use -march=native
+        cmd += ' -O3 -DNDEBUG -ffast-math -funroll-loops';
+      } else {
+        // Native compilation: use -march=native for optimal performance
+        cmd += ' -O3 -march=native -DNDEBUG -ffast-math -funroll-loops';
+      }
+      
+      cmd += ` "${cppFile}" -o "${outFile}"`;
+      
+      execSync(cmd, { encoding: 'utf-8', stdio: 'inherit' });
+    } catch (error: any) {
+      throw new Error(`Failed to compile C++ to binary: ${error.message}`);
+    }
+  }
+
+  /**
    * Emit C++ code from GoodScript source files
    */
-  private emitCpp(program: ts.Program, outDir: string): void {
+  private emitCpp(program: ts.Program, outDir: string, compileBinary: boolean = false, arch?: string): void {
     // Create output directory if it doesn't exist
     if (!fs.existsSync(outDir)) {
       fs.mkdirSync(outDir, { recursive: true });
@@ -463,6 +525,12 @@ export class Compiler {
         
         // Write C++ file
         fs.writeFileSync(cppPath, cppCode, 'utf-8');
+
+        // Compile to binary if requested
+        if (compileBinary) {
+          const binPath = cppPath.replace(/\.cpp$/, '');
+          this.compileCppToBinary(cppPath, binPath, arch);
+        }
       }
     }
   }

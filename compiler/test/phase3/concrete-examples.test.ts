@@ -55,7 +55,7 @@ const compileCppBinary = (cppFile: string, outDir: string, exampleName: string):
   
   try {
     execSync(
-      `g++ -std=c++20 -O2 ${cppFile} -o ${binFile} 2>&1`,
+      `zig c++ -std=c++20 -O3 -march=native -DNDEBUG -ffast-math -funroll-loops ${cppFile} -o ${binFile} 2>&1`,
       { encoding: 'utf-8', timeout: 30000 }
     );
     return true;

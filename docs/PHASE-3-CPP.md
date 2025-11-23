@@ -1,6 +1,6 @@
 # Phase 3: C++ Code Generation
 
-**Status:** ✅ Foundation Complete (12/12 concrete example tests passing, 100%)
+**Status:** ✅ Foundation Complete + Zig Toolchain Integrated
 
 **Test Coverage:** 
 - 45 basic feature tests (100% passing) - includes array auto-resize tests
@@ -10,8 +10,19 @@
   - ✅ json-parser (3/3)
   - ✅ lru-cache (3/3)
   - ✅ n-queens (3/3)
+- 54 CLI tests (100% passing)
+  - ✅ 20 tsc compatibility tests
+  - ✅ 19 native compilation tests
+  - ✅ 15 gs wrapper tests
 
 **Recent Updates (Nov 23, 2025):**
+- ✅ **Zig C++ Compiler Integration** - Drop-in replacement for g++/clang++
+- ✅ **Cross-compilation Support** - Target any platform from any platform
+- ✅ **Optimized Binary Compilation** - `-O3 -march=native -ffast-math -funroll-loops`
+- ✅ **Inlined Helper Functions** - `array_get` and `map_get` marked `inline`
+- ✅ **CLI Binary Compilation** - `gsc -t native -b` compiles to native binary
+- ✅ **Architecture Targeting** - `gsc -a x86_64-linux` for cross-compilation
+- ✅ **Comprehensive CLI Tests** - 34 new tests for native/cross-compilation
 - ✅ Smart pointer null comparisons fixed (`nullptr` vs `std::nullopt`)
 - ✅ Smart pointer member access fixed (`->` vs `.`)
 - ✅ Array/vector member access fixed (proper `.` usage)
@@ -25,6 +36,14 @@
 ## Overview
 
 Phase 3 implements the C++ code generator that transforms GoodScript's TypeScript AST into idiomatic, memory-safe C++20 code. The generator maps GoodScript's ownership semantics to C++'s smart pointers while ensuring RAII (Resource Acquisition Is Initialization) patterns and deterministic memory management.
+
+**Compilation Toolchain:** GoodScript uses the **Zig C++ compiler** (`zig c++`) as the default compilation backend, providing:
+- Zero-config cross-compilation to any platform
+- Single self-contained binary (no complex toolchain installation)
+- Aggressive optimizations (`-O3 -march=native` for native, `-O3` for cross-compilation)
+- Support for targeting Linux, Windows, macOS, WebAssembly, and more
+
+See `docs/ZIG-TOOLCHAIN.md` for detailed information on Zig integration.
 
 ## Implementation Status
 

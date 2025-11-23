@@ -69,9 +69,9 @@ export const executeCpp = (cppCode: string, outDir: string): ExecutionResult => 
   writeFileSync(cppFile, cppCode, 'utf-8');
   
   try {
-    // Compile the C++ code
+    // Compile the C++ code using Zig's C++ compiler
     execSync(
-      `g++ -std=c++17 -O3 ${cppFile} -o ${binFile} 2>&1`,
+      `zig c++ -std=c++17 -O3 ${cppFile} -o ${binFile} 2>&1`,
       { encoding: 'utf-8', timeout: 10000 }
     );
     
@@ -131,11 +131,11 @@ export const compareOutputs = (jsResult: ExecutionResult, cppResult: ExecutionRe
 };
 
 /**
- * Check if g++ is available
+ * Check if Zig C++ compiler is available
  */
 export const isCppCompilerAvailable = (): boolean => {
   try {
-    execSync('g++ --version', { stdio: 'ignore' });
+    execSync('zig version', { stdio: 'ignore' });
     return true;
   } catch {
     return false;
