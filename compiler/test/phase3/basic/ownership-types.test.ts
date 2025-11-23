@@ -85,7 +85,7 @@ describe('Phase 3: Ownership - share<T>', () => {
 });
 
 describe('Phase 3: Ownership - use<T>', () => {
-  it('should generate std::weak_ptr for use<T>', () => {
+  it('should generate gs::weak_ptr for use<T>', () => {
     const source = `
       class Node {
         parent: use<Node>;
@@ -93,7 +93,7 @@ describe('Phase 3: Ownership - use<T>', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('std::weak_ptr<Node>');
+    expect(cpp).toContain('gs::weak_ptr<Node>');
   });
 });
 

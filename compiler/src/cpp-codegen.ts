@@ -7,7 +7,7 @@
  * Ownership mappings:
  * - Unique<T> -> std::unique_ptr<T>
  * - Shared<T> -> gs::shared_ptr<T> (non-atomic for single-threaded performance)
- * - Weak<T> -> std::weak_ptr<T>
+ * - Weak<T> -> gs::weak_ptr<T> (non-atomic for single-threaded performance)
  * - T | null | undefined -> std::optional<T>
  * 
  * All generated code is wrapped in the 'gs' namespace to avoid keyword conflicts.
@@ -197,24 +197,31 @@ export class CppCodegen {
     lines.push('  return std::to_string(value);');
     lines.push('}');
     lines.push('');
-    lines.push('// Lightweight non-atomic shared pointer for single-threaded execution');
-    lines.push('// Replaces gs::shared_ptr with faster non-atomic reference counting');
+    lines.push('// Lightweight non-atomic shared/weak pointer for single-threaded execution');
+    lines.push('// Replaces std::shared_ptr/gs::weak_ptr with faster non-atomic reference counting');
+    lines.push('');
+    lines.push('// Forward declaration for weak_ptr');
+    lines.push('template<typename T> class weak_ptr;');
+    lines.push('');
     lines.push('template<typename T>');
     lines.push('class shared_ptr {');
     lines.push('private:');
     lines.push('  struct ControlBlock {');
     lines.push('    T* ptr;');
-    lines.push('    size_t ref_count;');
-    lines.push('    ControlBlock(T* p) : ptr(p), ref_count(1) {}');
+    lines.push('    size_t strong_count;');
+    lines.push('    size_t weak_count;');
+    lines.push('    ControlBlock(T* p) : ptr(p), strong_count(1), weak_count(0) {}');
     lines.push('  };');
     lines.push('  ControlBlock* control;');
+    lines.push('');
+    lines.push('  friend class weak_ptr<T>;');
     lines.push('');
     lines.push('public:');
     lines.push('  shared_ptr() : control(nullptr) {}');
     lines.push('  explicit shared_ptr(T* ptr) : control(ptr ? new ControlBlock(ptr) : nullptr) {}');
     lines.push('');
     lines.push('  shared_ptr(const shared_ptr& other) : control(other.control) {');
-    lines.push('    if (control) ++control->ref_count;');
+    lines.push('    if (control) ++control->strong_count;');
     lines.push('  }');
     lines.push('');
     lines.push('  shared_ptr(shared_ptr&& other) noexcept : control(other.control) {');
@@ -222,29 +229,38 @@ export class CppCodegen {
     lines.push('  }');
     lines.push('');
     lines.push('  ~shared_ptr() {');
-    lines.push('    if (control && --control->ref_count == 0) {');
+    lines.push('    if (control && --control->strong_count == 0) {');
     lines.push('      delete control->ptr;');
-    lines.push('      delete control;');
+    lines.push('      control->ptr = nullptr;');
+    lines.push('      if (control->weak_count == 0) {');
+    lines.push('        delete control;');
+    lines.push('      }');
     lines.push('    }');
     lines.push('  }');
     lines.push('');
     lines.push('  shared_ptr& operator=(const shared_ptr& other) {');
     lines.push('    if (this != &other) {');
-    lines.push('      if (control && --control->ref_count == 0) {');
+    lines.push('      if (control && --control->strong_count == 0) {');
     lines.push('        delete control->ptr;');
-    lines.push('        delete control;');
+    lines.push('        control->ptr = nullptr;');
+    lines.push('        if (control->weak_count == 0) {');
+    lines.push('          delete control;');
+    lines.push('        }');
     lines.push('      }');
     lines.push('      control = other.control;');
-    lines.push('      if (control) ++control->ref_count;');
+    lines.push('      if (control) ++control->strong_count;');
     lines.push('    }');
     lines.push('    return *this;');
     lines.push('  }');
     lines.push('');
     lines.push('  shared_ptr& operator=(shared_ptr&& other) noexcept {');
     lines.push('    if (this != &other) {');
-    lines.push('      if (control && --control->ref_count == 0) {');
+    lines.push('      if (control && --control->strong_count == 0) {');
     lines.push('        delete control->ptr;');
-    lines.push('        delete control;');
+    lines.push('        control->ptr = nullptr;');
+    lines.push('        if (control->weak_count == 0) {');
+    lines.push('          delete control;');
+    lines.push('        }');
     lines.push('      }');
     lines.push('      control = other.control;');
     lines.push('      other.control = nullptr;');
@@ -256,7 +272,7 @@ export class CppCodegen {
     lines.push('  T& operator*() const { return *control->ptr; }');
     lines.push('  T* operator->() const { return control->ptr; }');
     lines.push('  explicit operator bool() const { return control && control->ptr; }');
-    lines.push('  size_t use_count() const { return control ? control->ref_count : 0; }');
+    lines.push('  size_t use_count() const { return control ? control->strong_count : 0; }');
     lines.push('');
     lines.push('  // Comparison operators for nullptr');
     lines.push('  bool operator==(std::nullptr_t) const { return !control || !control->ptr; }');
@@ -265,8 +281,96 @@ export class CppCodegen {
     lines.push('  friend bool operator!=(std::nullptr_t, const shared_ptr& ptr) { return ptr != nullptr; }');
     lines.push('');
     lines.push('  void reset() {');
-    lines.push('    if (control && --control->ref_count == 0) {');
+    lines.push('    if (control && --control->strong_count == 0) {');
     lines.push('      delete control->ptr;');
+    lines.push('      control->ptr = nullptr;');
+    lines.push('      if (control->weak_count == 0) {');
+    lines.push('        delete control;');
+    lines.push('      }');
+    lines.push('    }');
+    lines.push('    control = nullptr;');
+    lines.push('  }');
+    lines.push('};');
+    lines.push('');
+    lines.push('// Lightweight non-atomic weak pointer');
+    lines.push('template<typename T>');
+    lines.push('class weak_ptr {');
+    lines.push('private:');
+    lines.push('  typename shared_ptr<T>::ControlBlock* control;');
+    lines.push('');
+    lines.push('public:');
+    lines.push('  weak_ptr() : control(nullptr) {}');
+    lines.push('');
+    lines.push('  weak_ptr(const shared_ptr<T>& shared) : control(shared.control) {');
+    lines.push('    if (control) ++control->weak_count;');
+    lines.push('  }');
+    lines.push('');
+    lines.push('  weak_ptr(const weak_ptr& other) : control(other.control) {');
+    lines.push('    if (control) ++control->weak_count;');
+    lines.push('  }');
+    lines.push('');
+    lines.push('  weak_ptr(weak_ptr&& other) noexcept : control(other.control) {');
+    lines.push('    other.control = nullptr;');
+    lines.push('  }');
+    lines.push('');
+    lines.push('  ~weak_ptr() {');
+    lines.push('    if (control && --control->weak_count == 0 && control->strong_count == 0) {');
+    lines.push('      delete control;');
+    lines.push('    }');
+    lines.push('  }');
+    lines.push('');
+    lines.push('  weak_ptr& operator=(const weak_ptr& other) {');
+    lines.push('    if (this != &other) {');
+    lines.push('      if (control && --control->weak_count == 0 && control->strong_count == 0) {');
+    lines.push('        delete control;');
+    lines.push('      }');
+    lines.push('      control = other.control;');
+    lines.push('      if (control) ++control->weak_count;');
+    lines.push('    }');
+    lines.push('    return *this;');
+    lines.push('  }');
+    lines.push('');
+    lines.push('  weak_ptr& operator=(const shared_ptr<T>& shared) {');
+    lines.push('    if (control && --control->weak_count == 0 && control->strong_count == 0) {');
+    lines.push('      delete control;');
+    lines.push('    }');
+    lines.push('    control = shared.control;');
+    lines.push('    if (control) ++control->weak_count;');
+    lines.push('    return *this;');
+    lines.push('  }');
+    lines.push('');
+    lines.push('  weak_ptr& operator=(weak_ptr&& other) noexcept {');
+    lines.push('    if (this != &other) {');
+    lines.push('      if (control && --control->weak_count == 0 && control->strong_count == 0) {');
+    lines.push('        delete control;');
+    lines.push('      }');
+    lines.push('      control = other.control;');
+    lines.push('      other.control = nullptr;');
+    lines.push('    }');
+    lines.push('    return *this;');
+    lines.push('  }');
+    lines.push('');
+    lines.push('  // Lock to get shared_ptr (non-atomic check)');
+    lines.push('  shared_ptr<T> lock() const {');
+    lines.push('    if (control && control->ptr && control->strong_count > 0) {');
+    lines.push('      shared_ptr<T> result;');
+    lines.push('      result.control = control;');
+    lines.push('      ++control->strong_count;');
+    lines.push('      return result;');
+    lines.push('    }');
+    lines.push('    return shared_ptr<T>();');
+    lines.push('  }');
+    lines.push('');
+    lines.push('  bool expired() const {');
+    lines.push('    return !control || !control->ptr || control->strong_count == 0;');
+    lines.push('  }');
+    lines.push('');
+    lines.push('  size_t use_count() const {');
+    lines.push('    return control ? control->strong_count : 0;');
+    lines.push('  }');
+    lines.push('');
+    lines.push('  void reset() {');
+    lines.push('    if (control && --control->weak_count == 0 && control->strong_count == 0) {');
     lines.push('      delete control;');
     lines.push('    }');
     lines.push('    control = nullptr;');
@@ -926,7 +1030,7 @@ export class CppCodegen {
       return `gs::shared_ptr<${innerType}>`;
     } else if (typeName === 'use' && type.typeArguments && type.typeArguments.length > 0) {
       const innerType = this.generateType(type.typeArguments[0]);
-      return `std::weak_ptr<${innerType}>`;
+      return `gs::weak_ptr<${innerType}>`;
     } else if (typeName === 'Map' && type.typeArguments && type.typeArguments.length === 2) {
       this.addInclude('<unordered_map>');
       const keyType = this.generateType(type.typeArguments[0]);
@@ -1248,7 +1352,7 @@ export class CppCodegen {
               typeText.startsWith('use<') ||
               typeText.startsWith('std::unique_ptr<') ||
               typeText.startsWith('gs::shared_ptr<') ||
-              typeText.startsWith('std::weak_ptr<')) {
+              typeText.startsWith('gs::weak_ptr<')) {
             return true;
           }
         }
@@ -1291,7 +1395,7 @@ export class CppCodegen {
           return typeText.match(/(own|share|use)<[^>]+>\[\]/) !== null ||
                  typeText.includes('std::vector<std::unique_ptr<') ||
                  typeText.includes('std::vector<gs::shared_ptr<') ||
-                 typeText.includes('std::vector<std::weak_ptr<');
+                 typeText.includes('std::vector<gs::weak_ptr<');
         }
       }
     }
