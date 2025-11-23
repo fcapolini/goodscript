@@ -35,6 +35,13 @@ const CPP_KEYWORDS = new Set([
   'void', 'volatile', 'wchar_t', 'while', 'xor', 'xor_eq'
 ]);
 
+/**
+ * Common C++ macros that should be avoided
+ */
+const CPP_MACROS = new Set([
+  'EOF', 'NULL', 'TRUE', 'FALSE', 'MIN', 'MAX', 'assert'
+]);
+
 export class CppCodegen {
   private indentLevel = 0;
   private readonly INDENT = '  '; // 2 spaces
@@ -58,7 +65,7 @@ export class CppCodegen {
       return 'this';
     }
     
-    if (CPP_KEYWORDS.has(name)) {
+    if (CPP_KEYWORDS.has(name) || CPP_MACROS.has(name)) {
       return `${name}_`;  // Append underscore to avoid collision
     }
     return name;
@@ -282,7 +289,8 @@ export class CppCodegen {
       
       if (ts.isFunctionDeclaration(statement) || 
           ts.isClassDeclaration(statement) || 
-          ts.isInterfaceDeclaration(statement)) {
+          ts.isInterfaceDeclaration(statement) ||
+          ts.isEnumDeclaration(statement)) {
         declarations.push(statement);
       } else {
         executableStatements.push(statement);
@@ -339,6 +347,10 @@ export class CppCodegen {
       this.generateWhileStatement(statement);
     } else if (ts.isBlock(statement)) {
       this.generateBlock(statement);
+    } else if (ts.isBreakStatement(statement)) {
+      this.emit('break;');
+    } else if (ts.isContinueStatement(statement)) {
+      this.emit('continue;');
     } else {
       // Unsupported statement - add comment
       this.emit(`// TODO: Unsupported statement: ${ts.SyntaxKind[statement.kind]}`);
@@ -925,7 +937,14 @@ export class CppCodegen {
     if (ts.isNumericLiteral(expr)) {
       return expr.text;
     } else if (ts.isStringLiteral(expr)) {
-      return `"${expr.text}"`;
+      // Escape backslashes and quotes for C++
+      const escaped = expr.text
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r')
+        .replace(/\t/g, '\\t');
+      return `"${escaped}"`;
     } else if (ts.isTemplateExpression(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) {
       return this.generateTemplateLiteral(expr);
     } else if (expr.kind === ts.SyntaxKind.TrueKeyword) {
@@ -976,9 +995,68 @@ export class CppCodegen {
    * Generate binary expression
    */
   private generateBinaryExpression(expr: ts.BinaryExpression): string {
-    const left = this.generateExpression(expr.left);
-    const right = this.generateExpression(expr.right);
+    let left = this.generateExpression(expr.left);
+    let right = this.generateExpression(expr.right);
     const op = expr.operatorToken.getText();
+    
+    // For string concatenation with +, check if operands might be optional
+    if (op === '+' && this.checker) {
+      // Helper to check if an expression should be wrapped for optional extraction
+      const shouldWrapOptional = (operand: ts.Expression): boolean => {
+        // Check if it's a call expression that returns optional
+        if (ts.isCallExpression(operand)) {
+          const returnType = this.getMethodReturnTypeFromSource(operand);
+          // Check for use<string>, string | null, string | undefined patterns
+          if (returnType && (
+            returnType.startsWith('use<string>') || 
+            returnType.startsWith('use<String>') ||
+            (returnType.includes('string') && (returnType.includes('null') || returnType.includes('undefined')))
+          )) {
+            return true;
+          }
+        }
+        
+        // Check if it's an identifier with optional type
+        if (ts.isIdentifier(operand)) {
+          const symbol = this.checker!.getSymbolAtLocation(operand);
+          if (!symbol?.valueDeclaration) return false;
+          
+          // Check the type annotation
+          const typeText = this.getTypeTextFromSymbol(symbol);
+          if (typeText && (
+            typeText.includes('null') || 
+            typeText.includes('undefined') ||
+            typeText.startsWith('use<')
+          )) {
+            return true;
+          }
+          
+          // If no explicit type, check if it's initialized from a call that returns optional
+          if (ts.isVariableDeclaration(symbol.valueDeclaration) && symbol.valueDeclaration.initializer) {
+            if (ts.isCallExpression(symbol.valueDeclaration.initializer)) {
+              const initReturnType = this.getMethodReturnTypeFromSource(symbol.valueDeclaration.initializer);
+              if (initReturnType && (
+                initReturnType.startsWith('use<string>') || 
+                initReturnType.startsWith('use<String>') ||
+                (initReturnType.includes('string') && (initReturnType.includes('null') || initReturnType.includes('undefined')))
+              )) {
+                return true;
+              }
+            }
+          }
+        }
+        
+        return false;
+      };
+      
+      if (shouldWrapOptional(expr.right)) {
+        right = `${right}.value_or("")`;
+      }
+      
+      if (shouldWrapOptional(expr.left)) {
+        left = `${left}.value_or("")`;
+      }
+    }
     
     // Map === to ==, !== to !=
     if (op === '===') {
@@ -1009,7 +1087,34 @@ export class CppCodegen {
     if (ts.isPropertyAccessExpression(expr.expression)) {
       const object = this.generateExpression(expr.expression.expression);
       const methodName = expr.expression.name.getText();
-      const accessor = (object === 'this') ? '->' : '.';
+      
+      // Determine accessor: check if object is a shared_ptr
+      let accessor = '.';
+      if (object === 'this') {
+        accessor = '->';
+      } else if (this.checker) {
+        // Check if the object expression is a field/variable with share<T> type
+        const objExpr = expr.expression.expression;
+        if (ts.isPropertyAccessExpression(objExpr)) {
+          // e.g., this.input.charAt() - check if 'input' is share<T>
+          const symbol = this.checker.getSymbolAtLocation(objExpr.name);
+          if (symbol?.valueDeclaration) {
+            const typeText = this.getTypeTextFromSymbol(symbol);
+            if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<')) {
+              accessor = '->';
+            }
+          }
+        } else if (ts.isIdentifier(objExpr)) {
+          // e.g., input.charAt() - check if 'input' is share<T>
+          const symbol = this.checker.getSymbolAtLocation(objExpr);
+          if (symbol?.valueDeclaration) {
+            const typeText = this.getTypeTextFromSymbol(symbol);
+            if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<')) {
+              accessor = '->';
+            }
+          }
+        }
+      }
       
       // Special handling for console.log
       if (object === 'console' && methodName === 'log') {
@@ -1109,6 +1214,16 @@ export class CppCodegen {
         return `gs::index_of(${object}, ${args})`;
       }
       
+      if (methodName === 'charAt') {
+        // string.charAt(index) -> string.substr(index, 1) or string[index]
+        return `${object}${accessor}substr(${args}, 1)`;
+      }
+      
+      if (methodName === 'charCodeAt') {
+        // string.charCodeAt(index) -> static_cast<int>(string[index])
+        return `static_cast<int>(${object}[${args}])`;
+      }
+      
       return `${object}${accessor}${methodName}(${args})`;
     }
     
@@ -1124,8 +1239,50 @@ export class CppCodegen {
     const propertyName = expr.name.getText();
     const property = this.escapeIdentifier(propertyName);
     
+    // Check if this is enum member access
+    if (this.checker) {
+      const symbol = this.checker.getSymbolAtLocation(expr.expression);
+      if (symbol) {
+        const type = this.checker.getTypeOfSymbolAtLocation(symbol, symbol.valueDeclaration!);
+        // Check if it's an enum type
+        if (type.symbol && type.symbol.flags & ts.SymbolFlags.Enum) {
+          // Enum member access: EnumName.Member -> EnumName::Member
+          return `${object}::${property}`;
+        }
+      }
+    }
+    
+    // Determine the accessor (. or ->)
+    let accessor = '.';
+    
     // Special handling for 'this' - it's a pointer in C++
-    const accessor = (object === 'this') ? '->' : '.';
+    if (object === 'this') {
+      accessor = '->';
+    }
+    // Check if the object is a shared_ptr by looking at the source type
+    else if (this.checker && ts.isPropertyAccessExpression(expr.expression)) {
+      // For member access like this.input.size(), check if 'input' is share<T>
+      const objExpr = expr.expression;
+      if (ts.isPropertyAccessExpression(objExpr)) {
+        const objSymbol = this.checker.getSymbolAtLocation(objExpr.name);
+        if (objSymbol?.valueDeclaration) {
+          const typeText = this.getTypeTextFromSymbol(objSymbol);
+          if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<')) {
+            accessor = '->';
+          }
+        }
+      }
+    }
+    // Check if it's a direct identifier that's a shared_ptr
+    else if (this.checker && ts.isIdentifier(expr.expression)) {
+      const symbol = this.checker.getSymbolAtLocation(expr.expression);
+      if (symbol?.valueDeclaration) {
+        const typeText = this.getTypeTextFromSymbol(symbol);
+        if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<')) {
+          accessor = '->';
+        }
+      }
+    }
     
     // Map TypeScript/JavaScript property names to C++ equivalents
     if (propertyName === 'length') {
@@ -1134,6 +1291,34 @@ export class CppCodegen {
     }
     
     return `${object}${accessor}${property}`;
+  }
+  
+  /**
+   * Helper to get type text from a symbol's value declaration
+   */
+  private getTypeTextFromSymbol(symbol: ts.Symbol): string | undefined {
+    if (symbol.valueDeclaration && 'type' in symbol.valueDeclaration) {
+      const typeNode = (symbol.valueDeclaration as any).type as ts.TypeNode | undefined;
+      return typeNode?.getText();
+    }
+    return undefined;
+  }
+  
+  /**
+   * Get the return type from a method call by examining the source AST
+   */
+  private getMethodReturnTypeFromSource(callExpr: ts.CallExpression): string | undefined {
+    if (!this.checker) return undefined;
+    
+    const signature = this.checker.getResolvedSignature(callExpr);
+    if (!signature || !signature.declaration) return undefined;
+    
+    if (ts.isMethodDeclaration(signature.declaration)) {
+      const returnTypeNode = signature.declaration.type;
+      return returnTypeNode?.getText();
+    }
+    
+    return undefined;
   }
   
   /**
