@@ -2104,21 +2104,40 @@ export class CppCodegen {
   
   /**
    * Generate element access (array/map indexing)
+   * 
+   * For arrays, we need bounds checking to match JavaScript semantics and avoid segfaults.
+   * JavaScript returns undefined for out-of-bounds reads, we use a safe accessor helper.
    */
   private generateElementAccess(expr: ts.ElementAccessExpression): string {
     const object = this.generateExpression(expr.expression);
     const index = this.generateExpression(expr.argumentExpression);
     const accessor = (object === 'this') ? '->' : '.';
     
-    // For now, use [] operator directly
-    // Could be array access or map access
-    if (object === 'this') {
-      // this->member[index] needs to be this->member.at(index) for safety
-      // But for simplicity, use []
-      return `${object}->${index}`;
+    // For maps, use [] operator (creates entry if not exists, matching JS behavior)
+    // For arrays, we need bounds checking to avoid segfaults
+    
+    // Check if this is array access vs map access
+    if (this.checker) {
+      const type = this.checker.getTypeAtLocation(expr.expression);
+      const typeString = this.checker.typeToString(type);
+      
+      // If it's clearly a Map/unordered_map, use [] operator
+      if (typeString.includes('Map') || typeString.includes('unordered_map')) {
+        if (object === 'this') {
+          return `${object}->${index}`;
+        }
+        return `${object}[${index}]`;
+      }
     }
     
-    return `${object}[${index}]`;
+    // For arrays (std::vector), use safe accessor with bounds checking
+    // JavaScript returns undefined for out-of-bounds, we throw to match .at() behavior
+    // This prevents silent segfaults
+    if (object === 'this') {
+      return `${object}->${accessor}at(${index})`;
+    }
+    
+    return `${object}.at(${index})`;
   }
   
   /**
