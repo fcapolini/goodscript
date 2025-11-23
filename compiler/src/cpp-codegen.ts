@@ -52,6 +52,9 @@ export class CppCodegen {
   // Track variables that are already wrapped in smart pointers
   private uniquePtrVars = new Set<string>();
   
+  // Track current method return type for smart pointer wrapping
+  private currentMethodReturnType?: string;
+  
   constructor(checker?: ts.TypeChecker) {
     this.checker = checker;
   }
@@ -390,7 +393,12 @@ export class CppCodegen {
       }
       
       const name = this.escapeIdentifier(decl.name.getText());
-      const type = decl.type ? this.generateType(decl.type) : 'auto';
+      let type = decl.type ? this.generateType(decl.type) : 'auto';
+      
+      // If type is auto and initializer is a string literal, use std::string
+      if (type === 'auto' && decl.initializer && ts.isStringLiteral(decl.initializer)) {
+        type = 'std::string';
+      }
       
       // Check if this is a recursive arrow function
       if (decl.initializer && ts.isArrowFunction(decl.initializer)) {
@@ -443,6 +451,10 @@ export class CppCodegen {
     const params = this.generateParameters(func.parameters);
     const returnType = func.type ? this.generateType(func.type) : 'void';
     
+    // Track return type for smart pointer wrapping
+    const previousReturnType = this.currentMethodReturnType;
+    this.currentMethodReturnType = returnType;
+    
     this.emit(`${returnType} ${name}(${params}) {`);
     this.indent();
     
@@ -453,6 +465,9 @@ export class CppCodegen {
     this.dedent();
     this.emit('}');
     this.emit('');
+    
+    // Restore previous return type
+    this.currentMethodReturnType = previousReturnType;
   }
   
   /**
@@ -531,7 +546,15 @@ export class CppCodegen {
     const params = this.generateParameters(method.parameters);
     const returnType = method.type ? this.generateType(method.type) : 'void';
     
-    this.emit(`${returnType} ${name}(${params}) {`);
+    // Check if method is static
+    const isStatic = method.modifiers?.some(m => m.kind === ts.SyntaxKind.StaticKeyword) || false;
+    const staticKeyword = isStatic ? 'static ' : '';
+    
+    // Track return type for smart pointer wrapping
+    const previousReturnType = this.currentMethodReturnType;
+    this.currentMethodReturnType = returnType;
+    
+    this.emit(`${staticKeyword}${returnType} ${name}(${params}) {`);
     this.indent();
     
     if (method.body) {
@@ -543,6 +566,9 @@ export class CppCodegen {
     this.dedent();
     this.emit('}');
     this.emit('');
+    
+    // Restore previous return type
+    this.currentMethodReturnType = previousReturnType;
   }
   
   /**
@@ -689,7 +715,28 @@ export class CppCodegen {
    */
   private generateReturnStatement(statement: ts.ReturnStatement): void {
     if (statement.expression) {
-      const expr = this.generateExpression(statement.expression);
+      let expr = this.generateExpression(statement.expression);
+      
+      // If returning own<T> and expression is a constructor call, wrap with make_unique
+      if (this.currentMethodReturnType?.startsWith('std::unique_ptr<')) {
+        if (ts.isNewExpression(statement.expression)) {
+          // Extract the type from std::unique_ptr<Type>
+          const match = this.currentMethodReturnType.match(/std::unique_ptr<(.+)>/);
+          if (match) {
+            const innerType = match[1];
+            // expr is "gs::Token(args)", we need "std::make_unique<Token>(args)"
+            // Extract just the args from gs::ClassName(args)
+            const classMatch = expr.match(/gs::([^(]+)\((.*)\)/);
+            if (classMatch) {
+              const className = classMatch[1];
+              const args = classMatch[2];
+              this.addInclude('<memory>');
+              expr = `std::make_unique<${className}>(${args})`;
+            }
+          }
+        }
+      }
+      
       this.emit(`return ${expr};`);
     } else {
       this.emit('return;');
@@ -999,6 +1046,49 @@ export class CppCodegen {
     let right = this.generateExpression(expr.right);
     const op = expr.operatorToken.getText();
     
+    // For assignment to smart pointer fields, wrap new expressions
+    if (op === '=' && this.checker && ts.isPropertyAccessExpression(expr.left)) {
+      if (ts.isNewExpression(expr.right)) {
+        // Check if left side is a unique_ptr or shared_ptr field
+        const propName = expr.left.name;
+        const symbol = this.checker.getSymbolAtLocation(propName);
+        if (symbol?.valueDeclaration) {
+          const typeText = this.getTypeTextFromSymbol(symbol);
+          
+          // If assigning to unique_ptr field, wrap with make_unique
+          if (typeText?.startsWith('own<') || typeText?.startsWith('std::unique_ptr<')) {
+            const match = typeText.match(/(own|std::unique_ptr)<(.+)>/);
+            if (match) {
+              const innerType = match[2];
+              // right is "gs::ClassName(args)", extract args
+              const classMatch = right.match(/gs::([^(]+)\((.*)\)/);
+              if (classMatch) {
+                const className = classMatch[1];
+                const args = classMatch[2];
+                this.addInclude('<memory>');
+                right = `std::make_unique<${className}>(${args})`;
+              }
+            }
+          }
+          
+          // If assigning to shared_ptr field, wrap with make_shared
+          else if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<')) {
+            const match = typeText.match(/(share|std::shared_ptr)<(.+)>/);
+            if (match) {
+              const innerType = match[2];
+              const classMatch = right.match(/gs::([^(]+)\((.*)\)/);
+              if (classMatch) {
+                const className = classMatch[1];
+                const args = classMatch[2];
+                this.addInclude('<memory>');
+                right = `std::make_shared<${className}>(${args})`;
+              }
+            }
+          }
+        }
+      }
+    }
+    
     // For string concatenation with +, check if operands might be optional
     if (op === '+' && this.checker) {
       // Helper to check if an expression should be wrapped for optional extraction
@@ -1088,28 +1178,46 @@ export class CppCodegen {
       const object = this.generateExpression(expr.expression.expression);
       const methodName = expr.expression.name.getText();
       
-      // Determine accessor: check if object is a shared_ptr
+      // Check if this is a static method call
+      if (this.checker) {
+        const symbol = this.checker.getSymbolAtLocation(expr.expression.name);
+        if (symbol && symbol.flags & ts.SymbolFlags.Method) {
+          const declarations = symbol.getDeclarations();
+          if (declarations && declarations.length > 0) {
+            const decl = declarations[0];
+            if (ts.isMethodDeclaration(decl) && 
+                decl.modifiers?.some(m => m.kind === ts.SyntaxKind.StaticKeyword)) {
+              // Static method call: ClassName.method() -> ClassName::method()
+              return `${object}::${methodName}(${args})`;
+            }
+          }
+        }
+      }
+      
+      // Determine accessor: check if object is a shared_ptr or unique_ptr
       let accessor = '.';
       if (object === 'this') {
         accessor = '->';
       } else if (this.checker) {
-        // Check if the object expression is a field/variable with share<T> type
+        // Check if the object expression is a field/variable with share<T> or own<T> type
         const objExpr = expr.expression.expression;
         if (ts.isPropertyAccessExpression(objExpr)) {
-          // e.g., this.input.charAt() - check if 'input' is share<T>
+          // e.g., this.input.charAt() - check if 'input' is share<T> or own<T>
           const symbol = this.checker.getSymbolAtLocation(objExpr.name);
           if (symbol?.valueDeclaration) {
             const typeText = this.getTypeTextFromSymbol(symbol);
-            if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<')) {
+            if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<') ||
+                typeText?.startsWith('own<') || typeText?.startsWith('std::unique_ptr<')) {
               accessor = '->';
             }
           }
         } else if (ts.isIdentifier(objExpr)) {
-          // e.g., input.charAt() - check if 'input' is share<T>
+          // e.g., input.charAt() - check if 'input' is share<T> or own<T>
           const symbol = this.checker.getSymbolAtLocation(objExpr);
           if (symbol?.valueDeclaration) {
             const typeText = this.getTypeTextFromSymbol(symbol);
-            if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<')) {
+            if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<') ||
+                typeText?.startsWith('own<') || typeText?.startsWith('std::unique_ptr<')) {
               accessor = '->';
             }
           }
@@ -1259,26 +1367,28 @@ export class CppCodegen {
     if (object === 'this') {
       accessor = '->';
     }
-    // Check if the object is a shared_ptr by looking at the source type
+    // Check if the object is a shared_ptr or unique_ptr by looking at the source type
     else if (this.checker && ts.isPropertyAccessExpression(expr.expression)) {
-      // For member access like this.input.size(), check if 'input' is share<T>
+      // For member access like this.input.size(), check if 'input' is share<T> or own<T>
       const objExpr = expr.expression;
       if (ts.isPropertyAccessExpression(objExpr)) {
         const objSymbol = this.checker.getSymbolAtLocation(objExpr.name);
         if (objSymbol?.valueDeclaration) {
           const typeText = this.getTypeTextFromSymbol(objSymbol);
-          if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<')) {
+          if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<') ||
+              typeText?.startsWith('own<') || typeText?.startsWith('std::unique_ptr<')) {
             accessor = '->';
           }
         }
       }
     }
-    // Check if it's a direct identifier that's a shared_ptr
+    // Check if it's a direct identifier that's a shared_ptr or unique_ptr
     else if (this.checker && ts.isIdentifier(expr.expression)) {
       const symbol = this.checker.getSymbolAtLocation(expr.expression);
       if (symbol?.valueDeclaration) {
         const typeText = this.getTypeTextFromSymbol(symbol);
-        if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<')) {
+        if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<') ||
+            typeText?.startsWith('own<') || typeText?.startsWith('std::unique_ptr<')) {
           accessor = '->';
         }
       }
