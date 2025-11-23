@@ -1050,6 +1050,15 @@ export class CppCodegen {
     let right = this.generateExpression(expr.right);
     const op = expr.operatorToken.getText();
     
+    // For assignment to array element, use helper that auto-resizes like JS
+    if (op === '=' && ts.isElementAccessExpression(expr.left)) {
+      const arrayExpr = this.generateExpression(expr.left.expression);
+      const indexExpr = this.generateExpression(expr.left.argumentExpression);
+      this.addInclude('<algorithm>');
+      // Use a helper that resizes if needed: if (index >= arr.size()) arr.resize(index + 1);
+      return `([&]() { auto& __arr = ${arrayExpr}; auto __idx = ${indexExpr}; if (__idx >= __arr.size()) __arr.resize(__idx + 1); return __arr[__idx] = ${right}; }())`;
+    }
+    
     // For assignment to smart pointer fields, wrap new expressions
     if (op === '=' && this.checker && ts.isPropertyAccessExpression(expr.left)) {
       if (ts.isNewExpression(expr.right)) {
