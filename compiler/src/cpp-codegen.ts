@@ -2647,8 +2647,14 @@ export class CppCodegen {
           convertedExpr = exprStr;
         } else if (checkTypeStr.includes('string') && (checkTypeStr.includes('null') || checkTypeStr.includes('undefined'))) {
           // Optional string - extract value
-          // If we're in a narrowed context (typeStr is 'string'), use .value(), otherwise .value_or("")
-          if (typeStr === 'string' && checkTypeStr !== 'string') {
+          // Check if already unwrapped (identifier in unwrappedOptionals)
+          const isAlreadyUnwrapped = ts.isIdentifier(span.expression) && 
+                                    this.unwrappedOptionals.has(span.expression.text);
+          
+          if (isAlreadyUnwrapped) {
+            // Already unwrapped by generateExpression, don't add .value() again
+            convertedExpr = exprStr;
+          } else if (typeStr === 'string' && checkTypeStr !== 'string') {
             // Narrowed to non-null, can use .value()
             convertedExpr = `${exprStr}.value()`;
           } else {
@@ -2659,7 +2665,14 @@ export class CppCodegen {
           convertedExpr = `gs::to_string_int(${exprStr})`;
         } else if (checkTypeStr.includes('number') && (checkTypeStr.includes('null') || checkTypeStr.includes('undefined'))) {
           // Optional number - extract value then convert
-          if (typeStr === 'number' && checkTypeStr !== 'number') {
+          // Check if already unwrapped (identifier in unwrappedOptionals)
+          const isAlreadyUnwrapped = ts.isIdentifier(span.expression) && 
+                                    this.unwrappedOptionals.has(span.expression.text);
+          
+          if (isAlreadyUnwrapped) {
+            // Already unwrapped by generateExpression, just convert to string
+            convertedExpr = `gs::to_string_int(${exprStr})`;
+          } else if (typeStr === 'number' && checkTypeStr !== 'number') {
             // Narrowed to non-null, can use .value()
             convertedExpr = `gs::to_string_int(${exprStr}.value())`;
           } else {

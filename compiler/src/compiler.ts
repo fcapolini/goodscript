@@ -381,6 +381,7 @@ export class Compiler {
     const compilerOptions: ts.CompilerOptions = {
       target: ts.ScriptTarget.ES2020,
       module: ts.ModuleKind.CommonJS,
+      lib: ['lib.es2020.d.ts'],  // Exclude DOM types to avoid conflicts with user code
       outDir: outDir,
       rootDir: rootDir,  // Use the provided rootDir to preserve structure
       skipLibCheck: true,
