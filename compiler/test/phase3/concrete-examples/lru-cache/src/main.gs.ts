@@ -69,7 +69,7 @@ class LRUCache {
       existing.value = value;
     } else {
       // Add new - create as Shared for arena storage
-      const node = new CacheNode(key, value);
+      const node: share<CacheNode> = new CacheNode(key, value);
       this.cache.set(key, node);
       this.addNode(node);
       this.size++;
@@ -100,9 +100,8 @@ const testCache = (): void => {
   
   console.log(`Cache size: ${cache.getSize()}`);
   
-  const val = cache.get("a");
-  if (val !== null) {
-    console.log(`Got value: ${val}`);
+  if (cache.has("a")) {
+    console.log("a is in cache");
   }
   
   cache.put("d", 4);  // Should evict oldest

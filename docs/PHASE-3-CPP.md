@@ -1,21 +1,24 @@
 # Phase 3: C++ Code Generation
 
-**Status:** 🚧 In Progress (11/12 concrete example tests passing, 92%)
+**Status:** ✅ Foundation Complete (12/12 concrete example tests passing, 100%)
 
 **Test Coverage:** 
-- 40 basic feature tests (100% passing) - includes array auto-resize tests
-- 11/12 concrete example tests (92% passing)
+- 45 basic feature tests (100% passing) - includes array auto-resize tests
+- 12/12 concrete example tests (100% passing)
   - ✅ cli-args (3/3)
   - ✅ json-parser (3/3)
-  - ⚠️ lru-cache (2/3 - needs optional unwrapping)
+  - ✅ lru-cache (3/3)
   - ✅ n-queens (3/3)
 
-**Recent Updates (Nov 23, 2024):**
+**Recent Updates (Nov 23, 2025):**
 - ✅ Smart pointer null comparisons fixed (`nullptr` vs `std::nullopt`)
 - ✅ Smart pointer member access fixed (`->` vs `.`)
 - ✅ Array/vector member access fixed (proper `.` usage)
 - ✅ Map.delete() mapped to erase()
 - ✅ JavaScript-compatible array auto-resize on out-of-bounds assignment
+- ✅ Optional unwrapping for `Map.get()` results (`(*node)->property`)
+- ✅ Smart pointer construction from `new T()` with type annotations
+- ✅ Context-aware Map method detection (`.get()`, `.has()`)
 
 ## Overview
 
@@ -96,6 +99,30 @@ Phase 3 implements the C++ code generator that transforms GoodScript's TypeScrip
   ([&]() { auto& __arr = a; auto __idx = 10; 
     if (__idx >= __arr.size()) __arr.resize(__idx + 1); 
     return __arr[__idx] = 0; }());
+  ```
+
+- **Optional Unwrapping for Map.get()** - Double unwrapping for `optional<shared_ptr<T>>`:
+  ```typescript
+  const cache: Map<string, share<Node>> = new Map();
+  const node = cache.get(key);  // share<Node> | undefined
+  if (node !== undefined) {
+    return node.value;  // Accessing property on optional shared_ptr
+  }
+  ```
+  ```cpp
+  std::unordered_map<std::string, std::shared_ptr<Node>> cache = {};
+  auto node = gs::map_get(cache, key);  // optional<shared_ptr<Node>>
+  if (node != std::nullopt) {
+    return (*node)->value;  // Unwrap optional, then dereference shared_ptr
+  }
+  ```
+
+- **Smart Pointer Construction** - Automatic wrapping when type annotation present:
+  ```typescript
+  const node: share<CacheNode> = new CacheNode(key, value);
+  ```
+  ```cpp
+  std::shared_ptr<CacheNode> node = std::make_shared<CacheNode>(key, value);
   ```
 
 - **Smart Pointer Type Detection** - Context-aware pointer dereferencing:

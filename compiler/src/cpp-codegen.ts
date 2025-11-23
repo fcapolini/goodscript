@@ -518,7 +518,33 @@ export class CppCodegen {
       const qualifier = (isConst && isPrimitive) ? 'const ' : '';
       
       if (decl.initializer) {
-        const value = this.generateExpression(decl.initializer);
+        let value = this.generateExpression(decl.initializer);
+        
+        // Special handling: if variable type is shared_ptr and initializer is new T(), wrap with make_shared
+        if (type.startsWith('std::shared_ptr<') && ts.isNewExpression(decl.initializer) && 
+            ts.isIdentifier(decl.initializer.expression)) {
+          const className = decl.initializer.expression.getText();
+          // Check if value is gs::ClassName(...)
+          const match = value.match(/gs::([^(]+)\((.*)\)/);
+          if (match && match[1] === className) {
+            const args = match[2];
+            this.addInclude('<memory>');
+            value = `std::make_shared<${className}>(${args})`;
+          }
+        }
+        
+        // Special handling: if variable type is unique_ptr and initializer is new T(), wrap with make_unique
+        else if (type.startsWith('std::unique_ptr<') && ts.isNewExpression(decl.initializer) &&
+            ts.isIdentifier(decl.initializer.expression)) {
+          const className = decl.initializer.expression.getText();
+          const match = value.match(/gs::([^(]+)\((.*)\)/);
+          if (match && match[1] === className) {
+            const args = match[2];
+            this.addInclude('<memory>');
+            value = `std::make_unique<${className}>(${args})`;
+          }
+        }
+        
         this.emit(`${qualifier}${type} ${name} = ${value};`);
       } else {
         this.emit(`${type} ${name};`);
@@ -1462,46 +1488,65 @@ export class CppCodegen {
             // For smart pointer values, use emplace with make_unique/make_shared
             let valueArg = argArray[1];
             
-            // Check if value is already wrapped
-            if (!valueArg.includes('std::make_unique') && !valueArg.includes('std::make_shared') && !valueArg.includes('std::move')) {
-              // Value needs to be wrapped
-              const wrapperFn = isShared ? 'std::make_shared' : 'std::make_unique';
-              
-              // Check if the argument is from a method returning optional
-              // If so, we need to unwrap it first with *value or value.value()
-              let needsUnwrap = false;
-              
-              if (expr.arguments.length >= 2) {
-                const valueArgExpr = expr.arguments[1];
-                
-                // Direct call expression
-                if (ts.isCallExpression(valueArgExpr)) {
-                  const returnType = this.getMethodReturnTypeFromSource(valueArgExpr);
-                  if (returnType && (returnType.includes('| null') || returnType.includes('| undefined'))) {
-                    needsUnwrap = true;
+            // Check if value is already a smart pointer
+            let alreadySmartPtr = false;
+            if (expr.arguments.length >= 2) {
+              const valueArgExpr = expr.arguments[1];
+              if (ts.isIdentifier(valueArgExpr) && this.checker) {
+                const symbol = this.checker.getSymbolAtLocation(valueArgExpr);
+                if (symbol?.valueDeclaration && ts.isVariableDeclaration(symbol.valueDeclaration)) {
+                  const typeText = this.getTypeTextFromSymbol(symbol);
+                  if (typeText && (typeText.startsWith('share<') || typeText.startsWith('own<') || 
+                      typeText.startsWith('std::shared_ptr<') || typeText.startsWith('std::unique_ptr<'))) {
+                    alreadySmartPtr = true;
                   }
                 }
-                // Identifier that was initialized from a call returning optional
-                else if (ts.isIdentifier(valueArgExpr) && this.checker) {
-                  const symbol = this.checker.getSymbolAtLocation(valueArgExpr);
-                  if (symbol?.valueDeclaration && ts.isVariableDeclaration(symbol.valueDeclaration)) {
-                    const init = symbol.valueDeclaration.initializer;
-                    if (init && ts.isCallExpression(init)) {
-                      const returnType = this.getMethodReturnTypeFromSource(init);
-                      if (returnType && (returnType.includes('| null') || returnType.includes('| undefined'))) {
-                        needsUnwrap = true;
-                      }
+              }
+            }
+            
+            // Check if value is already wrapped or is already a smart pointer variable
+            if (alreadySmartPtr || valueArg.includes('std::make_unique') || valueArg.includes('std::make_shared') || valueArg.includes('std::move')) {
+              // Already a smart pointer, just use it as-is
+              return `${object}${accessor}emplace(${argArray[0]}, ${valueArg})`;
+            }
+            
+            // Value needs to be wrapped
+            const wrapperFn = isShared ? 'std::make_shared' : 'std::make_unique';
+            
+            // Check if the argument is from a method returning optional
+            // If so, we need to unwrap it first with *value or value.value()
+            let needsUnwrap = false;
+            
+            if (expr.arguments.length >= 2) {
+              const valueArgExpr = expr.arguments[1];
+              
+              // Direct call expression
+              if (ts.isCallExpression(valueArgExpr)) {
+                const returnType = this.getMethodReturnTypeFromSource(valueArgExpr);
+                if (returnType && (returnType.includes('| null') || returnType.includes('| undefined'))) {
+                  needsUnwrap = true;
+                }
+              }
+              // Identifier that was initialized from a call returning optional
+              else if (ts.isIdentifier(valueArgExpr) && this.checker) {
+                const symbol = this.checker.getSymbolAtLocation(valueArgExpr);
+                if (symbol?.valueDeclaration && ts.isVariableDeclaration(symbol.valueDeclaration)) {
+                  const init = symbol.valueDeclaration.initializer;
+                  if (init && ts.isCallExpression(init)) {
+                    const returnType = this.getMethodReturnTypeFromSource(init);
+                    if (returnType && (returnType.includes('| null') || returnType.includes('| undefined'))) {
+                      needsUnwrap = true;
                     }
                   }
                 }
               }
-              
-              if (needsUnwrap) {
-                valueArg = `*${valueArg}`;
-              }
-              
-              valueArg = `${wrapperFn}<${valueElementType}>(${valueArg})`;
             }
+            
+            if (needsUnwrap) {
+              valueArg = `*${valueArg}`;
+            }
+            
+            valueArg = `${wrapperFn}<${valueElementType}>(${valueArg})`;
             
             return `${object}${accessor}emplace(${argArray[0]}, ${valueArg})`;
           } else {
@@ -1512,16 +1557,52 @@ export class CppCodegen {
       }
       
       if (methodName === 'get') {
-        // map.get(key) - returns optional in our case
-        const argArray = expr.arguments.map(arg => this.generateExpression(arg));
-        if (argArray.length === 1) {
-          return `gs::map_get(${object}, ${argArray[0]})`;
+        // Only apply special handling if this is a Map
+        const objExpr = expr.expression.expression;
+        let isMap = false;
+        
+        if (this.checker) {
+          const symbol = this.checker.getSymbolAtLocation(objExpr);
+          if (symbol?.valueDeclaration && 'type' in symbol.valueDeclaration) {
+            const typeNode = (symbol.valueDeclaration as any).type as ts.TypeNode | undefined;
+            if (typeNode) {
+              const typeText = typeNode.getText();
+              isMap = typeText.startsWith('Map<');
+            }
+          }
         }
+        
+        if (isMap) {
+          // map.get(key) - returns optional in our case
+          const argArray = expr.arguments.map(arg => this.generateExpression(arg));
+          if (argArray.length === 1) {
+            return `gs::map_get(${object}, ${argArray[0]})`;
+          }
+        }
+        // Otherwise, fall through to regular method call
       }
       
       if (methodName === 'has') {
-        // map.has(key) -> map.find(key) != map.end()
-        return `(${object}${accessor}find(${args}) != ${object}${accessor}end())`;
+        // Only apply special handling if this is a Map
+        const objExpr = expr.expression.expression;
+        let isMap = false;
+        
+        if (this.checker) {
+          const symbol = this.checker.getSymbolAtLocation(objExpr);
+          if (symbol?.valueDeclaration && 'type' in symbol.valueDeclaration) {
+            const typeNode = (symbol.valueDeclaration as any).type as ts.TypeNode | undefined;
+            if (typeNode) {
+              const typeText = typeNode.getText();
+              isMap = typeText.startsWith('Map<');
+            }
+          }
+        }
+        
+        if (isMap) {
+          // map.has(key) -> map.find(key) != map.end()
+          return `(${object}${accessor}find(${args}) != ${object}${accessor}end())`;
+        }
+        // Otherwise, fall through to regular method call
       }
       
       if (methodName === 'delete') {
@@ -1716,6 +1797,7 @@ export class CppCodegen {
     
     // Determine the accessor (. or ->)
     let accessor = '.';
+    let needsOptionalUnwrap = false;
     
     // Special handling for 'this' - it's a pointer in C++
     if (object === 'this') {
@@ -1725,22 +1807,58 @@ export class CppCodegen {
     else if (this.isSmartPointerType(expr.expression)) {
       accessor = '->';
     }
-    // Check if it's an optional type (T | null) - needs -> in C++
+    // Check if it's a variable that might need optional unwrapping
     else if (this.checker && ts.isIdentifier(expr.expression)) {
       const symbol = this.checker.getSymbolAtLocation(expr.expression);
-      if (symbol?.valueDeclaration) {
-        const typeText = this.getTypeTextFromSymbol(symbol);
-        if (typeText && (typeText.includes('| null') || typeText.includes('| undefined'))) {
-          accessor = '->';
-        }
-        // Also check if variable was initialized from a method returning optional
-        else if (ts.isVariableDeclaration(symbol.valueDeclaration)) {
-          const init = symbol.valueDeclaration.initializer;
-          if (init && ts.isCallExpression(init)) {
-            const returnType = this.getMethodReturnTypeFromSource(init);
-            if (returnType && (returnType.includes('| null') || returnType.includes('| undefined'))) {
+      if (symbol?.valueDeclaration && ts.isVariableDeclaration(symbol.valueDeclaration)) {
+        const init = symbol.valueDeclaration.initializer;
+        if (init && ts.isCallExpression(init)) {
+          // For Map.get() and similar built-in methods, we need to look at the Map's AST type
+          // not the TypeChecker type (which erases ownership qualifiers)
+          if (ts.isPropertyAccessExpression(init.expression) && 
+              init.expression.name.getText() === 'get') {
+            // Get the symbol for the map object
+            if (ts.isPropertyAccessExpression(init.expression.expression)) {
+              // this.cache.get() - get symbol for 'cache'
+              const mapSymbol = this.checker.getSymbolAtLocation(init.expression.expression.name);
+              if (mapSymbol) {
+                const mapTypeText = this.getTypeTextFromSymbol(mapSymbol);
+                
+                // Check if it's Map<K, share<V>>
+                const match = mapTypeText?.match(/Map<[^,]+,\s*share<([^>]+)>>/);
+                if (match) {
+                  // Map<K, share<V>>.get() returns share<V> | undefined -> optional<shared_ptr<V>>
+                  needsOptionalUnwrap = true;
+                  accessor = '->';
+                }
+              }
+            }
+          }
+          
+          // Also try to get return type from method signature
+          const returnType = this.getMethodReturnTypeFromSource(init);
+          if (returnType) {
+            // Check if it returns share<T> | undefined or share<T> | null
+            const isOptionalShare = 
+              returnType.match(/^share<[^>]+>\s*\|\s*(undefined|null)/) ||
+              returnType.match(/^(undefined|null)\s*\|\s*share<[^>]+>/);
+            
+            if (isOptionalShare) {
+              // This is optional<shared_ptr<T>>, need both unwrap and ->
+              needsOptionalUnwrap = true;
               accessor = '->';
             }
+            // Check for other optional types
+            else if (returnType.includes('| null') || returnType.includes('| undefined')) {
+              accessor = '->';
+            }
+          }
+        }
+        // Also check declared type if no initializer
+        else {
+          const typeText = this.getTypeTextFromSymbol(symbol);
+          if (typeText && (typeText.includes('| null') || typeText.includes('| undefined'))) {
+            accessor = '->';
           }
         }
       }
@@ -1749,7 +1867,13 @@ export class CppCodegen {
     // Map TypeScript/JavaScript property names to C++ equivalents
     if (propertyName === 'length') {
       // array.length -> array.size()
-      return `${object}${accessor}size()`;
+      const sizeCall = `${object}${accessor}size()`;
+      return needsOptionalUnwrap ? `(*${object})->size()` : sizeCall;
+    }
+    
+    // If we need to unwrap optional<shared_ptr<T>>, generate (*obj)->property
+    if (needsOptionalUnwrap) {
+      return `(*${object})->${property}`;
     }
     
     return `${object}${accessor}${property}`;
