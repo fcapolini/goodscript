@@ -8,12 +8,61 @@ import * as ts from 'typescript';
  */
 export class TypeScriptCodegen {
   /**
+   * Type declarations to inject when ownership types are used
+   */
+  private static readonly TYPE_DECLARATIONS = `/**
+ * GoodScript ownership type declarations
+ * These are automatically injected by the compiler when needed
+ */
+declare type own<T> = T;
+declare type share<T> = T;
+declare type use<T> = T | null | undefined;
+
+`;
+
+  /**
    * Generate TypeScript code from a GoodScript AST
    */
   generate(sourceFile: ts.SourceFile): string {
     const transformed = this.transformSourceFile(sourceFile);
     const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
-    return printer.printFile(transformed);
+    let code = printer.printFile(transformed);
+    
+    // Check if the file uses ownership types
+    if (this.usesOwnershipTypes(sourceFile)) {
+      // Prepend type declarations if not already present
+      if (!code.includes('declare type own<T>') && 
+          !code.includes('declare type share<T>') &&
+          !code.includes('declare type use<T>')) {
+        code = TypeScriptCodegen.TYPE_DECLARATIONS + code;
+      }
+    }
+    
+    return code;
+  }
+  
+  /**
+   * Check if the source file uses ownership types (own, share, use)
+   */
+  private usesOwnershipTypes(sourceFile: ts.SourceFile): boolean {
+    let hasOwnershipTypes = false;
+    
+    const visit = (node: ts.Node): void => {
+      if (ts.isTypeReferenceNode(node)) {
+        const typeName = node.typeName.getText();
+        if (typeName === 'own' || typeName === 'share' || typeName === 'use') {
+          hasOwnershipTypes = true;
+          return; // Early exit
+        }
+      }
+      
+      if (!hasOwnershipTypes) {
+        ts.forEachChild(node, visit);
+      }
+    };
+    
+    visit(sourceFile);
+    return hasOwnershipTypes;
   }
 
   /**

@@ -12,7 +12,7 @@ import { Validator } from './validator';
 import { NullCheckAnalyzer } from './null-check-analyzer';
 import { TypeScriptCodegen } from './ts-codegen';
 import { CppCodegen } from './cpp-codegen';
-import { Diagnostic } from './types';
+import { Diagnostic, SourceLocation } from './types';
 
 export interface CompileOptions {
   files: string[];
@@ -159,37 +159,51 @@ export class Compiler {
     const hasErrors = allDiagnostics.some(d => d.severity === 'error');
 
     // If successful and outDir specified, generate code
-    // For C++ target, emit code even if there are TypeScript module resolution errors
-    // (we're not actually running the code, just generating it)
-    const shouldEmit = options.outDir && (
-      !hasErrors || 
-      (target === 'native' && allDiagnostics.every(d => 
-        d.severity !== 'error' || 
-        d.code === 'TS2307' ||  // Module not found
-        d.code === 'TS2792' ||  // Cannot find module (ESM)
-        d.code === 'TS2305'     // Module has no exported member
-      ))
-    );
+    // For TypeScript target, emit code even if there are ownership type errors
+    // (we inject the type declarations in the generated code)
+    // For C++ target, emit code even if there are ownership type errors or module resolution errors
+    // (ownership types are compile-time only, and we're generating C++ not running TypeScript)
+    const isAllowedError = (d: Diagnostic) => {
+      if (d.severity !== 'error') return true;
+      
+      // Allow ownership type errors for both TypeScript and native targets
+      if (d.code === 'TS2552') {
+        // "Cannot find name 'X'" - check if it's an ownership type
+        const message = d.message.toLowerCase();
+        if (message.includes("'own'") || message.includes("'share'") || message.includes("'use'")) {
+          return true;
+        }
+      }
+      
+      // Allow module resolution errors for native target only
+      if (target === 'native') {
+        return d.code === 'TS2307' ||  // Module not found
+               d.code === 'TS2792' ||  // Cannot find module (ESM)
+               d.code === 'TS2305';    // Module has no exported member
+      }
+      
+      return false;
+    };
+    
+    const shouldEmit = options.outDir && (!hasErrors || allDiagnostics.every(isAllowedError));
     
     if (shouldEmit && options.outDir) {
       const emit = options.emit || 'js';  // Default to JS output
       
       if (target === 'typescript') {
-        this.emitTypeScript(program, options.outDir, emit);
+        const tsDiagnostics = this.emitTypeScript(program, options.outDir, emit);
+        // Add TypeScript→JavaScript compilation errors
+        allDiagnostics.push(...tsDiagnostics);
       } else if (target === 'native') {
         this.emitCpp(program, options.outDir);
       }
     }
 
-    // For C++ target with only module resolution errors, consider it successful
-    const isSuccessful = !hasErrors || (
-      target === 'native' && allDiagnostics.every(d => 
-        d.severity !== 'error' || 
-        d.code === 'TS2307' ||  // Module not found
-        d.code === 'TS2792' ||  // Cannot find module (ESM)
-        d.code === 'TS2305'     // Module has no exported member
-      )
-    );
+    // Determine if compilation was successful
+    // Allow ownership type errors for TypeScript target (we inject declarations)
+    // Allow module resolution errors for native C++ target
+    const finalHasErrors = allDiagnostics.some(d => d.severity === 'error');
+    const isSuccessful = !finalHasErrors || allDiagnostics.every(isAllowedError);
 
     return {
       success: isSuccessful,
@@ -219,12 +233,13 @@ export class Compiler {
   /**
    * Emit TypeScript code by removing ownership annotations,
    * then optionally compile to JavaScript
+   * Returns diagnostics from the TS→JS compilation phase
    */
   private emitTypeScript(
     program: ts.Program,
     outDir: string,
     emit: 'js' | 'ts' | 'both'
-  ): void {
+  ): Diagnostic[] {
     // Create output directory if it doesn't exist
     if (!fs.existsSync(outDir)) {
       fs.mkdirSync(outDir, { recursive: true });
@@ -291,10 +306,12 @@ export class Compiler {
     }
 
     // Compile TypeScript to JavaScript if requested
+    const tsDiagnostics: Diagnostic[] = [];
     if (emit === 'js' || emit === 'both') {
       // For JS compilation, we need to use outDir as rootDir since the .ts files
       // are already in the output directory structure we want
-      this.compileTypeScriptToJS(tsFiles, outDir, outDir);
+      const jsCompileDiagnostics = this.compileTypeScriptToJS(tsFiles, outDir, outDir);
+      tsDiagnostics.push(...jsCompileDiagnostics);
       
       // Remove .ts files if only JS was requested
       if (emit === 'js') {
@@ -306,6 +323,8 @@ export class Compiler {
       }
     }
     // If emit === 'ts', we already wrote the files above
+    
+    return tsDiagnostics;
   }
 
   /**
@@ -344,8 +363,9 @@ export class Compiler {
 
   /**
    * Compile TypeScript files to JavaScript using tsc
+   * Returns diagnostics from the compilation
    */
-  private compileTypeScriptToJS(tsFiles: string[], outDir: string, rootDir: string): void {
+  private compileTypeScriptToJS(tsFiles: string[], outDir: string, rootDir: string): Diagnostic[] {
     // Create a temporary tsconfig for compilation
     const compilerOptions: ts.CompilerOptions = {
       target: ts.ScriptTarget.ES2020,
@@ -364,6 +384,7 @@ export class Compiler {
     // Check for compilation errors
     const jsDiagnostics = ts.getPreEmitDiagnostics(jsProgram).concat(emitResult.diagnostics);
     
+    const diagnostics: Diagnostic[] = [];
     if (jsDiagnostics.length > 0) {
       const formatHost: ts.FormatDiagnosticsHost = {
         getCurrentDirectory: () => ts.sys.getCurrentDirectory(),
@@ -372,7 +393,30 @@ export class Compiler {
       };
       const message = ts.formatDiagnosticsWithColorAndContext(jsDiagnostics, formatHost);
       console.error('TypeScript compilation errors:\n', message);
+      
+      // Convert TypeScript diagnostics to our Diagnostic format
+      for (const tsDiag of jsDiagnostics) {
+        // Skip diagnostics without file location (e.g., global config errors)
+        if (!tsDiag.file || tsDiag.start === undefined) {
+          continue;
+        }
+        
+        const location: SourceLocation = {
+          fileName: tsDiag.file.fileName,
+          line: ts.getLineAndCharacterOfPosition(tsDiag.file, tsDiag.start).line + 1,
+          column: ts.getLineAndCharacterOfPosition(tsDiag.file, tsDiag.start).character + 1,
+        };
+        
+        diagnostics.push({
+          severity: tsDiag.category === ts.DiagnosticCategory.Error ? 'error' : 'warning',
+          message: ts.flattenDiagnosticMessageText(tsDiag.messageText, '\n'),
+          location,
+          code: `TS${tsDiag.code}`,
+        });
+      }
     }
+    
+    return diagnostics;
   }
 
   /**

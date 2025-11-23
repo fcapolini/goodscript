@@ -1,11 +1,14 @@
 # Phase 3: C++ Code Generation
 
-**Status:** 🚧 Foundation Complete (35/35 basic tests passing)
+**Status:** 🚧 In Progress (11/12 concrete example tests passing, 92%)
 
-**Test Coverage:** 35 basic feature tests (100% passing)
-- Primitives and basic expressions (18 tests)
-- Ownership types and collections (10 tests)
-- Classes and interfaces (7 tests)
+**Test Coverage:** 
+- 35 basic feature tests (100% passing)
+- 11/12 concrete example tests (92% passing)
+  - ✅ cli-args (3/3)
+  - ✅ json-parser (3/3)
+  - ⚠️ lru-cache (2/3 - C++ codegen bugs)
+  - ✅ n-queens (3/3)
 
 ## Overview
 
