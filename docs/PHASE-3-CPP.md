@@ -4,6 +4,7 @@
 
 **Test Coverage:** 
 - 45 basic feature tests (100% passing) - includes array auto-resize tests
+- 13 semantic equivalence tests (documenting JS/C++ behavior differences)
 - 12/12 concrete example tests (100% passing)
   - ✅ cli-args (3/3)
   - ✅ json-parser (3/3)
@@ -19,6 +20,7 @@
 - ✅ Optional unwrapping for `Map.get()` results (`(*node)->property`)
 - ✅ Smart pointer construction from `new T()` with type annotations
 - ✅ Context-aware Map method detection (`.get()`, `.has()`)
+- ✅ Comprehensive semantic equivalence test suite (13 tests documenting JS/C++ correspondences)
 
 ## Overview
 
@@ -239,15 +241,16 @@ std::shared_ptr<TreeNode> node = TreeNode();  // Will add make_shared
 
 ```
 test/phase3/
-├── basic/                    # Feature unit tests (35 tests - 100% passing)
+├── basic/                    # Feature unit tests (45 tests - 100% passing)
 │   ├── primitives.test.ts    # Types, expressions, control flow
 │   ├── ownership-types.test.ts # Smart pointer mappings
-│   └── classes.test.ts       # Classes, constructors, methods
+│   ├── classes.test.ts       # Classes, constructors, methods
+│   └── js-cpp-semantics.test.ts # Semantic equivalence documentation (13 tests)
 ├── compile/                  # Compilation validation (planned)
 │   └── *.test.ts            # Verify generated C++ compiles
 ├── runtime/                  # Runtime equivalence (planned)
 │   └── *.test.ts            # JS vs C++ output comparison
-└── concrete-examples/        # End-to-end programs (planned)
+└── concrete-examples/        # End-to-end programs (12/12 passing)
     └── */                   # Complete applications
 ```
 
@@ -374,6 +377,47 @@ if (x == 5) { }   // === maps to ==
 ```
 
 **Rationale**: GoodScript requires strict equality to avoid type coercion bugs. C++ has no `===`, so `==` is the natural mapping.
+
+### 6. Semantic Equivalence Documentation
+
+**Test Suite**: `test/phase3/basic/js-cpp-semantics.test.ts` (13 tests)
+
+Documents how JavaScript and C++ behaviors correspond across:
+
+1. **Array Access**: JavaScript `undefined` vs C++ default values for out-of-bounds reads
+   - Both are safe (no crash)
+   - Both are predictable
+   - GoodScript's no-truthy-falsy rule prevents relying on the difference
+
+2. **Array Assignment**: Auto-resize behavior matches JavaScript exactly
+   ```javascript
+   arr[10] = 42;  // Resizes to length 11 in both JS and C++
+   ```
+
+3. **Object Members**: TypeScript `field?: type` → C++ `std::optional<T>`
+   - JavaScript `undefined` → C++ `std::nullopt`
+   - Similar semantics: both represent "no value present"
+
+4. **Numeric Types**: Both use IEEE 754 double precision
+   - `5 / 2 === 2.5` in both languages (not truncated to 2)
+   - Same precision and range
+
+5. **Equality Operators**: `===` → `==` is safe because:
+   - GoodScript prohibits `==` (only `===` allowed)
+   - GoodScript prohibits type coercion
+   - C++ `==` with same types ≡ JavaScript `===`
+
+6. **Boolean Semantics**: No truthy/falsy coercion
+   - GoodScript (GS110): conditions must be explicit boolean expressions
+   - C++: same requirement
+   - Result: identical behavior in both languages
+
+7. **Null/Undefined**: Combined into `std::optional<T>`
+   - JavaScript: two distinct values (`null` and `undefined`)
+   - C++: one concept (`std::nullopt`)
+   - Functionally equivalent for safety
+
+These tests serve as **documentation** rather than validation, explicitly showing where JavaScript and C++ semantics align and where they diverge. The key insight: **GoodScript's Phase 1 restrictions** (no type coercion, no truthy/falsy, strict equality only) are what enable semantic equivalence—without them, mapping TypeScript to C++ would be impossible.
 
 ## Implementation Notes
 
@@ -527,10 +571,18 @@ Building features incrementally with comprehensive tests prevented regression. E
 
 ### 4. Test-Driven Development
 
-Writing tests first clarified requirements and caught edge cases early. The 35/35 passing tests provide confidence for future refactoring.
+Writing tests first clarified requirements and caught edge cases early. The 45/45 passing tests provide confidence for future refactoring.
+
+### 5. Semantic Equivalence is a Feature
+
+The semantic equivalence test suite (13 tests) documents the correspondence between JavaScript and C++ behaviors. This is critical because:
+- Developers need to understand where behaviors align
+- The one documented difference (array out-of-bounds) is intentional and safe
+- GoodScript's restrictions are what enable cross-language equivalence
+- Tests serve as executable documentation
 
 ---
 
-**Last Updated**: November 22, 2025
+**Last Updated**: November 23, 2025
 **Status**: Foundation complete, ready for advanced features
 **Next Milestone**: Smart pointer construction and compilation validation
