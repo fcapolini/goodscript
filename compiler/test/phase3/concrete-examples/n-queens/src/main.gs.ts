@@ -87,4 +87,4 @@ const nQueens = (N: number) => {
   }
 };
 
-nQueens(4);
+nQueens(12);
