@@ -1,8 +1,10 @@
 /**
  * Test array bounds checking in C++ code generation
  * 
- * JavaScript returns undefined for out-of-bounds reads, but C++ vector[]
- * causes undefined behavior. We use .at() which throws std::out_of_range.
+ * JavaScript returns undefined (or type-default) for out-of-bounds reads.
+ * C++ vector[] causes undefined behavior. We use gs::array_get() which
+ * returns a default-constructed value (0 for numbers, false for bool, etc.)
+ * matching JavaScript semantics better than throwing exceptions.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -22,16 +24,16 @@ function compileToCpp(source: string): string {
 }
 
 describe('Phase 3: Array Bounds Checking', () => {
-  it('should use .at() for array reads to prevent segfaults', () => {
+  it('should use gs::array_get() for array reads to prevent segfaults', () => {
     const cpp = compileToCpp(`
       const arr = [1, 2, 3];
       const x = arr[0];
       const y = arr[1];
     `);
     
-    // Should use .at() for safe access, not [] operator
-    expect(cpp).toContain('.at(0)');
-    expect(cpp).toContain('.at(1)');
+    // Should use gs::array_get() for safe access that matches JS semantics
+    expect(cpp).toContain('gs::array_get(arr, 0)');
+    expect(cpp).toContain('gs::array_get(arr, 1)');
     // Should NOT use unsafe [] for reads
     expect(cpp).not.toMatch(/arr\[0\](?!\s*=)/); // [] not followed by =
   });
@@ -48,15 +50,15 @@ describe('Phase 3: Array Bounds Checking', () => {
     expect(cpp).toContain('__arr');
   });
 
-  it('should use [] for Map access (not .at())', () => {
+  it('should use [] for Map access (not gs::array_get)', () => {
     const cpp = compileToCpp(`
       const map = new Map<string, number>();
       map.set("key", 42);
       const val = map.get("key");
     `);
     
-    // Maps should not use .at() - they use [] or helper functions
-    // (get() method is handled specially, but direct access would use [])
+    // Maps should not use gs::array_get
+    expect(cpp).not.toContain('gs::array_get');
     expect(cpp).toContain('map');
   });
 
@@ -66,10 +68,10 @@ describe('Phase 3: Array Bounds Checking', () => {
       const sum = arr[0] + arr[1] + arr[2];
     `);
     
-    // All array reads should use .at()
-    expect(cpp).toContain('.at(0)');
-    expect(cpp).toContain('.at(1)');
-    expect(cpp).toContain('.at(2)');
+    // All array reads should use gs::array_get()
+    expect(cpp).toContain('gs::array_get(arr, 0)');
+    expect(cpp).toContain('gs::array_get(arr, 1)');
+    expect(cpp).toContain('gs::array_get(arr, 2)');
   });
 
   it('should handle array reads with variable indices', () => {
@@ -79,8 +81,8 @@ describe('Phase 3: Array Bounds Checking', () => {
       const val = arr[i];
     `);
     
-    // Should use .at() even with variable index
-    expect(cpp).toContain('.at(i)');
+    // Should use gs::array_get() even with variable index
+    expect(cpp).toContain('gs::array_get(arr, i)');
   });
 
   it('should handle nested array access', () => {
@@ -89,8 +91,8 @@ describe('Phase 3: Array Bounds Checking', () => {
       const val = matrix[0][1];
     `);
     
-    // Should use .at() for both levels
-    expect(cpp).toContain('.at(0)');
-    expect(cpp).toContain('.at(1)');
+    // Should use gs::array_get() for both levels
+    expect(cpp).toContain('gs::array_get(matrix, 0)');
+    expect(cpp).toContain('gs::array_get');
   });
 });

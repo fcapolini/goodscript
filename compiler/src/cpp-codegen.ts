@@ -207,6 +207,16 @@ export class CppCodegen {
     lines.push('  return std::nullopt;');
     lines.push('}');
     lines.push('');
+    lines.push('// Array helper: safe get (returns element or default value, matching JavaScript undefined behavior)');
+    lines.push('// For primitive types, returns 0/false/empty; could be enhanced to return optional');
+    lines.push('template<typename T>');
+    lines.push('T array_get(const std::vector<T>& arr, size_t index) {');
+    lines.push('  if (index < arr.size()) {');
+    lines.push('    return arr[index];');
+    lines.push('  }');
+    lines.push('  return T{}; // Default-constructed value (0 for numbers, false for bool, etc.)');
+    lines.push('}');
+    lines.push('');
     lines.push('} // namespace gs');
     lines.push('');
   }
@@ -2105,8 +2115,9 @@ export class CppCodegen {
   /**
    * Generate element access (array/map indexing)
    * 
-   * For arrays, we need bounds checking to match JavaScript semantics and avoid segfaults.
-   * JavaScript returns undefined for out-of-bounds reads, we use a safe accessor helper.
+   * For arrays, we need bounds checking to match JavaScript semantics.
+   * JavaScript returns undefined for out-of-bounds reads; we return default value (0, false, etc.)
+   * to avoid exceptions while maintaining safety.
    */
   private generateElementAccess(expr: ts.ElementAccessExpression): string {
     const object = this.generateExpression(expr.expression);
@@ -2114,7 +2125,7 @@ export class CppCodegen {
     const accessor = (object === 'this') ? '->' : '.';
     
     // For maps, use [] operator (creates entry if not exists, matching JS behavior)
-    // For arrays, we need bounds checking to avoid segfaults
+    // For arrays, use safe accessor that returns default value for out-of-bounds
     
     // Check if this is array access vs map access
     if (this.checker) {
@@ -2130,14 +2141,14 @@ export class CppCodegen {
       }
     }
     
-    // For arrays (std::vector), use safe accessor with bounds checking
-    // JavaScript returns undefined for out-of-bounds, we throw to match .at() behavior
-    // This prevents silent segfaults
+    // For arrays (std::vector), use safe accessor
+    // JavaScript returns undefined for out-of-bounds, we return default value (0, false, empty string, etc.)
+    // This matches JS semantics better than throwing exception
     if (object === 'this') {
-      return `${object}->${accessor}at(${index})`;
+      return `gs::array_get(${object}${accessor}vec, ${index})`;
     }
     
-    return `${object}.at(${index})`;
+    return `gs::array_get(${object}, ${index})`;
   }
   
   /**
