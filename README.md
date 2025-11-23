@@ -100,6 +100,10 @@ async function example(sharedNode: share<Node>) {
   * `own<T>` → `std::unique_ptr<T>`
   * `share<T>` → `gs::shared_ptr<T>` (lightweight non-atomic refcounting, ~3x faster)
   * `use<T>` → `gs::weak_ptr<T>` (lightweight non-atomic weak references, ~3x faster)
+* **Runtime Library**: TypeScript-compatible wrapper classes (`gs::String`, `gs::Array<T>`, `gs::Map<K,V>`, etc.)
+  - Header-only, zero-overhead wrappers around C++ STL
+  - Methods match TypeScript/JavaScript naming exactly
+  - Complete test coverage
 * Ensures **memory safety, deterministic destruction, and DAG-enforced ownership**.
 * Uses **C++20 features** (concepts, ranges, coroutines for async/await).
 * **Performance optimizations**: Custom smart pointers use non-atomic operations, safe for single-threaded execution.
@@ -222,8 +226,12 @@ async function demo(node: share<Node>) {
 - ✅ **Phase 1**: TypeScript "Good Parts" validation (244/244 tests)
 - ✅ **Phase 2**: Ownership analysis and DAG enforcement (425/425 tests)
 - 🚧 **Phase 3**: C++ code generation - Foundation complete (35/35 basic tests)
-  - Type mappings, ownership qualifiers, classes, control flow
-  - Next: Smart pointer construction, compilation validation, runtime equivalence
+  - ✅ Type mappings, ownership qualifiers, classes, control flow
+  - ✅ **Runtime Library**: TypeScript-compatible wrapper classes for C++ STL
+    - `gs::String`, `gs::Array<T>`, `gs::Map<K,V>`, `gs::Set<T>`
+    - `gs::JSON`, `gs::console`
+    - Header-only, zero-overhead, 100% test coverage
+  - Next: Migrate codegen to use runtime wrappers, compilation validation, runtime equivalence
 
 ### Planned
 - 📋 **Phase 4**: Standard library, module system, Zig toolchain integration
