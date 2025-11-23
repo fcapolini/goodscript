@@ -384,6 +384,71 @@ export class CppCodegen {
   }
   
   /**
+   * Infer array element type from usage patterns (assignments)
+   */
+  private inferArrayTypeFromUsage(arrayName: string, decl: ts.VariableDeclaration): string | null {
+    // Find the containing source file or block
+    let current: ts.Node = decl;
+    let statementsContainer: ts.SourceFile | ts.Block | null = null;
+    
+    while (current) {
+      if (ts.isSourceFile(current) || ts.isBlock(current)) {
+        statementsContainer = current;
+        break;
+      }
+      current = current.parent!;
+    }
+    
+    if (!statementsContainer) return null;
+    
+    // Look for array element assignments: arrayName[index] = value
+    let inferredType: string | null = null;
+    
+    const visit = (node: ts.Node): void => {
+      if (ts.isExpressionStatement(node) && ts.isBinaryExpression(node.expression)) {
+        const binary = node.expression;
+        if (binary.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            ts.isElementAccessExpression(binary.left)) {
+          const elemAccess = binary.left;
+          if (ts.isIdentifier(elemAccess.expression) && 
+              elemAccess.expression.getText() === arrayName) {
+            // Found an assignment to our array
+            const value = binary.right;
+            
+            // Infer type from the value
+            if (ts.isNumericLiteral(value)) {
+              inferredType = 'std::vector<double>';
+            } else if (ts.isStringLiteral(value)) {
+              inferredType = 'std::vector<std::string>';
+            } else if (value.kind === ts.SyntaxKind.TrueKeyword || 
+                       value.kind === ts.SyntaxKind.FalseKeyword) {
+              inferredType = 'std::vector<bool>';
+            }
+          }
+        }
+      }
+      
+      // Don't recurse into nested blocks/functions
+      if (!ts.isBlock(node) && !ts.isFunctionDeclaration(node) && !ts.isArrowFunction(node)) {
+        ts.forEachChild(node, visit);
+      }
+    };
+    
+    // Visit all statements in the container
+    if (ts.isSourceFile(statementsContainer)) {
+      statementsContainer.statements.forEach(visit);
+    } else if (ts.isBlock(statementsContainer)) {
+      statementsContainer.statements.forEach(visit);
+    }
+    
+    if (inferredType) {
+      this.addInclude('<vector>');
+    }
+    
+    return inferredType;
+  }
+  
+  /**
    * Generate variable declaration
    */
   private generateVariableStatement(statement: ts.VariableStatement): void {
@@ -398,6 +463,20 @@ export class CppCodegen {
       
       const name = this.escapeIdentifier(decl.name.getText());
       let type = decl.type ? this.generateType(decl.type) : 'auto';
+      
+      // If type is auto and initializer is empty array, try to infer element type from usage
+      if (type === 'auto' && decl.initializer && ts.isArrayLiteralExpression(decl.initializer) && 
+          decl.initializer.elements.length === 0) {
+        // Look for assignments to this array in the same scope
+        const inferredType = this.inferArrayTypeFromUsage(name, decl);
+        if (inferredType) {
+          type = inferredType;
+        } else {
+          // Default to double if we can't infer
+          type = 'std::vector<double>';
+          this.addInclude('<vector>');
+        }
+      }
       
       // If type is auto and initializer is a string literal, use std::string
       if (type === 'auto' && decl.initializer && ts.isStringLiteral(decl.initializer)) {
@@ -982,6 +1061,101 @@ export class CppCodegen {
   }
   
   /**
+   * Helper to check if an expression has smart pointer type (own<T>, share<T>, or use<T>)
+   */
+  private isSmartPointerType(expr: ts.Expression): boolean {
+    if (!this.checker) return false;
+    
+    // Check if it's a property access or identifier
+    if (ts.isIdentifier(expr) || ts.isPropertyAccessExpression(expr)) {
+      const symbol = this.checker.getSymbolAtLocation(
+        ts.isIdentifier(expr) ? expr : expr.name
+      );
+      
+      if (symbol?.valueDeclaration) {
+        const typeText = this.getTypeTextFromSymbol(symbol);
+        if (typeText) {
+          // Exclude arrays - own<T>[], share<T>[], etc. are NOT smart pointers themselves
+          if (typeText.endsWith('[]') || typeText.includes('[]>') || typeText.endsWith(']')) {
+            return false;
+          }
+          
+          // Check for ownership types or std smart pointers
+          if (typeText.startsWith('own<') || 
+              typeText.startsWith('share<') || 
+              typeText.startsWith('use<') ||
+              typeText.startsWith('std::unique_ptr<') ||
+              typeText.startsWith('std::shared_ptr<') ||
+              typeText.startsWith('std::weak_ptr<')) {
+            return true;
+          }
+        }
+        
+        // If no explicit type annotation (e.g., using 'auto'), check initializer
+        if (ts.isVariableDeclaration(symbol.valueDeclaration) && 
+            symbol.valueDeclaration.initializer) {
+          const init = symbol.valueDeclaration.initializer;
+          
+          // If initialized from element access of smart pointer array
+          if (ts.isElementAccessExpression(init)) {
+            return this.isSmartPointerType(init);
+          }
+          
+          // If initialized from a call returning smart pointer
+          if (ts.isCallExpression(init)) {
+            const returnType = this.getMethodReturnTypeFromSource(init);
+            if (returnType) {
+              return returnType.startsWith('own<') || 
+                     returnType.startsWith('share<') || 
+                     returnType.startsWith('use<');
+            }
+          }
+        }
+      }
+    }
+    
+    // Check if it's an element access (e.g., array[0] might be smart pointer)
+    if (ts.isElementAccessExpression(expr) && this.checker) {
+      const arrayExpr = expr.expression;
+      const symbol = this.checker.getSymbolAtLocation(
+        ts.isIdentifier(arrayExpr) ? arrayExpr : 
+        ts.isPropertyAccessExpression(arrayExpr) ? arrayExpr.name : arrayExpr
+      );
+      
+      if (symbol?.valueDeclaration) {
+        const typeText = this.getTypeTextFromSymbol(symbol);
+        if (typeText) {
+          // Check for arrays of smart pointers: own<T>[], share<T>[], etc.
+          return typeText.match(/(own|share|use)<[^>]+>\[\]/) !== null ||
+                 typeText.includes('std::vector<std::unique_ptr<') ||
+                 typeText.includes('std::vector<std::shared_ptr<') ||
+                 typeText.includes('std::vector<std::weak_ptr<');
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Generate expression with null context awareness
+   * If otherOperand is a smart pointer and this expr is null/undefined, use nullptr instead of std::nullopt
+   */
+  private generateExpressionWithNullContext(expr: ts.Expression, otherOperand?: ts.Expression): string {
+    // Check if this is null/undefined and the other operand is a smart pointer
+    const isNull = expr.kind === ts.SyntaxKind.NullKeyword;
+    const isUndefined = expr.kind === ts.SyntaxKind.UndefinedKeyword || 
+                        (ts.isIdentifier(expr) && expr.getText() === 'undefined');
+    
+    if ((isNull || isUndefined) && otherOperand && this.isSmartPointerType(otherOperand)) {
+      return 'nullptr';
+    }
+    
+    // Otherwise use normal generation
+    return this.generateExpression(expr);
+  }
+  
+  /**
    * Generate expression
    */
   private generateExpression(expr: ts.Expression): string {
@@ -1046,9 +1220,12 @@ export class CppCodegen {
    * Generate binary expression
    */
   private generateBinaryExpression(expr: ts.BinaryExpression): string {
-    let left = this.generateExpression(expr.left);
-    let right = this.generateExpression(expr.right);
     const op = expr.operatorToken.getText();
+    
+    // Check if we're comparing against null/undefined with a smart pointer
+    // This needs to happen before we call generateExpression on the operands
+    let left = this.generateExpressionWithNullContext(expr.left, expr.right);
+    let right = this.generateExpressionWithNullContext(expr.right, expr.left);
     
     // For assignment to array element, use helper that auto-resizes like JS
     if (op === '=' && ts.isElementAccessExpression(expr.left)) {
@@ -1347,6 +1524,11 @@ export class CppCodegen {
         return `(${object}${accessor}find(${args}) != ${object}${accessor}end())`;
       }
       
+      if (methodName === 'delete') {
+        // map.delete(key) -> map.erase(key)
+        return `${object}${accessor}erase(${args})`;
+      }
+      
       // Array methods
       if (methodName === 'push') {
         // Check if array has smart pointer elements
@@ -1539,32 +1721,16 @@ export class CppCodegen {
     if (object === 'this') {
       accessor = '->';
     }
-    // Check if the object is a shared_ptr or unique_ptr by looking at the source type
-    else if (this.checker && ts.isPropertyAccessExpression(expr.expression)) {
-      // For member access like this.input.size(), check if 'input' is share<T> or own<T>
-      const objExpr = expr.expression;
-      if (ts.isPropertyAccessExpression(objExpr)) {
-        const objSymbol = this.checker.getSymbolAtLocation(objExpr.name);
-        if (objSymbol?.valueDeclaration) {
-          const typeText = this.getTypeTextFromSymbol(objSymbol);
-          if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<') ||
-              typeText?.startsWith('own<') || typeText?.startsWith('std::unique_ptr<')) {
-            accessor = '->';
-          }
-        }
-      }
+    // Check if the expression is a smart pointer using our helper
+    else if (this.isSmartPointerType(expr.expression)) {
+      accessor = '->';
     }
-    // Check if it's a direct identifier that's a shared_ptr or unique_ptr or optional
+    // Check if it's an optional type (T | null) - needs -> in C++
     else if (this.checker && ts.isIdentifier(expr.expression)) {
       const symbol = this.checker.getSymbolAtLocation(expr.expression);
       if (symbol?.valueDeclaration) {
         const typeText = this.getTypeTextFromSymbol(symbol);
-        if (typeText?.startsWith('share<') || typeText?.startsWith('std::shared_ptr<') ||
-            typeText?.startsWith('own<') || typeText?.startsWith('std::unique_ptr<')) {
-          accessor = '->';
-        }
-        // Check if it's an optional type (T | null) - needs -> in C++
-        else if (typeText && (typeText.includes('| null') || typeText.includes('| undefined'))) {
+        if (typeText && (typeText.includes('| null') || typeText.includes('| undefined'))) {
           accessor = '->';
         }
         // Also check if variable was initialized from a method returning optional

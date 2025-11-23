@@ -3,12 +3,19 @@
 **Status:** 🚧 In Progress (11/12 concrete example tests passing, 92%)
 
 **Test Coverage:** 
-- 35 basic feature tests (100% passing)
+- 40 basic feature tests (100% passing) - includes array auto-resize tests
 - 11/12 concrete example tests (92% passing)
   - ✅ cli-args (3/3)
   - ✅ json-parser (3/3)
-  - ⚠️ lru-cache (2/3 - C++ codegen bugs)
+  - ⚠️ lru-cache (2/3 - needs optional unwrapping)
   - ✅ n-queens (3/3)
+
+**Recent Updates (Nov 23, 2024):**
+- ✅ Smart pointer null comparisons fixed (`nullptr` vs `std::nullopt`)
+- ✅ Smart pointer member access fixed (`->` vs `.`)
+- ✅ Array/vector member access fixed (proper `.` usage)
+- ✅ Map.delete() mapped to erase()
+- ✅ JavaScript-compatible array auto-resize on out-of-bounds assignment
 
 ## Overview
 
@@ -73,18 +80,44 @@ Phase 3 implements the C++ code generator that transforms GoodScript's TypeScrip
   #include <string>        // std::string
   #include <optional>      // std::optional
   #include <iostream>      // I/O operations
+  #include <algorithm>     // std::transform, etc.
   #include <vector>        // When arrays used
   #include <unordered_map> // When Map used
   #include <unordered_set> // When Set used
   ```
 
+- **JavaScript Array Semantics** - Arrays auto-resize on out-of-bounds assignment:
+  ```typescript
+  const a = [];
+  a[10] = 0;  // Auto-resizes array to size 11
+  ```
+  ```cpp
+  std::vector<double> a = {};
+  ([&]() { auto& __arr = a; auto __idx = 10; 
+    if (__idx >= __arr.size()) __arr.resize(__idx + 1); 
+    return __arr[__idx] = 0; }());
+  ```
+
+- **Smart Pointer Type Detection** - Context-aware pointer dereferencing:
+  ```typescript
+  const node: share<Node> = ...;
+  node.value = 42;  // Uses -> for smart pointers
+  ```
+  ```cpp
+  std::shared_ptr<Node> node = ...;
+  node->value = 42;  // Correct arrow operator
+  ```
+
 ### 🚧 In Progress / Planned
 
 #### Smart Pointer Management
-- [ ] **Construction** - `std::make_unique()`, `std::make_shared()` wrapping
-- [ ] **Dereferencing** - Context-aware use of `->` vs `.`
-- [ ] **State Tracking** - Avoid double-wrapping already-wrapped pointers
-- [ ] **Move Semantics** - Use `std::move()` for efficiency
+- [x] **Null Comparisons** - Smart pointers compare to `nullptr`, optionals to `std::nullopt`
+- [x] **Member Access** - Context-aware use of `->` for smart pointers, `.` for values/vectors
+- [x] **Type Inference** - Handles variables initialized from smart pointer arrays
+- [ ] **Construction** - `std::make_unique()`, `std::make_shared()` wrapping (partial)
+- [ ] **Optional Unwrapping** - Automatic dereferencing of `optional<shared_ptr<T>>`
+- [ ] **State Tracking** - Avoid double-wrapping already-wrapped pointers (partial)
+- [ ] **Move Semantics** - Use `std::move()` for efficiency (partial)
 - [ ] **Method Chaining** - Handle fluent interfaces with smart pointers
 
 #### Advanced Features
@@ -95,10 +128,13 @@ Phase 3 implements the C++ code generator that transforms GoodScript's TypeScrip
 - [ ] **Exception Handling** - Try/catch with RAII-safe cleanup
 
 #### Standard Library
-- [ ] **console.log** - Currently maps to `std::cout`, needs refinement
+- [x] **console.log** - Maps to `std::cout << ... << std::endl`
+- [x] **Array Methods** - push_back(), size(), basic operations
+- [x] **Array Auto-Resize** - JavaScript-compatible out-of-bounds assignment
+- [x] **Map Methods** - get() → map_get helper, set() → emplace/insert, delete() → erase(), has() → find
+- [x] **String Methods** - startsWith(), indexOf(), charAt(), charCodeAt(), substring()
 - [ ] **Math** - Map to `<cmath>` functions
-- [ ] **Array Methods** - map(), filter(), reduce() → algorithms or ranges
-- [ ] **String Methods** - substring(), indexOf(), etc.
+- [ ] **Advanced Array Methods** - map(), filter(), reduce() → algorithms or ranges
 - [ ] **Date/Time** - Map to `<chrono>`
 
 #### Testing Infrastructure

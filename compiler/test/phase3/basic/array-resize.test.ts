@@ -72,4 +72,17 @@ describe('Phase 3: Array Auto-Resize', () => {
     
     expect(cpp).toContain('resize');
   });
+  
+  it('should handle untyped array with assignment', () => {
+    const source = `
+      const a = [];
+      a[10] = 0;
+    `;
+    const cpp = compileToCpp(source);
+    
+    // Should infer type from usage and resize
+    expect(cpp).toContain('resize');
+    // Should create a typed vector, not auto a = {}
+    expect(cpp).toMatch(/std::vector<\w+>\s+a\s*=/);
+  });
 });
