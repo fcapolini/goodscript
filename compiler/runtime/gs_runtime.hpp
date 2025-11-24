@@ -36,9 +36,19 @@
 #include "gs_object.hpp"
 #include "gs_number.hpp"
 #include "gs_tuple.hpp"
+
+// RegExp support (requires PCRE2 library)
+// Define GS_ENABLE_REGEXP to include RegExp support
+// Compile with: -DGS_ENABLE_REGEXP -lpcre2-8
+#ifdef GS_ENABLE_REGEXP
 #include "gs_regexp.hpp"
+#endif
+
 #include "gs_array_impl.hpp"
+
+#ifdef GS_ENABLE_REGEXP
 #include "gs_regexp_impl.hpp"
+#endif
 
 // Memory management utilities
 #include <memory>

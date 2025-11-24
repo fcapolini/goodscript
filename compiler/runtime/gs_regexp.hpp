@@ -247,6 +247,11 @@ public:
     return false;
   }
   
+  // Overload for gs::String
+  bool test(const gs::String& subject) {
+    return test(subject.str());
+  }
+  
   /**
    * Execute a search for a match and return detailed results
    * Equivalent to TypeScript: regex.exec(str)
@@ -303,6 +308,11 @@ public:
     }
     
     return matches;
+  }
+  
+  // Overload for gs::String
+  std::optional<std::vector<std::string>> exec(const gs::String& subject) {
+    return exec(subject.str());
   }
   
   /**
@@ -403,6 +413,11 @@ public:
     
     PCRE2_SIZE* ovector = pcre2_get_ovector_pointer(match_data_);
     return static_cast<int>(ovector[0]);
+  }
+  
+  // Overload for gs::String
+  int search(const gs::String& subject) const {
+    return search(subject.str());
   }
   
   // Friend declarations for String methods that need access to internals

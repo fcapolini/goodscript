@@ -1936,6 +1936,8 @@ export class CppCodegen {
       return this.generateArrowFunction(expr);
     } else if (ts.isParenthesizedExpression(expr)) {
       return `(${this.generateExpression(expr.expression)})`;
+    } else if (ts.isRegularExpressionLiteral(expr)) {
+      return this.generateRegExpLiteral(expr);
     }
     
     return '/* unsupported expression */';
@@ -2486,6 +2488,57 @@ export class CppCodegen {
     const propertyName = expr.name.getText();
     const property = this.escapeIdentifier(propertyName);
     
+    // Check if this is accessing a RegExp property - convert to method call
+    // RegExp properties: source, global, ignoreCase, multiline, dotAll, unicode, sticky, flags, lastIndex
+    const regexpProperties = ['source', 'global', 'ignoreCase', 'multiline', 'dotAll', 'unicode', 'sticky', 'flags', 'lastIndex'];
+    
+    if (ts.isIdentifier(expr.expression) && regexpProperties.includes(propertyName)) {
+      // If we have a type checker, verify it's actually a RegExp
+      if (this.checker) {
+        const symbol = this.checker.getSymbolAtLocation(expr.expression);
+        if (symbol?.valueDeclaration && ts.isVariableDeclaration(symbol.valueDeclaration)) {
+          // Check if the variable is initialized with a RegExp literal
+          const isRegExpVar = symbol.valueDeclaration.initializer && 
+                             ts.isRegularExpressionLiteral(symbol.valueDeclaration.initializer);
+          
+          if (isRegExpVar) {
+            // Convert property access to method call: pattern.global -> pattern.global()
+            return `${object}.${property}()`;
+          }
+          
+          // Also check explicit RegExp type annotation
+          const typeText = this.getTypeTextFromSymbol(symbol);
+          if (typeText?.includes('RegExp')) {
+            // Convert property access to method call: pattern.global -> pattern.global()
+            return `${object}.${property}()`;
+          }
+        }
+      } else {
+        // No type checker - try to infer from variable declaration in same file
+        // Look for variable declaration with RegExp literal initializer
+        const varName = expr.expression.getText();
+        const sourceFile = expr.getSourceFile();
+        
+        // Simple heuristic: search for "const varName = /.../"
+        let isRegExp = false;
+        ts.forEachChild(sourceFile, function visit(node): void {
+          if (ts.isVariableStatement(node)) {
+            for (const decl of node.declarationList.declarations) {
+              if (ts.isIdentifier(decl.name) && decl.name.getText() === varName) {
+                if (decl.initializer && ts.isRegularExpressionLiteral(decl.initializer)) {
+                  isRegExp = true;
+                }
+              }
+            }
+          }
+        });
+        
+        if (isRegExp) {
+          return `${object}.${property}()`;
+        }
+      }
+    }
+    
     // Check if this is accessing a LiteralObject property
     if (ts.isIdentifier(expr.expression)) {
       const varName = this.escapeIdentifier(expr.expression.getText());
@@ -2774,6 +2827,40 @@ export class CppCodegen {
     
     const className = this.generateExpression(expr.expression);
     return `${className}(${args})`;
+  }
+  
+  /**
+   * Generate regular expression literal
+   * Maps /pattern/flags to gs::RegExp(R"(pattern)", "flags")
+   */
+  private generateRegExpLiteral(expr: ts.RegularExpressionLiteral): string {
+    const text = expr.text;
+    
+    // The text is the full regex: /pattern/flags
+    // We need to parse it to extract pattern and flags
+    if (!text.startsWith('/')) {
+      // Shouldn't happen, but handle gracefully
+      return `gs::RegExp("${text}", "")`;
+    }
+    
+    // Find the closing slash by searching from the end
+    // Flags come after the last /
+    const lastSlashIndex = text.lastIndexOf('/');
+    if (lastSlashIndex <= 0) {
+      // Only one slash? Treat as pattern without flags
+      const pattern = text.substring(1);
+      return `gs::RegExp(R"(${pattern})", "")`;
+    }
+    
+    // Extract pattern (between first and last /)
+    const pattern = text.substring(1, lastSlashIndex);
+    
+    // Extract flags (after last /)
+    const flags = text.substring(lastSlashIndex + 1);
+    
+    // Use raw string literal R"(...)" to avoid escaping issues
+    // This preserves backslashes as-is (e.g., \d+ stays \d+, not \\d+)
+    return `gs::RegExp(R"(${pattern})", "${flags}")`;
   }
   
   /**

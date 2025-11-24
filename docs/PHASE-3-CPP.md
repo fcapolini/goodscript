@@ -1,10 +1,13 @@
 # Phase 3: C++ Code Generation
 
-**Status:** ✅ ~95% Complete (842 tests passing)
+**Status:** ✅ ~95% Complete (885 tests passing)
 
 **Test Coverage:** 
 - 66 basic feature tests (100% passing)
 - 28 runtime library tests (100% passing)
+- 28 RegExp runtime tests (100% passing) ✅ **NEW**
+- 9 RegExp codegen tests (100% passing) ✅ **NEW**
+- 6 RegExp e2e tests (100% passing) ✅ **NEW**
 - 88/88 concrete example tests (100% passing) ✅
   - ✅ array-methods (8/8)
   - ✅ binary-search-tree (8/8)
@@ -21,6 +24,14 @@
   - ⏸️ interface-shapes - Requires: interface virtual methods, polymorphic arrays, method resolution
 
 **Recent Updates (Nov 24, 2025):**
+- ✅ **RegExp C++ Integration** - Complete regex literal support:
+  - Regex literals generate C++ code: `/\d+/g` → `gs::RegExp(R"(\d+)", "g")`
+  - Property access conversion: `pattern.global` → `pattern.global()` (methods in C++)
+  - Runtime method overloads for `gs::String` compatibility
+  - Conditional compilation with `#ifdef GS_ENABLE_REGEXP` (optional PCRE2 dependency)
+  - 43 new tests: 28 runtime + 9 codegen + 6 end-to-end C++ compilation
+  - Full JavaScript regex semantics: lookahead, lookbehind, all flags, Unicode support
+- ✅ **885 tests passing** - Up from 842 at session start (+43 tests)
 - ✅ **String Pool Example Unlocked** - Complete share<string> support:
   - Fixed type reference mapping: `string` type ref → `gs::String` (not `string`)  
   - Fixed Map/Set constructors: Use `gs::Map`/`gs::Set` wrappers (not raw STL)
@@ -150,6 +161,22 @@ See `docs/ZIG-TOOLCHAIN.md` for detailed information on Zig integration.
   #include <unordered_map> // When Map used
   #include <unordered_set> // When Set used
   ```
+
+- **RegExp Literals** - JavaScript regex to C++ PCRE2:
+  ```typescript
+  const pattern = /\d+/g;
+  console.log(pattern.test("hello 123"));
+  console.log(pattern.global);
+  ```
+  ```cpp
+  auto pattern = gs::RegExp(R"(\d+)", "g");
+  gs::console::log(pattern.test(gs::String("hello 123")));
+  gs::console::log(pattern.global());  // Property access → method call
+  ```
+  - Uses raw string literals `R"(...)"` to avoid escape doubling
+  - Converts property access to method calls (C++ uses getters)
+  - Requires PCRE2 library and `-DGS_ENABLE_REGEXP` flag
+  - Full JavaScript regex semantics: lookahead, lookbehind, Unicode, all flags
 
 - **JavaScript Array Semantics** - Arrays auto-resize on out-of-bounds assignment:
   ```typescript
