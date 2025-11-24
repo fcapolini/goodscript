@@ -316,6 +316,60 @@ const proto = obj.__proto__;
     });
   });
 
+  describe('GS127: No Proxy', () => {
+    it('should reject Proxy constructor', () => {
+      const source = `
+const handler = {
+  get(target: any, prop: string) {
+    return target[prop];
+  }
+};
+const proxy = new Proxy({}, handler);
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS127')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS127');
+      expect(errors[0].message).toContain('Proxy is not supported');
+    });
+
+    it('should reject Proxy.revocable', () => {
+      const source = `
+const { proxy, revoke } = Proxy.revocable({}, {});
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS127')).toBe(true);
+    });
+
+    it('should reject Reflect.get', () => {
+      const source = `
+const obj = { x: 1 };
+const value = Reflect.get(obj, 'x');
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS127')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS127');
+      expect(errors[0].message).toContain('Reflect API is not supported');
+    });
+
+    it('should reject Reflect.set', () => {
+      const source = `
+const obj = {};
+Reflect.set(obj, 'x', 1);
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS127')).toBe(true);
+    });
+
+    it('should reject Reflect.has', () => {
+      const source = `
+const obj = { x: 1 };
+const hasX = Reflect.has(obj, 'x');
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS127')).toBe(true);
+    });
+  });
+
   it('should accept regular arrays', () => {
     const source = `
 const arr = [1, 2, 3];
@@ -329,6 +383,7 @@ arr.push(4);
     expect(hasError(result.diagnostics, 'GS124')).toBe(false);
     expect(hasError(result.diagnostics, 'GS125')).toBe(false);
     expect(hasError(result.diagnostics, 'GS126')).toBe(false);
+    expect(hasError(result.diagnostics, 'GS127')).toBe(false);
   });
 });
 

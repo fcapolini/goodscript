@@ -1009,6 +1009,97 @@ class MyArray<T> extends Array<T> {  // ✅ Accepted
 function myArrayHelper<T>(arr: T[]) { ... }  // ✅ Accepted
 ```
 
+### GS127: No Proxy or Reflect API (Implementation Limitation)
+
+**Error:** `Proxy is not supported - lacks C++ equivalent for runtime interception`  
+**Error:** `Reflect API is not supported - lacks C++ equivalent for runtime interception`
+
+**Rejected:**
+```typescript
+// Proxy for interception
+const handler = {
+  get(target: any, prop: string) {
+    console.log(`Getting ${prop}`);
+    return target[prop];
+  }
+};
+const proxy = new Proxy({}, handler);
+
+// Proxy.revocable
+const { proxy, revoke } = Proxy.revocable({}, {});
+
+// Reflect API
+const obj = { x: 1 };
+const value = Reflect.get(obj, 'x');
+Reflect.set(obj, 'y', 2);
+const hasX = Reflect.has(obj, 'x');
+Reflect.deleteProperty(obj, 'x');
+Reflect.apply(func, thisArg, args);
+```
+
+**Why:**
+- Proxy enables runtime interception of object operations (get, set, has, delete, etc.)
+- C++ doesn't support runtime interception of member access without extensive infrastructure
+- Would require generating proxy wrapper classes with forwarding for every operation
+- Reflect API is designed to complement Proxy with programmatic object operations
+- No equivalent to Proxy traps in C++ (would need operator overloading per-instance)
+- Performance overhead would be significant for a rarely-used feature
+- Proxy semantics fundamentally rely on JavaScript's dynamic nature
+
+**Alternatives:**
+```typescript
+// Instead of Proxy for validation
+const handler = {
+  set(target: any, prop: string, value: any) {
+    if (typeof value !== 'number') throw new Error('Must be number');
+    target[prop] = value;
+    return true;
+  }
+};
+const proxy = new Proxy({}, handler);  // ❌ Rejected
+
+// Use a class with explicit validation
+class ValidatedObject {  // ✅ Accepted
+  private data = new Map<string, number>();
+  
+  set(key: string, value: number): void {
+    if (typeof value !== 'number') throw new Error('Must be number');
+    this.data.set(key, value);
+  }
+  
+  get(key: string): number | undefined {
+    return this.data.get(key);
+  }
+}
+
+// Instead of Proxy for logging
+const proxy = new Proxy(obj, {  // ❌ Rejected
+  get(target, prop) {
+    console.log(`Accessed ${String(prop)}`);
+    return target[prop];
+  }
+});
+
+// Use explicit logging methods
+class LoggingWrapper<T> {  // ✅ Accepted
+  constructor(private obj: T) {}
+  
+  get<K extends keyof T>(key: K): T[K] {
+    console.log(`Accessed ${String(key)}`);
+    return this.obj[key];
+  }
+}
+
+// Instead of Reflect for dynamic access
+const value = Reflect.get(obj, 'x');  // ❌ Rejected
+
+// Use direct property access or Map
+const value = obj.x;  // ✅ Accepted
+// Or for truly dynamic keys:
+const map = new Map<string, any>();  // ✅ Accepted
+const value = map.get('x');
+```
+
 **Future consideration:**
 All these restrictions may be lifted in future versions once the code generator supports:
 - Const-correctness tracking for parameters
@@ -1082,6 +1173,7 @@ These restrictions transform TypeScript from a gradually-typed superset of JavaS
 | GS124 | Unsupported Object methods (defineProperty, create, getPrototypeOf, etc.) | Use supported Object methods: keys, values, entries, assign, is |
 | GS125 | Symbol type and Symbol() constructor | Not supported - implementation limitation |
 | GS126 | Prototype manipulation (prototype, __proto__) | Use classes with static structure |
+| GS127 | Proxy and Reflect API | Use explicit wrapper classes for validation/logging |
 | GS201 | Implicit type coercion | Use template literals or explicit conversion |
 
 ---

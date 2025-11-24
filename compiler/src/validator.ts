@@ -226,6 +226,38 @@ export class Validator {
       );
     }
 
+    // No Proxy (GS127) - implementation limitation
+    if (ts.isIdentifier(node) && node.text === 'Proxy') {
+      const parent = node.parent;
+      if (ts.isNewExpression(parent) || ts.isCallExpression(parent)) {
+        this.addError(
+          'Proxy is not supported - lacks C++ equivalent for runtime interception',
+          location,
+          'GS127'
+        );
+      }
+    }
+    // Catch Proxy.revocable and other Proxy static methods
+    if (ts.isPropertyAccessExpression(node) && 
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === 'Proxy') {
+      this.addError(
+        'Proxy is not supported - lacks C++ equivalent for runtime interception',
+        location,
+        'GS127'
+      );
+    }
+    // Also catch Reflect API which is often used with Proxy
+    if (ts.isPropertyAccessExpression(node) && 
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === 'Reflect') {
+      this.addError(
+        'Reflect API is not supported - lacks C++ equivalent for runtime interception',
+        location,
+        'GS127'
+      );
+    }
+
     // No 'arguments' object (in non-arrow functions)
     if (ts.isIdentifier(node) && node.text === 'arguments') {
       const func = this.findContainingFunction(node);
