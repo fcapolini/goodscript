@@ -129,6 +129,41 @@ const process = (set: ReadonlySet<string>): number => {
     });
   });
 
+  describe('GS123: No Object.freeze/seal/preventExtensions', () => {
+    it('should reject Object.freeze()', () => {
+      const source = `
+const obj = { x: 10 };
+Object.freeze(obj);
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS123')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS123');
+      expect(errors[0].message).toContain('Object.freeze');
+    });
+
+    it('should reject Object.seal()', () => {
+      const source = `
+const obj = { x: 10 };
+Object.seal(obj);
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS123')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS123');
+      expect(errors[0].message).toContain('Object.seal');
+    });
+
+    it('should reject Object.preventExtensions()', () => {
+      const source = `
+const obj = { x: 10 };
+Object.preventExtensions(obj);
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS123')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS123');
+      expect(errors[0].message).toContain('Object.preventExtensions');
+    });
+  });
+
   it('should accept regular arrays', () => {
     const source = `
 const arr = [1, 2, 3];
@@ -138,5 +173,6 @@ arr.push(4);
     expect(hasError(result.diagnostics, 'GS120')).toBe(false);
     expect(hasError(result.diagnostics, 'GS121')).toBe(false);
     expect(hasError(result.diagnostics, 'GS122')).toBe(false);
+    expect(hasError(result.diagnostics, 'GS123')).toBe(false);
   });
 });

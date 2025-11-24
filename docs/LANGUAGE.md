@@ -59,6 +59,7 @@ All heap-allocated values must be **qualified** with one of the following:
 * `ReadonlyMap<K, V>` type (GS122)
 * `ReadonlySet<T>` type (GS122)
 * `as const` assertions (GS120)
+* `Object.freeze()`, `Object.seal()`, `Object.preventExtensions()` (GS123)
 
 **Rationale for current restriction:**
 These features require sophisticated const-correctness tracking in C++ code generation:

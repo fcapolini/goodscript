@@ -158,6 +158,21 @@ export class Validator {
       }
     }
 
+    // No Object.freeze, Object.seal, Object.preventExtensions (GS123) - implementation limitation
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+      const expr = node.expression;
+      if (ts.isIdentifier(expr.expression) && expr.expression.text === 'Object') {
+        const methodName = expr.name.text;
+        if (methodName === 'freeze' || methodName === 'seal' || methodName === 'preventExtensions') {
+          this.addError(
+            `Object.${methodName}() is not supported in the current implementation`,
+            location,
+            'GS123'
+          );
+        }
+      }
+    }
+
     // No 'arguments' object (in non-arrow functions)
     if (ts.isIdentifier(node) && node.text === 'arguments') {
       const func = this.findContainingFunction(node);

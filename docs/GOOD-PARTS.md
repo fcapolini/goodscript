@@ -819,7 +819,30 @@ function check(set: Set<string>): void { ... }
 
 **Why:** These are TypeScript utility types that depend on readonly modifier support.
 
-**Future consideration:**
+#### GS123: No `Object.freeze()`, `Object.seal()`, or `Object.preventExtensions()`
+
+**Restriction:** Runtime immutability methods are not supported.
+
+**Example:**
+```typescript
+// ❌ Not supported
+const obj = { x: 10 };
+Object.freeze(obj);
+Object.seal(obj);
+Object.preventExtensions(obj);
+
+// ✅ Use regular objects
+const obj = { x: 10 };
+// Just don't modify it, or use ownership types for safety
+```
+
+**Why:** 
+- These runtime methods provide immutability guarantees that would need C++ equivalents
+- Would require tracking frozen/sealed state across the C++ boundary
+- GoodScript's ownership system provides memory safety without runtime immutability
+- Type-level immutability (readonly) is a better fit but not yet implemented
+
+**Future consideration:****
 All these restrictions may be lifted in future versions once the code generator supports:
 - Const-correctness tracking for parameters
 - Constructor initializer list generation
@@ -888,6 +911,7 @@ These restrictions transform TypeScript from a gradually-typed superset of JavaS
 | GS120 | `as const` assertion | Not supported - implementation limitation |
 | GS121 | `readonly` modifier | Not supported - implementation limitation |
 | GS122 | Readonly utility types (`ReadonlyArray`, `Readonly`, `ReadonlyMap`, `ReadonlySet`) | Not supported - implementation limitation |
+| GS123 | `Object.freeze/seal/preventExtensions` | Not supported - implementation limitation |
 | GS201 | Implicit type coercion | Use template literals or explicit conversion |
 
 ---
