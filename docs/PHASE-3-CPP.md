@@ -17,8 +17,8 @@
   - ✅ lru-cache (8/8)
   - ✅ n-queens (8/8)
   - ✅ string-pool (8/8) - **Unlocked Nov 24, 2025** via share<string> codegen fixes
-  - ⏸️ hash-map (C++ compilation fails - needs investigation)
-  - ⏸️ interface-shapes (C++ compilation fails - needs investigation)
+  - ⏸️ hash-map - Requires: tuple literals, tuple subscript operator, mixed-type array literals
+  - ⏸️ interface-shapes - Requires: interface virtual methods, polymorphic arrays, method resolution
 
 **Recent Updates (Nov 24, 2025):**
 - ✅ **String Pool Example Unlocked** - Complete share<string> support:

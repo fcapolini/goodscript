@@ -12,7 +12,10 @@ import {
 
 const EXAMPLE_NAME = "hash-map";
 
-// TODO: C++ compilation fails - needs investigation
+// TODO: Multiple codegen issues to fix:
+// 1. Tuple construction: gs::Array<double>{key, value} - needs tuple literal support
+// 2. Tuple subscript: entry[0], entry[1] - gs::Tuple needs operator[]
+// 3. Mixed-type array literals: [string, number] needs proper tuple type inference
 describe.skip(`Concrete Example: ${EXAMPLE_NAME}`, () => {
   let tmpDir: string;
 
@@ -73,10 +76,10 @@ describe.skip(`Concrete Example: ${EXAMPLE_NAME}`, () => {
     });
 
     it("should compile C++ successfully", () => {
-      expect(nativeResult.cppCompileSuccess).toBe(true);
       if (!nativeResult.cppCompileSuccess) {
         console.error("C++ Compile Stderr:", nativeResult.cppCompileStderr);
       }
+      expect(nativeResult.cppCompileSuccess).toBe(true);
     });
 
     it("should execute C++ successfully", () => {

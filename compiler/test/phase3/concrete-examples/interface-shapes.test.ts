@@ -12,7 +12,11 @@ import {
 
 const EXAMPLE_NAME = "interface-shapes";
 
-// TODO: C++ compilation fails - needs investigation
+// TODO: Multiple codegen issues to fix:
+// 1. Interface methods not generated as pure virtual functions in base class
+// 2. Interface implementation not generating method definitions
+// 3. Polymorphic array literals: Array<Shape> = [Rectangle, Circle, Triangle] needs covariance
+// 4. Method calls on interface references not resolving to implementations
 describe.skip(`Concrete Example: ${EXAMPLE_NAME}`, () => {
   let tmpDir: string;
 
@@ -73,10 +77,10 @@ describe.skip(`Concrete Example: ${EXAMPLE_NAME}`, () => {
     });
 
     it("should compile C++ successfully", () => {
-      expect(nativeResult.cppCompileSuccess).toBe(true);
       if (!nativeResult.cppCompileSuccess) {
         console.error("C++ Compile Stderr:", nativeResult.cppCompileStderr);
       }
+      expect(nativeResult.cppCompileSuccess).toBe(true);
     });
 
     it("should execute C++ successfully", () => {
