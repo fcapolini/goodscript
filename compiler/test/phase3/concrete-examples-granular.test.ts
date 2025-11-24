@@ -275,9 +275,9 @@ describe("Phase 3: Granular Concrete Examples", () => {
     });
   }
 
-  // Examples with known issues (codegen bugs, not runtime library):
-  // - hash-map: Type alias in lambda return type, string-to-number conversion
-  // - string-pool: Complex share<string> handling issues
+  // Examples with known issues (codegen limitations):
+  // - hash-map: Tuple subscript access (entry[0] on std::pair needs .first/.second)
+  // - string-pool: Complex share<string> handling
   const knownIssues = new Set<string>(["hash-map", "string-pool"]);
 
   for (const exampleName of examples) {

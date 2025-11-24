@@ -191,6 +191,11 @@ export class CppCodegen {
     lines.push('  return gs::String(std::to_string(value));');
     lines.push('}');
     lines.push('');
+    lines.push('// String passthrough - for template literals that try to convert strings');
+    lines.push('inline gs::String to_string_int(const gs::String& value) {');
+    lines.push('  return value;');
+    lines.push('}');
+    lines.push('');
     lines.push('} // namespace gs');
     lines.push('');
   }
@@ -880,8 +885,21 @@ export class CppCodegen {
       return innerType;
     }
     
-    // Regular type reference
-    return this.escapeIdentifier(typeName);
+    // Regular type reference - add gs:: namespace prefix for user-defined types
+    // Built-in types don't need the prefix
+    const escapedName = this.escapeIdentifier(typeName);
+    
+    // Check if it's a built-in C++ type that shouldn't be namespaced
+    const builtInTypes = new Set(['void', 'bool', 'int', 'double', 'float', 'char', 
+                                   'size_t', 'int8_t', 'int16_t', 'int32_t', 'int64_t',
+                                   'uint8_t', 'uint16_t', 'uint32_t', 'uint64_t']);
+    
+    if (builtInTypes.has(escapedName)) {
+      return escapedName;
+    }
+    
+    // User-defined type - add gs:: namespace
+    return `gs::${escapedName}`;
   }
   
   /**
@@ -2412,17 +2430,24 @@ export class CppCodegen {
           }
         }
         
-        // Debug: log what type we're seeing
-        // console.log(`[Template Literal] Expression: ${exprStr}, Type: ${typeStr}, Declared: ${declaredTypeStr}`);
-        
         // Use declared type for checking if it's optional
         const checkTypeStr = declaredTypeStr;
         
         // Check if it's a string type (or optional string)
-        if (checkTypeStr === 'string') {
-          // Plain string - no conversion needed
+        // In TypeScript, 'string' is the primitive, 'String' is the wrapper class
+        // We map TS string to gs::String in C++, so both should be treated as strings
+        // Also check for inferred "string" type from type checker
+        const isStringType = checkTypeStr === 'string' || 
+                           checkTypeStr === 'String' ||
+                           typeStr === 'string' ||
+                           typeStr === 'String';
+        const isOptionalString = (checkTypeStr.includes('string') || checkTypeStr.includes('String')) &&
+                                 (checkTypeStr.includes('null') || checkTypeStr.includes('undefined'));
+        
+        if (isStringType) {
+          // Plain string - no conversion needed (works for both primitive and gs::String)
           convertedExpr = exprStr;
-        } else if (checkTypeStr.includes('string') && (checkTypeStr.includes('null') || checkTypeStr.includes('undefined'))) {
+        } else if (isOptionalString && (checkTypeStr.includes('null') || checkTypeStr.includes('undefined'))) {
           // Optional string - extract value
           // Check if already unwrapped (identifier in unwrappedOptionals)
           const isAlreadyUnwrapped = ts.isIdentifier(span.expression) && 
