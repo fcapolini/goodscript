@@ -1,14 +1,14 @@
 # Phase 3: C++ Code Generation
 
-**Status:** ✅ ~95% Complete (885 tests passing)
+**Status:** ✅ ~96% Complete (894 tests passing)
 
 **Test Coverage:** 
 - 66 basic feature tests (100% passing)
 - 28 runtime library tests (100% passing)
-- 28 RegExp runtime tests (100% passing) ✅ **NEW**
-- 9 RegExp codegen tests (100% passing) ✅ **NEW**
-- 6 RegExp e2e tests (100% passing) ✅ **NEW**
-- 88/88 concrete example tests (100% passing) ✅
+- 28 RegExp runtime tests (100% passing) ✅
+- 9 RegExp codegen tests (100% passing) ✅
+- 6 RegExp e2e tests (100% passing) ✅
+- 96/96 concrete example tests (100% passing) ✅
   - ✅ array-methods (8/8)
   - ✅ binary-search-tree (8/8)
   - ✅ cli-args (8/8)
@@ -17,13 +17,25 @@
   - ✅ generic-stack (8/8)
   - ✅ json-parser (8/8) - **Unlocked Nov 24, 2025** via JSON.stringify support
   - ✅ linked-list (8/8)
-  - ✅ lru-cache (8/8)
+  - ✅ lru-cache (8/8) - **Unlocked Nov 25, 2025** via smart pointer null check fixes
   - ✅ n-queens (8/8)
+  - ✅ regex-validator (9/9) - **Unlocked Nov 25, 2025** via optional unwrapping fixes
   - ✅ string-pool (8/8) - **Unlocked Nov 24, 2025** via share<string> codegen fixes
   - ⏸️ hash-map - Requires: tuple literals, tuple subscript operator, mixed-type array literals
   - ⏸️ interface-shapes - Requires: interface virtual methods, polymorphic arrays, method resolution
 
-**Recent Updates (Nov 24, 2025):**
+**Recent Updates (Nov 25, 2025):**
+- ✅ **Optional Unwrapping & Null Check Fixes** - 5 critical codegen bugs resolved:
+  - Compound null checks: `(x !== null && x !== undefined)` now correctly generates `.has_value()` for `optional<T>` or boolean context for smart pointers
+  - Element access unwrapping: Array subscripts on `.match()` results now properly add `.value()` prefix
+  - Return unwrapping: Functions returning non-optional types from optional values now add `.value()` suffix
+  - Empty array inference: `return []` now infers correct type from method return signature
+  - Smart pointer vs optional distinction: Variables from array access use boolean checks, not `.has_value()`
+  - 2 new examples unlocked: regex-validator (9/9), lru-cache (8/8)
+- ✅ **894 tests passing** - Up from 885 (+9 tests)
+- ✅ **PCRE2 Integration** - Complete regex support with Zig toolchain
+
+**Previous Updates (Nov 24, 2025):**
 - ✅ **RegExp C++ Integration** - Complete regex literal support:
   - Regex literals generate C++ code: `/\d+/g` → `gs::RegExp(R"(\d+)", "g")`
   - Property access conversion: `pattern.global` → `pattern.global()` (methods in C++)

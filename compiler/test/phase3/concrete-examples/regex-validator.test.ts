@@ -112,29 +112,24 @@ describe(`Concrete Example: ${EXAMPLE_NAME}`, () => {
       nativeResult = compileAndExecuteNative(execution);
     });
 
-    // TODO: Fix C++ codegen bugs found by this test:
-    // 1. Optional array subscript needs .value() unwrapping: result[1] → result.value()[1]
-    // 2. Optional return needs .value() unwrapping: return matches → return matches.value()
-    // 3. Empty array literal type inference: gs::Array<double>{} → gs::Array<gs::String>{}
-    // 4. Duplicate null checks: (x != std::nullopt && x != std::nullopt) → x.has_value()
-    // See: /tmp/regex-validator-codegen-bugs.md for full analysis
-
-    it.skip("should compile C++ successfully (BLOCKED: codegen bugs)", () => {
-      expect(nativeResult.cppCompileSuccess).toBe(true);
+    it("should compile C++ successfully", () => {
       if (!nativeResult.cppCompileSuccess) {
         console.error("C++ Compile Stderr:", nativeResult.cppCompileStderr);
+        console.error("C++ Compile Stdout:", nativeResult.cppCompileStdout);
       }
+      expect(nativeResult.cppCompileSuccess).toBe(true);
     });
 
-    it.skip("should execute C++ successfully (BLOCKED: codegen bugs)", () => {
-      expect(nativeResult.cppSuccess).toBe(true);
+    it("should execute C++ successfully", () => {
       if (!nativeResult.cppSuccess) {
         console.error("C++ Error:", nativeResult.cppError);
         console.error("C++ Stderr:", nativeResult.cppStderr);
+        console.error("C++ Output:", nativeResult.cppOutput);
       }
+      expect(nativeResult.cppSuccess).toBe(true);
     });
 
-    it.skip("should produce matching JavaScript and C++ output (BLOCKED: codegen bugs)", () => {
+    it("should produce matching JavaScript and C++ output", () => {
       expect(nativeResult.jsSuccess).toBe(true);
       expect(nativeResult.cppSuccess).toBe(true);
       expect(nativeResult.outputMatches).toBe(true);

@@ -1186,6 +1186,45 @@ export class CppCodegen {
     if (statement.expression) {
       let expr = this.generateExpression(statement.expression);
       
+      // Check if returning optional type where non-optional is expected
+      if (this.currentMethodReturnType && !this.currentMethodReturnType.includes('optional<') &&
+          this.checker && ts.isIdentifier(statement.expression)) {
+        const symbol = this.checker.getSymbolAtLocation(statement.expression);
+        if (symbol?.valueDeclaration) {
+          let isOptionalValue = false;
+          
+          // Check if variable has optional type
+          const typeText = this.getTypeTextFromSymbol(symbol);
+          if (typeText && (typeText.includes('null') || typeText.includes('undefined'))) {
+            isOptionalValue = true;
+          }
+          
+          // Check if initialized from method returning optional
+          // Special case: .match() always returns optional<Array<String>>
+          if (!isOptionalValue && ts.isVariableDeclaration(symbol.valueDeclaration) && 
+              symbol.valueDeclaration.initializer &&
+              ts.isCallExpression(symbol.valueDeclaration.initializer)) {
+            const init = symbol.valueDeclaration.initializer;
+            
+            // Check if it's a .match() call
+            if (ts.isPropertyAccessExpression(init.expression) &&
+                init.expression.name.getText() === 'match') {
+              isOptionalValue = true;
+            } else {
+              // Check other methods via return type
+              const returnType = this.getMethodReturnTypeFromSource(init);
+              if (returnType?.includes('optional<')) {
+                isOptionalValue = true;
+              }
+            }
+          }
+          
+          if (isOptionalValue && !expr.includes('.value()')) {
+            expr = `${expr}.value()`;
+          }
+        }
+      }
+      
       // If returning own<T> and expression is a constructor call, wrap with make_unique
       if (this.currentMethodReturnType?.startsWith('std::unique_ptr<')) {
         if (ts.isNewExpression(statement.expression)) {
@@ -1965,6 +2004,147 @@ export class CppCodegen {
       // which works for references without needing pointers
       this.addInclude('<typeinfo>');
       return `(typeid(${object}) == typeid(gs::${typeName}))`;
+    }
+    
+    // Detect pattern: var !== null/undefined or var === null/undefined
+    // Convert to .has_value() for optional types
+    if ((opKind === ts.SyntaxKind.ExclamationEqualsEqualsToken || opKind === ts.SyntaxKind.EqualsEqualsEqualsToken) &&
+        this.checker) {
+      let varExpr: ts.Expression | null = null;
+      let isNullCheck = false;
+      
+      if (ts.isIdentifier(expr.left) && this.isNullLiteral(expr.right)) {
+        varExpr = expr.left;
+        isNullCheck = true;
+      } else if (ts.isIdentifier(expr.right) && this.isNullLiteral(expr.left)) {
+        varExpr = expr.right;
+        isNullCheck = true;
+      }
+      
+      // If this is a null check on a variable, check if it has optional type
+      if (isNullCheck && varExpr && ts.isIdentifier(varExpr)) {
+        const symbol = this.checker.getSymbolAtLocation(varExpr);
+        if (symbol?.valueDeclaration) {
+          const typeText = this.getTypeTextFromSymbol(symbol);
+          const isOptionalType = typeText && (
+            typeText.includes('null') || 
+            typeText.includes('undefined') ||
+            typeText.startsWith('use<')
+          );
+          
+          // Also check if initialized from method returning optional
+          let isOptionalInit = false;
+          if (ts.isVariableDeclaration(symbol.valueDeclaration) && 
+              symbol.valueDeclaration.initializer &&
+              ts.isCallExpression(symbol.valueDeclaration.initializer)) {
+            const returnType = this.getMethodReturnTypeFromSource(symbol.valueDeclaration.initializer);
+            isOptionalInit = returnType?.includes('optional<') ?? false;
+          }
+          
+          if (isOptionalType || isOptionalInit) {
+            const varName = this.escapeIdentifier(varExpr.getText());
+            // Use .has_value() instead of comparison to std::nullopt
+            if (opKind === ts.SyntaxKind.ExclamationEqualsEqualsToken) {
+              return `${varName}.has_value()`;
+            } else {
+              return `!${varName}.has_value()`;
+            }
+          }
+        }
+      }
+    }
+    
+    // Detect compound pattern: (var !== null && var !== undefined) -> var.has_value()
+    // This is common in TypeScript for checking optional values
+    if ((opKind === ts.SyntaxKind.AmpersandAmpersandToken || opKind === ts.SyntaxKind.BarBarToken) &&
+        ts.isBinaryExpression(expr.left) && ts.isBinaryExpression(expr.right)) {
+      const leftOp = expr.left.operatorToken.kind;
+      const rightOp = expr.right.operatorToken.kind;
+      
+      // Check if both sides are null checks on the same variable
+      if ((leftOp === ts.SyntaxKind.ExclamationEqualsEqualsToken || leftOp === ts.SyntaxKind.EqualsEqualsEqualsToken) &&
+          (rightOp === ts.SyntaxKind.ExclamationEqualsEqualsToken || rightOp === ts.SyntaxKind.EqualsEqualsEqualsToken)) {
+        
+        let leftVar: string | null = null;
+        let rightVar: string | null = null;
+        
+        // Get variable name from left side
+        if (ts.isIdentifier(expr.left.left) && this.isNullLiteral(expr.left.right)) {
+          leftVar = expr.left.left.getText();
+        } else if (ts.isIdentifier(expr.left.right) && this.isNullLiteral(expr.left.left)) {
+          leftVar = expr.left.right.getText();
+        }
+        
+        // Get variable name from right side
+        if (ts.isIdentifier(expr.right.left) && this.isNullLiteral(expr.right.right)) {
+          rightVar = expr.right.left.getText();
+        } else if (ts.isIdentifier(expr.right.right) && this.isNullLiteral(expr.right.left)) {
+          rightVar = expr.right.right.getText();
+        }
+        
+        // If both sides check the same variable against null/undefined
+        if (leftVar && rightVar && leftVar === rightVar) {
+          // Both should be !== checks (for &&) or both === checks (for ||)
+          const isNotEqualChecks = leftOp === ts.SyntaxKind.ExclamationEqualsEqualsToken && 
+                                   rightOp === ts.SyntaxKind.ExclamationEqualsEqualsToken;
+          const isEqualChecks = leftOp === ts.SyntaxKind.EqualsEqualsEqualsToken &&
+                               rightOp === ts.SyntaxKind.EqualsEqualsEqualsToken;
+          
+          if ((opKind === ts.SyntaxKind.AmpersandAmpersandToken && isNotEqualChecks) ||
+              (opKind === ts.SyntaxKind.BarBarToken && isEqualChecks)) {
+            const varName = this.escapeIdentifier(leftVar);
+            
+            // Check if this variable is from an optional-returning method
+            // Map.get() returns optional<T>, so we use .has_value()
+            // Array element access returns T directly (smart pointer), so we use boolean context
+            let useHasValue = false;
+            
+            // Look for the variable declaration to see what it's initialized from
+            if (this.checker) {
+              const leftIdentifier = ts.isIdentifier(expr.left.left) ? expr.left.left : 
+                                    (ts.isIdentifier(expr.left.right) ? expr.left.right : null);
+              if (leftIdentifier) {
+                const symbol = this.checker.getSymbolAtLocation(leftIdentifier);
+                if (symbol?.valueDeclaration && ts.isVariableDeclaration(symbol.valueDeclaration)) {
+                  const init = symbol.valueDeclaration.initializer;
+                  // Check if initialized from a .get() method call (Map.get returns optional)
+                  if (init && ts.isCallExpression(init) && 
+                      ts.isPropertyAccessExpression(init.expression) &&
+                      init.expression.name.getText() === 'get') {
+                    useHasValue = true;
+                  }
+                  // Check if the return type explicitly includes 'optional'
+                  if (init && ts.isCallExpression(init)) {
+                    const returnType = this.getMethodReturnTypeFromSource(init);
+                    if (returnType?.includes('optional<')) {
+                      useHasValue = true;
+                    }
+                  }
+                }
+              }
+            }
+            
+            if (useHasValue) {
+              // Pattern: (x !== null && x !== undefined) -> x.has_value() (for optional types)
+              // Pattern: (x === null || x === undefined) -> !x.has_value()
+              if (isNotEqualChecks) {
+                return `${varName}.has_value()`;
+              } else {
+                return `!${varName}.has_value()`;
+              }
+            } else {
+              // Pattern: (x !== null && x !== undefined) -> x (for smart pointers)
+              // Pattern: (x === null || x === undefined) -> !x
+              // Smart pointers have boolean conversion operator
+              if (isNotEqualChecks) {
+                return varName;
+              } else {
+                return `!${varName}`;
+              }
+            }
+          }
+        }
+      }
     }
     
     // Track assignment target for empty array type inference (BEFORE generating expressions)
@@ -2869,8 +3049,17 @@ export class CppCodegen {
   private generateArrayLiteral(expr: ts.ArrayLiteralExpression): string {
     const elements = expr.elements.map(el => this.generateExpression(el)).join(', ');
     
-    // Empty array - try to infer type from parent assignment
+    // Empty array - try to infer type from parent assignment or return statement
     if (expr.elements.length === 0) {
+      // Check if we're in a return statement - use method return type
+      if (this.currentMethodReturnType) {
+        const arrayMatch = this.currentMethodReturnType.match(/gs::Array<(.+)>/);
+        if (arrayMatch) {
+          const elementType = arrayMatch[1];
+          return `gs::Array<${elementType}>{}`;
+        }
+      }
+      
       // Walk up parent chain to find the assignment
       let node: ts.Node = expr;
       while (node.parent) {
@@ -3012,9 +3201,47 @@ export class CppCodegen {
    * to avoid exceptions while maintaining safety.
    */
   private generateElementAccess(expr: ts.ElementAccessExpression): string {
-    const object = this.generateExpression(expr.expression);
+    let object = this.generateExpression(expr.expression);
     let index = this.generateExpression(expr.argumentExpression);
     const accessor = (object === 'this') ? '->' : '.';
+    
+    // Check if the object expression has optional type - if so, unwrap with .value()
+    if (this.checker && ts.isIdentifier(expr.expression)) {
+      const symbol = this.checker.getSymbolAtLocation(expr.expression);
+      if (symbol?.valueDeclaration) {
+        let needsUnwrap = false;
+        
+        // Check if variable has optional type annotation
+        const typeText = this.getTypeTextFromSymbol(symbol);
+        if (typeText && (typeText.includes('null') || typeText.includes('undefined'))) {
+          needsUnwrap = true;
+        }
+        
+        // Check if initialized from method returning optional
+        // Special case: .match() always returns optional<Array<String>>
+        if (!needsUnwrap && ts.isVariableDeclaration(symbol.valueDeclaration) && 
+            symbol.valueDeclaration.initializer &&
+            ts.isCallExpression(symbol.valueDeclaration.initializer)) {
+          const init = symbol.valueDeclaration.initializer;
+          
+          // Check if it's a .match() call
+          if (ts.isPropertyAccessExpression(init.expression) &&
+              init.expression.name.getText() === 'match') {
+            needsUnwrap = true;
+          } else {
+            // Check other methods via return type
+            const returnType = this.getMethodReturnTypeFromSource(init);
+            if (returnType?.includes('optional<')) {
+              needsUnwrap = true;
+            }
+          }
+        }
+        
+        if (needsUnwrap && !object.includes('.value()')) {
+          object = `${object}.value()`;
+        }
+      }
+    }
     
     // Cast numeric indices to int to avoid ambiguity between int and size_t overloads
     // TypeScript numbers are doubles, but array indices should be integers

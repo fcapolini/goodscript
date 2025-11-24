@@ -181,10 +181,51 @@ export function compileAndExecuteNative(
   let cppCompileStdout = "";
   let cppCompileStderr = "";
 
+  // Check if the code uses RegExp (needs PCRE2)
+  const needsRegExp = execution.cppCode.includes('#ifdef GS_ENABLE_REGEXP') ||
+                      execution.cppCode.includes('gs::RegExp');
+  
+  let compileCmd = `zig c++ -std=c++20 -O2 -I${RUNTIME_DIR} ${cppFile} -o ${binFile}`;
+  
+  // Add PCRE2 support if needed
+  if (needsRegExp) {
+    try {
+      // Try to find PCRE2 via brew (macOS)
+      const brewPrefix = execSync('brew --prefix pcre2 2>/dev/null', {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'ignore']
+      }).trim();
+      compileCmd += ` -DGS_ENABLE_REGEXP -I${brewPrefix}/include -L${brewPrefix}/lib -lpcre2-8`;
+    } catch {
+      try {
+        // Try pkg-config
+        const pcre2Flags = execSync('pkg-config --cflags --libs libpcre2-8 2>/dev/null', {
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'ignore']
+        }).trim();
+        compileCmd += ` -DGS_ENABLE_REGEXP ${pcre2Flags}`;
+      } catch {
+        // PCRE2 not available - compilation will fail
+        cppCompileStderr = 'PCRE2 library not found. Install with: brew install pcre2';
+        return {
+          ...execution,
+          cppCompileSuccess: false,
+          cppCompileStdout: '',
+          cppCompileStderr,
+          cppOutput: '',
+          cppStderr: '',
+          cppSuccess: false,
+          cppError: 'PCRE2 not available',
+          outputMatches: false,
+        };
+      }
+    }
+  }
+
   // Compile C++ to binary (with O2 optimization)
   try {
     const output = execSync(
-      `zig c++ -std=c++20 -O2 -I${RUNTIME_DIR} ${cppFile} -o ${binFile} 2>&1`,
+      `${compileCmd} 2>&1`,
       { encoding: "utf-8", timeout: 30000 }
     );
     cppCompileSuccess = true;
@@ -193,18 +234,25 @@ export function compileAndExecuteNative(
     cppCompileStderr = error.stdout || error.stderr || error.message;
   }
 
-  // Execute C++ binary
+  // Execute C++ binary (already compiled above, just run it)
   let cppOutput = "";
   let cppStderr = "";
   let cppSuccess = false;
   let cppError: string | undefined = undefined;
 
   if (cppCompileSuccess) {
-    const cppResult = executeCpp(execution.cppCode, binFile);
-    cppOutput = cppResult.stdout;
-    cppStderr = cppResult.stderr;
-    cppSuccess = cppResult.success;
-    cppError = cppResult.error;
+    try {
+      const result = execSync(binFile, {
+        encoding: 'utf-8',
+        timeout: 5000,
+        maxBuffer: 1024 * 1024
+      });
+      cppOutput = result;
+      cppSuccess = true;
+    } catch (error: any) {
+      cppStderr = error.stderr || error.stdout || error.message;
+      cppError = error.message;
+    }
   }
 
   const outputMatches =

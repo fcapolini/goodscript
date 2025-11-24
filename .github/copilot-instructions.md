@@ -23,16 +23,17 @@ GoodScript is a **TypeScript specialization** for safe systems programming with 
 - **Key files**: `compiler/src/ownership-analyzer.ts`, `compiler/src/null-check-analyzer.ts`
 - **Documentation**: `docs/DAG-ANALYSIS.md`, `docs/MEMORY-OWNERSHIP.md`
 
-### Phase 3: C++ Code Generation (🚧 In Progress - 93% Complete)
+### Phase 3: C++ Code Generation (🚧 In Progress - 96% Complete)
 - Translates TypeScript AST to C++ code
 - Maps ownership types: `own<T>` → `std::unique_ptr<T>`, `share<T>` → `std::shared_ptr<T>`, `use<T>` → `std::weak_ptr<T>`
 - Generates idiomatic C++ with proper RAII, exception handling
 - All code wrapped in `gs` namespace to avoid keyword conflicts
-- Runtime library with `gs::String`, `gs::Array<T>`, `gs::Map<K,V>`, `gs::Set<T>`
-- **Status**: 100/107 tests passing (66/66 basic, 28/28 runtime, 56/64 concrete examples)
-- **Key files**: `compiler/src/cpp-codegen.ts` (2376 lines), `runtime/*.hpp`
-- **Documentation**: `docs/COMPILATION-TARGET.md`, `test/phase3/README.md`
-- **TODO**: Object-push-modify pattern, json-parser debug, async/await coroutines
+- Runtime library with `gs::String`, `gs::Array<T>`, `gs::Map<K,V>`, `gs::Set<T>`, `gs::RegExp`
+- **Status**: 894/911 tests passing (66/66 basic, 28/28 runtime, 96/96 concrete examples, 71 RegExp tests)
+- **Key files**: `compiler/src/cpp-codegen.ts` (3500+ lines), `runtime/*.hpp`
+- **Documentation**: `docs/COMPILATION-TARGET.md`, `docs/PHASE-3-CPP.md`
+- **Recent fixes**: Optional unwrapping, smart pointer null checks, PCRE2 integration
+- **TODO**: Async/await coroutines, tuple literals, interface virtual methods
 
 ### Phase 4: Ecosystem (📋 Planned)
 - Standard library APIs for Node.js/Deno compatibility

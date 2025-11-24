@@ -104,12 +104,11 @@ private:
 
 public:
   // Constructors
-  // Note: gs::String has implicit conversion to std::string_view, which converts to std::string
-  // So this works with both std::string and gs::String arguments
-  RegExp(const std::string& pattern, const std::string& flags = "")
+  // Accept both std::string and gs::String (which converts to std::string_view)
+  RegExp(std::string_view pattern, std::string_view flags = "")
     : compiled_(nullptr), pattern_(pattern), flags_(flags), 
       lastIndex_(0), match_data_(nullptr) {
-    parseFlags(flags);
+    parseFlags(std::string(flags));
     compile();
   }
   
