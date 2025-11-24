@@ -1535,6 +1535,17 @@ export class CppCodegen {
       if (text === 'undefined') {
         return 'std::nullopt';
       }
+      // Map NaN to gs::Number::NaN
+      if (text === 'NaN') {
+        return 'gs::Number::NaN';
+      }
+      // Map Math and Number identifiers to gs:: namespace
+      if (text === 'Math') {
+        return 'gs::Math';
+      }
+      if (text === 'Number') {
+        return 'gs::Number';
+      }
       const escaped = this.escapeIdentifier(text);
       
       // If this variable is an unwrapped optional, add .value() to access it
@@ -1771,6 +1782,10 @@ export class CppCodegen {
       const method = expr.expression.name.getText();
       if (obj === 'String' && method === 'fromCharCode') {
         return `gs::String::fromCharCode(${args})`;
+      }
+      // Handle Math.* and Number.* method calls
+      if (obj === 'Math' || obj === 'Number') {
+        return `gs::${obj}::${method}(${args})`;
       }
     }
     
@@ -2067,10 +2082,12 @@ export class CppCodegen {
     const propertyName = expr.name.getText();
     const property = this.escapeIdentifier(propertyName);
     
-    // Handle Math.* and Number.* global objects
-    if (object === 'Math' || object === 'Number') {
+    // Handle Math.* and Number.* global objects (check both with and without gs:: prefix for robustness)
+    if (object === 'gs::Math' || object === 'gs::Number' || object === 'Math' || object === 'Number') {
+      // Ensure gs:: prefix
+      const nsObject = object.startsWith('gs::') ? object : `gs::${object}`;
       // Math.PI, Math.sin(), Number.isNaN(), etc. -> gs::Math::PI, gs::Math::sin(), gs::Number::isNaN()
-      return `gs::${object}::${property}`;
+      return `${nsObject}::${property}`;
     }
     
     // Check if this is enum member access
