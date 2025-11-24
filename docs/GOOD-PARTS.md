@@ -895,7 +895,61 @@ Object.is(-0, +0);    // false (unlike ===)
 - The supported methods (keys/values/entries/assign/is) have clear C++ equivalents
 - These work with `Map<K,V>` types which map directly to `std::unordered_map`
 
-**Future consideration:****
+### GS125: No Symbol (Implementation Limitation)
+
+**Error:** `Symbol is not supported - lacks clear C++ equivalent`
+
+**Rejected:**
+```typescript
+// Symbol type
+const sym: Symbol = Symbol('test');
+
+// Symbol constructor
+const unique = Symbol('unique');
+
+// Well-known symbols
+const iter = Symbol.iterator;
+const toStr = Symbol.toStringTag;
+
+// Symbol registry
+const global = Symbol.for('app.id');
+const key = Symbol.keyFor(global);
+
+// Symbol-keyed properties
+const obj = {
+  [Symbol.iterator]() { return this; }
+};
+```
+
+**Why:**
+- Symbols are JavaScript-specific runtime-unique identifiers
+- C++ has no equivalent concept (unlike strings/numbers which map directly)
+- Symbol-keyed properties can't be represented in C++ structs/classes
+- Well-known symbols (Symbol.iterator, etc.) rely on runtime duck-typing
+- Symbol registry (Symbol.for/keyFor) requires global runtime state
+- Implementing symbols would require significant runtime overhead for rarely-used feature
+
+**Alternatives:**
+```typescript
+// Instead of Symbol for unique keys
+const uniqueId = Math.random().toString(36);
+
+// Instead of Symbol.iterator
+class MyIterable {
+  // Implement standard iteration pattern
+  [Symbol.iterator]() { ... }  // ❌ Rejected
+  
+  // Use named methods instead
+  getIterator() { ... }  // ✅ Accepted
+}
+
+// Instead of Symbol-keyed private properties
+class MyClass {
+  #private = 42;  // Use actual private fields
+}
+```
+
+**Future consideration:**
 All these restrictions may be lifted in future versions once the code generator supports:
 - Const-correctness tracking for parameters
 - Constructor initializer list generation
@@ -966,6 +1020,7 @@ These restrictions transform TypeScript from a gradually-typed superset of JavaS
 | GS122 | Readonly utility types (`ReadonlyArray`, `Readonly`, `ReadonlyMap`, `ReadonlySet`) | Not supported - implementation limitation |
 | GS123 | `Object.freeze/seal/preventExtensions` | Not supported - implementation limitation |
 | GS124 | Unsupported Object methods (defineProperty, create, getPrototypeOf, etc.) | Use supported Object methods: keys, values, entries, assign, is |
+| GS125 | Symbol type and Symbol() constructor | Not supported - implementation limitation |
 | GS201 | Implicit type coercion | Use template literals or explicit conversion |
 
 ---

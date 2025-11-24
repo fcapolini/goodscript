@@ -220,6 +220,51 @@ const desc = Object.getOwnPropertyDescriptor(obj, 'x');
     });
   });
 
+  describe('GS125: No Symbol', () => {
+    it('should reject Symbol type', () => {
+      const source = `
+const sym: Symbol = Symbol('test');
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS125')).toBe(true);
+    });
+
+    it('should reject Symbol() constructor', () => {
+      const source = `
+const sym = Symbol('test');
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS125')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS125');
+      expect(errors[0].message).toContain('Symbol is not supported');
+    });
+
+    it('should reject Symbol.iterator', () => {
+      const source = `
+const iter = Symbol.iterator;
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS125')).toBe(true);
+    });
+
+    it('should reject Symbol.for()', () => {
+      const source = `
+const sym = Symbol.for('global');
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS125')).toBe(true);
+    });
+
+    it('should reject Symbol.keyFor()', () => {
+      const source = `
+const sym = Symbol('test');
+const key = Symbol.keyFor(sym);
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS125')).toBe(true);
+    });
+  });
+
   it('should accept regular arrays', () => {
     const source = `
 const arr = [1, 2, 3];
@@ -231,5 +276,7 @@ arr.push(4);
     expect(hasError(result.diagnostics, 'GS122')).toBe(false);
     expect(hasError(result.diagnostics, 'GS123')).toBe(false);
     expect(hasError(result.diagnostics, 'GS124')).toBe(false);
+    expect(hasError(result.diagnostics, 'GS125')).toBe(false);
   });
 });
+

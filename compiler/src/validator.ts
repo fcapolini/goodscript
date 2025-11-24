@@ -199,6 +199,22 @@ export class Validator {
       }
     }
 
+    // No Symbol (GS125) - implementation limitation
+    if (ts.isIdentifier(node) && node.text === 'Symbol') {
+      // Check if it's a type reference or value usage
+      const parent = node.parent;
+      if (ts.isTypeReferenceNode(parent) || 
+          ts.isCallExpression(parent) || 
+          ts.isNewExpression(parent) ||
+          ts.isPropertyAccessExpression(parent)) {
+        this.addError(
+          'Symbol is not supported - lacks clear C++ equivalent',
+          location,
+          'GS125'
+        );
+      }
+    }
+
     // No 'arguments' object (in non-arrow functions)
     if (ts.isIdentifier(node) && node.text === 'arguments') {
       const func = this.findContainingFunction(node);
