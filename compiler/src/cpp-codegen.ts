@@ -683,9 +683,16 @@ export class CppCodegen {
   private generateParameters(parameters: ts.NodeArray<ts.ParameterDeclaration>): string {
     return parameters.map(p => {
       const name = this.escapeIdentifier(p.name.getText());
-      const type = p.type ? this.generateType(p.type) : 'auto';
+      const type = p.type ? this.generateType(p.type, { isParameter: true }) : 'auto';
       
-      // Arrays are passed as mutable references (can be modified)
+      // Handle readonly arrays (marked with 'readonly ' prefix)
+      if (type.startsWith('readonly ')) {
+        const actualType = type.substring(9); // Remove 'readonly ' prefix
+        // Readonly arrays are passed as const references
+        return `const ${actualType}& ${name}`;
+      }
+      
+      // Mutable arrays are passed as mutable references (can be modified)
       if (type.startsWith('gs::Array<')) {
         return `${type}& ${name}`;
       }
@@ -959,7 +966,18 @@ export class CppCodegen {
   /**
    * Generate type annotation
    */
-  private generateType(type: ts.TypeNode): string {
+  private generateType(type: ts.TypeNode, context?: { isParameter?: boolean }): string {
+    // Handle readonly type operator (readonly T[])
+    if (type.kind === ts.SyntaxKind.TypeOperator) {
+      const typeOp = type as ts.TypeOperatorNode;
+      if (typeOp.operator === ts.SyntaxKind.ReadonlyKeyword) {
+        // For readonly arrays, generate the inner type and mark as readonly in context
+        const innerType = this.generateType(typeOp.type, context);
+        // Return the type with a marker that parameter generation can use
+        return `readonly ${innerType}`;
+      }
+    }
+    
     if (ts.isTypeReferenceNode(type)) {
       return this.generateTypeReference(type);
     } else if (type.kind === ts.SyntaxKind.NumberKeyword) {

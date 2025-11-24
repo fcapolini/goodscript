@@ -145,6 +145,19 @@ private:
     std::cout << (value ? "true" : "false");
   }
   
+  // Support for arrays - print in JavaScript format
+  template<typename T>
+  static void log_impl(const Array<T>& value) {
+    std::cout << "[ ";
+    bool first = true;
+    for (const auto& item : value) {
+      if (!first) std::cout << ", ";
+      log_impl(item);
+      first = false;
+    }
+    std::cout << " ]";
+  }
+  
   template<typename T>
   static void log_space_impl(const T& value) {
     std::cout << ' ';
@@ -169,6 +182,19 @@ private:
   
   static void error_impl(bool value) {
     std::cerr << (value ? "true" : "false");
+  }
+  
+  // Support for arrays - print in JavaScript format
+  template<typename T>
+  static void error_impl(const Array<T>& value) {
+    std::cerr << "[ ";
+    bool first = true;
+    for (const auto& item : value) {
+      if (!first) std::cerr << ", ";
+      error_impl(item);
+      first = false;
+    }
+    std::cerr << " ]";
   }
   
   template<typename T>
