@@ -14,11 +14,13 @@
  *   - gs::Array<T>: TypeScript-compatible array wrapper
  *   - gs::Map<K,V>: TypeScript-compatible map wrapper
  *   - gs::Set<T>: TypeScript-compatible set wrapper
+ *   - gs::Property: Type-erased value wrapper for object literal properties
+ *   - gs::LiteralObject: Object literals with heterogeneous property types
  *   - gs::JSON: JSON.stringify() and JSON.parse()
  *   - gs::console: console.log(), console.error(), console.warn()
  *   - gs::Math: Math functions (sin, cos, sqrt, PI, etc.)
  *   - gs::Number: Number utilities (isNaN, isFinite, etc.)
- *   - gs::Object: Object.freeze/seal/preventExtensions (no-ops)
+ *   - gs::Object: Object utilities (keys, values, entries, assign, is)
  *   - gs::shared_ptr<T>: Non-atomic shared pointer for single-threaded use
  *   - gs::weak_ptr<T>: Non-atomic weak pointer for single-threaded use
  */
@@ -26,6 +28,7 @@
 #include "gs_string.hpp"
 #include "gs_array.hpp"
 #include "gs_map.hpp"
+#include "gs_property.hpp"
 #include "gs_json.hpp"
 #include "gs_console.hpp"
 #include "gs_math.hpp"

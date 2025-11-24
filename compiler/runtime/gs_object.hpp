@@ -1,23 +1,42 @@
 /**
  * GoodScript Object Runtime
  * 
- * Provides Object class with useful utility methods.
+ * Provides Object class with useful utility methods and LiteralObject type.
  */
 
 #pragma once
 
 #include "gs_map.hpp"
 #include "gs_array.hpp"
+#include "gs_property.hpp"
 #include <cmath>
 #include <limits>
 
 namespace gs {
 
 /**
+ * LiteralObject - Type for object literals with heterogeneous property values
+ * 
+ * Maps property names (strings) to Property values (type-erased).
+ * Allows object literals like { a: 1, b: "hello", c: true }
+ * 
+ * Example:
+ *   LiteralObject obj = {
+ *     {"name", Property("Alice")},
+ *     {"age", Property(30)},
+ *     {"active", Property(true)}
+ *   };
+ *   
+ *   auto name = obj.get("name").asString();  // "Alice"
+ *   auto age = obj.get("age").asNumber();    // 30.0
+ */
+using LiteralObject = Map<gs::String, Property>;
+
+/**
  * Object class - provides static methods for object operations
  * 
  * Implemented methods:
- * - keys(), values(), entries() - for gs::Map
+ * - keys(), values(), entries() - for gs::Map and LiteralObject
  * - assign() - merge maps
  * - is() - SameValue comparison
  * 
@@ -69,6 +88,43 @@ public:
   }
 
   // ============================================================================
+  // LiteralObject overloads (for object literals with mixed types)
+  // ============================================================================
+
+  /**
+   * Object.keys(literalObject) - Get array of property names
+   */
+  static Array<gs::String> keys(const LiteralObject& obj) {
+    Array<gs::String> result;
+    for (const auto& pair : obj.impl_) {
+      result.push(pair.first);
+    }
+    return result;
+  }
+
+  /**
+   * Object.values(literalObject) - Get array of property values
+   */
+  static Array<Property> values(const LiteralObject& obj) {
+    Array<Property> result;
+    for (const auto& pair : obj.impl_) {
+      result.push(pair.second);
+    }
+    return result;
+  }
+
+  /**
+   * Object.entries(literalObject) - Get array of [key, value] pairs
+   */
+  static Array<std::pair<gs::String, Property>> entries(const LiteralObject& obj) {
+    Array<std::pair<gs::String, Property>> result;
+    for (const auto& pair : obj.impl_) {
+      result.push(pair);
+    }
+    return result;
+  }
+
+  // ============================================================================
   // Object Manipulation
   // ============================================================================
 
@@ -90,6 +146,25 @@ public:
    */
   template<typename K, typename V, typename... Sources>
   static Map<K, V>& assign(Map<K, V>& target, const Map<K, V>& first, const Sources&... rest) {
+    assign(target, first);
+    return assign(target, rest...);
+  }
+
+  /**
+   * Object.assign(target, source) - Merge LiteralObject
+   */
+  static LiteralObject& assign(LiteralObject& target, const LiteralObject& source) {
+    for (const auto& pair : source.impl_) {
+      target.set(pair.first, pair.second);
+    }
+    return target;
+  }
+
+  /**
+   * Object.assign(target, source1, source2, ...) - Merge multiple LiteralObjects
+   */
+  template<typename... Sources>
+  static LiteralObject& assign(LiteralObject& target, const LiteralObject& first, const Sources&... rest) {
     assign(target, first);
     return assign(target, rest...);
   }

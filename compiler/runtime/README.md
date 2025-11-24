@@ -39,6 +39,20 @@ Instead, we use **composition** - wrapping STL types internally and exposing a T
   - Set methods: `add()`, `has()`, `delete_()`, `clear()`, `forEach()`, `values()`
   - Property: `size()`
 
+- **`gs_property.hpp`**: `gs::Property` - Type-erased value wrapper
+  - Holds any type: `bool`, `number`, `string`, or complex objects
+  - Runtime type checking: `isBool()`, `isNumber()`, `isString()`, `isObject()`, `isNull()`, `isUndefined()`
+  - Safe value extraction: `asBool()`, `asNumber()`, `asString()`, `asObject<T>()`
+  - Used for object literal properties with heterogeneous types
+  - Example:
+    ```cpp
+    Property p1(42);           // number
+    Property p2("hello");      // string
+    Property p3(true);         // bool
+    double n = p1.asNumber();  // 42.0
+    String s = p2.asString();  // "hello"
+    ```
+
 ### Utilities
 
 - **`gs_json.hpp`**: `gs::JSON` - JSON utilities
@@ -56,17 +70,28 @@ Instead, we use **composition** - wrapping STL types internally and exposing a T
 - **`gs_number.hpp`**: `gs::Number` - Number utilities
   - `Number::isNaN()`, `Number::isFinite()`, `Number::parseInt()`, `Number::parseFloat()`
 
-- **`gs_object.hpp`**: `gs::Object` - Object utilities
-  - **Supported methods**:
-    - `Object::keys(map)` - returns `Array<K>` of map keys
-    - `Object::values(map)` - returns `Array<V>` of map values
-    - `Object::entries(map)` - returns `Array<pair<K,V>>` of entries
-    - `Object::assign(target, sources...)` - merge maps (variadic template)
+- **`gs_object.hpp`**: `gs::Object` - Object utilities and LiteralObject type
+  - **LiteralObject type**: `Map<String, Property>` for heterogeneous object literals
+    - Supports object literals with mixed property types: `{ a: 1, b: "hello", c: true }`
+    - Example:
+      ```cpp
+      LiteralObject obj = {
+        {"name", Property("Alice")},
+        {"age", Property(30)},
+        {"active", Property(true)}
+      };
+      auto name = obj.get("name").value().asString();  // "Alice"
+      ```
+  - **Supported Object methods**:
+    - `Object::keys(map/obj)` - returns `Array<K>` of keys
+    - `Object::values(map/obj)` - returns `Array<V>` or `Array<Property>` of values
+    - `Object::entries(map/obj)` - returns `Array<pair<K,V>>` or `Array<pair<String,Property>>` of entries
+    - `Object::assign(target, sources...)` - merge maps or literal objects (variadic template)
     - `Object::is(a, b)` - SameValue comparison (handles NaN and ±0 correctly)
   - **Restricted methods** (GS123-124):
     - Immutability: `freeze()`, `seal()`, `preventExtensions()` (no-ops, restricted)
     - Reflection/prototypes: `defineProperty()`, `create()`, `getPrototypeOf()`, etc. (restricted)
-  - Note: Only Map-compatible methods are implemented; reflection/prototype methods are unsupported
+  - Note: Supports both `Map<K,V>` and `LiteralObject` types
 
 ### Implementation Details
 
@@ -95,6 +120,7 @@ The C++ code generator should:
    - `Array<T>` → `gs::Array<T>`
    - `Map<K,V>` → `gs::Map<K,V>`
    - `Set<T>` → `gs::Set<T>`
+   - Object literals → `gs::LiteralObject` (Map<String, Property>)
    - `own<T>` → `std::unique_ptr<T>`
    - `share<T>` → `gs::shared_ptr<T>`
    - `use<T>` → `gs::weak_ptr<T>`
@@ -120,6 +146,12 @@ const numbers: Array<number> = [1, 2, 3, 4, 5];
 const doubled = numbers.map(x => x * 2);
 const sum = numbers.reduce((acc, x) => acc + x, 0);
 
+// Object literals with mixed types
+const person = { name: "Alice", age: 30, active: true };
+console.log(Object.keys(person));  // ["name", "age", "active"]
+const name = person.name;           // "Alice"
+const sum = numbers.reduce((acc, x) => acc + x, 0);
+
 const cache = new Map<string, number>();
 cache.set("answer", 42);
 const answer = cache.get("answer");
@@ -142,11 +174,25 @@ int main() {
   auto doubled = numbers.map([](double x) { return x * 2; });
   auto sum = numbers.reduce([](double acc, double x) { return acc + x; }, 0.0);
 
+  // Object literal becomes LiteralObject
+  gs::LiteralObject person = {
+    {"name", gs::Property("Alice")},
+    {"age", gs::Property(30)},
+    {"active", gs::Property(true)}
+  };
+  gs::console::log(Object::keys(person));  // ["name", "age", "active"]
+  auto name = person.get("name").value().asString();  // "Alice"
+
   gs::Map<gs::String, double> cache;
   cache.set(gs::String("answer"), 42.0);
   auto answer = cache.get(gs::String("answer"));
 
   gs::console::log(gs::String("Answer:"), answer.value());
+  gs::console::log(gs::JSON::stringify(numbers));
+  
+  return 0;
+}
+```  gs::console::log(gs::String("Answer:"), answer.value());
   gs::console::log(gs::JSON::stringify(numbers));
   
   return 0;

@@ -20,6 +20,9 @@ template<typename K, typename V>
 class Map {
 private:
   std::unordered_map<K, V> impl_;
+  
+  // Allow Object class to access impl_ for keys/values/entries
+  friend class Object;
 
 public:
   // Type aliases for STL compatibility
