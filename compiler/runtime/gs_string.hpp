@@ -329,7 +329,8 @@ public:
   // Stream output
   
   friend std::ostream& operator<<(std::ostream& os, const String& str) {
-    return os << str.impl_;
+    os << str.impl_;
+    return os;
   }
 };
 

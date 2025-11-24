@@ -181,6 +181,7 @@ export class CppCodegen {
     lines.push('// Note: Array methods (push, map, filter, etc.) are now in gs::Array<T>');
     lines.push('// Note: Smart pointers (shared_ptr, weak_ptr) are in gs_runtime.hpp');
     lines.push('// Note: JSON.stringify is in gs::JSON::stringify');
+    lines.push('// Note: String.fromCharCode is in gs::String::fromCharCode');
     lines.push('');
     lines.push('// Number helper: format integer without decimal point');
     lines.push('inline gs::String to_string_int(double value) {');
@@ -1605,7 +1606,7 @@ export class CppCodegen {
       const obj = expr.expression.expression.getText();
       const method = expr.expression.name.getText();
       if (obj === 'String' && method === 'fromCharCode') {
-        return `gs::from_char_code(${args})`;
+        return `gs::String::fromCharCode(${args})`;
       }
     }
     
@@ -1701,8 +1702,8 @@ export class CppCodegen {
       }
       
       if (methodName === 'delete') {
-        // map.delete(key) -> map.erase(key)
-        return `${object}${accessor}erase(${args})`;
+        // map.delete(key) -> map.delete_() (delete is a C++ keyword)
+        return `${object}${accessor}delete_(${args})`;
       }
       
       // Array methods
@@ -1781,10 +1782,10 @@ export class CppCodegen {
         
         if (isComplexObject) {
           // Store the source in a variable to avoid creating it multiple times
-          return `[&]() { auto __src = ${object}; std::vector<std::string> __result; std::transform(__src.begin(), __src.end(), std::back_inserter(__result), ${lambdaStr}); return __result; }()`;
+          return `[&]() { auto __src = ${object}; gs::Array<gs::String> __result; std::transform(__src.begin(), __src.end(), std::back_inserter(__result), ${lambdaStr}); return __result; }()`;
         } else {
           // Simple case - object is an identifier
-          return `[&]() { std::vector<std::string> __result; std::transform(${object}.begin(), ${object}.end(), std::back_inserter(__result), ${lambdaStr}); return __result; }()`;
+          return `[&]() { gs::Array<gs::String> __result; std::transform(${object}.begin(), ${object}.end(), std::back_inserter(__result), ${lambdaStr}); return __result; }()`;
         }
       }
       

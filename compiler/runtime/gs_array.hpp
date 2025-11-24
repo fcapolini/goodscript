@@ -66,6 +66,19 @@ public:
     return static_cast<int>(impl_.size());
   }
   
+  // STL compatibility aliases for std::back_inserter and algorithms
+  void push_back(const T& element) {
+    impl_.push_back(element);
+  }
+  
+  void push_back(T&& element) {
+    impl_.push_back(std::move(element));
+  }
+  
+  size_t size() const {
+    return impl_.size();
+  }
+  
   /**
    * Removes the last element from the array and returns it
    * Equivalent to TypeScript: arr.pop()

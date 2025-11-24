@@ -23,15 +23,16 @@ GoodScript is a **TypeScript specialization** for safe systems programming with 
 - **Key files**: `compiler/src/ownership-analyzer.ts`, `compiler/src/null-check-analyzer.ts`
 - **Documentation**: `docs/DAG-ANALYSIS.md`, `docs/MEMORY-OWNERSHIP.md`
 
-### Phase 3: C++ Code Generation (🚧 In Progress - Foundation Complete)
+### Phase 3: C++ Code Generation (🚧 In Progress - 93% Complete)
 - Translates TypeScript AST to C++ code
 - Maps ownership types: `own<T>` → `std::unique_ptr<T>`, `share<T>` → `std::shared_ptr<T>`, `use<T>` → `std::weak_ptr<T>`
 - Generates idiomatic C++ with proper RAII, exception handling
 - All code wrapped in `gs` namespace to avoid keyword conflicts
-- **Status**: 35/35 basic tests passing (primitives, ownership types, classes, control flow)
-- **Key file**: `compiler/src/cpp-codegen.ts` (725 lines)
+- Runtime library with `gs::String`, `gs::Array<T>`, `gs::Map<K,V>`, `gs::Set<T>`
+- **Status**: 100/107 tests passing (66/66 basic, 28/28 runtime, 56/64 concrete examples)
+- **Key files**: `compiler/src/cpp-codegen.ts` (2376 lines), `runtime/*.hpp`
 - **Documentation**: `docs/COMPILATION-TARGET.md`, `test/phase3/README.md`
-- **TODO**: Smart pointer construction, async/await coroutines, stdlib mappings
+- **TODO**: Object-push-modify pattern, json-parser debug, async/await coroutines
 
 ### Phase 4: Ecosystem (📋 Planned)
 - Standard library APIs for Node.js/Deno compatibility
@@ -501,29 +502,31 @@ When implementing new features or fixing bugs:
 5. **Explicit over implicit**: If it can surprise, make it explicit
 6. **Fail early**: Compile-time errors > Runtime errors > Memory corruption
 
-## Current Status (as of Nov 22, 2025)
+## Current Status (as of Nov 24, 2025)
 
 - **Phase 1**: ✅ 100% complete (244/244 tests)
 - **Phase 2**: ✅ 100% complete (425/425 tests)  
-- **Phase 3**: 🚧 Foundation complete (35/35 basic tests passing)
+- **Phase 3**: 🚧 93% complete (100/107 tests passing)
   - ✅ AST traversal and code emission
   - ✅ Type mappings (primitives, ownership types, collections)
   - ✅ Statement generation (variables, functions, classes, control flow)
   - ✅ Expression generation (operators, calls, literals)
   - ✅ Namespace wrapping (gs::) and keyword escaping
-  - ⏳ Smart pointer construction (make_unique, make_shared)
+  - ✅ Runtime library (String, Array, Map, Set, JSON, console)
+  - ✅ STL compatibility (push_back, size aliases for std::back_inserter)
+  - ✅ Smart pointer wrapping (wrap_for_push helper)
+  - ✅ String methods (indexOf, startsWith, fromCharCode)
+  - ✅ Map/Set operations (delete_, has, set, get)
+  - ⏳ Object-push-modify pattern (semantic mismatch issue)
+  - ⏳ json-parser debug (codegen produces empty output)
   - ⏳ C++20 coroutines for async/await
-  - ⏳ Standard library mappings
-  - ⏳ Compilation validation tests (g++/clang++)
-  - ⏳ Runtime equivalence tests (JS vs C++ output)
 - **Phase 4**: 📋 Planned
 
 **Next priorities**:
-1. Implement smart pointer construction logic
-2. Add state tracking to avoid double-wrapping
-3. Create compilation validation tests (g++/clang++)
-4. Implement runtime equivalence testing
-5. Add stdlib mappings (console, Math, Array methods)
+1. Debug json-parser empty codegen output
+2. Handle object-push-modify pattern (create shared_ptr directly or retrieve after push)
+3. Add async/await coroutine support
+4. Implement remaining stdlib mappings
 
 ---
 
