@@ -2021,6 +2021,15 @@ export class CppCodegen {
         return `static_cast<int>(${object}[${args}])`;
       }
       
+      // Number methods
+      if (methodName === 'toFixed') {
+        // number.toFixed(digits) -> format number with fixed decimal places
+        this.addInclude('<iomanip>');
+        this.addInclude('<sstream>');
+        // Wrap in lambda to format with ostringstream
+        return `([&]() { std::ostringstream __oss; __oss << std::fixed << std::setprecision(${args}) << ${object}; return gs::String(__oss.str()); })()`;
+      }
+      
       return `${object}${accessor}${methodName}(${args})`;
     }
     

@@ -19,6 +19,11 @@ class String;
  */
 template<typename T>
 class Array {
+  // Allow all Array instantiations to access each other's private members
+  // This is needed for map() which creates Array<R> from Array<T>
+  template<typename U>
+  friend class Array;
+
 private:
   std::vector<T> impl_;
 
@@ -210,10 +215,16 @@ public:
   /**
    * Executes a reducer function on each element, resulting in a single output value
    * Equivalent to TypeScript: arr.reduce(callback, initialValue)
+   * 
+   * Note: The return type is deduced from the callback's return type, not the initial value.
+   * This matches TypeScript semantics where reduce(callback, 0) with a callback returning
+   * number produces a number result, even though 0 could be int.
    */
   template<typename Fn, typename U>
-  U reduce(Fn&& callback, U initialValue) const {
-    U accumulator = std::move(initialValue);
+  auto reduce(Fn&& callback, U initialValue) const 
+    -> decltype(callback(std::declval<U>(), std::declval<T>())) {
+    using ResultType = decltype(callback(std::declval<U>(), std::declval<T>()));
+    ResultType accumulator = static_cast<ResultType>(std::move(initialValue));
     
     for (const auto& element : impl_) {
       accumulator = callback(std::move(accumulator), element);
@@ -328,10 +339,17 @@ public:
   /**
    * Sorts the elements of an array in place using a comparison function
    * Equivalent to TypeScript: arr.sort(compareFn)
+   * 
+   * Note: TypeScript comparators return a number (negative/zero/positive),
+   * but C++ std::sort expects a boolean comparator. We wrap the user's
+   * comparator to convert the numeric result to boolean.
    */
   template<typename Fn>
   Array<T>& sort(Fn&& compareFn) {
-    std::sort(impl_.begin(), impl_.end(), std::forward<Fn>(compareFn));
+    std::sort(impl_.begin(), impl_.end(), [&](const T& a, const T& b) {
+      auto result = compareFn(a, b);
+      return result < 0;
+    });
     return *this;
   }
   
@@ -374,18 +392,16 @@ public:
   }
   
   // Array subscript operators
+  // Use decltype to handle std::vector<bool> which returns a proxy type
   
-  T& operator[](int index) {
+  auto operator[](int index) -> decltype(impl_[index]) {
     return impl_[index];
   }
   
-  const T& operator[](int index) const {
+  auto operator[](int index) const -> decltype(impl_[index]) {
     return impl_[index];
   }
   
-  // Special handling for bool to avoid vector<bool> issues
-  // Note: std::vector<bool> returns a proxy type, not a reference
-  // So we provide value access for it
   auto operator[](size_t index) -> decltype(impl_[index]) {
     return impl_[index];
   }
