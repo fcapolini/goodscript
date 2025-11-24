@@ -25,6 +25,7 @@
 #include "gs_map.hpp"
 #include "gs_json.hpp"
 #include "gs_console.hpp"
+#include "gs_tuple.hpp"
 #include "gs_array_impl.hpp"
 
 // Memory management utilities

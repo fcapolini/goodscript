@@ -43,7 +43,7 @@ describe('Phase 3: Ownership - own<T>', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('std::unique_ptr<Node>');
+    expect(cpp).toContain('std::unique_ptr<gs::Node>');
   });
   
   it('should generate class with own<T> field', () => {
@@ -62,14 +62,14 @@ describe('Phase 3: Ownership - share<T>', () => {
   it('should generate gs::shared_ptr for share<T>', () => {
     const source = `
       class Data {
-        count: number;
+        value: number;
       }
       
-      const data: share<Data> = new Data();
+      const x: share<Data> = new Data();
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('gs::shared_ptr<Data>');
+    expect(cpp).toContain('gs::shared_ptr<gs::Data>');
   });
   
   it('should generate class with share<T> field', () => {
@@ -93,7 +93,7 @@ describe('Phase 3: Ownership - use<T>', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('gs::weak_ptr<Node>');
+    expect(cpp).toContain('gs::weak_ptr<gs::Node>');
   });
 });
 
@@ -150,6 +150,6 @@ describe('Phase 3: Collection Types', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('gs::Map<gs::String, gs::shared_ptr<Data>>');
+    expect(cpp).toContain('gs::Map<gs::String, gs::shared_ptr<gs::Data>>');
   });
 });

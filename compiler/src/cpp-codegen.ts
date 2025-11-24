@@ -805,13 +805,13 @@ export class CppCodegen {
       const elementType = this.generateType(type.elementType);
       return `gs::Array<${elementType}>`;
     } else if (ts.isTupleTypeNode(type)) {
-      // Handle tuple types: [T, U] -> std::pair<T, U> (for 2 elements)
+      // Handle tuple types: [T, U] -> gs::Tuple<T, U> (for 2 elements)
       // or std::tuple<T, U, V, ...> (for more elements)
       if (type.elements.length === 2) {
-        this.addInclude('<utility>'); // for std::pair
+        // No need to add include - gs_runtime.hpp provides it
         const first = this.generateType(type.elements[0]);
         const second = this.generateType(type.elements[1]);
-        return `std::pair<${first}, ${second}>`;
+        return `gs::Tuple<${first}, ${second}>`;
       } else if (type.elements.length > 2) {
         this.addInclude('<tuple>');
         const elementTypes = type.elements.map(el => this.generateType(el)).join(', ');
@@ -2285,19 +2285,27 @@ export class CppCodegen {
         return `${object}[${index}]`;
       }
       
-      // Check if this is a tuple/pair access with numeric literal
-      // TypeScript represents tuples as [T, U] which we map to std::pair or std::tuple
-      // When accessing with numeric literal like entries[j][1], need std::get<N>()
+      // Check if this is a tuple access with numeric literal
+      // TypeScript represents tuples as [T, U] which we map to gs::Tuple<T, U> or std::tuple
+      // When accessing with numeric literal like entry[0] or entry[1], map to .first() or .second()
       if (ts.isNumericLiteral(expr.argumentExpression)) {
-        const indexValue = expr.argumentExpression.text;
-        // Check if the object type is a tuple/pair
-        // If object is array_get(entries, j) where entries is [T,U][], result is std::pair
-        // Or if object directly has tuple type
+        const indexValue = parseInt(expr.argumentExpression.text, 10);
+        // Check if the object type is a tuple
         const objectType = this.checker.getTypeAtLocation(expr.expression);
         const objectTypeString = this.checker.typeToString(objectType);
         
-        // If type string contains 'pair' or 'tuple', use std::get
-        if (objectTypeString.includes('pair<') || objectTypeString.includes('tuple<')) {
+        // If type string contains 'Tuple<' (our gs::Tuple), use .first() or .second()
+        if (objectTypeString.includes('Tuple<')) {
+          if (indexValue === 0) {
+            return `${object}.first()`;
+          } else if (indexValue === 1) {
+            return `${object}.second()`;
+          }
+          // For other indices, fall through to error
+        }
+        
+        // If type string contains 'tuple<' (std::tuple for 3+ elements), use std::get
+        if (objectTypeString.includes('tuple<')) {
           return `std::get<${indexValue}>(${object})`;
         }
         
@@ -2307,7 +2315,15 @@ export class CppCodegen {
           const outerType = this.checker.getTypeAtLocation(expr.expression.expression);
           const outerTypeStr = this.checker.typeToString(outerType);
           // Check if it's an array of tuples
-          if (outerTypeStr.match(/\[.*,.*\]\[\]/) || outerTypeStr.includes('pair') || outerTypeStr.includes('tuple')) {
+          if (outerTypeStr.match(/\[.*,.*\]\[\]/)) {
+            // Array of tuples - the element access returns a gs::Tuple
+            if (indexValue === 0) {
+              return `${object}.first()`;
+            } else if (indexValue === 1) {
+              return `${object}.second()`;
+            }
+          } else if (outerTypeStr.includes('tuple')) {
+            // std::tuple (3+ elements)
             return `std::get<${indexValue}>(${object})`;
           }
         }
