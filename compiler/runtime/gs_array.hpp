@@ -139,14 +139,16 @@ public:
   }
   
   /**
-   * Returns a shallow copy of a portion of the array
+   * Returns a shallow copy of a portion of the array.
    * Equivalent to TypeScript: arr.slice(start, end)
    */
-  Array<T> slice(int start, std::optional<int> end = std::nullopt) const {
+  Array<T> slice(std::optional<int> start = std::nullopt, std::optional<int> end = std::nullopt) const {
     int len = static_cast<int>(impl_.size());
     
     // Handle negative indices
-    int startIdx = start < 0 ? std::max(0, len + start) : std::min(start, len);
+    int startIdx = start.has_value()
+      ? (start.value() < 0 ? std::max(0, len + start.value()) : std::min(start.value(), len))
+      : 0;
     int endIdx = end.has_value() 
       ? (end.value() < 0 ? std::max(0, len + end.value()) : std::min(end.value(), len))
       : len;

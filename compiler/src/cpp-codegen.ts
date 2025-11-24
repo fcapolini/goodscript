@@ -1960,15 +1960,8 @@ export class CppCodegen {
       }
       
       if (methodName === 'slice') {
-        // array.slice(start, end)
-        const argArray = expr.arguments.map(arg => this.generateExpression(arg));
-        if (argArray.length === 2) {
-          this.addInclude('<algorithm>');
-          const start = argArray[0];
-          const end = argArray[1];
-          // Create a new vector from the slice
-          return `std::vector<decltype(${object})::value_type>(${object}.begin() + ${start}, ${object}.begin() + ${end})`;
-        }
+        // array.slice(start, end) - delegate to runtime library method
+        return `${object}${accessor}slice(${args})`;
       }
       
       if (methodName === 'map') {
