@@ -885,12 +885,48 @@ export class CppCodegen {
   private generateConstructor(className: string, constructor: ts.ConstructorDeclaration): void {
     const params = this.generateParameters(constructor.parameters);
     
-    this.emit(`${className}(${params}) {`);
+    // Check for super() call in the first statement
+    let baseInitializer = '';
+    let skipFirstStatement = false;
+    
+    if (constructor.body && constructor.body.statements.length > 0) {
+      const firstStmt = constructor.body.statements[0];
+      
+      // Check if first statement is an expression statement containing super()
+      if (ts.isExpressionStatement(firstStmt) && ts.isCallExpression(firstStmt.expression)) {
+        const callExpr = firstStmt.expression;
+        
+        // Check if it's a super() call
+        if (callExpr.expression.kind === ts.SyntaxKind.SuperKeyword) {
+          // Get the base class name from the current class's heritage clause
+          const classDecl = this.currentClass;
+          if (classDecl && classDecl.heritageClauses) {
+            for (const clause of classDecl.heritageClauses) {
+              if (clause.token === ts.SyntaxKind.ExtendsKeyword && clause.types.length > 0) {
+                const baseClassName = this.escapeIdentifier(clause.types[0].expression.getText());
+                
+                // Generate arguments for base constructor
+                const args = callExpr.arguments.map(arg => this.generateExpression(arg)).join(', ');
+                
+                baseInitializer = ` : ${baseClassName}(${args})`;
+                skipFirstStatement = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    this.emit(`${className}(${params})${baseInitializer} {`);
     this.indent();
     
     if (constructor.body) {
-      for (const statement of constructor.body.statements) {
-        this.generateStatement(statement);
+      const statements = constructor.body.statements;
+      const startIndex = skipFirstStatement ? 1 : 0;
+      
+      for (let i = startIndex; i < statements.length; i++) {
+        this.generateStatement(statements[i]);
       }
     }
     
