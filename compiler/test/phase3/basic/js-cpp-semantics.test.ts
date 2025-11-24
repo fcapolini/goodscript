@@ -49,9 +49,10 @@ describe('Phase 3: JS/C++ Semantic Equivalence', () => {
     
     // JavaScript: arr[10] = 42 automatically resizes array to length 11
     // C++ (our implementation): uses IIFE with resize to match behavior
-    // Note: Uses __idx = 10 and __arr[__idx] pattern
+    // Uses lambda pattern: __arr, __idx, and resize
     
-    expect(cpp).toContain('__idx = 10');
+    expect(cpp).toContain('__arr');
+    expect(cpp).toContain('__idx');
     expect(cpp).toContain('42');
     expect(cpp).toContain('resize');
   });

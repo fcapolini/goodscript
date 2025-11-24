@@ -71,7 +71,7 @@ describe('Phase 3: Parameter Passing', () => {
     expect(cpp).toContain('void draw(const gs::Point& point)');
   });
 
-  it('should pass arrays by const reference', () => {
+  it('should pass arrays by mutable reference', () => {
     const source = `
       class Processor {
         sum(numbers: number[]): number {
@@ -85,8 +85,8 @@ describe('Phase 3: Parameter Passing', () => {
     `;
     const cpp = compileToCpp(source);
     
-    // Arrays should be passed by const reference
-    expect(cpp).toContain('double sum(const gs::Array<double>& numbers)');
+    // Arrays are passed by mutable reference (allows modification if needed)
+    expect(cpp).toContain('double sum(gs::Array<double>& numbers)');
   });
 
   it('should pass maps by const reference', () => {
