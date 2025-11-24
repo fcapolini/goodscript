@@ -631,8 +631,39 @@ export class CppCodegen {
     return parameters.map(p => {
       const name = this.escapeIdentifier(p.name.getText());
       const type = p.type ? this.generateType(p.type) : 'auto';
-      return `${type} ${name}`;
+      
+      // Pass non-trivial types by const reference for efficiency
+      // Primitives (int, double, bool) are passed by value
+      const passByConstRef = this.shouldPassByConstReference(type);
+      const paramType = passByConstRef ? `const ${type}&` : type;
+      
+      return `${paramType} ${name}`;
     }).join(', ');
+  }
+  
+  /**
+   * Determine if a type should be passed by const reference
+   * Returns true for non-trivial types (strings, classes, containers)
+   * Returns false for primitives and smart pointers (which have move semantics)
+   */
+  private shouldPassByConstReference(type: string): boolean {
+    // Primitives are passed by value (cheap)
+    if (type === 'int' || type === 'double' || type === 'bool' || type === 'void') {
+      return false;
+    }
+    
+    // Smart pointers have efficient move semantics, don't need const&
+    if (type.startsWith('gs::unique_ptr<') || 
+        type.startsWith('gs::shared_ptr<') || 
+        type.startsWith('gs::weak_ptr<') ||
+        type.startsWith('std::unique_ptr<') || 
+        type.startsWith('std::shared_ptr<') || 
+        type.startsWith('std::weak_ptr<')) {
+      return false;
+    }
+    
+    // Everything else (gs::String, gs::Array, gs::Map, user classes) should be const&
+    return true;
   }
   
   /**

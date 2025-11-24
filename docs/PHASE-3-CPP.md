@@ -378,7 +378,49 @@ See `docs/COMPILATION-TARGET.md` for detailed analysis.
 - Makes generated code composable with other C++ code
 - Clear separation between GoodScript and native C++
 
-### 3. Smart Pointer Types
+### 3. Parameter Passing Strategy
+
+**TypeScript Immutability Principle**: In TypeScript/JavaScript, primitives (number, boolean, string) are immutable. This means functions cannot modify the caller's values, making pass-by-reference semantically equivalent to pass-by-value for these types.
+
+**GoodScript C++ Implementation**:
+
+| Type | C++ Parameter | Rationale |
+|------|--------------|-----------|
+| `number` | `double x` | Pass by value - 8 bytes, fits in register, very efficient |
+| `boolean` | `bool flag` | Pass by value - 1 byte, extremely cheap |
+| `string` | `const gs::String& s` | **Pass by const reference** - avoids copying heap buffer, immutability enforced by `const` |
+| User classes | `const gs::Point& p` | Pass by const reference - avoids copying object data |
+| Arrays/Maps/Sets | `const gs::Array<T>& arr` | Pass by const reference - avoids copying entire container |
+| Smart pointers | `gs::shared_ptr<T> p` | Pass by value - only copies pointer + refcount (16 bytes), has move semantics |
+
+**Example**:
+```typescript
+// GoodScript
+class Processor {
+  process(count: number, flag: boolean, message: string): void {
+    console.log(count, flag, message);
+  }
+}
+```
+
+```cpp
+// Generated C++ - optimized parameter passing
+class Processor {
+public:
+  void process(double count, bool flag, const gs::String& message) {
+    gs::console.log(count, flag, message);
+  }
+};
+```
+
+**Key Insight**: Because TypeScript strings are immutable, we can safely pass `gs::String` by const reference without changing semantics. The `const` prevents modification (matching TypeScript), while the `&` avoids expensive deep copies of the string's heap buffer.
+
+**Performance Impact**:
+- Small primitives: No change (already optimal)
+- Large strings: **Eliminates O(n) copy** to O(1) pointer pass
+- Collections: **Eliminates deep copy** of all elements
+
+### 4. Smart Pointer Types
 
 **Ownership Mapping**:
 - `own<T>` → `std::unique_ptr<T>` - Exclusive, movable ownership
