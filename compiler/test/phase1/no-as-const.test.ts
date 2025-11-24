@@ -164,6 +164,62 @@ Object.preventExtensions(obj);
     });
   });
 
+  describe('GS124: No unsupported Object methods', () => {
+    it('should reject Object.defineProperty()', () => {
+      const source = `
+const obj = {};
+Object.defineProperty(obj, 'x', { value: 42 });
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS124')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS124');
+      expect(errors[0].message).toContain('Object.defineProperty');
+    });
+
+    it('should reject Object.create()', () => {
+      const source = `
+const obj = Object.create(null);
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS124')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS124');
+      expect(errors[0].message).toContain('Object.create');
+    });
+
+    it('should reject Object.getPrototypeOf()', () => {
+      const source = `
+const obj = {};
+const proto = Object.getPrototypeOf(obj);
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS124')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS124');
+      expect(errors[0].message).toContain('Object.getPrototypeOf');
+    });
+
+    it('should reject Object.setPrototypeOf()', () => {
+      const source = `
+const obj = {};
+Object.setPrototypeOf(obj, null);
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS124')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS124');
+      expect(errors[0].message).toContain('Object.setPrototypeOf');
+    });
+
+    it('should reject Object.getOwnPropertyDescriptor()', () => {
+      const source = `
+const obj = { x: 10 };
+const desc = Object.getOwnPropertyDescriptor(obj, 'x');
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS124')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS124');
+      expect(errors[0].message).toContain('Object.getOwnPropertyDescriptor');
+    });
+  });
+
   it('should accept regular arrays', () => {
     const source = `
 const arr = [1, 2, 3];
@@ -174,5 +230,6 @@ arr.push(4);
     expect(hasError(result.diagnostics, 'GS121')).toBe(false);
     expect(hasError(result.diagnostics, 'GS122')).toBe(false);
     expect(hasError(result.diagnostics, 'GS123')).toBe(false);
+    expect(hasError(result.diagnostics, 'GS124')).toBe(false);
   });
 });

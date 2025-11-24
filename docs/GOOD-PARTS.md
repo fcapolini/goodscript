@@ -842,6 +842,59 @@ const obj = { x: 10 };
 - GoodScript's ownership system provides memory safety without runtime immutability
 - Type-level immutability (readonly) is a better fit but not yet implemented
 
+#### GS124: No Unsupported Object Methods
+
+**Restriction:** Object methods that depend on JavaScript's reflection or prototype semantics are not supported.
+
+**Not supported:**
+- `Object.defineProperty()` / `Object.defineProperties()` - property descriptors
+- `Object.create()` - prototype-based object creation
+- `Object.getPrototypeOf()` / `Object.setPrototypeOf()` - prototype chain
+- `Object.getOwnPropertyNames()` / `Object.getOwnPropertySymbols()` - reflection
+- `Object.getOwnPropertyDescriptor()` / `Object.getOwnPropertyDescriptors()` - descriptors
+- `Object.preventExtensions()` / `Object.isExtensible()` - extensibility
+- `Object.isFrozen()` / `Object.isSealed()` - immutability state
+
+**Supported Object methods:**
+- `Object.keys(map)` - get array of map keys
+- `Object.values(map)` - get array of map values
+- `Object.entries(map)` - get array of [key, value] pairs
+- `Object.assign(target, ...sources)` - merge maps
+- `Object.is(a, b)` - SameValue comparison (handles NaN and -0/+0)
+
+**Example:**
+```typescript
+// ❌ Not supported - property descriptors
+Object.defineProperty(obj, 'x', { value: 42, writable: false });
+
+// ❌ Not supported - prototype chain
+const obj = Object.create(proto);
+const proto = Object.getPrototypeOf(obj);
+
+// ❌ Not supported - reflection
+const props = Object.getOwnPropertyNames(obj);
+const desc = Object.getOwnPropertyDescriptor(obj, 'x');
+
+// ✅ Supported - map operations
+const map = new Map([['a', 1], ['b', 2]]);
+const keys = Object.keys(map);      // ['a', 'b']
+const values = Object.values(map);  // [1, 2]
+const entries = Object.entries(map); // [['a', 1], ['b', 2]]
+
+const merged = Object.assign(new Map(), map1, map2);
+
+// ✅ Supported - SameValue comparison
+Object.is(NaN, NaN);  // true (unlike ===)
+Object.is(-0, +0);    // false (unlike ===)
+```
+
+**Why:**
+- C++ lacks JavaScript's dynamic property descriptor system
+- Prototype chains don't map to C++ class hierarchies
+- Object reflection requires runtime type information (RTTI) which GoodScript avoids
+- The supported methods (keys/values/entries/assign/is) have clear C++ equivalents
+- These work with `Map<K,V>` types which map directly to `std::unordered_map`
+
 **Future consideration:****
 All these restrictions may be lifted in future versions once the code generator supports:
 - Const-correctness tracking for parameters
@@ -912,6 +965,7 @@ These restrictions transform TypeScript from a gradually-typed superset of JavaS
 | GS121 | `readonly` modifier | Not supported - implementation limitation |
 | GS122 | Readonly utility types (`ReadonlyArray`, `Readonly`, `ReadonlyMap`, `ReadonlySet`) | Not supported - implementation limitation |
 | GS123 | `Object.freeze/seal/preventExtensions` | Not supported - implementation limitation |
+| GS124 | Unsupported Object methods (defineProperty, create, getPrototypeOf, etc.) | Use supported Object methods: keys, values, entries, assign, is |
 | GS201 | Implicit type coercion | Use template literals or explicit conversion |
 
 ---

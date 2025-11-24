@@ -57,9 +57,16 @@ Instead, we use **composition** - wrapping STL types internally and exposing a T
   - `Number::isNaN()`, `Number::isFinite()`, `Number::parseInt()`, `Number::parseFloat()`
 
 - **`gs_object.hpp`**: `gs::Object` - Object utilities
-  - Immutability methods (no-ops): `Object::freeze()`, `Object::seal()`, `Object::preventExtensions()`
-  - Query methods (constants): `Object::isFrozen()` (returns false), `Object::isSealed()` (returns false), `Object::isExtensible()` (returns true)
-  - Note: These are restricted in GoodScript (GS123) but provided for potential interop
+  - **Supported methods**:
+    - `Object::keys(map)` - returns `Array<K>` of map keys
+    - `Object::values(map)` - returns `Array<V>` of map values
+    - `Object::entries(map)` - returns `Array<pair<K,V>>` of entries
+    - `Object::assign(target, sources...)` - merge maps (variadic template)
+    - `Object::is(a, b)` - SameValue comparison (handles NaN and ±0 correctly)
+  - **Restricted methods** (GS123-124):
+    - Immutability: `freeze()`, `seal()`, `preventExtensions()` (no-ops, restricted)
+    - Reflection/prototypes: `defineProperty()`, `create()`, `getPrototypeOf()`, etc. (restricted)
+  - Note: Only Map-compatible methods are implemented; reflection/prototype methods are unsupported
 
 ### Implementation Details
 

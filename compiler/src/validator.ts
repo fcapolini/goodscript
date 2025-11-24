@@ -173,6 +173,32 @@ export class Validator {
       }
     }
 
+    // No unsupported Object methods (GS124) - implementation limitation
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+      const expr = node.expression;
+      if (ts.isIdentifier(expr.expression) && expr.expression.text === 'Object') {
+        const methodName = expr.name.text;
+        const unsupportedMethods = [
+          'defineProperty',
+          'defineProperties',
+          'create',
+          'getPrototypeOf',
+          'setPrototypeOf',
+          'getOwnPropertyNames',
+          'getOwnPropertySymbols',
+          'getOwnPropertyDescriptor',
+          'getOwnPropertyDescriptors'
+        ];
+        if (unsupportedMethods.includes(methodName)) {
+          this.addError(
+            `Object.${methodName}() is not supported - lacks reflection/prototype semantics in C++`,
+            location,
+            'GS124'
+          );
+        }
+      }
+    }
+
     // No 'arguments' object (in non-arrow functions)
     if (ts.isIdentifier(node) && node.text === 'arguments') {
       const func = this.findContainingFunction(node);

@@ -60,12 +60,21 @@ All heap-allocated values must be **qualified** with one of the following:
 * `ReadonlySet<T>` type (GS122)
 * `as const` assertions (GS120)
 * `Object.freeze()`, `Object.seal()`, `Object.preventExtensions()` (GS123)
+* Unsupported Object methods requiring reflection/prototypes (GS124)
+
+**Supported Object methods:**
+* `Object.keys(map)` - get array of map keys
+* `Object.values(map)` - get array of map values  
+* `Object.entries(map)` - get array of [key, value] pairs
+* `Object.assign(target, ...sources)` - merge maps
+* `Object.is(a, b)` - SameValue comparison (handles NaN and -0/+0)
 
 **Rationale for current restriction:**
 These features require sophisticated const-correctness tracking in C++ code generation:
 - Readonly parameters need const references: `const gs::Array<T>&`
 - Readonly properties need constructor initializer lists (incompatible with current codegen)
 - `as const` creates deeply readonly types with literal inference
+- Object reflection/prototype methods lack clear C++ equivalents
 - The implementation complexity doesn't justify the benefit at this phase
 
 **Future consideration:**
