@@ -203,6 +203,27 @@ console.log(str.slice(-3));
       ]);
     });
     
+    it('should handle string substr', () => {
+      const code = `
+const str: string = "Hello, World!";
+console.log(str.substr(0, 5));
+console.log(str.substr(7, 5));
+console.log(str.substr(7));
+console.log(str.substr(-6));
+console.log(str.substr(-6, 5));
+      `.trim();
+      
+      const { jsOutput } = testEquivalence('string-substr', code, { skipCpp: true });
+      
+      expect(jsOutput.split('\n')).toEqual([
+        'Hello',
+        'World',
+        'World!',
+        'World!',
+        'World'
+      ]);
+    });
+    
     it('should handle string tests (startsWith, endsWith, includes)', () => {
       const code = `
 const message: string = "Hello, World!";

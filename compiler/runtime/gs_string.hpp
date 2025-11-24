@@ -129,6 +129,25 @@ public:
   }
   
   /**
+   * Extracts a substring from a string
+   * Equivalent to TypeScript: str.substr(start, length)
+   * Note: This method is deprecated in JavaScript but included for compatibility
+   */
+  String substr(int start, std::optional<int> length = std::nullopt) const {
+    int len = static_cast<int>(impl_.length());
+    
+    // Handle negative start (counts from end)
+    int actualStart = start < 0 ? std::max(0, len + start) : std::min(start, len);
+    
+    // Determine length
+    int actualLength = length.has_value() 
+      ? std::max(0, std::min(length.value(), len - actualStart))
+      : len - actualStart;
+    
+    return String(impl_.substr(actualStart, actualLength));
+  }
+  
+  /**
    * Converts the string to lowercase
    * Equivalent to TypeScript: str.toLowerCase()
    */
