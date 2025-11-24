@@ -49,6 +49,18 @@ Instead, we use **composition** - wrapping STL types internally and exposing a T
   - `console::log()`, `console::error()`, `console::warn()`
   - Supports multiple arguments
 
+- **`gs_math.hpp`**: `gs::Math` - Math utilities
+  - Constants: `Math::PI`, `Math::E`
+  - Functions: `Math::abs()`, `Math::sin()`, `Math::cos()`, `Math::sqrt()`, `Math::floor()`, `Math::ceil()`, `Math::round()`, etc.
+
+- **`gs_number.hpp`**: `gs::Number` - Number utilities
+  - `Number::isNaN()`, `Number::isFinite()`, `Number::parseInt()`, `Number::parseFloat()`
+
+- **`gs_object.hpp`**: `gs::Object` - Object utilities
+  - Immutability methods (no-ops): `Object::freeze()`, `Object::seal()`, `Object::preventExtensions()`
+  - Query methods (constants): `Object::isFrozen()` (returns false), `Object::isSealed()` (returns false), `Object::isExtensible()` (returns true)
+  - Note: These are restricted in GoodScript (GS123) but provided for potential interop
+
 ### Implementation Details
 
 - **`gs_array_impl.hpp`**: Template implementations that require cross-type dependencies
@@ -83,6 +95,9 @@ The C++ code generator should:
 3. **Map global objects**:
    - `JSON` → `gs::JSON`
    - `console` → `gs::console`
+   - `Math` → `gs::Math`
+   - `Number` → `gs::Number`
+   - `Object` → `gs::Object`
    - `String` → `gs::String` (for static methods)
 
 ## Example Transformations

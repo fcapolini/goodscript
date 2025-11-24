@@ -18,6 +18,7 @@
  *   - gs::console: console.log(), console.error(), console.warn()
  *   - gs::Math: Math functions (sin, cos, sqrt, PI, etc.)
  *   - gs::Number: Number utilities (isNaN, isFinite, etc.)
+ *   - gs::Object: Object.freeze/seal/preventExtensions (no-ops)
  *   - gs::shared_ptr<T>: Non-atomic shared pointer for single-threaded use
  *   - gs::weak_ptr<T>: Non-atomic weak pointer for single-threaded use
  */
@@ -28,6 +29,7 @@
 #include "gs_json.hpp"
 #include "gs_console.hpp"
 #include "gs_math.hpp"
+#include "gs_object.hpp"
 #include "gs_number.hpp"
 #include "gs_tuple.hpp"
 #include "gs_array_impl.hpp"
