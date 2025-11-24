@@ -116,12 +116,11 @@ if (y != 10) { }
 
 ## Test Status
 
-**Current Status**: ✅ **100/107 Phase 3 tests passing (93%)**
+**Current Status**: ✅ **106/107 Phase 3 tests passing (99%)**
 - Basic tests: 66/66 passing (100%)
 - Runtime tests: 28/28 passing (100%)
-- Concrete examples: 56/64 passing (87.5%)
-  - 2 examples with issues:
-    - json-parser: codegen produces empty output (needs investigation)
+- Concrete examples: 63/64 passing (98.4%)
+  - 1 remaining issue:
     - linked-list: semantic mismatch (object-push-modify pattern)
 
 ## Runtime Library Integration

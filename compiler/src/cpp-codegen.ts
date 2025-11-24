@@ -518,9 +518,9 @@ export class CppCodegen {
         }
       }
       
-      // If type is auto and initializer is a string literal, use std::string
+      // If type is auto and initializer is a string literal, use gs::String
       if (type === 'auto' && decl.initializer && ts.isStringLiteral(decl.initializer)) {
-        type = 'std::string';
+        type = 'gs::String';
       }
       
       // Check if this is a recursive arrow function
@@ -1293,6 +1293,55 @@ export class CppCodegen {
   /**
    * Helper to check if an expression has smart pointer type (own<T>, share<T>, or use<T>)
    */
+  /**
+   * Check if an expression is a direct smart pointer (not in a container or optional)
+   */
+  private isDirectSmartPointer(expr: ts.Expression): boolean {
+    if (!this.checker) return false;
+    
+    if (ts.isIdentifier(expr) || ts.isPropertyAccessExpression(expr)) {
+      const symbol = this.checker.getSymbolAtLocation(
+        ts.isIdentifier(expr) ? expr : expr.name
+      );
+      
+      if (symbol?.valueDeclaration) {
+        const typeText = this.getTypeTextFromSymbol(symbol);
+        if (typeText) {
+          // Check for direct ownership types WITHOUT [] or | null/undefined
+          const isDirectOwn = /^own<[^>]+>$/.test(typeText);
+          const isDirectShare = /^share<[^>]+>$/.test(typeText);
+          const isDirectUse = /^use<[^>]+>$/.test(typeText);
+          
+          if (isDirectOwn || isDirectShare || isDirectUse) {
+            return true;
+          }
+        }
+        
+        // For auto variables, check if initialized from array element access
+        if (ts.isVariableDeclaration(symbol.valueDeclaration) && 
+            symbol.valueDeclaration.initializer &&
+            ts.isElementAccessExpression(symbol.valueDeclaration.initializer)) {
+          const arrayExpr = symbol.valueDeclaration.initializer.expression;
+          const arraySymbol = this.checker.getSymbolAtLocation(
+            ts.isPropertyAccessExpression(arrayExpr) ? arrayExpr.name : arrayExpr
+          );
+          if (arraySymbol) {
+            const arrayTypeText = this.getTypeTextFromSymbol(arraySymbol);
+            // Check if array is share<T>[] or own<T>[]
+            if (arrayTypeText) {
+              const hasSmartPtrElement = /^(own|share|use)<[^>]+>\[\]$/.test(arrayTypeText);
+              if (hasSmartPtrElement) {
+                return true;
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    return false;
+  }
+  
   private isSmartPointerType(expr: ts.Expression): boolean {
     if (!this.checker) return false;
     
@@ -1372,13 +1421,19 @@ export class CppCodegen {
    * If otherOperand is a smart pointer and this expr is null/undefined, use nullptr instead of std::nullopt
    */
   private generateExpressionWithNullContext(expr: ts.Expression, otherOperand?: ts.Expression): string {
-    // Check if this is null/undefined and the other operand is a smart pointer
+    // Check if this is null/undefined
     const isNull = expr.kind === ts.SyntaxKind.NullKeyword;
     const isUndefined = expr.kind === ts.SyntaxKind.UndefinedKeyword || 
                         (ts.isIdentifier(expr) && expr.getText() === 'undefined');
     
-    if ((isNull || isUndefined) && otherOperand && this.isSmartPointerType(otherOperand)) {
-      return 'nullptr';
+    if (isNull || isUndefined) {
+      // Check if the other operand is a direct smart pointer (own<T>, share<T>, use<T>)
+      if (otherOperand && this.isDirectSmartPointer(otherOperand)) {
+        // For direct smart pointer comparisons, use nullptr
+        return 'nullptr';
+      }
+      // Otherwise use std::nullopt (for optionals and nullable types)
+      return 'std::nullopt';
     }
     
     // Otherwise use normal generation
@@ -1568,11 +1623,17 @@ export class CppCodegen {
       };
       
       if (shouldWrapOptional(expr.right)) {
-        right = `${right}.value_or("")`;
+        // Don't add .value_or() if already unwrapped with .value()
+        if (!right.includes('.value()')) {
+          right = `${right}.value_or("")`;
+        }
       }
       
       if (shouldWrapOptional(expr.left)) {
-        left = `${left}.value_or("")`;
+        // Don't add .value_or() if already unwrapped with .value()
+        if (!left.includes('.value()')) {
+          left = `${left}.value_or("")`;
+        }
       }
     }
     
@@ -1672,6 +1733,45 @@ export class CppCodegen {
       
       // Map methods - gs::Map handles all complexity internally
       if (methodName === 'set') {
+        // Check if map has share<V> or own<V> value type
+        if (this.checker && ts.isPropertyAccessExpression(expr.expression)) {
+          const mapExpr = expr.expression.expression;
+          const mapSymbol = this.checker.getSymbolAtLocation(
+            ts.isPropertyAccessExpression(mapExpr) ? mapExpr.name : mapExpr
+          );
+          
+          if (mapSymbol?.valueDeclaration && 'type' in mapSymbol.valueDeclaration) {
+            const typeNode = (mapSymbol.valueDeclaration as any).type as ts.TypeNode | undefined;
+            if (typeNode) {
+              const mapTypeText = typeNode.getText();
+              
+              // Check for Map<K, share<V>> or Map<K, own<V>>
+              const shareMatch = mapTypeText.match(/Map<[^,]+,\s*share<([^>]+)>>/);
+              const ownMatch = mapTypeText.match(/Map<[^,]+,\s*own<([^>]+)>>/);
+              
+              if (shareMatch || ownMatch) {
+                const valueType = shareMatch ? shareMatch[1] : ownMatch![1];
+                const isShared = !!shareMatch;
+                
+                // Wrap the second argument (value) if needed
+                if (expr.arguments.length >= 2) {
+                  const keyArg = this.generateExpression(expr.arguments[0]);
+                  const valueArgExpr = expr.arguments[1];
+                  const valueArg = this.generateExpression(valueArgExpr);
+                  
+                  // Only wrap if the argument is not already a smart pointer
+                  const needsWrapping = !this.isDirectSmartPointer(valueArgExpr);
+                  const finalValue = needsWrapping 
+                    ? `gs::${isShared ? 'make_shared' : 'make_unique'}<${valueType}>(${valueArg})`
+                    : valueArg;
+                  
+                  return `${object}${accessor}set(${keyArg}, ${finalValue})`;
+                }
+              }
+            }
+          }
+        }
+        
         return `${object}${accessor}set(${args})`;
       }
       
@@ -1910,9 +2010,14 @@ export class CppCodegen {
               needsOptionalUnwrap = true;
               accessor = '->';
             }
-            // Check for other optional types
+            // Check for other optional types - only use -> if it's a smart pointer type
             else if (returnType.includes('| null') || returnType.includes('| undefined')) {
-              accessor = '->';
+              // Check if the base type (without | null/undefined) is a smart pointer
+              const baseType = returnType.replace(/\s*\|\s*(null|undefined)/g, '').trim();
+              if (baseType.startsWith('own<') || baseType.startsWith('share<') || baseType.startsWith('use<')) {
+                accessor = '->';
+              }
+              // Otherwise it's a value type in an optional, use .
             }
           }
         }
@@ -1920,7 +2025,11 @@ export class CppCodegen {
         else {
           const typeText = this.getTypeTextFromSymbol(symbol);
           if (typeText && (typeText.includes('| null') || typeText.includes('| undefined'))) {
-            accessor = '->';
+            // Check if the base type is a smart pointer
+            const baseType = typeText.replace(/\s*\|\s*(null|undefined)/g, '').trim();
+            if (baseType.startsWith('own<') || baseType.startsWith('share<') || baseType.startsWith('use<')) {
+              accessor = '->';
+            }
           }
         }
       }
@@ -2052,7 +2161,7 @@ export class CppCodegen {
                       // Otherwise wrap literals/values in make_shared
                       if (ts.isStringLiteral(arg) || ts.isIdentifier(arg)) {
                         this.addInclude('<memory>');
-                        return `gs::make_shared<std::string>(${rawArgs[i]})`;
+                        return `gs::make_shared<gs::String>(${rawArgs[i]})`;
                       }
                     }
                   }
