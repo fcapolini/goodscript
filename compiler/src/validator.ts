@@ -145,10 +145,11 @@ export class Validator {
       );
     }
 
-    // No ReadonlyArray or Readonly utility types (GS122) - implementation limitation
+    // No ReadonlyArray, Readonly, ReadonlyMap, ReadonlySet utility types (GS122) - implementation limitation
     if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName)) {
       const typeName = node.typeName.text;
-      if (typeName === 'ReadonlyArray' || typeName === 'Readonly') {
+      if (typeName === 'ReadonlyArray' || typeName === 'Readonly' || 
+          typeName === 'ReadonlyMap' || typeName === 'ReadonlySet') {
         this.addError(
           `The "${typeName}<T>" type is not supported in the current implementation`,
           location,

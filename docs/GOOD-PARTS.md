@@ -798,19 +798,23 @@ interface Config {
 - Readonly properties require constructor initializer lists (incompatible with current codegen)
 - Would require significant refactoring of parameter and constructor generation
 
-#### GS122: No `ReadonlyArray<T>` or `Readonly<T>` Types
+#### GS122: No `ReadonlyArray<T>`, `Readonly<T>`, `ReadonlyMap<K,V>`, or `ReadonlySet<T>` Types
 
-**Restriction:** Utility types `ReadonlyArray<T>` and `Readonly<T>` are not supported.
+**Restriction:** Readonly utility types are not supported.
 
 **Example:**
 ```typescript
 // ❌ Not supported
 function process(items: ReadonlyArray<number>): void { ... }
 type ReadonlyPoint = Readonly<{ x: number; y: number }>;
+function lookup(map: ReadonlyMap<string, number>): void { ... }
+function check(set: ReadonlySet<string>): void { ... }
 
 // ✅ Use regular types
 function process(items: number[]): void { ... }
 type Point = { x: number; y: number };
+function lookup(map: Map<string, number>): void { ... }
+function check(set: Set<string>): void { ... }
 ```
 
 **Why:** These are TypeScript utility types that depend on readonly modifier support.
@@ -883,7 +887,7 @@ These restrictions transform TypeScript from a gradually-typed superset of JavaS
 | GS116 | Primitive constructors | Use `.toString()`, template literals, `parseInt/parseFloat`, or explicit comparisons |
 | GS120 | `as const` assertion | Not supported - implementation limitation |
 | GS121 | `readonly` modifier | Not supported - implementation limitation |
-| GS122 | `ReadonlyArray<T>` or `Readonly<T>` | Not supported - implementation limitation |
+| GS122 | Readonly utility types (`ReadonlyArray`, `Readonly`, `ReadonlyMap`, `ReadonlySet`) | Not supported - implementation limitation |
 | GS201 | Implicit type coercion | Use template literals or explicit conversion |
 
 ---

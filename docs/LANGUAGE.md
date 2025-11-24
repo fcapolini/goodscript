@@ -56,6 +56,8 @@ All heap-allocated values must be **qualified** with one of the following:
 * `readonly` modifier on class/interface properties (GS121)  
 * `ReadonlyArray<T>` type (GS122)
 * `Readonly<T>` utility type (GS122)
+* `ReadonlyMap<K, V>` type (GS122)
+* `ReadonlySet<T>` type (GS122)
 * `as const` assertions (GS120)
 
 **Rationale for current restriction:**

@@ -80,7 +80,7 @@ interface Config {
     });
   });
 
-  describe('GS122: No ReadonlyArray or Readonly types', () => {
+  describe('GS122: No ReadonlyArray, Readonly, ReadonlyMap, or ReadonlySet types', () => {
     it('should reject ReadonlyArray<T>', () => {
       const source = `
 const process = (items: ReadonlyArray<number>): number => {
@@ -102,6 +102,30 @@ type ReadonlyPoint = Readonly<Point>;
       expect(hasError(result.diagnostics, 'GS122')).toBe(true);
       const errors = getErrors(result.diagnostics, 'GS122');
       expect(errors[0].message).toContain('Readonly');
+    });
+
+    it('should reject ReadonlyMap<K, V>', () => {
+      const source = `
+const process = (map: ReadonlyMap<string, number>): number => {
+  return map.size;
+};
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS122')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS122');
+      expect(errors[0].message).toContain('ReadonlyMap');
+    });
+
+    it('should reject ReadonlySet<T>', () => {
+      const source = `
+const process = (set: ReadonlySet<string>): number => {
+  return set.size;
+};
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS122')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS122');
+      expect(errors[0].message).toContain('ReadonlySet');
     });
   });
 
