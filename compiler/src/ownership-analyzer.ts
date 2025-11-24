@@ -196,8 +196,13 @@ export class OwnershipAnalyzer {
       }
       // Check method declarations to visit their parameters
       else if (ts.isMethodDeclaration(node) || ts.isFunctionDeclaration(node) || ts.isArrowFunction(node)) {
-        // Visit parameters explicitly
+        // Check parameters for primitive ownership qualifiers
         for (const param of node.parameters) {
+          if (param.type) {
+            const paramName = param.name.getText(sourceFile);
+            const location = Parser.getLocation(param, sourceFile);
+            this.checkPrimitiveOwnership(param.type, `parameter '${paramName}'`, location, sourceFile);
+          }
           visit(param);
         }
         ts.forEachChild(node, visit);
@@ -302,6 +307,9 @@ export class OwnershipAnalyzer {
 
     const fieldName = node.name.getText(sourceFile);
     const location = Parser.getLocation(node, sourceFile);
+
+    // Check for ownership qualifiers on primitive types (not allowed)
+    this.checkPrimitiveOwnership(node.type, fieldName, location, sourceFile);
 
     // Check for naked class references (class types without ownership wrappers)
     this.checkForNakedClassReference(node.type, fieldName, location, sourceFile, checker);
@@ -842,6 +850,54 @@ export class OwnershipAnalyzer {
       message,
       location: cycleEdge.location,
     });
+  }
+
+  /**
+   * Check for invalid ownership qualifiers on primitive types
+   * Primitives (number, boolean) are stack-allocated and passed by value,
+   * so they must NOT use ownership qualifiers.
+   * 
+   * Note: string is NOT included because gs::String can be used with ownership
+   * qualifiers (e.g., share<string> for string interning/deduplication).
+   * 
+   * Reports GS306 error if a numeric or boolean primitive is wrapped in own<T>, share<T>, or use<T>.
+   */
+  private checkPrimitiveOwnership(
+    typeNode: ts.TypeNode,
+    fieldName: string,
+    location: SourceLocation,
+    sourceFile: ts.SourceFile
+  ): void {
+    // Check if it's a type reference (own<T>, share<T>, use<T>)
+    if (!ts.isTypeReferenceNode(typeNode)) {
+      return;
+    }
+
+    const typeName = typeNode.typeName.getText(sourceFile);
+
+    // Check if it's an ownership qualifier
+    if (typeName === 'own' || typeName === 'share' || typeName === 'use' ||
+        typeName === 'Unique' || typeName === 'Shared' || typeName === 'Weak') {
+      // Check if the inner type is a primitive (only number and boolean, NOT string)
+      if (typeNode.typeArguments && typeNode.typeArguments.length === 1) {
+        const innerType = typeNode.typeArguments[0];
+        
+        if (innerType.kind === ts.SyntaxKind.NumberKeyword ||
+            innerType.kind === ts.SyntaxKind.BooleanKeyword) {
+          
+          const primitiveTypeName = innerType.kind === ts.SyntaxKind.NumberKeyword ? 'number' : 'boolean';
+          
+          this.diagnostics.push({
+            severity: 'error',
+            code: 'GS306',
+            message: `Field '${fieldName}' uses ownership qualifier '${typeName}' on primitive type '${primitiveTypeName}'. ` +
+                     `Primitives are stack-allocated and passed by value, and must not use ownership qualifiers. ` +
+                     `Use plain '${primitiveTypeName}' instead.`,
+            location,
+          });
+        }
+      }
+    }
   }
 
   /**
