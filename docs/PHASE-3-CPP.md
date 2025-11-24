@@ -1,11 +1,11 @@
 # Phase 3: C++ Code Generation
 
-**Status:** ✅ ~95% Complete (834 tests passing)
+**Status:** ✅ ~95% Complete (842 tests passing)
 
 **Test Coverage:** 
 - 66 basic feature tests (100% passing)
 - 28 runtime library tests (100% passing)
-- 80/80 concrete example tests (100% passing) ✅
+- 88/88 concrete example tests (100% passing) ✅
   - ✅ array-methods (8/8)
   - ✅ binary-search-tree (8/8)
   - ✅ cli-args (8/8)
@@ -16,11 +16,20 @@
   - ✅ linked-list (8/8)
   - ✅ lru-cache (8/8)
   - ✅ n-queens (8/8)
+  - ✅ string-pool (8/8) - **Unlocked Nov 24, 2025** via share<string> codegen fixes
   - ⏸️ hash-map (C++ compilation fails - needs investigation)
   - ⏸️ interface-shapes (C++ compilation fails - needs investigation)
-  - ⏸️ string-pool (share<string> codegen issues)
 
 **Recent Updates (Nov 24, 2025):**
+- ✅ **String Pool Example Unlocked** - Complete share<string> support:
+  - Fixed type reference mapping: `string` type ref → `gs::String` (not `string`)  
+  - Fixed Map/Set constructors: Use `gs::Map`/`gs::Set` wrappers (not raw STL)
+  - Fixed Map.size property: Convert to `.size()` method call for Map/Set only
+  - Fixed Map.set() wrapping: Properly map value types in `make_shared<T>()` calls
+  - Fixed share<T> return wrapping: Auto-wrap non-smart-pointer returns, detect `.value()` unwrapping
+  - 8 new tests passing (compilation, execution, output matching)
+- ✅ **842 tests passing** - Up from 834 at session start (+8 tests)
+- ✅ **11/11 active concrete examples passing** - 100% success rate!
 - ✅ **Class Inheritance Support** - Complete implementation:
   - Basic inheritance (extends/implements clauses) → `: public BaseClass`
   - super() call support with base class initialization
@@ -32,8 +41,6 @@
   - JSON.stringify for LiteralObject (object literals)
   - Produces valid JSON format for heterogeneous objects
   - 4 new tests with compilation and JSON.parse validation
-- ✅ **834 tests passing** - Up from 821 at session start (+13 tests)
-- ✅ **10/10 active concrete examples passing** - 100% success rate!
 - ✅ **GoodScript Runtime Library** - TypeScript-compatible wrapper classes for C++ STL
   - `gs::String` - Full TypeScript String API (charAt, indexOf, substring, slice, etc.)
   - `gs::Array<T>` - Full TypeScript Array API (push, pop, map, filter, reduce, etc.)

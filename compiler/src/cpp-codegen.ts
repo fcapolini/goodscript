@@ -1147,6 +1147,17 @@ export class CppCodegen {
     // Built-in types don't need the prefix
     const escapedName = this.escapeIdentifier(typeName);
     
+    // Check if it's a TypeScript primitive type that maps to a GoodScript type
+    if (escapedName === 'string') {
+      return 'gs::String';
+    }
+    if (escapedName === 'number') {
+      return 'double';
+    }
+    if (escapedName === 'boolean') {
+      return 'bool';
+    }
+    
     // Check if it's a built-in C++ type that shouldn't be namespaced
     const builtInTypes = new Set(['void', 'bool', 'int', 'double', 'float', 'char', 
                                    'size_t', 'int8_t', 'int16_t', 'int32_t', 'int64_t',
@@ -1191,6 +1202,25 @@ export class CppCodegen {
               this.addInclude('<memory>');
               expr = `std::make_unique<${className}>(${args})`;
             }
+          }
+        }
+      }
+      
+      // If returning share<T> and expression is not already a smart pointer, wrap with make_shared
+      if (this.currentMethodReturnType?.startsWith('gs::shared_ptr<')) {
+        // Check if the expression is already a smart pointer
+        const isAlreadySmartPtr = this.isDirectSmartPointer(statement.expression);
+        
+        // Also check if the generated expression ends with .value() which unwraps optional<shared_ptr<T>>
+        const isOptionalUnwrap = expr.endsWith('.value()');
+        
+        if (!isAlreadySmartPtr && !isOptionalUnwrap) {
+          // Extract the type from gs::shared_ptr<Type>
+          const match = this.currentMethodReturnType.match(/gs::shared_ptr<(.+)>/);
+          if (match) {
+            const innerType = match[1];
+            this.addInclude('<memory>');
+            expr = `gs::make_shared<${innerType}>(${expr})`;
           }
         }
       }
@@ -1651,6 +1681,42 @@ export class CppCodegen {
    */
   private isDirectSmartPointer(expr: ts.Expression): boolean {
     if (!this.checker) return false;
+    
+    // Check call expressions (e.g., map.get().value() which returns share<T>)
+    if (ts.isCallExpression(expr)) {
+      // For method calls, check the return type
+      if (ts.isPropertyAccessExpression(expr.expression)) {
+        const methodName = expr.expression.name.getText();
+        
+        // Check if it's .value() on an optional<shared_ptr<T>>
+        if (methodName === 'value') {
+          const objectExpr = expr.expression.expression;
+          if (ts.isIdentifier(objectExpr)) {
+            const symbol = this.checker.getSymbolAtLocation(objectExpr);
+            if (symbol?.valueDeclaration && ts.isVariableDeclaration(symbol.valueDeclaration)) {
+              const init = symbol.valueDeclaration.initializer;
+              // Check if initialized from map.get() which returns optional<share<T>>
+              if (init && ts.isCallExpression(init) && ts.isPropertyAccessExpression(init.expression)) {
+                if (init.expression.name.getText() === 'get') {
+                  // Get the map's type to see if it has share<V> values
+                  const mapExpr = init.expression.expression;
+                  const mapSymbol = this.checker.getSymbolAtLocation(
+                    ts.isPropertyAccessExpression(mapExpr) ? mapExpr.name : mapExpr
+                  );
+                  if (mapSymbol) {
+                    const mapTypeText = this.getTypeTextFromSymbol(mapSymbol);
+                    // If Map<K, share<V>>, then .get().value() returns share<V>
+                    if (mapTypeText?.match(/Map<[^,]+,\s*share<[^>]+>>/)) {
+                      return true;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
     
     if (ts.isIdentifier(expr) || ts.isPropertyAccessExpression(expr)) {
       const symbol = this.checker.getSymbolAtLocation(
@@ -2191,8 +2257,23 @@ export class CppCodegen {
               const ownMatch = mapTypeText.match(/Map<[^,]+,\s*own<([^>]+)>>/);
               
               if (shareMatch || ownMatch) {
-                const valueType = shareMatch ? shareMatch[1] : ownMatch![1];
+                const valueTypeText = shareMatch ? shareMatch[1] : ownMatch![1];
                 const isShared = !!shareMatch;
+                
+                // Map the extracted type to C++ (e.g., "string" -> "gs::String")
+                // We need to create a temporary type node to use generateType
+                // For now, handle common cases directly
+                let valueType = valueTypeText;
+                if (valueTypeText === 'string') {
+                  valueType = 'gs::String';
+                } else if (valueTypeText === 'number') {
+                  valueType = 'double';
+                } else if (valueTypeText === 'boolean') {
+                  valueType = 'bool';
+                } else if (!valueTypeText.includes('::')) {
+                  // User-defined type, add gs:: prefix
+                  valueType = `gs::${valueTypeText}`;
+                }
                 
                 // Wrap the second argument (value) if needed
                 if (expr.arguments.length >= 2) {
@@ -2522,6 +2603,26 @@ export class CppCodegen {
       return needsOptionalUnwrap ? `(*${object})->length()` : lengthCall;
     }
     
+    if (propertyName === 'size') {
+      // Check if this is Map.size or Set.size (not a user field called 'size')
+      // Only convert to method call if the object is a Map or Set
+      if (this.checker && expr.expression) {
+        const objSymbol = this.checker.getSymbolAtLocation(
+          ts.isPropertyAccessExpression(expr.expression) ? expr.expression.name : 
+          ts.isIdentifier(expr.expression) ? expr.expression : expr.expression
+        );
+        if (objSymbol) {
+          const typeText = this.getTypeTextFromSymbol(objSymbol);
+          // Check if type is Map<K, V> or Set<T>
+          if (typeText && (typeText.startsWith('Map<') || typeText.startsWith('Set<'))) {
+            const sizeCall = `${object}${accessor}size()`;
+            return needsOptionalUnwrap ? `(*${object})->size()` : sizeCall;
+          }
+        }
+      }
+      // Otherwise it's a regular field, don't add ()
+    }
+    
     // If we need to unwrap optional<shared_ptr<T>>, generate (*obj)->property
     if (needsOptionalUnwrap) {
       return `(*${object})->${property}`;
@@ -2575,14 +2676,20 @@ export class CppCodegen {
         if (expr.typeArguments && expr.typeArguments.length === 2) {
           const keyType = this.generateType(expr.typeArguments[0]);
           const valueType = this.generateType(expr.typeArguments[1]);
-          return `std::unordered_map<${keyType}, ${valueType}>{}`;
+          return `gs::Map<${keyType}, ${valueType}>{}`;
         }
-        // new Map() -> {} (default initialization)
+        // new Map() without type args -> {} (let C++ infer from context)
         return '{}';
       }
       
       // Set constructor
       if (className === 'Set') {
+        // Check if we have type arguments to generate the full type
+        if (expr.typeArguments && expr.typeArguments.length > 0) {
+          const elementType = this.generateType(expr.typeArguments[0]);
+          return `gs::Set<${elementType}>{}`;
+        }
+        // new Set() without type args -> {} (let C++ infer from context)
         return '{}';
       }
       
