@@ -2067,6 +2067,12 @@ export class CppCodegen {
     const propertyName = expr.name.getText();
     const property = this.escapeIdentifier(propertyName);
     
+    // Handle Math.* and Number.* global objects
+    if (object === 'Math' || object === 'Number') {
+      // Math.PI, Math.sin(), Number.isNaN(), etc. -> gs::Math::PI, gs::Math::sin(), gs::Number::isNaN()
+      return `gs::${object}::${property}`;
+    }
+    
     // Check if this is enum member access
     if (this.checker) {
       const symbol = this.checker.getSymbolAtLocation(expr.expression);
