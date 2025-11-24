@@ -5,6 +5,15 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    // Enable parallel test execution with 10 worker threads
+    // Each test file runs in its own worker thread
+    pool: 'threads',
+    poolOptions: {
+      threads: {
+        maxThreads: 10,
+        minThreads: 1,
+      },
+    },
   },
   resolve: {
     alias: {
