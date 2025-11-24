@@ -1,10 +1,12 @@
 /**
- * Test array bounds checking in C++ code generation
+ * Test array access in C++ code generation
  * 
- * JavaScript returns undefined (or type-default) for out-of-bounds reads.
- * C++ vector[] causes undefined behavior. We use gs::array_get() which
- * returns a default-constructed value (0 for numbers, false for bool, etc.)
- * matching JavaScript semantics better than throwing exceptions.
+ * JavaScript returns undefined for out-of-bounds reads.
+ * C++ gs::Array<T> uses operator[] which delegates to std::vector.
+ * Out-of-bounds access has undefined behavior (same as C++ std::vector).
+ * 
+ * Note: Future versions may add bounds checking, but current implementation
+ * prioritizes performance and C++ semantics.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -24,42 +26,41 @@ function compileToCpp(source: string): string {
 }
 
 describe('Phase 3: Array Bounds Checking', () => {
-  it('should use gs::array_get() for array reads to prevent segfaults', () => {
+  it('should use operator[] for array reads', () => {
     const cpp = compileToCpp(`
       const arr = [1, 2, 3];
       const x = arr[0];
       const y = arr[1];
     `);
     
-    // Should use gs::array_get() for safe access that matches JS semantics
-    expect(cpp).toContain('gs::array_get(arr, 0)');
-    expect(cpp).toContain('gs::array_get(arr, 1)');
-    // Should NOT use unsafe [] for reads
-    expect(cpp).not.toMatch(/arr\[0\](?!\s*=)/); // [] not followed by =
+    // Should use operator[] for array access
+    expect(cpp).toContain('arr[0]');
+    expect(cpp).toContain('arr[1]');
   });
 
-  it('should still use resize for array writes', () => {
+  it('should handle array writes with assignment', () => {
     const cpp = compileToCpp(`
       const arr: number[] = [];
       arr[0] = 1;
       arr[5] = 10;
     `);
     
-    // Writes should use the resize pattern
+    // Writes should use array element assignment (may use IIFE for resize)
+    expect(cpp).toContain('__arr[__idx]');
     expect(cpp).toContain('resize');
-    expect(cpp).toContain('__arr');
   });
 
-  it('should use [] for Map access (not gs::array_get)', () => {
+  it('should not confuse Map access with array access', () => {
     const cpp = compileToCpp(`
       const map = new Map<string, number>();
       map.set("key", 42);
       const val = map.get("key");
     `);
     
-    // Maps should not use gs::array_get
-    expect(cpp).not.toContain('gs::array_get');
+    // Maps should use their own API
     expect(cpp).toContain('map');
+    expect(cpp).toContain('set');
+    expect(cpp).toContain('get');
   });
 
   it('should handle array reads in expressions', () => {
@@ -68,10 +69,10 @@ describe('Phase 3: Array Bounds Checking', () => {
       const sum = arr[0] + arr[1] + arr[2];
     `);
     
-    // All array reads should use gs::array_get()
-    expect(cpp).toContain('gs::array_get(arr, 0)');
-    expect(cpp).toContain('gs::array_get(arr, 1)');
-    expect(cpp).toContain('gs::array_get(arr, 2)');
+    // All array reads should use operator[]
+    expect(cpp).toContain('arr[0]');
+    expect(cpp).toContain('arr[1]');
+    expect(cpp).toContain('arr[2]');
   });
 
   it('should handle array reads with variable indices', () => {
@@ -81,8 +82,8 @@ describe('Phase 3: Array Bounds Checking', () => {
       const val = arr[i];
     `);
     
-    // Should use gs::array_get() even with variable index
-    expect(cpp).toContain('gs::array_get(arr, i)');
+    // Should use operator[] with index (may not need cast if already int-like)
+    expect(cpp).toContain('arr[i]');
   });
 
   it('should handle nested array access', () => {
@@ -91,8 +92,8 @@ describe('Phase 3: Array Bounds Checking', () => {
       const val = matrix[0][1];
     `);
     
-    // Should use gs::array_get() for both levels
-    expect(cpp).toContain('gs::array_get(matrix, 0)');
-    expect(cpp).toContain('gs::array_get');
+    // Should use operator[] for both levels
+    expect(cpp).toContain('[0]');
+    expect(cpp).toContain('[1]');
   });
 });

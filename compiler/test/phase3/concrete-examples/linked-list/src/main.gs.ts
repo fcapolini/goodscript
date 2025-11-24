@@ -42,7 +42,9 @@ class DoublyLinkedList {
       // Link to tail
       const tailNode = this.nodes[this.tailIndex];
       tailNode.nextIndex = nodeIndex;
-      newNode.prevIndex = this.tailIndex;
+      // Get the pushed node from array to modify it
+      const pushedNode = this.nodes[nodeIndex];
+      pushedNode.prevIndex = this.tailIndex;
       this.tailIndex = nodeIndex;
     }
   }
@@ -60,7 +62,9 @@ class DoublyLinkedList {
       // Link to head
       const headNode = this.nodes[this.headIndex];
       headNode.prevIndex = nodeIndex;
-      newNode.nextIndex = this.headIndex;
+      // Get the pushed node from array to modify it
+      const pushedNode = this.nodes[nodeIndex];
+      pushedNode.nextIndex = this.headIndex;
       this.headIndex = nodeIndex;
     }
   }

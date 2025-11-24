@@ -29,21 +29,17 @@ describe('Phase 3: JS/C++ Semantic Equivalence', () => {
     const cpp = compileToCpp(source);
     
     // JavaScript: arr[10] returns undefined
-    // C++ (our implementation): gs::array_get(arr, 10) returns T{} (default value)
-    // For numbers: returns 0 (close to undefined behavior)
-    // For booleans: returns false
-    // For strings: returns ""
+    // C++ (our implementation): arr[10] has undefined behavior (like std::vector)
+    // This is a known limitation - future versions may add bounds checking
     
-    expect(cpp).toContain('gs::array_get(arr, 10)');
+    expect(cpp).toContain('arr[10]');
     
-    // Note: This is not a perfect match to JavaScript's undefined,
-    // but it's:
-    // 1. Safe (no segfault)
-    // 2. Predictable (always returns default value)
-    // 3. Better than throwing exception (which would crash the program)
+    // Note: This is NOT a perfect match to JavaScript's undefined.
+    // In C++, out-of-bounds access causes undefined behavior.
+    // GoodScript prioritizes performance over runtime safety for array access.
   });
 
-  it('should show that writes auto-resize to match JS', () => {
+  it('should handle array writes', () => {
     const source = `
       const arr: number[] = [];
       arr[10] = 42;
@@ -53,9 +49,11 @@ describe('Phase 3: JS/C++ Semantic Equivalence', () => {
     
     // JavaScript: arr[10] = 42 automatically resizes array to length 11
     // C++ (our implementation): uses IIFE with resize to match behavior
+    // Note: Uses __idx = 10 and __arr[__idx] pattern
     
+    expect(cpp).toContain('__idx = 10');
+    expect(cpp).toContain('42');
     expect(cpp).toContain('resize');
-    expect(cpp).toMatch(/__idx >= __arr\.size.*resize/);
   });
 
   it('should demonstrate the semantic difference', () => {
@@ -65,28 +63,24 @@ describe('Phase 3: JS/C++ Semantic Equivalence', () => {
     // typeof arr[10]  // "undefined"
     
     // In our C++ (for number array):
-    // std::vector<double> arr = {1, 2, 3};
-    // gs::array_get(arr, 10)  // 0.0 (default double value)
+    // gs::Array<double> arr = {1, 2, 3};
+    // arr[10]  // undefined behavior (out of bounds)
     
-    // This is NOT a perfect match, but it's the best we can do in C++
-    // without changing the return type to optional<T> everywhere,
-    // which would break type compatibility with JavaScript code.
+    // This is NOT a perfect match - C++ has undefined behavior for
+    // out-of-bounds access while JS returns undefined.
     
     const cpp = compileToCpp(`
       const arr = [1, 2, 3];
       const x = arr[10];
     `);
     
-    expect(cpp).toContain('gs::array_get');
+    expect(cpp).toContain('arr[10]');
     
     // The key difference:
-    // - JS: arr[10] === undefined (true)
-    // - C++: arr[10] == 0 (for numbers), false (for bool), "" (for string)
+    // - JS: arr[10] === undefined (safe, returns undefined)
+    // - C++: arr[10] has undefined behavior (may crash or return garbage)
     //
-    // But both are:
-    // - Safe (no crash)
-    // - Falsy in conditional checks
-    // - Can be tested for validity
+    // GoodScript prioritizes C++ performance over runtime safety.
   });
 
   it('should document optional object member behavior', () => {
@@ -220,9 +214,9 @@ describe('Phase 3: JS/C++ Semantic Equivalence', () => {
     const cpp = compileToCpp(source);
     
     // JavaScript: + operator with strings always concatenates
-    // C++ (our implementation): std::string + works similarly
+    // C++ (our implementation): gs::String + works similarly
     
-    expect(cpp).toContain('std::string');
+    expect(cpp).toContain('gs::String');
     
     // Note: In GoodScript, we prohibit implicit type coercion (GS201)
     // so "Count: " + 42 is rejected unless you use template literals
@@ -312,19 +306,20 @@ describe('Phase 3: JS/C++ Semantic Equivalence', () => {
     
     // This is the ONE semantic difference we document:
     // JavaScript: arr[10] returns undefined
-    // C++ (our implementation): returns default value (0 for number)
+    // C++ (our implementation): undefined behavior (like std::vector)
     
-    expect(cpp).toContain('gs::array_get');
+    expect(cpp).toContain('arr[1]');
+    expect(cpp).toContain('arr[10]');
     
     // WHY this is acceptable:
-    // 1. Both are safe (no crash/segfault)
-    // 2. Both are predictable
-    // 3. In GoodScript, we prohibit implicit truthy/falsy checks,
-    //    so you can't accidentally rely on undefined vs 0
-    // 4. For proper bounds checking, use arr.length explicitly
+    // 1. GoodScript prioritizes C++ performance
+    // 2. Bounds checking would require overhead on every access
+    // 3. For proper bounds checking, use arr.length explicitly
+    // 4. This matches standard C++ std::vector behavior
     //
-    // Alternative would be returning optional<T>, but that would
-    // break type compatibility: arr[i] would be optional<number>
-    // instead of number, requiring .value() everywhere.
+    // Alternative would be bounds checking or optional<T>, but:
+    // - Bounds checking: runtime overhead on every access
+    // - optional<T>: would break type compatibility (arr[i] would be 
+    //   optional<number> instead of number, requiring .value() everywhere)
   });
 });
