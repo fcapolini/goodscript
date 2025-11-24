@@ -824,8 +824,16 @@ export class CppCodegen {
       for (const clause of classDecl.heritageClauses) {
         for (const type of clause.types) {
           const baseClassName = this.escapeIdentifier(type.expression.getText());
+          
+          // Handle type arguments for generic base classes
+          let typeArgs = '';
+          if (type.typeArguments && type.typeArguments.length > 0) {
+            const args = type.typeArguments.map(arg => this.generateType(arg)).join(', ');
+            typeArgs = `<${args}>`;
+          }
+          
           // Both extends and implements use public inheritance in C++
-          baseClasses.push(`public ${baseClassName}`);
+          baseClasses.push(`public ${baseClassName}${typeArgs}`);
         }
       }
       
@@ -903,12 +911,20 @@ export class CppCodegen {
           if (classDecl && classDecl.heritageClauses) {
             for (const clause of classDecl.heritageClauses) {
               if (clause.token === ts.SyntaxKind.ExtendsKeyword && clause.types.length > 0) {
-                const baseClassName = this.escapeIdentifier(clause.types[0].expression.getText());
+                const baseType = clause.types[0];
+                const baseClassName = this.escapeIdentifier(baseType.expression.getText());
+                
+                // Handle type arguments for generic base classes
+                let typeArgs = '';
+                if (baseType.typeArguments && baseType.typeArguments.length > 0) {
+                  const args = baseType.typeArguments.map(arg => this.generateType(arg)).join(', ');
+                  typeArgs = `<${args}>`;
+                }
                 
                 // Generate arguments for base constructor
                 const args = callExpr.arguments.map(arg => this.generateExpression(arg)).join(', ');
                 
-                baseInitializer = ` : ${baseClassName}(${args})`;
+                baseInitializer = ` : ${baseClassName}${typeArgs}(${args})`;
                 skipFirstStatement = true;
                 break;
               }
