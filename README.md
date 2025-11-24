@@ -26,8 +26,16 @@ GoodScript enforces **"The Good Parts"** of TypeScript by removing JavaScript's 
 * No inconsistent function return types — all return statements must return compatible types
 * No mixed-type nullish coalescing — both sides of `??` must have compatible types
 * No `any` type — all types must be explicit
-* No dynamic features: `eval`, `with`, `delete`, `arguments`
+* No dynamic features: `eval`, `with`, `delete`, `arguments`, `new Function()`
 * No `for-in` loops (use `for-of` or explicit iteration)
+* No prototype manipulation or dynamic property access
+* No unary plus operator for type coercion
+* No `void` operator
+* No comma operator
+* No labeled statements
+* No generators (`function*`)
+* No `this` in standalone functions (only in class methods)
+* No arrow functions with implicit `this` binding from outer scope
 
 **Important differences from JavaScript:**
 
@@ -42,6 +50,15 @@ GoodScript enforces **"The Good Parts"** of TypeScript by removing JavaScript's 
   const map = new Map<number, number>();
   map.set(1000000, 42);  // Only stores one key-value pair
   ```
+
+**Temporary implementation restrictions (will be added in future releases):**
+
+* **No getters/setters** — Property accessors (`get`/`set`) are not yet implemented in native compilation. Use explicit getter/setter methods instead.
+* **No destructuring** — Array and object destructuring (`const [a, b] = arr`, `const {x, y} = obj`) not yet supported.
+* **No spread operator** — Spread syntax (`...arr`, `...obj`) not yet implemented.
+* **No rest parameters** — Rest parameters in functions (`function f(...args)`) not yet supported.
+* **No optional chaining beyond null checks** — Only `?.` for null/undefined checks is supported, not full optional chaining.
+* **No template literal expressions** — Template literals work for simple strings but not with embedded expressions beyond variables.
 
 **Why these restrictions?**
 * Enable complete static type inference
@@ -144,26 +161,39 @@ GoodScript uses the **Zig C++ compiler** for native compilation, providing:
 
 * **Zero-config cross-compilation** - Compile for any platform from any platform
 * **No complex toolchain setup** - Single 15MB self-contained binary
-* **Aggressive optimizations** - `-O3`, `-march=native`, `-ffast-math`, `-funroll-loops`
+* **Aggressive optimizations** - `-O2`, `-march=native`, `-ffast-math`, `-funroll-loops`
 * **Multiple targets** - Linux, Windows, macOS, WebAssembly, and more
 
 **Installation:**
 ```bash
+# Zig compiler
 # macOS
 brew install zig
 
 # Linux/Windows
 # See https://ziglang.org/download/
+
+# PCRE2 library (required for RegExp support)
+# macOS
+brew install pcre2
+
+# Ubuntu/Debian
+sudo apt-get install libpcre2-dev
+
+# Fedora/RHEL
+sudo dnf install pcre2-devel
 ```
 
-**Compiler Phases:**
+**Compiler Implementation Phases:**
 * **Phase 1**: Validates TypeScript "Good Parts" restrictions (no `var`, no `==`, etc.)
 * **Phase 2**: Analyzes ownership and enforces DAG (Directed Acyclic Graph) rules
-* **Phase 3**: ✅ Generates C++20 code with smart pointers (100% complete - 107/107 tests passing)
+* **Phase 3**: Generates C++20 code with smart pointers
   * C++ source generation
   * Native binary compilation with Zig
   * Cross-compilation to any platform
-  * Complete runtime library (String, Array, Map, Set, JSON, console)
+  * Complete runtime library (String, Array, Map, Set, RegExp, JSON, console)
+  * Class inheritance and generic base classes
+  * Smart pointer management (custom non-atomic shared_ptr/weak_ptr)
 * **Phase 4**: Standard library, module system, and deployment (📋 planned)
 
 **CLI Examples:**
@@ -227,18 +257,31 @@ async function demo(node: share<Node>) {
 ## 7. Current Status (November 2025)
 
 ### Completed
-- ✅ **Phase 1**: TypeScript "Good Parts" validation (244/244 tests)
-- ✅ **Phase 2**: Ownership analysis and DAG enforcement (425/425 tests)
-- 🚧 **Phase 3**: C++ code generation - Foundation complete (35/35 basic tests)
-  - ✅ Type mappings, ownership qualifiers, classes, control flow
-  - ✅ **Runtime Library**: TypeScript-compatible wrapper classes for C++ STL
-    - `gs::String`, `gs::Array<T>`, `gs::Map<K,V>`, `gs::Set<T>`
-    - `gs::JSON`, `gs::console`
-    - Header-only, zero-overhead, 100% test coverage
-  - Next: Migrate codegen to use runtime wrappers, compilation validation, runtime equivalence
+- ✅ **Phase 1**: TypeScript "Good Parts" validation (244/244 tests passing)
+- ✅ **Phase 2**: Ownership analysis and DAG enforcement (425/425 tests passing)
+- ✅ **Phase 3**: C++ code generation (~98% complete - 885/902 tests passing)
+  - ✅ Complete AST traversal and code emission system
+  - ✅ Type mappings: primitives, arrays, maps, sets, ownership types
+  - ✅ Statement generation: variables, functions, classes, control flow
+  - ✅ Expression generation: operators, calls, literals, property access
+  - ✅ **Class inheritance** with generic base classes and super() calls
+  - ✅ **Smart pointer management**: Custom non-atomic shared_ptr/weak_ptr (~3x faster)
+  - ✅ **Runtime Library**: Complete TypeScript-compatible wrappers
+    - `gs::String` - Full String API (charAt, indexOf, substring, slice, match, replace, split, etc.)
+    - `gs::Array<T>` - Full Array API (push, pop, map, filter, reduce, etc.)
+    - `gs::Map<K,V>` & `gs::Set<T>` - TypeScript Map/Set APIs
+    - `gs::RegExp` - Full JavaScript regex semantics via PCRE2 (lookahead, lookbehind, Unicode, all flags)
+    - `gs::JSON` - JSON.stringify() and JSON.parse()
+    - `gs::console` - console.log(), error(), warn()
+    - Header-only, zero-overhead, composition-based (no STL inheritance)
+  - ✅ **Zig C++ compiler integration** for zero-config cross-compilation
+  - ✅ **Native binary compilation** with aggressive optimizations
+  - ✅ **Cross-compilation support** to Linux, Windows, macOS, WebAssembly
+  - ✅ **11/11 concrete examples** passing (100%): binary-search-tree, fibonacci, linked-list, lru-cache, n-queens, json-parser, string-pool, etc.
+  - 🚧 Remaining work: Optional unwrapping, destructuring, getters/setters, spread operator
 
 ### Planned
-- 📋 **Phase 4**: Standard library, module system, Zig toolchain integration
+- 📋 **Phase 4**: Standard library APIs, module system, package management, deployment tooling
 
 ---
 
