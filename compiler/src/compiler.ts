@@ -461,6 +461,9 @@ export class Compiler {
     }
 
     try {
+      // Locate the runtime directory (contains gs_runtime.hpp and other headers)
+      const runtimeDir = path.join(__dirname, '..', 'runtime');
+      
       // Build compilation command
       let cmd = 'zig c++ -std=c++20';
       
@@ -473,6 +476,9 @@ export class Compiler {
         // Native compilation: use -march=native for optimal performance
         cmd += ' -O3 -march=native -DNDEBUG -ffast-math -funroll-loops';
       }
+      
+      // Add include path for runtime headers
+      cmd += ` -I"${runtimeDir}"`;
       
       cmd += ` "${cppFile}" -o "${outFile}"`;
       
