@@ -24,6 +24,7 @@ GoodScript enforces **"The Good Parts"** of TypeScript by removing JavaScript's 
 * No type coercion or truthy/falsy conversions
 * No mixed-type ternary expressions — both branches must have compatible types
 * No inconsistent function return types — all return statements must return compatible types
+* No mixed-type nullish coalescing — both sides of `??` must have compatible types
 * No `any` type — all types must be explicit
 * No dynamic features: `eval`, `with`, `delete`, `arguments`
 * No `for-in` loops (use `for-of` or explicit iteration)

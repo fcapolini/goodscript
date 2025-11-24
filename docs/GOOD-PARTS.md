@@ -148,7 +148,64 @@ const findValue = (arr: number[], target: number): number | null => {
 
 ---
 
-### 5. No Type Coercion (GS201)
+### 5. Nullish Coalescing Type Consistency (GS119)
+
+**Rule**: Both operands of the nullish coalescing operator (`??`) must have compatible types.
+
+**Rationale**: The `??` operator provides default values for `null`/`undefined`. Unlike JavaScript's type coercion, C++ requires both sides to have compatible types. This prevents mixing primitives (e.g., `number ?? string`) which would require complex type coercion at runtime.
+
+**Examples**:
+
+```typescript
+// ❌ Rejected - mixing number and string
+function getDefault(value: number | null): number | string {
+  return value ?? "default";  // Error: number and string are incompatible
+}
+
+// ✅ Accepted - both sides are number
+function getDefault(value: number | null): number {
+  return value ?? 0;
+}
+
+// ✅ Accepted - both sides are string
+function getName(name: string | null): string {
+  return name ?? "Anonymous";
+}
+
+// ✅ Accepted - with optional chaining
+interface User {
+  name?: string;
+}
+
+function getUserName(user: User | null): string {
+  return user?.name ?? "Anonymous";  // Both sides resolve to string | undefined
+}
+
+// ✅ Accepted - same object type
+class Config {
+  value: number = 0;
+}
+
+function getConfig(cfg: Config | null, fallback: Config): Config {
+  return cfg ?? fallback;
+}
+
+// ✅ Accepted - discriminated unions (different object types in union)
+type Result<T> = { success: true; value: T } | { success: false; error: string };
+
+function getResult(result: Result<number> | null, fallback: Result<number>): Result<number> {
+  return result ?? fallback;
+}
+```
+
+**Implementation notes**: 
+- The validator uses declared types (from type annotations) rather than flow-sensitive narrowed types
+- String, number, and boolean literals are normalized to their base types (`'hello'` → `string`, `42` → `number`, `false` → `boolean`)
+- Discriminated unions with different object types are allowed (same as ternary and function return validation)
+
+---
+
+### 10. No Type Coercion (GS201)
 
 **Restriction:** Cannot mix string and number types in operations.
 
@@ -280,7 +337,7 @@ for (const [key, value] of Object.entries(obj)) {
 
 ---
 
-### 9. No `with` Statement (GS101)
+### 8. No `with` Statement (GS101)
 
 **Restriction:** The `with` statement is prohibited.
 
@@ -479,7 +536,7 @@ const filtered = { a: obj.a, c: obj.c };
 
 ---
 
-### 14. No Comma Operator (GS112)
+### 15. No Comma Operator (GS112)
 
 **Restriction:** The comma operator is forbidden in expressions. Comma in arrays, parameters, declarations is allowed.
 
@@ -607,7 +664,7 @@ const process = (x: number, verbose: boolean): void => {
 
 ---
 
-### 16. No `void` Operator (GS115)
+### 17. No `void` Operator (GS116)
 
 **Restriction:** The `void` operator is forbidden. The `void` type annotation is allowed.
 
@@ -733,6 +790,7 @@ These restrictions transform TypeScript from a gradually-typed superset of JavaS
 | GS107 | `!=` operator | Use `!==` |
 | GS117 | Mixed-type ternary | Both branches must have compatible types |
 | GS118 | Inconsistent return types | All returns must have compatible types |
+| GS119 | Mixed-type nullish coalescing | Both sides of `??` must have compatible types |
 | GS108 | Function declarations/expressions | Use arrow functions or class methods |
 | GS109 | `any` type | Use explicit types, generics, or `unknown` |
 | GS110 | Implicit truthy/falsy checks | Use explicit comparisons |

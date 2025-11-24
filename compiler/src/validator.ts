@@ -51,6 +51,9 @@ export class Validator {
     // Check ternary expression type consistency
     this.checkTernaryTypes(node, sourceFile, checker);
 
+    // Check nullish coalescing type consistency
+    this.checkNullishCoalescingTypes(node, sourceFile, checker);
+
     // Check function return type consistency
     this.checkFunctionReturnTypes(node, sourceFile, checker);
 
@@ -493,8 +496,29 @@ export class Validator {
       if (nonNullTypes.length === 1) {
         type = nonNullTypes[0];
       } else if (nonNullTypes.length > 1) {
-        // Multiple non-null types - return union representation
-        return nonNullTypes.map(t => checker.typeToString(t)).join(' | ');
+        // Multiple non-null types
+        // Check if all are boolean literals (true | false)
+        const allBooleanLiterals = nonNullTypes.every(t => t.flags & ts.TypeFlags.BooleanLiteral);
+        if (allBooleanLiterals) {
+          return 'boolean';
+        }
+        
+        // Normalize each type in the union
+        const normalizedTypes = nonNullTypes.map(t => {
+          if (t.flags & ts.TypeFlags.StringLiteral) return 'string';
+          if (t.flags & ts.TypeFlags.NumberLiteral) return 'number';
+          if (t.flags & ts.TypeFlags.BooleanLiteral) return 'boolean';
+          return checker.typeToString(t);
+        });
+        
+        // If all normalized to the same type, return that type
+        const uniqueTypes = Array.from(new Set(normalizedTypes));
+        if (uniqueTypes.length === 1) {
+          return uniqueTypes[0];
+        }
+        
+        // Otherwise return the union representation (for discriminated unions)
+        return uniqueTypes.join(' | ');
       }
     }
 
@@ -508,7 +532,59 @@ export class Validator {
       return 'number';
     }
 
+    // Handle boolean literals as 'boolean' type
+    if (type.flags & ts.TypeFlags.BooleanLiteral) {
+      return 'boolean';
+    }
+
     return checker.typeToString(type);
+  }
+
+  /**
+   * Check nullish coalescing operator type consistency
+   * Both sides of ?? must have compatible types
+   */
+  private checkNullishCoalescingTypes(node: ts.Node, sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
+    if (!ts.isBinaryExpression(node)) {
+      return;
+    }
+
+    if (node.operatorToken.kind !== ts.SyntaxKind.QuestionQuestionToken) {
+      return;
+    }
+
+    const location = Parser.getLocation(node, sourceFile);
+    
+    // For both sides, try to get the declared type if it's a variable
+    const getEffectiveType = (expr: ts.Expression): ts.Type => {
+      if (ts.isIdentifier(expr)) {
+        const symbol = checker.getSymbolAtLocation(expr);
+        if (symbol && symbol.valueDeclaration && ts.isVariableDeclaration(symbol.valueDeclaration)) {
+          if (symbol.valueDeclaration.type) {
+            // Get type from the annotation, not the initialization
+            return checker.getTypeFromTypeNode(symbol.valueDeclaration.type);
+          }
+        }
+      }
+      return checker.getTypeAtLocation(expr);
+    };
+    
+    const leftType = getEffectiveType(node.left);
+    const rightType = getEffectiveType(node.right);
+
+    // Get base type names, stripping null/undefined from unions
+    const leftTypeName = this.getBaseTypeName(leftType, checker);
+    const rightTypeName = this.getBaseTypeName(rightType, checker);
+
+    // If types are incompatible (different base types), reject
+    if (leftTypeName !== rightTypeName) {
+      this.addError(
+        `Nullish coalescing operator (??) operands must have compatible types. Got '${leftTypeName}' and '${rightTypeName}'. ` +
+        `Use explicit type conversion or refactor to avoid mixed types.`,
+        location,
+        'GS119'
+      );
+    }
   }
 
   /**
