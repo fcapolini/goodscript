@@ -6,6 +6,9 @@
 
 namespace gs {
 
+// Forward declarations
+template<typename T> class Array;
+
 /**
  * GoodScript String class - TypeScript-compatible string wrapper
  * 
@@ -268,6 +271,13 @@ public:
     
     return String(std::move(result));
   }
+  
+  /**
+   * Splits the string into an array of substrings using a separator
+   * Equivalent to TypeScript: str.split(separator)
+   * Implementation in gs_array_impl.hpp (after Array<T> is defined)
+   */
+  Array<String> split(const String& separator) const;
   
   // Static methods
   

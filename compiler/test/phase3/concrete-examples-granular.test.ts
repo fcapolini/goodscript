@@ -275,7 +275,9 @@ describe("Phase 3: Granular Concrete Examples", () => {
     });
   }
 
-  // Examples with known issues
+  // Examples with known issues (codegen bugs, not runtime library):
+  // - hash-map: Type alias in lambda return type, string-to-number conversion
+  // - string-pool: Complex share<string> handling issues
   const knownIssues = new Set<string>(["hash-map", "string-pool"]);
 
   for (const exampleName of examples) {

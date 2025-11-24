@@ -80,6 +80,19 @@ public:
   }
   
   /**
+   * Resizes the array to contain the specified number of elements
+   * If the new size is larger, new elements are value-initialized
+   * Equivalent to C++: vector.resize(count)
+   */
+  void resize(size_t count) {
+    impl_.resize(count);
+  }
+  
+  void resize(size_t count, const T& value) {
+    impl_.resize(count, value);
+  }
+  
+  /**
    * Removes the last element from the array and returns it
    * Equivalent to TypeScript: arr.pop()
    */
