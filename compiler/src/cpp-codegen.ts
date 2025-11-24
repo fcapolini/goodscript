@@ -71,6 +71,10 @@ export class CppCodegen {
   // Track type parameters in current scope (for generic classes/functions)
   private typeParameters = new Set<string>();
   
+  // Track variables that are LiteralObject (Map<String, Property>)
+  // These need special handling for property access: obj.prop -> obj.get("prop").value().asType()
+  private literalObjectVars = new Set<string>();
+  
   constructor(checker?: ts.TypeChecker) {
     this.checker = checker;
   }
@@ -617,6 +621,11 @@ export class CppCodegen {
       
       if (decl.initializer) {
         let value = this.generateExpression(decl.initializer);
+        
+        // Track if this variable is a LiteralObject (object literal initializer)
+        if (ts.isObjectLiteralExpression(decl.initializer)) {
+          this.literalObjectVars.add(name);
+        }
         
         // Special handling: if variable type is shared_ptr and initializer is new T(), wrap with make_shared
         if (type.startsWith('gs::shared_ptr<') && ts.isNewExpression(decl.initializer) && 
@@ -1779,6 +1788,8 @@ export class CppCodegen {
       return this.generateNewExpression(expr);
     } else if (ts.isArrayLiteralExpression(expr)) {
       return this.generateArrayLiteral(expr);
+    } else if (ts.isObjectLiteralExpression(expr)) {
+      return this.generateObjectLiteral(expr);
     } else if (ts.isPrefixUnaryExpression(expr)) {
       return this.generatePrefixUnaryExpression(expr);
     } else if (ts.isPostfixUnaryExpression(expr)) {
@@ -2324,6 +2335,17 @@ export class CppCodegen {
     const propertyName = expr.name.getText();
     const property = this.escapeIdentifier(propertyName);
     
+    // Check if this is accessing a LiteralObject property
+    if (ts.isIdentifier(expr.expression)) {
+      const varName = this.escapeIdentifier(expr.expression.getText());
+      if (this.literalObjectVars.has(varName)) {
+        // LiteralObject property access: obj.prop -> obj.get("prop").value()
+        // The caller will need to add .asString()/.asNumber()/.asBool() as needed
+        // For now, we return the Property directly - this will need refinement
+        return `${object}.get(gs::String("${propertyName}")).value()`;
+      }
+    }
+    
     // Handle Math.* and Number.* global objects (check both with and without gs:: prefix for robustness)
     if (object === 'gs::Math' || object === 'gs::Number' || object === 'Math' || object === 'Number') {
       // Ensure gs:: prefix
@@ -2645,6 +2667,49 @@ export class CppCodegen {
     
     // Always wrap in gs::Array<T>{...}
     return `gs::Array<${elementType}>{${elements}}`;
+  }
+  
+  /**
+   * Generate object literal expression -> LiteralObject
+   * Maps to gs::LiteralObject (which is Map<String, Property>)
+   */
+  private generateObjectLiteral(expr: ts.ObjectLiteralExpression): string {
+    const properties: string[] = [];
+    
+    for (const prop of expr.properties) {
+      if (ts.isPropertyAssignment(prop)) {
+        // Get property name
+        let key: string;
+        if (ts.isIdentifier(prop.name)) {
+          key = prop.name.getText();
+        } else if (ts.isStringLiteral(prop.name)) {
+          key = prop.name.text;
+        } else if (ts.isNumericLiteral(prop.name)) {
+          key = prop.name.text;
+        } else {
+          // Computed property names are not supported yet
+          continue;
+        }
+        
+        // Generate value expression
+        const value = this.generateExpression(prop.initializer);
+        
+        // Wrap value in Property constructor
+        const propertyValue = `gs::Property(${value})`;
+        
+        // Add to properties array
+        properties.push(`{gs::String("${key}"), ${propertyValue}}`);
+      } else if (ts.isShorthandPropertyAssignment(prop)) {
+        // { x } is shorthand for { x: x }
+        const name = prop.name.getText();
+        const escapedName = this.escapeIdentifier(name);
+        properties.push(`{gs::String("${name}"), gs::Property(${escapedName})}`);
+      }
+      // Skip methods, getters, setters, spread assignments for now
+    }
+    
+    // Return LiteralObject initializer list
+    return `gs::LiteralObject{${properties.join(', ')}}`;
   }
   
   /**
