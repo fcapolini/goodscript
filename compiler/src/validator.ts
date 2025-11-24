@@ -247,6 +247,16 @@ export class Validator {
         'GS127'
       );
     }
+
+    // No getters/setters (GS128) - implementation limitation (temporary)
+    if (ts.isGetAccessor(node) || ts.isSetAccessor(node)) {
+      const kind = ts.isGetAccessor(node) ? 'Getter' : 'Setter';
+      this.addError(
+        `${kind} accessors are not yet supported - use explicit methods like getValue() and setValue() instead`,
+        location,
+        'GS128'
+      );
+    }
     // Also catch Reflect API which is often used with Proxy
     if (ts.isPropertyAccessExpression(node) && 
         ts.isIdentifier(node.expression) &&

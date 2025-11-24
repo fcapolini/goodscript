@@ -847,7 +847,7 @@ export class CppCodegen {
         this.generateMethodDeclaration(member);
       }
     }
-    
+
     this.dedent();
     this.emit('};');
     this.emit('');

@@ -1009,6 +1009,59 @@ class MyArray<T> extends Array<T> {  // ✅ Accepted
 function myArrayHelper<T>(arr: T[]) { ... }  // ✅ Accepted
 ```
 
+### GS128: No Getter/Setter Accessors (Temporary Implementation Limitation)
+
+**Status**: Planned for future implementation
+
+**Rejected patterns**:
+```typescript
+class Person {
+  private _name: string = "";
+  
+  get name(): string {  // ❌ Rejected
+    return this._name;
+  }
+  
+  set name(value: string) {  // ❌ Rejected
+    this._name = value;
+  }
+}
+```
+
+**Why restricted**:
+- Property access syntax (`obj.name = value`) needs special codegen to detect getters/setters
+- Requires type information at property access sites to distinguish fields from accessors
+- Adds complexity to the code generator for a feature that has explicit alternatives
+- Will be supported in a future release once property access transformation is implemented
+
+**Current workaround**:
+```typescript
+class Person {  // ✅ Accepted
+  private _name: string = "";
+  
+  getName(): string {
+    return this._name;
+  }
+  
+  setName(value: string): void {
+    this._name = value;
+  }
+}
+
+const p = new Person();
+p.setName("Alice");
+console.log(p.getName());
+```
+
+**Future support**:
+- Getters will map to `const` methods in C++: `string name() const`
+- Setters will map to non-const methods: `void name(const string& value)`
+- Property access will be transformed to method calls automatically
+- Read-only properties (getter without setter) provide encapsulation
+- Write-only properties (setter without getter) allow validation
+
+---
+
 ### GS127: No Proxy or Reflect API (Implementation Limitation)
 
 **Error:** `Proxy is not supported - lacks C++ equivalent for runtime interception`  

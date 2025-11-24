@@ -316,6 +316,91 @@ const proto = obj.__proto__;
     });
   });
 
+  describe('GS128: No getters/setters (temporary)', () => {
+    it('should reject getter accessor', () => {
+      const source = `
+class Person {
+  private _name: string = "";
+  
+  get name(): string {
+    return this._name;
+  }
+}
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS128')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS128');
+      expect(errors[0].message).toContain('Getter accessors are not yet supported');
+    });
+
+    it('should reject setter accessor', () => {
+      const source = `
+class Person {
+  private _age: number = 0;
+  
+  set age(value: number) {
+    this._age = value;
+  }
+}
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS128')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS128');
+      expect(errors[0].message).toContain('Setter accessors are not yet supported');
+    });
+
+    it('should reject getter/setter pair', () => {
+      const source = `
+class Counter {
+  private _count: number = 0;
+  
+  get count(): number {
+    return this._count;
+  }
+  
+  set count(value: number) {
+    this._count = value;
+  }
+}
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS128')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS128');
+      expect(errors.length).toBeGreaterThanOrEqual(2); // Both getter and setter flagged
+    });
+
+    it('should suggest using explicit methods', () => {
+      const source = `
+class Temperature {
+  get celsius(): number { return 0; }
+}
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS128')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS128');
+      expect(errors[0].message).toContain('getValue()');
+      expect(errors[0].message).toContain('setValue()');
+    });
+
+    it('should accept explicit getter/setter methods', () => {
+      const source = `
+class Person {
+  private _name: string = "";
+  
+  getName(): string {
+    return this._name;
+  }
+  
+  setName(value: string): void {
+    this._name = value;
+  }
+}
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS128')).toBe(false);
+    });
+  });
+
   describe('GS127: No Proxy', () => {
     it('should reject Proxy constructor', () => {
       const source = `
@@ -384,6 +469,7 @@ arr.push(4);
     expect(hasError(result.diagnostics, 'GS125')).toBe(false);
     expect(hasError(result.diagnostics, 'GS126')).toBe(false);
     expect(hasError(result.diagnostics, 'GS127')).toBe(false);
+    expect(hasError(result.diagnostics, 'GS128')).toBe(false);
   });
 });
 
