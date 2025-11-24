@@ -89,8 +89,13 @@ function double(values: number[]): void {
 
 **Type Safety:**
 * Regular arrays can be passed to `readonly` parameters (covariant)
-* Readonly arrays (e.g., `as const`) cannot be passed to mutable parameters
 * TypeScript enforces this at compile time, preventing memory safety issues
+
+**Restrictions:**
+* The `as const` assertion is **not allowed** in the current implementation (GS117)
+* This is a temporary limitation due to code generation complexity, not a language design decision
+* Use explicit `readonly` type annotations instead: `const arr: readonly number[] = [1, 2, 3]`
+* Future versions may support `as const` once the code generator is more mature
 
 ---
 

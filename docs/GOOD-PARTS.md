@@ -741,6 +741,47 @@ const bool2 = array.length > 0;           // Explicit comparison
 
 ---
 
+### 18. No `as const` Assertions (GS117)
+
+**Restriction:** The `as const` assertion is not allowed in the current implementation of GoodScript.
+
+**Note:** Unlike other restrictions in this document, this is **not** about eliminating a "bad part" of TypeScript. The `as const` feature is useful and well-designed. This restriction exists purely due to implementation complexity in the current C++ code generator.
+
+**Implementation challenges:**
+- Creates deeply readonly types that require complex code generation
+- TypeScript infers literal types and makes all properties/elements readonly recursively
+- Would require sophisticated const-correctness tracking throughout the codebase
+- The complexity doesn't justify the benefit for the current phase of the project
+
+**Example:**
+```typescript
+// ❌ Not allowed
+const colors = ['red', 'green', 'blue'] as const;
+const config = { x: 10, y: 20 } as const;
+
+// ✅ Correct alternatives
+const colors: readonly string[] = ['red', 'green', 'blue'];
+const config: { readonly x: number; readonly y: number } = { x: 10, y: 20 };
+
+// For function parameters needing immutability
+function sum(values: readonly number[]): number {
+  let total = 0;
+  for (const v of values) total += v;
+  return total;
+}
+```
+
+**Why this matters:**
+- `as const` makes `['a', 'b']` have type `readonly ['a', 'b']` (tuple with literal types)
+- Without it, the type is `string[]` which is simpler to handle in C++ codegen
+- Readonly function parameters (`readonly T[]`) provide sufficient immutability guarantees
+- Explicit type annotations make the code more maintainable
+
+**Future consideration:**
+This restriction may be lifted in future versions of GoodScript once the code generator is more mature. For now, explicit `readonly` annotations provide the essential immutability guarantees needed for safe systems programming.
+
+---
+
 ## Additional Type System Requirements
 
 GoodScript enforces strict static typing through the restrictions above. Additional best practices include:
@@ -799,6 +840,7 @@ These restrictions transform TypeScript from a gradually-typed superset of JavaS
 | GS113 | Switch fall-through | End each case with `break`, `return`, `throw`, or `continue` |
 | GS115 | `void` operator | Use `undefined` directly |
 | GS116 | Primitive constructors | Use `.toString()`, template literals, `parseInt/parseFloat`, or explicit comparisons |
+| GS117 | `as const` assertion | Use explicit `readonly` type annotations |
 | GS201 | Implicit type coercion | Use template literals or explicit conversion |
 
 ---

@@ -113,6 +113,17 @@ export class Validator {
       }
     }
 
+    // No 'as const' assertions (GS117) - implementation limitation, not a language design restriction
+    if (ts.isAsExpression(node) && ts.isTypeReferenceNode(node.type)) {
+      if (ts.isIdentifier(node.type.typeName) && node.type.typeName.text === 'const') {
+        this.addError(
+          'The "as const" assertion is not supported in the current implementation. Use explicit readonly types instead',
+          location,
+          'GS117'
+        );
+      }
+    }
+
     // No 'arguments' object (in non-arrow functions)
     if (ts.isIdentifier(node) && node.text === 'arguments') {
       const func = this.findContainingFunction(node);
