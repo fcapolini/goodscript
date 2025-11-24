@@ -9,6 +9,8 @@
  * - Multiple implementations
  */
 
+/// <reference path="../../../../../lib/goodscript.d.ts" />
+
 interface Shape {
   area(): number;
   perimeter(): number;
@@ -222,11 +224,11 @@ const testTypeChecking = (): void => {
   console.log(`Circle is Circle: ${isShapeCircle}`);
   
   // Specific type checks
-  if (rect instanceof Rectangle) {
+  if ((rect instanceof Rectangle) === true) {
     console.log(`Rectangle width: ${rect.getWidth()}`);
   }
   
-  if (circle instanceof Circle) {
+  if ((circle instanceof Circle) === true) {
     console.log(`Circle radius: ${circle.getRadius()}`);
   }
 };

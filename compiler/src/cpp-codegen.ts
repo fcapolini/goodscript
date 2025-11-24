@@ -62,6 +62,12 @@ export class CppCodegen {
   // Track Map/Array element types by variable name (for smart pointer wrapping)
   private containerElementTypes = new Map<string, { elementType: string, isShared: boolean }>();
   
+  // Track current class being generated (for empty array type inference)
+  private currentClass?: ts.ClassDeclaration;
+  
+  // Track current assignment target (for empty array type inference)
+  private currentAssignmentTarget?: string;
+  
   constructor(checker?: ts.TypeChecker) {
     this.checker = checker;
   }
@@ -672,6 +678,9 @@ export class CppCodegen {
   private generateClassDeclaration(classDecl: ts.ClassDeclaration): void {
     const name = this.escapeIdentifier(classDecl.name?.getText() || 'AnonymousClass');
     
+    // Track current class for empty array type inference
+    this.currentClass = classDecl;
+    
     this.emit(`class ${name} {`);
     this.emit('public:');
     this.indent();
@@ -707,6 +716,9 @@ export class CppCodegen {
     this.dedent();
     this.emit('};');
     this.emit('');
+    
+    // Clear current class
+    this.currentClass = undefined;
   }
   
   /**
@@ -1564,6 +1576,12 @@ export class CppCodegen {
   private generateBinaryExpression(expr: ts.BinaryExpression): string {
     const op = expr.operatorToken.getText();
     
+    // Track assignment target for empty array type inference (BEFORE generating expressions)
+    let previousAssignmentTarget = this.currentAssignmentTarget;
+    if (op === '=' && ts.isPropertyAccessExpression(expr.left)) {
+      this.currentAssignmentTarget = expr.left.name.getText();
+    }
+    
     // Check if we're comparing against null/undefined with a smart pointer
     // This needs to happen before we call generateExpression on the operands
     let left = this.generateExpressionWithNullContext(expr.left, expr.right);
@@ -1574,6 +1592,7 @@ export class CppCodegen {
       const arrayExpr = this.generateExpression(expr.left.expression);
       const indexExpr = this.generateExpression(expr.left.argumentExpression);
       this.addInclude('<algorithm>');
+      this.currentAssignmentTarget = previousAssignmentTarget;
       // Use a helper that resizes if needed: if (index >= arr.size()) arr.resize(index + 1);
       return `([&]() { auto& __arr = ${arrayExpr}; auto __idx = ${indexExpr}; if (__idx >= __arr.size()) __arr.resize(__idx + 1); return __arr[__idx] = ${right}; }())`;
     }
@@ -1688,8 +1707,10 @@ export class CppCodegen {
     
     // Map === to ==, !== to !=
     if (op === '===') {
+      this.currentAssignmentTarget = previousAssignmentTarget;
       return `${left} == ${right}`;
     } else if (op === '!==') {
+      this.currentAssignmentTarget = previousAssignmentTarget;
       return `${left} != ${right}`;
     }
     
@@ -1700,14 +1721,21 @@ export class CppCodegen {
       // For the common case of checking if a number is even/odd (x % 2),
       // cast to int since we're checking divisibility
       if (this.isIntegerLiteral(expr.right)) {
+        this.currentAssignmentTarget = previousAssignmentTarget;
         return `static_cast<int>(${left}) % static_cast<int>(${right})`;
       }
       // For general modulo, use std::fmod
       this.addInclude('<cmath>');
+      this.currentAssignmentTarget = previousAssignmentTarget;
       return `std::fmod(${left}, ${right})`;
     }
     
-    return `${left} ${op} ${right}`;
+    const result = `${left} ${op} ${right}`;
+    
+    // Restore assignment target tracking
+    this.currentAssignmentTarget = previousAssignmentTarget;
+    
+    return result;
   }
   
   /**
@@ -2291,9 +2319,41 @@ export class CppCodegen {
   private generateArrayLiteral(expr: ts.ArrayLiteralExpression): string {
     const elements = expr.elements.map(el => this.generateExpression(el)).join(', ');
     
-    // Empty array - return gs::Array<T>{} with type inference
+    // Empty array - try to infer type from parent assignment
     if (expr.elements.length === 0) {
-      return `gs::Array<double>{}`; // Default to double for empty arrays
+      // Walk up parent chain to find the assignment
+      let node: ts.Node = expr;
+      while (node.parent) {
+        node = node.parent;
+        
+        // Found assignment: this.nodes = []
+        if (ts.isBinaryExpression(node) && 
+            node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            ts.isPropertyAccessExpression(node.left)) {
+          const propName = node.left.name.getText();
+          
+          // Look up field in current class
+          if (this.currentClass) {
+            const member = this.currentClass.members.find((m: ts.ClassElement) =>
+              ts.isPropertyDeclaration(m) && m.name.getText() === propName
+            );
+            if (member && ts.isPropertyDeclaration(member) && member.type && ts.isArrayTypeNode(member.type)) {
+              const elementType = this.generateType(member.type.elementType);
+              return `gs::Array<${elementType}>{}`;
+            }
+          }
+          break;
+        }
+        
+        // Found variable declaration: const x: T[] = []
+        if (ts.isVariableDeclaration(node) && node.type && ts.isArrayTypeNode(node.type)) {
+          const elementType = this.generateType(node.type.elementType);
+          return `gs::Array<${elementType}>{}`;
+        }
+      }
+      
+      // Fallback: default to double for empty arrays
+      return `gs::Array<double>{}`;
     }
     
     // Try to infer element type from the first element

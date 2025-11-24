@@ -9,6 +9,8 @@
  * - Array operations
  */
 
+/// <reference path="../../../../../lib/goodscript.d.ts" />
+
 class Stack<T> {
   private items: T[];
 
@@ -184,7 +186,7 @@ const testBalancedParentheses = (): void => {
   for (let i = 0; i < expressions.length; i++) {
     const expr = expressions[i];
     const balanced = isBalanced(expr);
-    console.log(`"${expr}": ${balanced ? 'balanced' : 'not balanced'}`);
+    console.log(`"${expr}": ${balanced === true ? 'balanced' : 'not balanced'}`);
   }
 };
 

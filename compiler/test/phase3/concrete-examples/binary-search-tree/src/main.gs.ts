@@ -10,6 +10,8 @@
  * - Complex class interactions
  */
 
+/// <reference path="../../../../../lib/goodscript.d.ts" />
+
 class TreeNode {
   value: number;
   leftIndex: number;
@@ -237,7 +239,7 @@ const testSearch = (): void => {
   for (let i = 0; i < searchValues.length; i++) {
     const val = searchValues[i];
     const found = tree.search(val);
-    console.log(`Search ${val}: ${found ? 'found' : 'not found'}`);
+    console.log(`Search ${val}: ${found === true ? 'found' : 'not found'}`);
   }
 };
 

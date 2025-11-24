@@ -9,6 +9,8 @@
  * - Resource cleanup with finally
  */
 
+/// <reference path="../../../../../lib/goodscript.d.ts" />
+
 class ValidationError {
   message: string;
   code: number;
@@ -42,7 +44,7 @@ class Calculator {
     try {
       return this.divide(a, b);
     } catch (e) {
-      if (e instanceof ValidationError) {
+      if ((e instanceof ValidationError) === true) {
         console.log(`Error: ${e.message} (code: ${e.code})`);
       }
       return null;
@@ -69,17 +71,17 @@ class ResourceManager {
   }
 
   close(): void {
-    if (this.isOpen) {
+    if (this.isOpen === true) {
       console.log(`Closing resource: ${this.name}`);
       this.isOpen = false;
     }
   }
 
   process(shouldFail: boolean): void {
-    if (!this.isOpen) {
+    if (this.isOpen === false) {
       throw new ValidationError("Resource not open", 2001);
     }
-    if (shouldFail) {
+    if (shouldFail === true) {
       throw new ValidationError("Processing failed", 2002);
     }
     console.log(`Processing: ${this.name}`);
@@ -118,7 +120,7 @@ const testFinallyBlock = (): void => {
     resource.open();
     resource.process(false);
   } catch (e) {
-    if (e instanceof ValidationError) {
+    if ((e instanceof ValidationError) === true) {
       console.log(`Caught error: ${e.message}`);
     }
   } finally {
@@ -130,7 +132,7 @@ const testFinallyBlock = (): void => {
     resource.open();
     resource.process(true);
   } catch (e) {
-    if (e instanceof ValidationError) {
+    if ((e instanceof ValidationError) === true) {
       console.log(`Caught error: ${e.message}`);
     }
   } finally {
@@ -148,13 +150,13 @@ const testNestedTryCatch = (): void => {
       console.log("Inner try block");
       calc.divide(10, 0);
     } catch (e) {
-      if (e instanceof ValidationError) {
+      if ((e instanceof ValidationError) === true) {
         console.log(`Inner catch: ${e.message}`);
         throw e; // Re-throw
       }
     }
   } catch (e) {
-    if (e instanceof ValidationError) {
+    if ((e instanceof ValidationError) === true) {
       console.log(`Outer catch: ${e.message}`);
     }
   }
@@ -179,7 +181,7 @@ const testMultipleErrorTypes = (): void => {
     try {
       processValue(val);
     } catch (e) {
-      if (e instanceof ValidationError) {
+      if ((e instanceof ValidationError) === true) {
         console.log(`Error for value ${val}: ${e.message} (${e.code})`);
       }
     }
