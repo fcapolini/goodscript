@@ -816,7 +816,25 @@ export class CppCodegen {
       this.emit(templateDecl);
     }
     
-    this.emit(`class ${name} {`);
+    // Handle inheritance (extends/implements)
+    let inheritanceClause = '';
+    if (classDecl.heritageClauses && classDecl.heritageClauses.length > 0) {
+      const baseClasses: string[] = [];
+      
+      for (const clause of classDecl.heritageClauses) {
+        for (const type of clause.types) {
+          const baseClassName = this.escapeIdentifier(type.expression.getText());
+          // Both extends and implements use public inheritance in C++
+          baseClasses.push(`public ${baseClassName}`);
+        }
+      }
+      
+      if (baseClasses.length > 0) {
+        inheritanceClause = ' : ' + baseClasses.join(', ');
+      }
+    }
+    
+    this.emit(`class ${name}${inheritanceClause} {`);
     this.emit('public:');
     this.indent();
     
