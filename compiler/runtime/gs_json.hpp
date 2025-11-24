@@ -7,8 +7,13 @@
 #include <memory>
 #include "gs_string.hpp"
 #include "gs_array.hpp"
+#include "gs_property.hpp"
 
 namespace gs {
+
+// Forward declaration for LiteralObject
+template<typename K, typename V> class Map;
+using LiteralObject = Map<gs::String, Property>;
 
 /**
  * GoodScript JSON class - TypeScript-compatible JSON utilities
@@ -159,6 +164,51 @@ public:
       arr.push(String(s));
     }
     return stringify(arr);
+  }
+  
+  // Stringify for Property (type-erased value)
+  static String stringify(const Property& prop) {
+    switch (prop.type()) {
+      case Property::Type::Undefined:
+        return String("undefined");
+      case Property::Type::Null:
+        return String("null");
+      case Property::Type::Bool:
+        return stringify(prop.asBool());
+      case Property::Type::Number:
+        return stringify(prop.asNumber());
+      case Property::Type::String:
+        return stringify(prop.asString());
+      case Property::Type::Object:
+        // For objects, use a generic representation
+        // In a full implementation, would recursively stringify
+        return String("{}");
+    }
+    return String("null");
+  }
+  
+  // Stringify for LiteralObject (object literals)
+  static String stringify(const LiteralObject& obj) {
+    std::ostringstream oss;
+    oss << '{';
+    
+    bool first = true;
+    // Note: This requires Object::keys() which returns the keys
+    // We'll iterate manually through the map
+    for (auto it = obj.begin(); it != obj.end(); ++it) {
+      if (!first) oss << ',';
+      first = false;
+      
+      // Property name (quoted)
+      oss << '"' << it->first.str() << '"';
+      oss << ':';
+      
+      // Property value
+      oss << stringify(it->second).str();
+    }
+    
+    oss << '}';
+    return String(oss.str());
   }
   
   /**
