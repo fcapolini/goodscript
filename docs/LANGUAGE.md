@@ -47,55 +47,26 @@ All heap-allocated values must be **qualified** with one of the following:
 * Weak references can be accessed conditionally using the **optional chaining operator** `?.`, e.g., `w?.value`.
 * This corresponds to upgrading the weak reference to a strong reference in the generated C++ code, only if the object exists.
 
-### 2.4 Immutability and Readonly
+### 2.4 Immutability and Readonly (Not Currently Supported)
 
-GoodScript supports TypeScript's `readonly` modifier for arrays, providing **const-correctness** in both TypeScript and generated C++ code.
+**Current Status:** The `readonly` modifier and related features are **not supported** in the current implementation. This is a temporary limitation, not a language design decision.
 
-**TypeScript Semantics:**
-* `readonly T[]` parameters prevent modification of the array
-* Cannot call mutating methods (`push`, `pop`, `sort`, `splice`, etc.)
-* Cannot assign to array elements (`arr[0] = value`)
-* Can read from arrays and iterate over elements
+**Unsupported features:**
+* `readonly` modifier on array types: `readonly T[]` (GS121)
+* `readonly` modifier on class/interface properties (GS121)  
+* `ReadonlyArray<T>` type (GS122)
+* `Readonly<T>` utility type (GS122)
+* `as const` assertions (GS120)
 
-**C++ Code Generation:**
-* `readonly T[]` → `const gs::Array<T>&` (const reference)
-* `T[]` → `gs::Array<T>&` (mutable reference)
+**Rationale for current restriction:**
+These features require sophisticated const-correctness tracking in C++ code generation:
+- Readonly parameters need const references: `const gs::Array<T>&`
+- Readonly properties need constructor initializer lists (incompatible with current codegen)
+- `as const` creates deeply readonly types with literal inference
+- The implementation complexity doesn't justify the benefit at this phase
 
-**Defense in Depth:**
-* TypeScript's type checker rejects violations at compile time
-* C++ compiler enforces the same restrictions if code bypasses TypeScript
-* `const` prevents calling non-const methods and returns `const_reference` from `operator[]`
-
-**Example:**
-```typescript
-// Readonly parameter - cannot modify
-function sum(numbers: readonly number[]): number {
-  let total = 0;
-  for (const n of numbers) {
-    total += n;  // ✓ Reading is allowed
-  }
-  // numbers.push(1);   // ✗ TypeScript error
-  // numbers[0] = 1;    // ✗ TypeScript error
-  return total;
-}
-
-// Mutable parameter - can modify
-function double(values: number[]): void {
-  for (let i = 0; i < values.length; i++) {
-    values[i] *= 2;  // ✓ Modification allowed
-  }
-}
-```
-
-**Type Safety:**
-* Regular arrays can be passed to `readonly` parameters (covariant)
-* TypeScript enforces this at compile time, preventing memory safety issues
-
-**Restrictions:**
-* The `as const` assertion is **not allowed** in the current implementation (GS117)
-* This is a temporary limitation due to code generation complexity, not a language design decision
-* Use explicit `readonly` type annotations instead: `const arr: readonly number[] = [1, 2, 3]`
-* Future versions may support `as const` once the code generator is more mature
+**Future consideration:**
+These restrictions may be lifted in future versions once the code generator is more mature. The features are well-designed in TypeScript, but require significant codegen infrastructure
 
 ---
 

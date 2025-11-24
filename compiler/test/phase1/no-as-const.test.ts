@@ -1,61 +1,43 @@
 /**
- * Tests for GS117: No 'as const' assertions
- * The 'as const' construct creates deeply readonly types that are complex to implement
+ * Tests for GS120-GS122: No readonly-related features
+ * These are implementation limitations, not language design restrictions
  */
 
 import { describe, it, expect } from 'vitest';
 import { compileSource, hasError, getErrors } from './test-helpers';
 
-describe('GS117: No as const assertions', () => {
-  it('should reject as const on array literals', () => {
-    const source = `
+describe('GS120-GS122: No readonly features (implementation limitations)', () => {
+  describe('GS120: No as const assertions', () => {
+    it('should reject as const on array literals', () => {
+      const source = `
 const arr = [1, 2, 3] as const;
-    `;
-    const result = compileSource(source);
-    expect(hasError(result.diagnostics, 'GS117')).toBe(true);
-    const errors = getErrors(result.diagnostics, 'GS117');
-    expect(errors[0].message).toContain('as const');
-  });
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS120')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS120');
+      expect(errors[0].message).toContain('as const');
+    });
 
-  it('should reject as const on object literals', () => {
-    const source = `
+    it('should reject as const on object literals', () => {
+      const source = `
 const obj = { x: 10, y: 20 } as const;
-    `;
-    const result = compileSource(source);
-    expect(hasError(result.diagnostics, 'GS117')).toBe(true);
-  });
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS120')).toBe(true);
+    });
 
-  it('should reject as const on tuple literals', () => {
-    const source = `
+    it('should reject as const on tuple literals', () => {
+      const source = `
 const tuple = [1, "hello", true] as const;
-    `;
-    const result = compileSource(source);
-    expect(hasError(result.diagnostics, 'GS117')).toBe(true);
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS120')).toBe(true);
+    });
   });
 
-  it('should reject as const on nested structures', () => {
-    const source = `
-const config = {
-  settings: {
-    enabled: true,
-    values: [1, 2, 3]
-  }
-} as const;
-    `;
-    const result = compileSource(source);
-    expect(hasError(result.diagnostics, 'GS117')).toBe(true);
-  });
-
-  it('should accept explicit readonly types for arrays', () => {
-    const source = `
-const arr: readonly number[] = [1, 2, 3];
-    `;
-    const result = compileSource(source);
-    expect(hasError(result.diagnostics, 'GS117')).toBe(false);
-  });
-
-  it('should accept readonly parameters', () => {
-    const source = `
+  describe('GS121: No readonly modifier', () => {
+    it('should reject readonly on array parameters', () => {
+      const source = `
 const sum = (items: readonly number[]): number => {
   let total = 0;
   for (const item of items) {
@@ -63,17 +45,74 @@ const sum = (items: readonly number[]): number => {
   }
   return total;
 };
-    `;
-    const result = compileSource(source);
-    expect(hasError(result.diagnostics, 'GS117')).toBe(false);
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS121')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS121');
+      expect(errors[0].message).toContain('readonly');
+    });
+
+    it('should reject readonly on class properties', () => {
+      const source = `
+class Point {
+  readonly x: number;
+  readonly y: number;
+  
+  constructor(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+  }
+}
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS121')).toBe(true);
+    });
+
+    it('should reject readonly on interface properties', () => {
+      const source = `
+interface Config {
+  readonly host: string;
+  readonly port: number;
+}
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS121')).toBe(true);
+    });
   });
 
-  it('should accept regular arrays without as const', () => {
+  describe('GS122: No ReadonlyArray or Readonly types', () => {
+    it('should reject ReadonlyArray<T>', () => {
+      const source = `
+const process = (items: ReadonlyArray<number>): number => {
+  return items.length;
+};
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS122')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS122');
+      expect(errors[0].message).toContain('ReadonlyArray');
+    });
+
+    it('should reject Readonly<T> utility type', () => {
+      const source = `
+type Point = { x: number; y: number };
+type ReadonlyPoint = Readonly<Point>;
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS122')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS122');
+      expect(errors[0].message).toContain('Readonly');
+    });
+  });
+
+  it('should accept regular arrays', () => {
     const source = `
 const arr = [1, 2, 3];
 arr.push(4);
     `;
     const result = compileSource(source);
-    expect(hasError(result.diagnostics, 'GS117')).toBe(false);
+    expect(hasError(result.diagnostics, 'GS120')).toBe(false);
+    expect(hasError(result.diagnostics, 'GS121')).toBe(false);
+    expect(hasError(result.diagnostics, 'GS122')).toBe(false);
   });
 });

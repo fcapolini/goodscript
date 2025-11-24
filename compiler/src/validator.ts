@@ -113,13 +113,46 @@ export class Validator {
       }
     }
 
-    // No 'as const' assertions (GS117) - implementation limitation, not a language design restriction
+    // No 'as const' assertions (GS120) - implementation limitation, not a language design restriction
     if (ts.isAsExpression(node) && ts.isTypeReferenceNode(node.type)) {
       if (ts.isIdentifier(node.type.typeName) && node.type.typeName.text === 'const') {
         this.addError(
-          'The "as const" assertion is not supported in the current implementation. Use explicit readonly types instead',
+          'The "as const" assertion is not supported in the current implementation',
           location,
-          'GS117'
+          'GS120'
+        );
+      }
+    }
+
+    // No readonly modifier (GS121) - implementation limitation
+    // Check for TypeOperator with readonly (for readonly T[])
+    if (node.kind === ts.SyntaxKind.TypeOperator) {
+      const typeOp = node as ts.TypeOperatorNode;
+      if (typeOp.operator === ts.SyntaxKind.ReadonlyKeyword) {
+        this.addError(
+          'The \"readonly\" modifier is not supported in the current implementation',
+          location,
+          'GS121'
+        );
+      }
+    }
+    // Check for standalone ReadonlyKeyword (for class/interface properties)
+    if (node.kind === ts.SyntaxKind.ReadonlyKeyword) {
+      this.addError(
+        'The \"readonly\" modifier is not supported in the current implementation',
+        location,
+        'GS121'
+      );
+    }
+
+    // No ReadonlyArray or Readonly utility types (GS122) - implementation limitation
+    if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName)) {
+      const typeName = node.typeName.text;
+      if (typeName === 'ReadonlyArray' || typeName === 'Readonly') {
+        this.addError(
+          `The "${typeName}<T>" type is not supported in the current implementation`,
+          location,
+          'GS122'
         );
       }
     }

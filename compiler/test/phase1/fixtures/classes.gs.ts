@@ -25,7 +25,7 @@ class Counter {
 }
 
 class Person {
-  readonly name: string;
+  name: string;
   private age: number;
   
   constructor(name: string, age: number) {

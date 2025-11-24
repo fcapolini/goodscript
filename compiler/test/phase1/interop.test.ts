@@ -132,7 +132,7 @@ const product = multiply(4, 5);
           name: 'config.gs.ts',
           content: `
 export class Config {
-  constructor(public readonly name: string) {}
+  constructor(public name: string) {}
   
   getName = (): string => this.name;
 }
