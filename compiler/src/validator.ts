@@ -470,7 +470,7 @@ export class Validator {
         `Ternary expression branches must have compatible types. Got '${getTrueName}' and '${getFalseName}'. ` +
         `Use explicit type conversion or refactor to avoid mixed types.`,
         location,
-        'GS107'
+        'GS117'
       );
     }
   }
