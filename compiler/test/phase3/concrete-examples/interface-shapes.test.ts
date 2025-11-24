@@ -12,7 +12,7 @@ import {
 
 const EXAMPLE_NAME = "interface-shapes";
 
-// Note: This example currently fails due to structural vs nominal typing differences
+// TODO: C++ compilation fails - needs investigation
 describe.skip(`Concrete Example: ${EXAMPLE_NAME}`, () => {
   let tmpDir: string;
 

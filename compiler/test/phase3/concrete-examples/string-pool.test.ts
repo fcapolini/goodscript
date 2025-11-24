@@ -12,7 +12,7 @@ import {
 
 const EXAMPLE_NAME = "string-pool";
 
-// Note: This example is known to have issues and is currently skipped
+// TODO: share<string> codegen issues - see main.gs.ts for details
 describe.skip(`Concrete Example: ${EXAMPLE_NAME}`, () => {
   let tmpDir: string;
 
