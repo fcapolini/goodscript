@@ -42,9 +42,10 @@
   - Produces valid JSON format for heterogeneous objects
   - 4 new tests with compilation and JSON.parse validation
 - ✅ **GoodScript Runtime Library** - TypeScript-compatible wrapper classes for C++ STL
-  - `gs::String` - Full TypeScript String API (charAt, indexOf, substring, slice, etc.)
+  - `gs::String` - Full TypeScript String API (charAt, indexOf, substring, slice, match, search, replace, split, etc.)
   - `gs::Array<T>` - Full TypeScript Array API (push, pop, map, filter, reduce, etc.)
   - `gs::Map<K,V>` & `gs::Set<T>` - TypeScript Map/Set APIs
+  - `gs::RegExp` - **Full JavaScript regex semantics via PCRE2** (lookahead, lookbehind, Unicode, all flags)
   - `gs::JSON` - JSON.stringify() and JSON.parse()
   - `gs::console` - console.log(), console.error(), console.warn()
   - `gs::Property` - Type-erased wrapper for object literal properties

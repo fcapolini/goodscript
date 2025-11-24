@@ -8,6 +8,7 @@ namespace gs {
 
 // Forward declarations
 template<typename T> class Array;
+class RegExp;
 
 /**
  * GoodScript String class - TypeScript-compatible string wrapper
@@ -278,6 +279,91 @@ public:
    * Implementation in gs_array_impl.hpp (after Array<T> is defined)
    */
   Array<String> split(const String& separator) const;
+  
+  /**
+   * Splits the string using a regular expression
+   * Equivalent to TypeScript: str.split(regex)
+   * Implementation in gs_regexp_impl.hpp (after RegExp is defined)
+   */
+  Array<String> split(const RegExp& regex) const;
+  
+  /**
+   * Splits using a pattern string
+   * Convenience overload that constructs RegExp from String
+   * Implementation in gs_regexp_impl.hpp
+   */
+  Array<String> split(const String& pattern, const String& flags) const;
+  
+  /**
+   * Matches a string against a regular expression
+   * Equivalent to TypeScript: str.match(regex)
+   * Returns array of matches (global) or match with groups (non-global)
+   * Implementation in gs_regexp_impl.hpp
+   */
+  std::optional<Array<String>> match(const RegExp& regex) const;
+  
+  /**
+   * Matches a string against a regular expression pattern
+   * Convenience overload that constructs RegExp from String
+   * Implementation in gs_regexp_impl.hpp
+   */
+  std::optional<Array<String>> match(const String& pattern) const;
+  
+  /**
+   * Searches for a match between a regular expression and this string
+   * Equivalent to TypeScript: str.search(regex)
+   * Returns the index of the first match, or -1 if not found
+   * Implementation in gs_regexp_impl.hpp
+   */
+  int search(const RegExp& regex) const;
+  
+  /**
+   * Searches for a match using a pattern string
+   * Convenience overload that constructs RegExp from String
+   * Implementation in gs_regexp_impl.hpp
+   */
+  int search(const String& pattern) const;
+  
+  /**
+   * Replaces text in a string using a search string
+   * Equivalent to TypeScript: str.replace(searchValue, replaceValue)
+   */
+  String replace(const String& searchValue, const String& replaceValue) const {
+    std::string result = impl_;
+    size_t pos = result.find(searchValue.impl_);
+    if (pos != std::string::npos) {
+      result.replace(pos, searchValue.impl_.length(), replaceValue.impl_);
+    }
+    return String(std::move(result));
+  }
+  
+  /**
+   * Replaces text in a string using a regular expression
+   * Equivalent to TypeScript: str.replace(regex, replaceValue)
+   * Implementation in gs_regexp_impl.hpp
+   */
+  String replace(const RegExp& regex, const String& replaceValue) const;
+  
+  /**
+   * Replaces text using a pattern string
+   * Convenience overload that constructs RegExp from String
+   * Implementation in gs_regexp_impl.hpp
+   */
+  String replace(const String& pattern, const String& replaceValue, const String& flags) const;
+  
+  /**
+   * Replaces all occurrences of a search string
+   * Equivalent to TypeScript: str.replaceAll(searchValue, replaceValue)
+   */
+  String replaceAll(const String& searchValue, const String& replaceValue) const {
+    std::string result = impl_;
+    size_t pos = 0;
+    while ((pos = result.find(searchValue.impl_, pos)) != std::string::npos) {
+      result.replace(pos, searchValue.impl_.length(), replaceValue.impl_);
+      pos += replaceValue.impl_.length();
+    }
+    return String(std::move(result));
+  }
   
   // Static methods
   

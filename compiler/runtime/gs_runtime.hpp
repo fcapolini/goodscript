@@ -21,6 +21,7 @@
  *   - gs::Math: Math functions (sin, cos, sqrt, PI, etc.)
  *   - gs::Number: Number utilities (isNaN, isFinite, etc.)
  *   - gs::Object: Object utilities (keys, values, entries, assign, is)
+ *   - gs::RegExp: Regular expression support with full JS semantics (PCRE2)
  *   - gs::shared_ptr<T>: Non-atomic shared pointer for single-threaded use
  *   - gs::weak_ptr<T>: Non-atomic weak pointer for single-threaded use
  */
@@ -35,7 +36,9 @@
 #include "gs_object.hpp"
 #include "gs_number.hpp"
 #include "gs_tuple.hpp"
+#include "gs_regexp.hpp"
 #include "gs_array_impl.hpp"
+#include "gs_regexp_impl.hpp"
 
 // Memory management utilities
 #include <memory>

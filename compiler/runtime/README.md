@@ -70,6 +70,37 @@ Instead, we use **composition** - wrapping STL types internally and exposing a T
 - **`gs_number.hpp`**: `gs::Number` - Number utilities
   - `Number::isNaN()`, `Number::isFinite()`, `Number::parseInt()`, `Number::parseFloat()`
 
+- **`gs_regexp.hpp`**: `gs::RegExp` - Regular expression support with full JavaScript semantics
+  - **Uses PCRE2** library for complete JS regex compatibility
+  - **Supported features**:
+    - All standard flags: `g` (global), `i` (ignoreCase), `m` (multiline), `s` (dotAll), `u` (unicode), `y` (sticky)
+    - Lookahead and lookbehind assertions (positive and negative)
+    - Named capture groups
+    - Unicode property escapes
+    - All standard JavaScript regex features
+  - **Methods**:
+    - `test(str)` - tests if pattern matches
+    - `exec(str)` - returns match with capture groups
+    - `search(str)` - returns index of first match
+  - **Properties**: `source`, `global`, `ignoreCase`, `multiline`, `dotAll`, `unicode`, `sticky`, `flags`, `lastIndex`
+  - **String methods** (in `gs_string.hpp`):
+    - `str.match(regex)` - returns matches (all matches if global, or match with groups)
+    - `str.search(regex)` - returns index of first match
+    - `str.replace(regex, replacement)` - replaces matches (first or all if global)
+    - `str.split(regex)` - splits string by regex pattern
+  - **Dependencies**: Requires PCRE2 library (`-lpcre2-8` linker flag)
+  - **Example**:
+    ```cpp
+    RegExp email(R"((\w+)@(\w+)\.(\w+))");
+    auto match = email.exec("user@example.com");
+    // match.value() = ["user@example.com", "user", "example", "com"]
+    
+    String text = "The numbers are 42, 123, and 7";
+    RegExp numbers(R"(\d+)", "g");
+    auto allNumbers = text.match(numbers);
+    // allNumbers.value() = ["42", "123", "7"]
+    ```
+
 - **`gs_object.hpp`**: `gs::Object` - Object utilities and LiteralObject type
   - **LiteralObject type**: `Map<String, Property>` for heterogeneous object literals
     - Supports object literals with mixed property types: `{ a: 1, b: "hello", c: true }`
@@ -96,7 +127,11 @@ Instead, we use **composition** - wrapping STL types internally and exposing a T
 ### Implementation Details
 
 - **`gs_array_impl.hpp`**: Template implementations that require cross-type dependencies
-  - Currently contains `Array::join()` which depends on `String`
+  - Currently contains `String::split()` which depends on `Array`
+
+- **`gs_regexp_impl.hpp`**: RegExp-related implementations that require cross-type dependencies
+  - Contains `String` methods that use `RegExp`: `match()`, `search()`, `replace()`, `split()`
+  - Must be included after both `gs_string.hpp` and `gs_regexp.hpp`
 
 ### Main Header
 
@@ -232,10 +267,57 @@ std::string_view sv = str;  // Implicit conversion to string_view
 
 1. **Custom `gs::shared_ptr<T>`**: Non-atomic reference counting for better performance
 2. **Full JSON support**: Integrate nlohmann/json or simdjson
-3. **Math library**: `gs::Math` with common functions (`sin`, `cos`, `sqrt`, `random`, etc.)
+3. **Math library**: Additional math functions and better precision
 4. **Async/await**: C++20 coroutine support for `Promise<T>`
-5. **RegExp**: Regular expression support
-6. **Date**: Date/time utilities
+5. **Date**: Date/time utilities
+
+## Building and Dependencies
+
+### PCRE2 Library
+
+The regex functionality requires PCRE2 (version 10.x or later):
+
+**macOS (Homebrew):**
+```bash
+brew install pcre2
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get install libpcre2-dev
+```
+
+**Fedora/RHEL:**
+```bash
+sudo dnf install pcre2-devel
+```
+
+**Windows (vcpkg):**
+```bash
+vcpkg install pcre2
+```
+
+### Compilation
+
+When compiling code that uses the GoodScript runtime with regex support:
+
+```bash
+# With g++
+g++ -std=c++20 -o program main.cpp -lpcre2-8
+
+# With clang++
+clang++ -std=c++20 -o program main.cpp -lpcre2-8
+
+# If PCRE2 is installed in a non-standard location
+g++ -std=c++20 -I/path/to/pcre2/include -L/path/to/pcre2/lib -o program main.cpp -lpcre2-8
+```
+
+### CMake Integration
+
+```cmake
+find_package(PCRE2 REQUIRED)
+target_link_libraries(your_target PRIVATE pcre2-8)
+```
 
 ## Testing
 
