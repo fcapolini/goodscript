@@ -638,6 +638,11 @@ export class CppCodegen {
       const name = this.escapeIdentifier(p.name.getText());
       const type = p.type ? this.generateType(p.type) : 'auto';
       
+      // Arrays are passed as mutable references (can be modified)
+      if (type.startsWith('gs::Array<')) {
+        return `${type}& ${name}`;
+      }
+      
       // Pass non-trivial types by const reference for efficiency
       // Primitives (int, double, bool) are passed by value
       const passByConstRef = this.shouldPassByConstReference(type);
@@ -668,7 +673,13 @@ export class CppCodegen {
       return false;
     }
     
-    // Everything else (gs::String, gs::Array, gs::Map, user classes) should be const&
+    // Arrays are typically passed to be modified in JavaScript/TypeScript
+    // Pass them as mutable references (not const)
+    if (type.startsWith('gs::Array<')) {
+      return false;
+    }
+    
+    // Everything else (gs::String, gs::Map, user classes) should be const&
     return true;
   }
   
