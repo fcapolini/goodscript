@@ -103,7 +103,52 @@ const message2 = value === null ? 'null' : String(value);  // both strings
 
 ---
 
-### 4. No Type Coercion (GS201)
+### 4. Function Return Type Consistency (GS118)
+
+**Restriction:** All return statements in a function must return compatible types (same base type, ignoring null/undefined).
+
+**Rationale:**
+- Prevents functions from returning incompatible types across different code paths
+- Ensures type safety when transpiling to statically-typed languages like C++
+- Forces explicit return type declarations, making function contracts clear
+- Prevents subtle bugs from implicit type assumptions in different branches
+
+**Example:**
+```typescript
+// ❌ Not allowed - mixing string and number returns
+const getValue = (condition: boolean): string | number => {
+  if (condition) {
+    return "success";  // string
+  } else {
+    return 42;         // number
+  }
+};
+
+// ✅ Correct - consistent return types
+const getValue = (condition: boolean): string => {
+  if (condition) {
+    return "success";
+  } else {
+    return "42";  // converted to string
+  }
+};
+
+// ✅ Correct - nullable return type is allowed
+const findValue = (arr: number[], target: number): number | null => {
+  for (let i = 0; i < arr.length; i++) {
+    if (arr[i] === target) {
+      return arr[i];  // number
+    }
+  }
+  return null;  // null is compatible with number | null
+};
+```
+
+**Why this matters:** TypeScript allows union return types like `string | number`, but C++ requires a single concrete return type. This restriction forces developers to choose a consistent return type, making functions easier to understand and ensuring seamless native compilation.
+
+---
+
+### 5. No Type Coercion (GS201)
 
 **Restriction:** Cannot mix string and number types in operations.
 
@@ -125,7 +170,7 @@ const result2 = "sum: " + (1 + 2).toString();  // "sum: 3"
 
 ---
 
-### 5. No Function Declarations/Expressions (GS108)
+### 6. No Function Declarations/Expressions (GS108)
 
 **Restriction:** Must use arrow functions instead of `function` keyword (except for class methods).
 
@@ -168,7 +213,7 @@ Arrow functions eliminate all this confusion.
 
 ---
 
-### 6. No `arguments` Object (GS103)
+### 7. No `arguments` Object (GS103)
 
 **Restriction:** Cannot use the `arguments` pseudo-array. Must use rest parameters.
 
@@ -197,7 +242,7 @@ const sum = (...numbers: number[]): number => {
 
 ---
 
-### 7. No `for-in` Loops (GS104)
+### 8. No `for-in` Loops (GS104)
 
 **Restriction:** Use `for-of` or explicit iteration instead of `for-in`.
 
@@ -235,7 +280,7 @@ for (const [key, value] of Object.entries(obj)) {
 
 ---
 
-### 8. No `with` Statement (GS101)
+### 9. No `with` Statement (GS101)
 
 **Restriction:** The `with` statement is prohibited.
 
@@ -261,7 +306,7 @@ console.log(obj.property);  // Explicit and clear
 
 ---
 
-### 9. No `eval` or `Function` Constructor (GS102)
+### 10. No `eval` or `Function` Constructor (GS102)
 
 **Restriction:** The `eval` function and `Function` constructor are forbidden.
 
@@ -293,7 +338,7 @@ const result = operations.add(x, y);
 
 ---
 
-### 10. No `any` Type (GS109)
+### 11. No `any` Type (GS109)
 
 **Restriction:** The `any` type is forbidden. Must use explicit types or generics.
 
@@ -335,7 +380,7 @@ if (typeof data === 'object' && data !== null) {
 
 ---
 
-### 11. No Implicit Truthy/Falsy Checks (GS110)
+### 12. No Implicit Truthy/Falsy Checks (GS110)
 
 **Restriction:** All conditions must be explicit boolean expressions. No relying on truthy/falsy coercion.
 
@@ -398,7 +443,7 @@ if (false) { }      // false (only legitimate one)
 
 ---
 
-### 12. No `delete` Operator (GS111)
+### 13. No `delete` Operator (GS111)
 
 **Restriction:** The `delete` operator is prohibited.
 
@@ -434,7 +479,7 @@ const filtered = { a: obj.a, c: obj.c };
 
 ---
 
-### 13. No Comma Operator (GS112)
+### 14. No Comma Operator (GS112)
 
 **Restriction:** The comma operator is forbidden in expressions. Comma in arrays, parameters, declarations is allowed.
 
@@ -474,7 +519,7 @@ let a = 1, b = 2, c = 3;
 
 ---
 
-### 14. No Switch Fall-Through (GS113)
+### 15. No Switch Fall-Through (GS113)
 
 **Restriction:** Switch cases must end with `break`, `return`, `throw`, or `continue`. Empty cases (intentional fall-through to next case) are allowed.
 
@@ -562,7 +607,7 @@ const process = (x: number, verbose: boolean): void => {
 
 ---
 
-### 15. No `void` Operator (GS115)
+### 16. No `void` Operator (GS115)
 
 **Restriction:** The `void` operator is forbidden. The `void` type annotation is allowed.
 
@@ -597,7 +642,7 @@ const getValue = (): undefined => {
 
 ---
 
-### 16. No Primitive Constructors (GS116)
+### 17. No Primitive Constructors (GS116)
 
 **Restriction:** Cannot use `String()`, `Number()`, or `Boolean()` as constructors with `new`.
 
@@ -687,6 +732,7 @@ These restrictions transform TypeScript from a gradually-typed superset of JavaS
 | GS106 | `==` operator | Use `===` |
 | GS107 | `!=` operator | Use `!==` |
 | GS117 | Mixed-type ternary | Both branches must have compatible types |
+| GS118 | Inconsistent return types | All returns must have compatible types |
 | GS108 | Function declarations/expressions | Use arrow functions or class methods |
 | GS109 | `any` type | Use explicit types, generics, or `unknown` |
 | GS110 | Implicit truthy/falsy checks | Use explicit comparisons |

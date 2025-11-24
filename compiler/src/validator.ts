@@ -51,6 +51,9 @@ export class Validator {
     // Check ternary expression type consistency
     this.checkTernaryTypes(node, sourceFile, checker);
 
+    // Check function return type consistency
+    this.checkFunctionReturnTypes(node, sourceFile, checker);
+
     // Recurse into children
     ts.forEachChild(node, (child: ts.Node) => this.visit(child, sourceFile, checker));
   }
@@ -506,6 +509,112 @@ export class Validator {
     }
 
     return checker.typeToString(type);
+  }
+
+  /**
+   * Check function return type consistency
+   * All return statements in a function must return compatible types
+   */
+  private checkFunctionReturnTypes(node: ts.Node, sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
+    // Only check function/method/arrow function declarations
+    if (!ts.isFunctionDeclaration(node) && 
+        !ts.isMethodDeclaration(node) && 
+        !ts.isArrowFunction(node) &&
+        !ts.isFunctionExpression(node)) {
+      return;
+    }
+
+    // Skip if no body (interface/abstract method)
+    if (!node.body) {
+      return;
+    }
+
+    // Collect all return statements
+    const returnStatements: ts.ReturnStatement[] = [];
+    const collectReturns = (n: ts.Node): void => {
+      if (ts.isReturnStatement(n)) {
+        returnStatements.push(n);
+      }
+      // Don't recurse into nested functions
+      if (n !== node && (ts.isFunctionDeclaration(n) || 
+                        ts.isMethodDeclaration(n) || 
+                        ts.isArrowFunction(n) ||
+                        ts.isFunctionExpression(n))) {
+        return;
+      }
+      ts.forEachChild(n, collectReturns);
+    };
+    collectReturns(node.body);
+
+    // Need at least 2 return statements to check consistency
+    if (returnStatements.length < 2) {
+      return;
+    }
+
+    // Filter out returns without expressions (bare 'return' for void functions)
+    const returnsWithValues = returnStatements.filter(r => r.expression !== undefined);
+    
+    if (returnsWithValues.length < 2) {
+      return;
+    }
+
+    // Collect all unique base types from returns
+    const returnTypes = new Map<string, { typeName: string, location: SourceLocation }>();
+    
+    for (const returnStmt of returnsWithValues) {
+      const returnType = checker.getTypeAtLocation(returnStmt.expression!);
+      const returnBaseName = this.getBaseTypeName(returnType, checker);
+      
+      // Skip null/undefined as they're compatible with nullable types
+      if (returnBaseName === 'null' || returnBaseName === 'undefined') {
+        continue;
+      }
+      
+      if (!returnTypes.has(returnBaseName)) {
+        returnTypes.set(returnBaseName, {
+          typeName: returnBaseName,
+          location: Parser.getLocation(returnStmt, sourceFile)
+        });
+      }
+    }
+
+    // If we have more than one distinct non-nullable type, check if they're simple incompatible types
+    // (not part of a declared union type like Result<T>)
+    if (returnTypes.size > 1) {
+      const typeNames = Array.from(returnTypes.values());
+      
+      // Check if these are simple primitive mismatches (string vs number, etc.)
+      // Allow object types which might be part of discriminated unions
+      const hasSimplePrimitiveMismatch = typeNames.some(t1 => {
+        return typeNames.some(t2 => {
+          if (t1.typeName === t2.typeName) return false;
+          
+          // Check if both are simple primitives (string, number, boolean)
+          const isT1Primitive = t1.typeName === 'string' || t1.typeName === 'number' || t1.typeName === 'boolean';
+          const isT2Primitive = t2.typeName === 'string' || t2.typeName === 'number' || t2.typeName === 'boolean';
+          
+          // If both are primitives and different, that's a mismatch
+          return isT1Primitive && isT2Primitive;
+        });
+      });
+
+      if (hasSimplePrimitiveMismatch) {
+        const first = typeNames[0];
+        const second = typeNames.find(t => t.typeName !== first.typeName && 
+          ((first.typeName === 'string' || first.typeName === 'number' || first.typeName === 'boolean') &&
+           (t.typeName === 'string' || t.typeName === 'number' || t.typeName === 'boolean')));
+        
+        if (second) {
+          this.addError(
+            `Function return statements must have consistent types. ` +
+            `Expected '${first.typeName}' but got '${second.typeName}'. ` +
+            `Use a single return type or explicit type conversion.`,
+            second.location,
+            'GS118'
+          );
+        }
+      }
+    }
   }
 
   /**
