@@ -949,6 +949,66 @@ class MyClass {
 }
 ```
 
+### GS126: No Prototype Manipulation (Implementation Limitation)
+
+**Error:** `Prototype manipulation is not supported - C++ uses static class definitions`
+
+**Rejected:**
+```typescript
+// Prototype property access
+function MyClass() {}
+MyClass.prototype.method = function() {};
+
+// Prototype assignment
+class MyClass {}
+MyClass.prototype = { x: 1 };
+
+// Object.prototype access
+const proto = Object.prototype;
+
+// Constructor.prototype access
+class MyClass {
+  method() {
+    const p = this.constructor.prototype;
+  }
+}
+
+// __proto__ access (deprecated even in JavaScript)
+const obj = {};
+const proto = obj.__proto__;
+```
+
+**Why:**
+- JavaScript prototypes are runtime-dynamic inheritance chains
+- C++ uses static class definitions with compile-time inheritance
+- Prototype manipulation requires runtime class modification
+- `__proto__` is deprecated in JavaScript (use `Object.getPrototypeOf`)
+- No equivalent to dynamically adding methods to existing classes in C++
+- Would require runtime reflection and dynamic dispatch beyond vtables
+
+**Alternatives:**
+```typescript
+// Instead of prototype manipulation
+function MyClass() {}
+MyClass.prototype.method = function() {};  // ❌ Rejected
+
+// Use classes with static structure
+class MyClass {  // ✅ Accepted
+  method() { ... }
+}
+
+// Instead of modifying built-in prototypes
+Array.prototype.myMethod = function() {};  // ❌ Rejected
+
+// Use helper functions or extend classes
+class MyArray<T> extends Array<T> {  // ✅ Accepted
+  myMethod() { ... }
+}
+
+// Or use composition
+function myArrayHelper<T>(arr: T[]) { ... }  // ✅ Accepted
+```
+
 **Future consideration:**
 All these restrictions may be lifted in future versions once the code generator supports:
 - Const-correctness tracking for parameters
@@ -1021,6 +1081,7 @@ These restrictions transform TypeScript from a gradually-typed superset of JavaS
 | GS123 | `Object.freeze/seal/preventExtensions` | Not supported - implementation limitation |
 | GS124 | Unsupported Object methods (defineProperty, create, getPrototypeOf, etc.) | Use supported Object methods: keys, values, entries, assign, is |
 | GS125 | Symbol type and Symbol() constructor | Not supported - implementation limitation |
+| GS126 | Prototype manipulation (prototype, __proto__) | Use classes with static structure |
 | GS201 | Implicit type coercion | Use template literals or explicit conversion |
 
 ---

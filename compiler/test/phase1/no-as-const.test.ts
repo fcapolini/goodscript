@@ -265,6 +265,57 @@ const key = Symbol.keyFor(sym);
     });
   });
 
+  describe('GS126: No prototype', () => {
+    it('should reject prototype property access', () => {
+      const source = `
+function MyClass() {}
+MyClass.prototype.method = function() {};
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS126')).toBe(true);
+      const errors = getErrors(result.diagnostics, 'GS126');
+      expect(errors[0].message).toContain('Prototype manipulation is not supported');
+    });
+
+    it('should reject prototype assignment', () => {
+      const source = `
+class MyClass {}
+MyClass.prototype = { x: 1 };
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS126')).toBe(true);
+    });
+
+    it('should reject Object.prototype access', () => {
+      const source = `
+const proto = Object.prototype;
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS126')).toBe(true);
+    });
+
+    it('should reject constructor.prototype access', () => {
+      const source = `
+class MyClass {
+  method() {
+    const p = this.constructor.prototype;
+  }
+}
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS126')).toBe(true);
+    });
+
+    it('should reject __proto__ access', () => {
+      const source = `
+const obj = {};
+const proto = obj.__proto__;
+      `;
+      const result = compileSource(source);
+      expect(hasError(result.diagnostics, 'GS126')).toBe(true);
+    });
+  });
+
   it('should accept regular arrays', () => {
     const source = `
 const arr = [1, 2, 3];
@@ -277,6 +328,7 @@ arr.push(4);
     expect(hasError(result.diagnostics, 'GS123')).toBe(false);
     expect(hasError(result.diagnostics, 'GS124')).toBe(false);
     expect(hasError(result.diagnostics, 'GS125')).toBe(false);
+    expect(hasError(result.diagnostics, 'GS126')).toBe(false);
   });
 });
 

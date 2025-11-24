@@ -215,6 +215,17 @@ export class Validator {
       }
     }
 
+    // No 'prototype' access (GS126) - implementation limitation
+    if (ts.isPropertyAccessExpression(node) && 
+        ts.isIdentifier(node.name) && 
+        (node.name.text === 'prototype' || node.name.text === '__proto__')) {
+      this.addError(
+        'Prototype manipulation is not supported - C++ uses static class definitions',
+        location,
+        'GS126'
+      );
+    }
+
     // No 'arguments' object (in non-arrow functions)
     if (ts.isIdentifier(node) && node.text === 'arguments') {
       const func = this.findContainingFunction(node);
