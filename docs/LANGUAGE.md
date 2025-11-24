@@ -47,6 +47,51 @@ All heap-allocated values must be **qualified** with one of the following:
 * Weak references can be accessed conditionally using the **optional chaining operator** `?.`, e.g., `w?.value`.
 * This corresponds to upgrading the weak reference to a strong reference in the generated C++ code, only if the object exists.
 
+### 2.4 Immutability and Readonly
+
+GoodScript supports TypeScript's `readonly` modifier for arrays, providing **const-correctness** in both TypeScript and generated C++ code.
+
+**TypeScript Semantics:**
+* `readonly T[]` parameters prevent modification of the array
+* Cannot call mutating methods (`push`, `pop`, `sort`, `splice`, etc.)
+* Cannot assign to array elements (`arr[0] = value`)
+* Can read from arrays and iterate over elements
+
+**C++ Code Generation:**
+* `readonly T[]` → `const gs::Array<T>&` (const reference)
+* `T[]` → `gs::Array<T>&` (mutable reference)
+
+**Defense in Depth:**
+* TypeScript's type checker rejects violations at compile time
+* C++ compiler enforces the same restrictions if code bypasses TypeScript
+* `const` prevents calling non-const methods and returns `const_reference` from `operator[]`
+
+**Example:**
+```typescript
+// Readonly parameter - cannot modify
+function sum(numbers: readonly number[]): number {
+  let total = 0;
+  for (const n of numbers) {
+    total += n;  // ✓ Reading is allowed
+  }
+  // numbers.push(1);   // ✗ TypeScript error
+  // numbers[0] = 1;    // ✗ TypeScript error
+  return total;
+}
+
+// Mutable parameter - can modify
+function double(values: number[]): void {
+  for (let i = 0; i < values.length; i++) {
+    values[i] *= 2;  // ✓ Modification allowed
+  }
+}
+```
+
+**Type Safety:**
+* Regular arrays can be passed to `readonly` parameters (covariant)
+* Readonly arrays (e.g., `as const`) cannot be passed to mutable parameters
+* TypeScript enforces this at compile time, preventing memory safety issues
+
 ---
 
 ## 3. Language Features
