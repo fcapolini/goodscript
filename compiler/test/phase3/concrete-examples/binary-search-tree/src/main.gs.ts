@@ -297,10 +297,10 @@ const testEmptyTree = (): void => {
   console.log(`Search in empty tree: ${tree.search(42)}`);
 
   const min = tree.findMin();
-  console.log(`Min in empty tree: ${min === null ? 'null' : min}`);
+  console.log(`Min in empty tree: ${min}`);
 
   const max = tree.findMax();
-  console.log(`Max in empty tree: ${max === null ? 'null' : max}`);
+  console.log(`Max in empty tree: ${max}`);
 };
 
 // Run all tests

@@ -48,6 +48,9 @@ export class Validator {
     // Check for switch fall-through
     this.checkSwitchFallThrough(node, sourceFile);
 
+    // Check ternary expression type consistency
+    this.checkTernaryTypes(node, sourceFile, checker);
+
     // Recurse into children
     ts.forEachChild(node, (child: ts.Node) => this.visit(child, sourceFile, checker));
   }
@@ -441,6 +444,68 @@ export class Validator {
       location,
       code,
     });
+  }
+
+  /**
+   * Check ternary expression type consistency
+   * Both branches must have the same base type (no mixing strings and numbers)
+   */
+  private checkTernaryTypes(node: ts.Node, sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
+    if (!ts.isConditionalExpression(node)) {
+      return;
+    }
+
+    const location = Parser.getLocation(node, sourceFile);
+    
+    const trueType = checker.getTypeAtLocation(node.whenTrue);
+    const falseType = checker.getTypeAtLocation(node.whenFalse);
+
+    // Get base type names, stripping null/undefined from unions
+    const getTrueName = this.getBaseTypeName(trueType, checker);
+    const getFalseName = this.getBaseTypeName(falseType, checker);
+
+    // If types are incompatible (different base types), reject
+    if (getTrueName !== getFalseName) {
+      this.addError(
+        `Ternary expression branches must have compatible types. Got '${getTrueName}' and '${getFalseName}'. ` +
+        `Use explicit type conversion or refactor to avoid mixed types.`,
+        location,
+        'GS107'
+      );
+    }
+  }
+
+  /**
+   * Get the base type name, excluding null/undefined from unions
+   */
+  private getBaseTypeName(type: ts.Type, checker: ts.TypeChecker): string {
+    // For union types, get the non-null/undefined member
+    if (type.isUnion()) {
+      const nonNullTypes = type.types.filter(t => 
+        !(t.flags & ts.TypeFlags.Null) && 
+        !(t.flags & ts.TypeFlags.Undefined) &&
+        !(t.flags & ts.TypeFlags.Void)
+      );
+      
+      if (nonNullTypes.length === 1) {
+        type = nonNullTypes[0];
+      } else if (nonNullTypes.length > 1) {
+        // Multiple non-null types - return union representation
+        return nonNullTypes.map(t => checker.typeToString(t)).join(' | ');
+      }
+    }
+
+    // Handle string literals as 'string' type
+    if (type.flags & ts.TypeFlags.StringLiteral) {
+      return 'string';
+    }
+
+    // Handle number literals as 'number' type
+    if (type.flags & ts.TypeFlags.NumberLiteral) {
+      return 'number';
+    }
+
+    return checker.typeToString(type);
   }
 
   /**

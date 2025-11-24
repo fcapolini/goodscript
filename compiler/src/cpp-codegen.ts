@@ -202,6 +202,14 @@ export class CppCodegen {
     lines.push('  return value;');
     lines.push('}');
     lines.push('');
+    lines.push('// Optional number helper: convert std::optional<double> to string, null becomes "null"');
+    lines.push('inline gs::String optional_to_string(const std::optional<double>& opt) {');
+    lines.push('  if (opt.has_value()) {');
+    lines.push('    return to_string_int(opt.value());');
+    lines.push('  }');
+    lines.push('  return gs::String("null");');
+    lines.push('}');
+    lines.push('');
     lines.push('} // namespace gs');
     lines.push('');
   }
@@ -2684,7 +2692,8 @@ export class CppCodegen {
             // Narrowed to non-null, can use .value()
             convertedExpr = `gs::to_string_int(${exprStr}.value())`;
           } else {
-            convertedExpr = `gs::to_string_int(${exprStr}.value_or(0))`;
+            // Use optional_to_string which converts null to "null" string
+            convertedExpr = `gs::optional_to_string(${exprStr})`;
           }
         } else if (checkTypeStr === 'boolean') {
           // Boolean - convert to string via stream
