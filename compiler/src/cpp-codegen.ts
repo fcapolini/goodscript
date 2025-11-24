@@ -1693,7 +1693,32 @@ export class CppCodegen {
       return `${left} != ${right}`;
     }
     
+    // Handle modulo operator for doubles
+    // In TypeScript, % works on numbers (which are doubles), but in C++ % only works on integers
+    // If we detect numeric literals or doubles, use fmod() or cast to int
+    if (op === '%') {
+      // For the common case of checking if a number is even/odd (x % 2),
+      // cast to int since we're checking divisibility
+      if (this.isIntegerLiteral(expr.right)) {
+        return `static_cast<int>(${left}) % static_cast<int>(${right})`;
+      }
+      // For general modulo, use std::fmod
+      this.addInclude('<cmath>');
+      return `std::fmod(${left}, ${right})`;
+    }
+    
     return `${left} ${op} ${right}`;
+  }
+  
+  /**
+   * Helper to check if an expression is an integer literal
+   */
+  private isIntegerLiteral(expr: ts.Expression): boolean {
+    if (ts.isNumericLiteral(expr)) {
+      const text = expr.getText();
+      return !text.includes('.');
+    }
+    return false;
   }
   
   /**
@@ -1919,39 +1944,57 @@ export class CppCodegen {
       }
       
       if (methodName === 'map') {
-        // array.map(lambda)
-        const lambda = expr.arguments[0];
-        const lambdaStr = this.generateExpression(lambda);
-        this.addInclude('<algorithm>');
-        
-        // Check if object is a simple identifier or a complex expression
-        // If complex (like a method call), we need to store it in a variable first
-        const objectExpr = expr.expression.expression;
-        const isComplexObject = !ts.isIdentifier(objectExpr) || object.includes('(');
-        
-        if (isComplexObject) {
-          // Store the source in a variable to avoid creating it multiple times
-          return `[&]() { auto __src = ${object}; gs::Array<gs::String> __result; std::transform(__src.begin(), __src.end(), std::back_inserter(__result), ${lambdaStr}); return __result; }()`;
-        } else {
-          // Simple case - object is an identifier
-          return `[&]() { gs::Array<gs::String> __result; std::transform(${object}.begin(), ${object}.end(), std::back_inserter(__result), ${lambdaStr}); return __result; }()`;
-        }
+        // array.map(lambda) - use gs::Array<T>::map() method
+        // The runtime library handles type inference automatically
+        return `${object}${accessor}map(${args})`;
+      }
+      
+      if (methodName === 'filter') {
+        // array.filter(lambda) - use gs::Array<T>::filter() method
+        return `${object}${accessor}filter(${args})`;
+      }
+      
+      if (methodName === 'reduce') {
+        // array.reduce(lambda, initialValue) - use gs::Array<T>::reduce() method
+        return `${object}${accessor}reduce(${args})`;
+      }
+      
+      if (methodName === 'find') {
+        // array.find(lambda) - returns optional<T>
+        // In TypeScript this returns T | undefined, map to optional<T>
+        return `${object}${accessor}find(${args})`;
+      }
+      
+      if (methodName === 'findIndex') {
+        // array.findIndex(lambda) - returns int (-1 if not found)
+        return `${object}${accessor}findIndex(${args})`;
+      }
+      
+      if (methodName === 'some') {
+        // array.some(lambda) - returns bool
+        return `${object}${accessor}some(${args})`;
+      }
+      
+      if (methodName === 'every') {
+        // array.every(lambda) - returns bool
+        return `${object}${accessor}every(${args})`;
+      }
+      
+      if (methodName === 'sort') {
+        // array.sort() or array.sort(compareFn)
+        return `${object}${accessor}sort(${args})`;
+      }
+      
+      if (methodName === 'slice') {
+        // array.slice(start, end?)
+        // TypeScript allows slice() with no args to copy array, C++ requires at least start
+        const sliceArgs = expr.arguments.length === 0 ? '0' : args;
+        return `${object}${accessor}slice(${sliceArgs})`;
       }
       
       if (methodName === 'join') {
-        // array.join(separator)
-        const separator = expr.arguments.length > 0 ? this.generateExpression(expr.arguments[0]) : '\" \"';
-        this.addInclude('<algorithm>');
-        
-        // Similar fix for join - store complex objects first
-        const objectExpr = expr.expression.expression;
-        const isComplexObject = !ts.isIdentifier(objectExpr) || object.includes('(');
-        
-        if (isComplexObject) {
-          return `[&]() { auto __src = ${object}; std::string __result; for (size_t __i = 0; __i < __src.size(); __i++) { if (__i > 0) __result += ${separator}; __result += __src[__i]; } return __result; }()`;
-        } else {
-          return `[&]() { std::string __result; for (size_t __i = 0; __i < ${object}.size(); __i++) { if (__i > 0) __result += ${separator}; __result += ${object}[__i]; } return __result; }()`;
-        }
+        // array.join(separator) - use gs::Array<T>::join() method
+        return `${object}${accessor}join(${args})`;
       }
       
       // String methods
@@ -2239,15 +2282,36 @@ export class CppCodegen {
   private generateArrayLiteral(expr: ts.ArrayLiteralExpression): string {
     const elements = expr.elements.map(el => this.generateExpression(el)).join(', ');
     
-    // Check if all elements are strings to determine type
-    const allStrings = expr.elements.every(el => ts.isStringLiteral(el));
-    
-    if (allStrings && expr.elements.length > 0) {
-      // Explicitly create a gs::Array of gs::Strings
-      return `gs::Array<gs::String>{${elements}}`;
+    // Empty array - return gs::Array<T>{} with type inference
+    if (expr.elements.length === 0) {
+      return `gs::Array<double>{}`; // Default to double for empty arrays
     }
     
-    return `{${elements}}`;
+    // Try to infer element type from the first element
+    const firstElement = expr.elements[0];
+    let elementType = 'double'; // default
+    
+    if (ts.isStringLiteral(firstElement)) {
+      elementType = 'gs::String';
+    } else if (ts.isNumericLiteral(firstElement)) {
+      elementType = 'double';
+    } else if (firstElement.kind === ts.SyntaxKind.TrueKeyword || 
+               firstElement.kind === ts.SyntaxKind.FalseKeyword) {
+      elementType = 'bool';
+    } else if (ts.isNewExpression(firstElement) && this.checker) {
+      // For new ClassName() expressions, get the class name
+      // User-defined classes are in the gs namespace
+      if (ts.isIdentifier(firstElement.expression)) {
+        const className = this.escapeIdentifier(firstElement.expression.getText());
+        elementType = `gs::${className}`;
+      }
+    } else if (ts.isObjectLiteralExpression(firstElement)) {
+      // For object literals, try to infer from context or use auto
+      elementType = 'auto';
+    }
+    
+    // Always wrap in gs::Array<T>{...}
+    return `gs::Array<${elementType}>{${elements}}`;
   }
   
   /**

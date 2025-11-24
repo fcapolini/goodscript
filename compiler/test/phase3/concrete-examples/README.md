@@ -61,6 +61,33 @@ The test suite will automatically discover and test your new example.
 
 ## Current Examples
 
+### array-methods
+
+Advanced array operations demonstrating:
+- Array.map() for transformations
+- Array.filter() for filtering elements
+- Array.reduce() for aggregation
+- Array.find() and Array.findIndex()
+- Array.some() and Array.every() predicates
+- Array.sort() with custom comparators
+- Method chaining and composition
+- Higher-order functions with Person class
+
+**Status**: 🆕 New example - not yet tested
+
+### binary-search-tree
+
+Binary search tree implementation demonstrating:
+- Recursive data structures with Pool Pattern
+- share<TreeNode>[] for node storage
+- Index-based tree linking (left/right children)
+- Recursive algorithms (insert, search, min/max, height)
+- Three traversal orders (inorder, preorder, postorder)
+- Null-safe operations on empty tree
+- Complex recursive patterns
+
+**Status**: 🆕 New example - not yet tested
+
 ### cli-args
 
 Command-line argument parser demonstrating:
@@ -72,6 +99,19 @@ Command-line argument parser demonstrating:
 
 **Status**: ✅ Full JavaScript and C++ equivalence
 
+### error-handling
+
+Exception handling demonstrating:
+- Error class and custom error types (ValidationError)
+- try-catch-finally blocks
+- Error propagation and re-throwing
+- Resource cleanup with finally
+- Nested try-catch blocks
+- Multiple error types with error codes
+- instanceof checks for error types
+
+**Status**: 🆕 New example - not yet tested
+
 ### fibonacci
 
 Fibonacci calculator (recursive and iterative) demonstrating:
@@ -82,6 +122,19 @@ Fibonacci calculator (recursive and iterative) demonstrating:
 - Explicit boolean comparisons (no truthy/falsy)
 
 **Status**: ✅ Full JavaScript and C++ equivalence
+
+### generic-stack
+
+Generic/template class demonstrating:
+- Generic class Stack<T> with type parameters
+- Generic methods (push, pop, peek)
+- Type-safe operations for different types
+- Nullable return types (T | null)
+- Generic functions (reverseArray<T>)
+- Balanced parentheses checker using stack
+- Multiple type instantiations (Stack<number>, Stack<string>)
+
+**Status**: 🆕 New example - not yet tested
 
 ### hash-map
 
@@ -96,6 +149,19 @@ Word frequency counter demonstrating:
 - Map.get() returns `std::optional<V>` but arithmetic doesn't unwrap it
 - for-of with Map entries doesn't generate proper `[key, value]` destructuring
 - Tuple return types need proper `std::tuple` or `std::pair` mapping
+
+### interface-shapes
+
+Interfaces and polymorphism demonstrating:
+- Interface definitions (Shape, Drawable, Comparable)
+- Classes implementing multiple interfaces
+- Polymorphism through interface types
+- instanceof type checking
+- Interface-typed arrays and parameters
+- Geometric calculations (area, perimeter)
+- Multiple implementations (Rectangle, Circle, Triangle)
+
+**Status**: 🆕 New example - not yet tested
 
 ### json-parser
 
@@ -158,9 +224,12 @@ String interning/deduplication demonstrating:
 
 ## Test Statistics
 
-- **Total Examples**: 8
+- **Total Examples**: 13
+- **Original Examples**: 8 (cli-args, fibonacci, hash-map, json-parser, linked-list, lru-cache, n-queens, string-pool)
+- **New Examples**: 5 (array-methods, binary-search-tree, error-handling, generic-stack, interface-shapes)
 - **Full Equivalence**: 5 (cli-args, fibonacci, json-parser, lru-cache, n-queens)
 - **JS Only**: 3 (hash-map, linked-list, string-pool - document known C++ codegen bugs)
+- **To Be Tested**: 5 (new examples awaiting first test run)
 
 ## Notes
 
