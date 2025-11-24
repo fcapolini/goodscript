@@ -1227,8 +1227,8 @@ export class CppCodegen {
     // Check if this is an array initialization pattern
     const initPattern = this.detectArrayInitPattern(statement);
     if (initPattern) {
-      // Generate as array.resize(limit, value) or array.assign(limit, value)
-      this.emit(`${initPattern.arrayName}.assign(${initPattern.limit}, ${initPattern.value});`);
+      // Generate as array.resize(limit, value)
+      this.emit(`${initPattern.arrayName}.resize(${initPattern.limit}, ${initPattern.value});`);
       return;
     }
     
@@ -1594,7 +1594,8 @@ export class CppCodegen {
       this.addInclude('<algorithm>');
       this.currentAssignmentTarget = previousAssignmentTarget;
       // Use a helper that resizes if needed: if (index >= arr.size()) arr.resize(index + 1);
-      return `([&]() { auto& __arr = ${arrayExpr}; auto __idx = ${indexExpr}; if (__idx >= __arr.size()) __arr.resize(__idx + 1); return __arr[__idx] = ${right}; }())`;
+      // Cast index to int to handle double indices from arithmetic
+      return `([&]() { auto& __arr = ${arrayExpr}; auto __idx = static_cast<int>(${indexExpr}); if (__idx >= static_cast<int>(__arr.size())) __arr.resize(__idx + 1); return __arr[__idx] = ${right}; }())`;
     }
     
     // For assignment to smart pointer fields, wrap new expressions
@@ -2239,13 +2240,11 @@ export class CppCodegen {
         
         // If args are provided, use them for size
         if (args) {
-          return `std::vector<${elementType}>(${args})`;
+          return `gs::Array<${elementType}>(${args})`;
         }
         
-        // Empty array - NOTE: In JS, empty arrays auto-expand on index assignment
-        // In C++, we need explicit sizing. For now, return empty vector.
-        // The user will need to call resize() or use push_back()
-        return `std::vector<${elementType}>()`;
+        // Empty array - use gs::Array for TypeScript compatibility
+        return `gs::Array<${elementType}>()`;
       }
       
       // For user-defined classes, check if constructor parameters need smart pointer wrapping
