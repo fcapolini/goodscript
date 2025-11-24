@@ -1,5 +1,7 @@
 # Introducing GoodScript: TypeScript with Deterministic Memory Safety
 
+> **🚧 Alpha State:** GoodScript is currently in active development. The compiler is ~98% complete (885/902 tests passing) with core features working, but some advanced features are still being implemented. See [Current Status](#7-current-status-november-2025) for details.
+
 **Audience:** TypeScript developers interested in writing memory-safe systems code
 
 **Purpose:** Highlight GoodScript's dual-mode workflow, tooling support, and memory-safety features.
