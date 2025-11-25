@@ -2417,6 +2417,21 @@ export class CppCodegen {
     
     // For string concatenation with +, check if operands might be optional
     if (op === '+' && this.checker) {
+      // Optimize pattern: string_literal + number.toString()
+      // This is common in loops like: 'key' + i.toString()
+      // Generate: gs::String("key").concat_int(i) instead of ostringstream overhead
+      if (ts.isStringLiteral(expr.left) && ts.isCallExpression(expr.right)) {
+        const methodCall = expr.right;
+        if (ts.isPropertyAccessExpression(methodCall.expression) &&
+            methodCall.expression.name.text === 'toString') {
+          const valueExpr = this.generateExpression(methodCall.expression.expression);
+          const literalValue = expr.left.text;
+          this.currentAssignmentTarget = previousAssignmentTarget;
+          // Use a helper that efficiently concatenates string + number
+          return `gs::String("${literalValue}").concat_number(${valueExpr})`;
+        }
+      }
+      
       // Helper to check if an expression should be wrapped for optional extraction
       const shouldWrapOptional = (operand: ts.Expression): boolean => {
         // Check if it's a call expression that returns optional

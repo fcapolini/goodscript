@@ -46,6 +46,14 @@ public:
   // TypeScript/JavaScript Map API
   
   /**
+   * Reserve space for expected number of elements
+   * Helps avoid rehashing during bulk inserts
+   */
+  void reserve(int capacity) {
+    impl_.reserve(static_cast<size_t>(capacity));
+  }
+  
+  /**
    * Returns the number of key-value pairs in the map
    * Equivalent to TypeScript: map.size
    */

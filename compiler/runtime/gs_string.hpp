@@ -84,6 +84,32 @@ public:
   }
   
   /**
+   * Efficiently concatenate string with a number
+   * Optimized for common pattern: "prefix" + number.toString()
+   * Not part of JavaScript API - C++ optimization only
+   */
+  String concat_number(double value) const {
+    std::string result;
+    result.reserve(impl_.size() + 24); // Current string + space for number
+    result = impl_;
+    // Format double without unnecessary decimals
+    if (std::floor(value) == value && std::abs(value) < 1e15) {
+      result += std::to_string(static_cast<long long>(value));
+    } else {
+      result += std::to_string(value);
+    }
+    return String(std::move(result));
+  }
+  
+  String concat_number(int value) const {
+    std::string result;
+    result.reserve(impl_.size() + 12); // Current string + space for int
+    result = impl_;
+    result += std::to_string(value);
+    return String(std::move(result));
+  }
+  
+  /**
    * Returns the index of the first occurrence of searchString
    * Equivalent to TypeScript: str.indexOf(searchString)
    * Returns -1 if not found
@@ -472,6 +498,29 @@ public:
   friend std::ostream& operator<<(std::ostream& os, const String& str) {
     os << str.impl_;
     return os;
+  }
+  
+  // Optimized concatenation of string literal + integer
+  // This avoids creating an intermediate String object for the number
+  static String concat(const char* prefix, int value) {
+    std::string result;
+    result.reserve(std::strlen(prefix) + 12); // prefix + max int digits
+    result = prefix;
+    result += std::to_string(value);
+    return String(std::move(result));
+  }
+  
+  static String concat(const char* prefix, double value) {
+    std::string result;
+    result.reserve(std::strlen(prefix) + 24); // prefix + max double digits
+    result = prefix;
+    // Format double without unnecessary decimals
+    if (std::floor(value) == value && std::abs(value) < 1e15) {
+      result += std::to_string(static_cast<long long>(value));
+    } else {
+      result += std::to_string(value);
+    }
+    return String(std::move(result));
   }
 };
 

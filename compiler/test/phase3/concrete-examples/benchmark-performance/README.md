@@ -19,15 +19,15 @@ npm test -- test/phase3/concrete-examples/benchmark-performance.test.ts
 
 ## Latest Results (November 2025)
 
-| Benchmark              | Node.js | C++ Native | Speedup |
-|------------------------|---------|------------|---------|
-| Fibonacci(35)          | ~371ms  | ~191ms     | 1.94x   |
-| Array Operations       | ~9ms    | ~5ms       | 1.80x   |
-| Binary Search          | ~48ms   | ~4ms       | 12.00x  |
-| Bubble Sort            | ~7ms    | ~7ms       | 1.00x   |
-| HashMap Operations     | ~11ms   | ~19ms      | 0.58x   |
-| String Manipulation    | ~1ms    | ~1ms       | 1.00x   |
-| **AVERAGE SPEEDUP**    |         |            | **3.05x** |
+| Benchmark             | Node.js | C++ Native | Speedup |
+|-----------------------|---------|------------|---------|  
+| Fibonacci(35)         | ~390ms  | ~185ms     | 2.11x   |
+| Array Operations      | ~9ms    | ~4ms       | 2.25x   |
+| Binary Search         | ~47ms   | ~4ms       | 11.75x  |
+| Bubble Sort           | ~7ms    | ~8ms       | 0.88x   |
+| HashMap Operations    | ~11ms   | ~8ms       | 1.38x   |
+| String Manipulation   | ~1ms    | ~1ms       | 1.00x   |
+| **Average Speedup**   |         |            | **3.23x** |
 
 *Note: Actual times vary based on hardware. The speedup ratio is more consistent.*
 
@@ -58,7 +58,43 @@ npm test -- test/phase3/concrete-examples/benchmark-performance.test.ts
 
 **Implementation:** The compiler detects recursive functions, checks if they're closures (capture outer variables), and hoists non-closures to the `gs::` namespace as regular C++ functions. Closures still use `std::function` since they need capture context.
 
-### Why is String Manipulation now competitive?
+### Why is HashMap Operations now faster than Node.js?
+
+The HashMap benchmark improved from **0.58x (slower!)** to **1.38x (faster)** through a codegen optimization:
+
+**The Problem:** Creating map keys with string concatenation:
+```typescript
+const key = 'key' + i.toString();
+map.set(key, i);
+```
+
+**Unoptimized C++ (slow):**
+```cpp
+auto key = gs::String("key") + ([&]() {
+  std::ostringstream __oss;
+  __oss << i;
+  return gs::String(__oss.str());
+})();
+```
+- Creates lambda wrapper
+- Allocates ostringstream
+- Creates temporary String objects
+- Heavy overhead for simple string + number concatenation
+
+**Optimized C++ (fast):**
+```cpp
+auto key = gs::String("key").concat_number(i);
+```
+- Direct method call
+- Uses fast `std::to_string()`
+- Pre-allocates result string
+- Single allocation, no lambda overhead
+
+**The Optimization:** Codegen detects the pattern `string_literal + number.toString()` and generates efficient C++ code using a specialized `concat_number()` method instead of the generic ostringstream approach.
+
+**Result:** 2.4x improvement in HashMap performance (19ms → 8ms), beating Node.js by 38%.
+
+## Why is String Manipulation now competitive?
 
 **Key Insight:** String concatenation in a loop (`str = str + 'x'`) is O(n²) in C++ because each concatenation creates a new string and copies all previous data. JavaScript engines optimize this pattern, but C++ doesn't.
 
