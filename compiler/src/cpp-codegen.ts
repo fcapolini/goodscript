@@ -2406,6 +2406,16 @@ export class CppCodegen {
   private generateCallExpression(expr: ts.CallExpression): string {
     const args = expr.arguments.map(arg => this.generateExpression(arg)).join(', ');
     
+    // Handle Date.now() specially
+    if (ts.isPropertyAccessExpression(expr.expression)) {
+      const obj = expr.expression.expression.getText();
+      const method = expr.expression.name.getText();
+      if (obj === 'Date' && method === 'now') {
+        this.addInclude('<chrono>');
+        return `std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()`;
+      }
+    }
+    
     // Handle JSON.stringify specially
     if (ts.isPropertyAccessExpression(expr.expression)) {
       const obj = expr.expression.expression.getText();
@@ -2719,6 +2729,22 @@ export class CppCodegen {
         this.addInclude('<sstream>');
         // Wrap in lambda to format with ostringstream
         return `([&]() { std::ostringstream __oss; __oss << std::fixed << std::setprecision(${args}) << ${object}; return gs::String(__oss.str()); })()`;
+      }
+      
+      if (methodName === 'toString') {
+        // For numbers, we need to format them like JavaScript does:
+        // - Integers without decimals (e.g., "35" not "35.000000")
+        // - Doubles with minimal decimal places
+        // Use a helper function that checks if a double is actually an integer
+        this.addInclude('<sstream>');
+        this.addInclude('<cmath>');
+        return `([&]() { ` +
+               `std::ostringstream __oss; ` +
+               `auto __val = static_cast<double>(${object}); ` +
+               `if (std::floor(__val) == __val && std::abs(__val) < 1e15) { ` +
+               `__oss << static_cast<long long>(__val); ` +
+               `} else { __oss << __val; } ` +
+               `return gs::String(__oss.str()); })()`;
       }
       
       return `${object}${accessor}${methodName}(${args})`;
