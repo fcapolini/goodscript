@@ -125,6 +125,8 @@ describe(`Performance Benchmark: ${EXAMPLE_NAME}`, () => {
               times.hashMap = parseInt(match[1]);
             } else if (line.includes('String ops')) {
               times.string = parseInt(match[1]);
+            } else if (line.includes('Matrix multiply')) {
+              times.matrixMultiply = parseInt(match[1]);
             }
           }
         }
@@ -146,6 +148,7 @@ describe(`Performance Benchmark: ${EXAMPLE_NAME}`, () => {
         { key: 'bubbleSort', name: 'Bubble Sort' },
         { key: 'hashMap', name: 'HashMap Operations' },
         { key: 'string', name: 'String Manipulation' },
+        { key: 'matrixMultiply', name: 'Matrix Multiplication' },
       ];
 
       let jsTotal = 0;
