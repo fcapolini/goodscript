@@ -56,6 +56,10 @@ export class CppCodegen {
   // After null check, we can use .value() to unwrap
   private unwrappedOptionals = new Set<string>();
   
+  // Track variables that come from Map.get() or Array operator[] (return T* instead of optional<T>)
+  // These need nullptr comparisons and dereference for value use
+  private pointerVars = new Set<string>();
+  
   // Track current method return type for smart pointer wrapping
   private currentMethodReturnType?: string;
   
@@ -627,6 +631,19 @@ export class CppCodegen {
           this.literalObjectVars.add(name);
         }
         
+        // Track if this variable is from Map.get() (returns pointer, but NOT auto-dereferenced)
+        if (ts.isCallExpression(decl.initializer)) {
+          if (ts.isPropertyAccessExpression(decl.initializer.expression)) {
+            const methodName = decl.initializer.expression.name.getText();
+            if (methodName === 'get') {
+              // This is map.get() which returns V*
+              this.pointerVars.add(name);
+            }
+          }
+        }
+        // Note: We don't track Array element access here because generateElementAccess
+        // auto-dereferences the result, so the variable gets the dereferenced value
+        
         // Special handling: if variable type is shared_ptr and initializer is new T(), wrap with make_shared
         if (type.startsWith('gs::shared_ptr<') && ts.isNewExpression(decl.initializer) && 
             ts.isIdentifier(decl.initializer.expression)) {
@@ -670,6 +687,10 @@ export class CppCodegen {
     // Track return type for smart pointer wrapping
     const previousReturnType = this.currentMethodReturnType;
     this.currentMethodReturnType = returnType;
+    
+    // Clear unwrapped optionals and pointer vars for new function scope
+    this.unwrappedOptionals.clear();
+    this.pointerVars.clear();
     
     this.emit(`${returnType} ${name}(${params}) {`);
     this.indent();
@@ -967,8 +988,9 @@ export class CppCodegen {
     const previousReturnType = this.currentMethodReturnType;
     this.currentMethodReturnType = returnType;
     
-    // Clear unwrapped optionals for new method scope
+    // Clear unwrapped optionals and pointer vars for new method scope
     this.unwrappedOptionals.clear();
+    this.pointerVars.clear();
     
     this.emit(`${staticKeyword}${returnType} ${name}(${params}) {`);
     this.indent();
@@ -1186,6 +1208,9 @@ export class CppCodegen {
     if (statement.expression) {
       let expr = this.generateExpression(statement.expression);
       
+      // Note: if expr is a pointer variable, generateExpression already added (*var)
+      // So we don't need to add it here
+      
       // Check if returning optional type where non-optional is expected
       if (this.currentMethodReturnType && !this.currentMethodReturnType.includes('optional<') &&
           this.checker && ts.isIdentifier(statement.expression)) {
@@ -1250,10 +1275,15 @@ export class CppCodegen {
         // Check if the expression is already a smart pointer
         const isAlreadySmartPtr = this.isDirectSmartPointer(statement.expression);
         
+        // Check if this is a dereferenced pointer variable ((*var))
+        // These come from Map.get() which returns share<T>*, and dereferencing gives share<T>
+        const isDereferencedPointer = ts.isIdentifier(statement.expression) && 
+                                     this.pointerVars.has(this.escapeIdentifier(statement.expression.getText()));
+        
         // Also check if the generated expression ends with .value() which unwraps optional<shared_ptr<T>>
         const isOptionalUnwrap = expr.endsWith('.value()');
         
-        if (!isAlreadySmartPtr && !isOptionalUnwrap) {
+        if (!isAlreadySmartPtr && !isOptionalUnwrap && !isDereferencedPointer) {
           // Extract the type from gs::shared_ptr<Type>
           const match = this.currentMethodReturnType.match(/gs::shared_ptr<(.+)>/);
           if (match) {
@@ -1890,6 +1920,13 @@ export class CppCodegen {
         // For direct smart pointer comparisons, use nullptr
         return 'nullptr';
       }
+      // Check if the other operand is a pointer variable (from Map.get() or Array[])
+      if (otherOperand && ts.isIdentifier(otherOperand)) {
+        const varName = this.escapeIdentifier(otherOperand.getText());
+        if (this.pointerVars.has(varName)) {
+          return 'nullptr';
+        }
+      }
       // Otherwise use std::nullopt (for optionals and nullable types)
       return 'std::nullopt';
     }
@@ -1944,6 +1981,15 @@ export class CppCodegen {
         return 'gs::Number';
       }
       const escaped = this.escapeIdentifier(text);
+      
+      // If this variable is a pointer (from Map.get() or Array[]), dereference it for value use
+      // But NOT if we're in a null check context (handled separately in generateBinaryExpression)
+      if (this.pointerVars.has(escaped)) {
+        // Don't dereference if this is the direct child of a comparison with null
+        // (that's handled in generateBinaryExpression)
+        // For now, always dereference - the null check is handled elsewhere
+        return `(*${escaped})`;
+      }
       
       // If this variable is an unwrapped optional, add .value() to access it
       if (this.unwrappedOptionals.has(escaped)) {
@@ -2021,8 +2067,20 @@ export class CppCodegen {
         isNullCheck = true;
       }
       
-      // If this is a null check on a variable, check if it has optional type
+      // If this is a null check on a variable, check if it has optional type or is a pointer
       if (isNullCheck && varExpr && ts.isIdentifier(varExpr)) {
+        const varName = this.escapeIdentifier(varExpr.getText());
+        
+        // Check if this is a pointer variable (from Map.get() or Array[])
+        if (this.pointerVars.has(varName)) {
+          // Use nullptr comparison
+          if (opKind === ts.SyntaxKind.ExclamationEqualsEqualsToken) {
+            return `${varName} != nullptr`;
+          } else {
+            return `${varName} == nullptr`;
+          }
+        }
+        
         const symbol = this.checker.getSymbolAtLocation(varExpr);
         if (symbol?.valueDeclaration) {
           const typeText = this.getTypeTextFromSymbol(symbol);
@@ -2042,7 +2100,6 @@ export class CppCodegen {
           }
           
           if (isOptionalType || isOptionalInit) {
-            const varName = this.escapeIdentifier(varExpr.getText());
             // Use .has_value() instead of comparison to std::nullopt
             if (opKind === ts.SyntaxKind.ExclamationEqualsEqualsToken) {
               return `${varName}.has_value()`;
@@ -2093,6 +2150,16 @@ export class CppCodegen {
           if ((opKind === ts.SyntaxKind.AmpersandAmpersandToken && isNotEqualChecks) ||
               (opKind === ts.SyntaxKind.BarBarToken && isEqualChecks)) {
             const varName = this.escapeIdentifier(leftVar);
+            
+            // Check if this is a pointer variable (from Map.get())
+            if (this.pointerVars.has(varName)) {
+              // Use nullptr comparison
+              if (isNotEqualChecks) {
+                return `${varName} != nullptr`;
+              } else {
+                return `${varName} == nullptr`;
+              }
+            }
             
             // Check if this variable is from an optional-returning method
             // Map.get() returns optional<T>, so we use .has_value()
@@ -2768,66 +2835,77 @@ export class CppCodegen {
     else if (!ts.isElementAccessExpression(expr.expression) && this.isSmartPointerType(expr.expression)) {
       accessor = '->';
     }
-    // Check if it's a variable that might need optional unwrapping
+    // Check if it's a variable that might need optional unwrapping or pointer dereference
     else if (this.checker && ts.isIdentifier(expr.expression)) {
-      const symbol = this.checker.getSymbolAtLocation(expr.expression);
-      if (symbol?.valueDeclaration && ts.isVariableDeclaration(symbol.valueDeclaration)) {
-        const init = symbol.valueDeclaration.initializer;
-        if (init && ts.isCallExpression(init)) {
-          // For Map.get() and similar built-in methods, we need to look at the Map's AST type
-          // not the TypeChecker type (which erases ownership qualifiers)
-          if (ts.isPropertyAccessExpression(init.expression) && 
-              init.expression.name.getText() === 'get') {
-            // Get the symbol for the map object
-            if (ts.isPropertyAccessExpression(init.expression.expression)) {
-              // this.cache.get() - get symbol for 'cache'
-              const mapSymbol = this.checker.getSymbolAtLocation(init.expression.expression.name);
-              if (mapSymbol) {
-                const mapTypeText = this.getTypeTextFromSymbol(mapSymbol);
-                
-                // Check if it's Map<K, share<V>>
-                const match = mapTypeText?.match(/Map<[^,]+,\s*share<([^>]+)>>/);
-                if (match) {
-                  // Map<K, share<V>>.get() returns share<V> | undefined -> optional<shared_ptr<V>>
-                  needsOptionalUnwrap = true;
-                  accessor = '->';
+      const varName = this.escapeIdentifier(expr.expression.getText());
+      
+      // Check if this is a pointer variable (from Map.get() or Array[])
+      if (this.pointerVars.has(varName)) {
+        // Pointer variables need -> accessor
+        accessor = '->';
+        // Don't need optional unwrap, already a pointer
+        needsOptionalUnwrap = false;
+      } else {
+        const symbol = this.checker.getSymbolAtLocation(expr.expression);
+        if (symbol?.valueDeclaration && ts.isVariableDeclaration(symbol.valueDeclaration)) {
+          const init = symbol.valueDeclaration.initializer;
+          if (init && ts.isCallExpression(init)) {
+            // For Map.get() and similar built-in methods, we need to look at the Map's AST type
+            // not the TypeChecker type (which erases ownership qualifiers)
+            if (ts.isPropertyAccessExpression(init.expression) && 
+                init.expression.name.getText() === 'get') {
+              // Get the symbol for the map object
+              if (ts.isPropertyAccessExpression(init.expression.expression)) {
+                // this.cache.get() - get symbol for 'cache'
+                const mapSymbol = this.checker.getSymbolAtLocation(init.expression.expression.name);
+                if (mapSymbol) {
+                  const mapTypeText = this.getTypeTextFromSymbol(mapSymbol);
+                  
+                  // Check if it's Map<K, share<V>>
+                  const match = mapTypeText?.match(/Map<[^,]+,\s*share<([^>]+)>>/);
+                  if (match) {
+                    // Map<K, share<V>>.get() now returns share<V>* (pointer)
+                    // Already tracked in pointerVars, so this branch shouldn't be needed
+                    // But keep for backward compatibility
+                    accessor = '->';
+                  }
                 }
               }
             }
-          }
-          
-          // Also try to get return type from method signature
-          const returnType = this.getMethodReturnTypeFromSource(init);
-          if (returnType) {
-            // Check if it returns share<T> | undefined or share<T> | null
-            const isOptionalShare = 
-              returnType.match(/^share<[^>]+>\s*\|\s*(undefined|null)/) ||
-              returnType.match(/^(undefined|null)\s*\|\s*share<[^>]+>/);
             
-            if (isOptionalShare) {
-              // This is optional<shared_ptr<T>>, need both unwrap and ->
-              needsOptionalUnwrap = true;
-              accessor = '->';
+            // Also try to get return type from method signature
+            const returnType = this.getMethodReturnTypeFromSource(init);
+            if (returnType) {
+              // Check if it returns share<T> | undefined or share<T> | null
+              const isOptionalShare = 
+                returnType.match(/^share<[^>]+>\s*\|\s*(undefined|null)/) ||
+                returnType.match(/^(undefined|null)\s*\|\s*share<[^>]+>/);
+              
+              if (isOptionalShare) {
+                // This is optional<shared_ptr<T>>, need both unwrap and ->
+                needsOptionalUnwrap = true;
+                accessor = '->';
+              }
+              // Check for other optional types - only use -> if it's a smart pointer type
+              else if (returnType.includes('| null') || returnType.includes('| undefined')) {
+                // Check if the base type (without | null/undefined) is a smart pointer
+                const baseType = returnType.replace(/\s*\|\s*(null|undefined)/g, '').trim();
+                if (baseType.startsWith('own<') || baseType.startsWith('share<') || baseType.startsWith('use<')) {
+                  accessor = '->';
+                }
+                // Otherwise it's a value type in an optional, use .
+              }
             }
-            // Check for other optional types - only use -> if it's a smart pointer type
-            else if (returnType.includes('| null') || returnType.includes('| undefined')) {
-              // Check if the base type (without | null/undefined) is a smart pointer
-              const baseType = returnType.replace(/\s*\|\s*(null|undefined)/g, '').trim();
+          }
+          // Also check declared type if no initializer
+          else {
+            const typeText = this.getTypeTextFromSymbol(symbol);
+            if (typeText && (typeText.includes('| null') || typeText.includes('| undefined'))) {
+              // Check if the base type is a smart pointer
+              const baseType = typeText.replace(/\s*\|\s*(null|undefined)/g, '').trim();
               if (baseType.startsWith('own<') || baseType.startsWith('share<') || baseType.startsWith('use<')) {
                 accessor = '->';
               }
-              // Otherwise it's a value type in an optional, use .
-            }
-          }
-        }
-        // Also check declared type if no initializer
-        else {
-          const typeText = this.getTypeTextFromSymbol(symbol);
-          if (typeText && (typeText.includes('| null') || typeText.includes('| undefined'))) {
-            // Check if the base type is a smart pointer
-            const baseType = typeText.replace(/\s*\|\s*(null|undefined)/g, '').trim();
-            if (baseType.startsWith('own<') || baseType.startsWith('share<') || baseType.startsWith('use<')) {
-              accessor = '->';
             }
           }
         }
@@ -3193,8 +3271,25 @@ export class CppCodegen {
    */
   private generateConditionalExpression(expr: ts.ConditionalExpression): string {
     const condition = this.generateExpression(expr.condition);
-    const whenTrue = this.generateExpression(expr.whenTrue);
-    const whenFalse = this.generateExpression(expr.whenFalse);
+    let whenTrue = this.generateExpression(expr.whenTrue);
+    let whenFalse = this.generateExpression(expr.whenFalse);
+    
+    // Handle case where one branch returns a dereferenced pointer and the other returns std::nullopt
+    // e.g., (result != nullptr ? (*result) : std::nullopt)
+    // Need to wrap the dereferenced value in std::optional to make types match
+    const trueIsDereferencedPointer = whenTrue.startsWith('(*') && whenTrue.endsWith(')');
+    const falseIsDereferencedPointer = whenFalse.startsWith('(*') && whenFalse.endsWith(')');
+    const trueIsNullopt = whenTrue === 'std::nullopt';
+    const falseIsNullopt = whenFalse === 'std::nullopt';
+    
+    if (trueIsDereferencedPointer && falseIsNullopt) {
+      // Wrap whenTrue: (*result) → std::make_optional(*result)
+      whenTrue = `std::make_optional(${whenTrue})`;
+    } else if (falseIsDereferencedPointer && trueIsNullopt) {
+      // Wrap whenFalse: (*result) → std::make_optional(*result)
+      whenFalse = `std::make_optional(${whenFalse})`;
+    }
+    
     return `(${condition} ? ${whenTrue} : ${whenFalse})`;
   }
   

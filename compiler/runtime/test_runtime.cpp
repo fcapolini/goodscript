@@ -166,8 +166,8 @@ void test_map() {
   assert(map.size() == 2);
   
   auto val = map.get(gs::String("one"));
-  assert(val.has_value());
-  assert(val.value() == 1);
+  assert(val != nullptr);
+  assert(*val == 1);
   
   assert(map.has(gs::String("one")));
   assert(!map.has(gs::String("three")));

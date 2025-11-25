@@ -9,6 +9,7 @@
 - 9 RegExp codegen tests (100% passing) ✅
 - 6 RegExp e2e tests (100% passing) ✅
 - 96/96 concrete example tests (100% passing) ✅
+- 4 runtime Property/LiteralObject tests (100% passing) ✅
   - ✅ array-methods (8/8)
   - ✅ binary-search-tree (8/8)
   - ✅ cli-args (8/8)
@@ -25,6 +26,19 @@
   - ⏸️ interface-shapes - Requires: interface virtual methods, polymorphic arrays, method resolution
 
 **Recent Updates (Nov 25, 2025):**
+- ✅ **Map Pointer-Based Null Checking** - Extended pointer approach to Map:
+  - `gs::Map<K,V>::get()` now returns `V*` instead of `std::optional<V>`
+  - `gs::Map<K,V>::operator[]` added returning `V*` (const and non-const overloads)
+  - Returns `nullptr` for missing keys (matches JavaScript `undefined` semantics)
+  - Auto-dereference in codegen: `map.get(key)` → `(*map.get(key))` when used as value
+  - Null comparisons use `nullptr` instead of `std::nullopt` for pointer variables
+  - Property access: `map.get(key)->prop` (pointer accessor)
+  - Pointer variable tracking with scope isolation (per-method/function)
+  - Compound null check support: `(x !== null && x !== undefined)` → `x != nullptr`
+  - Conditional expression fix: wrap dereferenced pointers in `std::make_optional()` for ternary with `std::nullopt`
+  - LiteralObject tests updated to use pointer API
+  - 896 tests passing (maintained after Map pointer changes)
+  - API consistency: both Array and Map return nullable pointers
 - ✅ **JavaScript-Compatible Array Bounds Checking** - Pointer-based approach:
   - `gs::Array<T>::operator[]` returns `T*` (pointer) instead of `T&` (reference)
   - Returns `nullptr` for out-of-bounds access (matches JavaScript `undefined` semantics)
@@ -77,8 +91,8 @@
   - 4 new tests with compilation and JSON.parse validation
 - ✅ **GoodScript Runtime Library** - TypeScript-compatible wrapper classes for C++ STL
   - `gs::String` - Full TypeScript String API (charAt, indexOf, substring, slice, match, search, replace, split, etc.)
-  - `gs::Array<T>` - Full TypeScript Array API (push, pop, map, filter, reduce, etc.)
-  - `gs::Map<K,V>` & `gs::Set<T>` - TypeScript Map/Set APIs
+  - `gs::Array<T>` - Full TypeScript Array API with pointer-based bounds checking (`operator[]` returns `T*`)
+  - `gs::Map<K,V>` & `gs::Set<T>` - TypeScript Map/Set APIs with pointer-based null checking (`get()` returns `V*`)
   - `gs::RegExp` - **Full JavaScript regex semantics via PCRE2** (lookahead, lookbehind, Unicode, all flags)
   - `gs::JSON` - JSON.stringify() and JSON.parse()
   - `gs::console` - console.log(), console.error(), console.warn()

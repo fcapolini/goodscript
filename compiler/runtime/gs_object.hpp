@@ -27,8 +27,8 @@ namespace gs {
  *     {"active", Property(true)}
  *   };
  *   
- *   auto name = obj.get("name").asString();  // "Alice"
- *   auto age = obj.get("age").asNumber();    // 30.0
+ *   auto name = obj.get("name")->asString();  // "Alice"
+ *   auto age = obj.get("age")->asNumber();    // 30.0
  */
 using LiteralObject = Map<gs::String, Property>;
 

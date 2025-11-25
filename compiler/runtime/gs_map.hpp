@@ -79,15 +79,45 @@ public:
   }
   
   /**
-   * Returns the value associated with the key, or undefined if not found
+   * Returns the value associated with the key, or nullptr if not found
    * Equivalent to TypeScript: map.get(key)
+   * Returns pointer to allow null return (matches JS undefined semantics)
    */
-  std::optional<V> get(const K& key) const {
+  V* get(const K& key) {
     auto it = impl_.find(key);
     if (it != impl_.end()) {
-      return it->second;
+      return &it->second;
     }
-    return std::nullopt;
+    return nullptr;
+  }
+  
+  const V* get(const K& key) const {
+    auto it = impl_.find(key);
+    if (it != impl_.end()) {
+      return &it->second;
+    }
+    return nullptr;
+  }
+  
+  /**
+   * Subscript operator - returns pointer to value or nullptr if not found
+   * Equivalent to TypeScript: map[key] (though TS uses map.get(key))
+   * Matches Array operator[] semantics (returns pointer)
+   */
+  V* operator[](const K& key) {
+    auto it = impl_.find(key);
+    if (it != impl_.end()) {
+      return &it->second;
+    }
+    return nullptr;
+  }
+  
+  const V* operator[](const K& key) const {
+    auto it = impl_.find(key);
+    if (it != impl_.end()) {
+      return &it->second;
+    }
+    return nullptr;
   }
   
   /**

@@ -49,10 +49,10 @@ int main() {
   };
   
   // Test property access
-  assert(obj.get("name").value().asString() == String("Alice"));
-  assert(obj.get("age").value().asNumber() == 30.0);
-  assert(obj.get("active").value().asBool() == true);
-  assert(obj.get("score").value().asNumber() == 98.5);
+  assert(obj.get("name")->asString() == String("Alice"));
+  assert(obj.get("age")->asNumber() == 30.0);
+  assert(obj.get("active")->asBool() == true);
+  assert(obj.get("score")->asNumber() == 98.5);
   
   std::cout << "✓ LiteralObject property access works" << std::endl;
   
@@ -78,8 +78,8 @@ int main() {
   };
   
   Object::assign(obj, obj2);
-  assert(obj.get("city").value().asString() == String("NYC"));
-  assert(obj.get("zip").value().asNumber() == 10001.0);
+  assert(obj.get("city")->asString() == String("NYC"));
+  assert(obj.get("zip")->asNumber() == 10001.0);
   assert(obj.size() == 6);  // 4 original + 2 new
   
   std::cout << "✓ Object.assign() works" << std::endl;

@@ -1,6 +1,6 @@
 # Introducing GoodScript: TypeScript with Deterministic Memory Safety
 
-> **🚧 Alpha State:** GoodScript is currently in active development. The compiler is ~98% complete (885/902 tests passing) with core features working, but some advanced features are still being implemented. See [Current Status](#7-current-status-november-2025) for details.
+> **🚧 Alpha State:** GoodScript is currently in active development. The compiler is ~98% complete (896/913 tests passing) with core features working, but some advanced features are still being implemented. See [Current Status](#7-current-status-november-2025) for details.
 
 **Audience:** TypeScript developers interested in writing memory-safe systems code
 
@@ -41,7 +41,7 @@ GoodScript enforces **"The Good Parts"** of TypeScript by removing JavaScript's 
 
 **Important differences from JavaScript:**
 
-* **Arrays are not sparse** — GoodScript arrays use contiguous memory (`std::vector<T>` in C++). Writing to `arr[1000]` allocates memory for all elements 0-1000, not just index 1000. Avoid large index gaps to prevent excessive memory usage.
+* **Arrays are not sparse** — GoodScript arrays use contiguous memory (`std::vector<T>` in C++). Writing to `arr[1000]` allocates memory for all elements 0-1000, not just index 1000. Avoid large index gaps to prevent excessive memory usage, or use Map instead.
 
   ```ts
   // ⚠️ Inefficient in GoodScript - allocates 1,000,001 elements

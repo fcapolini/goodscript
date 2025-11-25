@@ -150,18 +150,18 @@ int main() {
     {"manager", Property::Null()}
   };
   
-  // Verify each property has correct type
-  assert(person.get("name").value().isString());
-  assert(person.get("age").value().isNumber());
-  assert(person.get("salary").value().isNumber());
-  assert(person.get("active").value().isBool());
-  assert(person.get("manager").value().isNull());
+  // Verify each property has correct type (using pointer API)
+  assert(person.get("name")->isString());
+  assert(person.get("age")->isNumber());
+  assert(person.get("salary")->isNumber());
+  assert(person.get("active")->isBool());
+  assert(person.get("manager")->isNull());
   
   // Verify values
-  assert(person.get("name").value().asString() == String("Alice"));
-  assert(person.get("age").value().asNumber() == 30.0);
-  assert(person.get("salary").value().asNumber() == 75000.50);
-  assert(person.get("active").value().asBool() == true);
+  assert(person.get("name")->asString() == String("Alice"));
+  assert(person.get("age")->asNumber() == 30.0);
+  assert(person.get("salary")->asNumber() == 75000.50);
+  assert(person.get("active")->asBool() == true);
   
   std::cout << "Heterogeneous storage works correctly" << std::endl;
   return 0;
@@ -223,7 +223,7 @@ int main() {
   };
   Object::assign(obj, obj2);
   assert(obj.size() == 5);
-  assert(obj.get("d").value().asNumber() == 4.0);
+  assert(obj.get("d")->asNumber() == 4.0);
   
   std::cout << "Object methods work with LiteralObject" << std::endl;
   return 0;
