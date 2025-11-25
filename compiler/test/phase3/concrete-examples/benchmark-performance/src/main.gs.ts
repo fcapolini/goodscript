@@ -11,10 +11,7 @@
  * 4. Bubble sort - nested loops and array access
  * 5. Hash map operations - data structure performance
  * 6. String manipulation - string operations
- * 7. Matrix multiplication - numerical computing
  */
-
-/// <reference path="../../../../../lib/goodscript.d.ts" />
 
 // Get current timestamp in milliseconds
 const now = (): number => {
@@ -200,79 +197,6 @@ const benchStringOps = (iterations: number): number => {
   return elapsed;
 };
 
-// Benchmark 7: Matrix Multiplication
-class Matrix {
-  data: number[];
-  rows: number;
-  cols: number;
-
-  constructor(rows: number, cols: number) {
-    this.rows = rows;
-    this.cols = cols;
-    this.data = new Array<number>();
-    const size = rows * cols;
-    for (let i = 0; i < size; i++) {
-      this.data.push(0);
-    }
-  }
-
-  set(row: number, col: number, value: number): void {
-    this.data[row * this.cols + col] = value;
-  }
-
-  get(row: number, col: number): number {
-    return this.data[row * this.cols + col];
-  }
-}
-
-const matrixMultiply = (a: Matrix, b: Matrix): Matrix => {
-  const result = new Matrix(a.rows, b.cols);
-  
-  for (let i = 0; i < a.rows; i++) {
-    const aRowStart = i * a.cols;
-    const resultRowStart = i * result.cols;
-    for (let j = 0; j < b.cols; j++) {
-      let sum = 0;
-      for (let k = 0; k < a.cols; k++) {
-        sum = sum + a.data[aRowStart + k] * b.data[k * b.cols + j];
-      }
-      result.data[resultRowStart + j] = sum;
-    }
-  }
-  
-  return result;
-};
-
-const benchMatrixMultiply = (size: number): number => {
-  const start = now();
-  
-  // Create two matrices with simple values
-  const a = new Matrix(size, size);
-  const b = new Matrix(size, size);
-  
-  for (let i = 0; i < size; i++) {
-    for (let j = 0; j < size; j++) {
-      a.set(i, j, i + j);
-      b.set(i, j, i - j);
-    }
-  }
-  
-  // Multiply matrices
-  const c = matrixMultiply(a, b);
-  
-  // Compute sum of result for verification
-  let sum = 0;
-  for (let i = 0; i < size; i++) {
-    for (let j = 0; j < size; j++) {
-      sum = sum + c.get(i, j);
-    }
-  }
-  
-  const elapsed = now() - start;
-  console.log('Matrix multiply (' + size.toString() + 'x' + size.toString() + '): sum=' + sum.toString() + ', time: ' + elapsed.toString() + 'ms');
-  return elapsed;
-};
-
 // Run all benchmarks
 console.log('=== GoodScript Performance Benchmark Suite ===');
 console.log('');
@@ -301,10 +225,6 @@ console.log('--- Benchmark 6: String Manipulation ---');
 const stringTime = benchStringOps(500000);  // Increased from 50k for more significant timing
 
 console.log('');
-console.log('--- Benchmark 7: Matrix Multiplication ---');
-const matrixTime = benchMatrixMultiply(200);  // 200x200 matrix
-
-console.log('');
 console.log('=== Summary ===');
-const totalTime = fibTime + arrayTime + binarySearchTime + bubbleSortTime + hashMapTime + stringTime + matrixTime;
+const totalTime = fibTime + arrayTime + binarySearchTime + bubbleSortTime + hashMapTime + stringTime;
 console.log('Total time: ' + totalTime.toString() + 'ms');

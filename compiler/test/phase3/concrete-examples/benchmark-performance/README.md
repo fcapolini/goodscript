@@ -29,14 +29,15 @@ npm test -- test/phase3/concrete-examples/benchmark-performance.test.ts
 | String Manipulation   | ~8ms    | ~12ms      | 0.67x   | 500k chars |
 | **Average Speedup**   |         |            | **2.55x** | |
 
-*Note: Actual times vary based on hardware. The speedup ratio is more consistent.*
+*Note: Test sizes increased for statistically significant measurements (all benchmarks now run >10ms). Fibonacci(38) uses recursive function hoisting. Array operations use at_ref() optimization. String operations use array.join() pattern.*
 
-**Key Improvements:**
-- **Fibonacci now 1.94x faster** after recursive function optimization (was 0.73x slower)
-- **String manipulation now competitive** using array.join() instead of repeated concatenation
-- Direct function declarations eliminate `std::function` overhead
-- Binary search shows excellent 12x speedup with algorithm optimization
-- Overall average speedup: 3.05x across all benchmarks
+**Performance varies by workload:**
+- **Excellent (5-10x)**: Binary search (9x) - cache-friendly algorithms
+- **Good (1.5-2.5x)**: Fibonacci (2.09x), Array operations (1.67x) - recursive and read-heavy code
+- **Competitive (~1x)**: HashMap operations (1.05x) - optimized string+number concatenation
+- **Slower (<1x)**: Bubble sort (0.82x), String manipulation (0.67x) - write-heavy and V8 optimizations
+
+**Overall average speedup: 2.55x** across diverse workloads
 
 ## Analysis
 
