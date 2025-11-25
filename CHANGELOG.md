@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **C++ AST-Based Code Generation Infrastructure** - New modular architecture for C++ codegen
+  - `src/cpp/ast.ts` - Complete C++ AST node type definitions (735 lines)
+  - `src/cpp/builder.ts` - Fluent API for type-safe AST construction (405 lines)
+  - `src/cpp/renderer.ts` - AST to formatted C++ source converter (672 lines)
+  - Visitor pattern for extensibility and transformations
+  - Smart pointer helpers (`makeUnique`, `makeShared`, `move`)
+  - 25 comprehensive unit tests (100% passing)
+  - Full documentation with examples (`src/cpp/README.md`)
+
+### Changed
+
+- Updated architecture documentation to reflect AST-based approach
+- Test count updated to 929/946 (98% passing)
+
+### Benefits
+
+- Type-safe construction at compile time
+- Composable and reusable code patterns
+- Testable without string comparisons
+- Enables transformations and optimizations
+- Clean separation: construction vs. rendering
+- Foundation for gradual migration of existing `cpp-codegen.ts`
+
 ## [0.7.0] - 2025-11-23
 
 ### Added
