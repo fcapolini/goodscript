@@ -1,6 +1,24 @@
 # Phase 3: C++ Code Generation
 
-**Status:** ✅ ~98% Complete (896 tests passing)
+**Status:** ✅ ~98% Complete (929 tests passing)
+
+## Architecture
+
+The C++ code generation uses an **AST-based approach** (as of Nov 25, 2025):
+
+- **`src/cpp/ast.ts`** - C++ AST node type definitions (735 lines)
+- **`src/cpp/builder.ts`** - Fluent API for constructing AST (405 lines)
+- **`src/cpp/renderer.ts`** - AST to formatted C++ code converter (672 lines)
+- **`src/cpp-codegen.ts`** - Main codegen (uses string generation, migration to AST pending)
+
+Benefits of AST-based approach:
+- Type-safe construction at compile time
+- Composable and reusable code patterns
+- Testable without string comparisons
+- Enables transformations and optimizations
+- Clean separation: construction vs. rendering
+
+See `src/cpp/README.md` for usage examples.
 
 **Test Coverage:** 
 - 68 basic feature tests (100% passing)
