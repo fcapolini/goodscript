@@ -2732,19 +2732,54 @@ export class CppCodegen {
       }
       
       if (methodName === 'toString') {
-        // For numbers, we need to format them like JavaScript does:
-        // - Integers without decimals (e.g., "35" not "35.000000")
-        // - Doubles with minimal decimal places
-        // Use a helper function that checks if a double is actually an integer
-        this.addInclude('<sstream>');
-        this.addInclude('<cmath>');
-        return `([&]() { ` +
-               `std::ostringstream __oss; ` +
-               `auto __val = static_cast<double>(${object}); ` +
-               `if (std::floor(__val) == __val && std::abs(__val) < 1e15) { ` +
-               `__oss << static_cast<long long>(__val); ` +
-               `} else { __oss << __val; } ` +
-               `return gs::String(__oss.str()); })()`;
+        // Check if this is a method call on a class instance or a primitive
+        // If it's a class with its own toString(), use it
+        // Otherwise, for primitives (numbers), format them nicely
+        const objExpr = expr.expression.expression;
+        
+        // Check if the object is a class instance
+        let isClassMethod = false;
+        if (this.checker) {
+          const type = this.checker.getTypeAtLocation(objExpr);
+          
+          // Check if it's an object type (class instance) with a toString method
+          if (type.symbol && (type.symbol.flags & ts.SymbolFlags.Class)) {
+            isClassMethod = true;
+          }
+          // Special case: if it's an element access of a class array, it's a class instance
+          else if (ts.isElementAccessExpression(objExpr)) {
+            // Check the element type of the array
+            if (this.checker) {
+              const arrayType = this.checker.getTypeAtLocation(objExpr.expression);
+              // If array elements have a class type, use their toString
+              if (arrayType.symbol) {
+                const typeArgs = (arrayType as any).typeArguments;
+                if (typeArgs && typeArgs.length > 0) {
+                  const elementType = typeArgs[0];
+                  if (elementType.symbol && (elementType.symbol.flags & ts.SymbolFlags.Class)) {
+                    isClassMethod = true;
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        if (isClassMethod) {
+          // Use the class's toString() method
+          return `${object}${accessor}toString(${args})`;
+        } else {
+          // For primitives (numbers, or results of .length() etc), format them nicely
+          this.addInclude('<sstream>');
+          this.addInclude('<cmath>');
+          return `([&]() { ` +
+                 `std::ostringstream __oss; ` +
+                 `auto __val = static_cast<double>(${object}); ` +
+                 `if (std::floor(__val) == __val && std::abs(__val) < 1e15) { ` +
+                 `__oss << static_cast<long long>(__val); ` +
+                 `} else { __oss << __val; } ` +
+                 `return gs::String(__oss.str()); })()`;
+        }
       }
       
       return `${object}${accessor}${methodName}(${args})`;
@@ -3440,7 +3475,18 @@ export class CppCodegen {
     // Array access returns T* (pointer) - dereference for value usage
     // Don't dereference if this is the target of property access (arr[i].name)
     // or if explicitly requested via options
-    const needsDeref = !options?.noDeref;
+    // Also don't dereference for string access (returns char, not pointer)
+    let needsDeref = !options?.noDeref;
+    
+    // Check if this is string indexing
+    if (needsDeref && this.checker) {
+      const type = this.checker.getTypeAtLocation(expr.expression);
+      const typeString = this.checker.typeToString(type);
+      if (typeString === 'string' || typeString === 'String' || typeString.includes('gs::String')) {
+        needsDeref = false;  // String indexing returns char, not pointer
+      }
+    }
+    
     const arrayAccess = object === 'this' ? `${object}->${index}` : `${object}[${index}]`;
     
     return needsDeref ? `(*${arrayAccess})` : arrayAccess;

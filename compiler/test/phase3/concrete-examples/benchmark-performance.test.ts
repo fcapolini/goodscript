@@ -117,8 +117,14 @@ describe(`Performance Benchmark: ${EXAMPLE_NAME}`, () => {
               times.fibonacci = parseInt(match[1]);
             } else if (line.includes('Array ops')) {
               times.array = parseInt(match[1]);
-            } else if (line.includes('Arithmetic')) {
-              times.arithmetic = parseInt(match[1]);
+            } else if (line.includes('Binary search')) {
+              times.binarySearch = parseInt(match[1]);
+            } else if (line.includes('Bubble sort')) {
+              times.bubbleSort = parseInt(match[1]);
+            } else if (line.includes('HashMap ops')) {
+              times.hashMap = parseInt(match[1]);
+            } else if (line.includes('String ops')) {
+              times.string = parseInt(match[1]);
             }
           }
         }
@@ -136,7 +142,10 @@ describe(`Performance Benchmark: ${EXAMPLE_NAME}`, () => {
       const benchmarks = [
         { key: 'fibonacci', name: 'Fibonacci (recursive)' },
         { key: 'array', name: 'Array Operations' },
-        { key: 'arithmetic', name: 'Arithmetic Loop' },
+        { key: 'binarySearch', name: 'Binary Search' },
+        { key: 'bubbleSort', name: 'Bubble Sort' },
+        { key: 'hashMap', name: 'HashMap Operations' },
+        { key: 'string', name: 'String Manipulation' },
       ];
 
       let jsTotal = 0;
