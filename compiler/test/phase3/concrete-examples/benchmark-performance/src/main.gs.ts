@@ -206,7 +206,7 @@ const fibTime = benchFibonacci(38);
 
 console.log('');
 console.log('--- Benchmark 2: Array Operations ---');
-const arrayTime = benchArrayOps(500000);
+const arrayTime = benchArrayOps(2000000);  // Increased from 500k for more significant timing
 
 console.log('');
 console.log('--- Benchmark 3: Binary Search ---');
@@ -214,15 +214,15 @@ const binarySearchTime = benchBinarySearch(100000, 100000);
 
 console.log('');
 console.log('--- Benchmark 4: Bubble Sort ---');
-const bubbleSortTime = benchBubbleSort(3000);
+const bubbleSortTime = benchBubbleSort(6000);  // Increased from 3k for more significant timing
 
 console.log('');
 console.log('--- Benchmark 5: HashMap Operations ---');
-const hashMapTime = benchHashMap(50000);
+const hashMapTime = benchHashMap(150000);  // Increased from 50k for more significant timing
 
 console.log('');
 console.log('--- Benchmark 6: String Manipulation ---');
-const stringTime = benchStringOps(50000);
+const stringTime = benchStringOps(500000);  // Increased from 50k for more significant timing
 
 console.log('');
 console.log('=== Summary ===');

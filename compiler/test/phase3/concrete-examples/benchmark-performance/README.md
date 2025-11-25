@@ -19,15 +19,15 @@ npm test -- test/phase3/concrete-examples/benchmark-performance.test.ts
 
 ## Latest Results (November 2025)
 
-| Benchmark             | Node.js | C++ Native | Speedup |
-|-----------------------|---------|------------|---------|  
-| Fibonacci(35)         | ~371ms  | ~192ms     | 1.93x   |
-| Array Operations      | ~9ms    | ~4ms       | 2.25x   |
-| Binary Search         | ~45ms   | ~4ms       | 11.25x  |
-| Bubble Sort           | ~7ms    | ~7ms       | 1.00x   |
-| HashMap Operations    | ~10ms   | ~9ms       | 1.11x   |
-| String Manipulation   | ~2ms    | ~1ms       | 2.00x   |
-| **Average Speedup**   |         |            | **3.26x** |
+| Benchmark             | Node.js | C++ Native | Speedup | Test Size |
+|-----------------------|---------|------------|---------|-----------|  
+| Fibonacci(38)         | ~372ms  | ~178ms     | 2.09x   | 38 levels |
+| Array Operations      | ~30ms   | ~18ms      | 1.67x   | 2M elements |
+| Binary Search         | ~45ms   | ~5ms       | 9.00x   | 100k searches |
+| Bubble Sort           | ~27ms   | ~33ms      | 0.82x   | 6k elements |
+| HashMap Operations    | ~39ms   | ~37ms      | 1.05x   | 150k ops |
+| String Manipulation   | ~8ms    | ~12ms      | 0.67x   | 500k chars |
+| **Average Speedup**   |         |            | **2.55x** | |
 
 *Note: Actual times vary based on hardware. The speedup ratio is more consistent.*
 

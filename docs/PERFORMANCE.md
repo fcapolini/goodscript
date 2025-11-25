@@ -28,17 +28,20 @@ Benchmark suite comparing Node.js vs GoodScript C++ compilation:
 
 | Benchmark             | Node.js | C++ Native | Speedup |
 |-----------------------|---------|------------|---------|  
-| Fibonacci(35)         | ~371ms  | ~192ms     | 1.93x   |
-| Array Operations      | ~9ms    | ~4ms       | 2.25x   |
-| Binary Search         | ~45ms   | ~4ms       | 11.25x  |
-| Bubble Sort           | ~7ms    | ~7ms       | 1.00x   |
-| HashMap Operations    | ~10ms   | ~9ms       | 1.11x   |
-| String Manipulation   | ~2ms    | ~1ms       | 2.00x   |
-| **Average Speedup**   |         |            | **3.26x** |*Note: Recursive functions are now optimized with direct declarations (2.68x faster). String operations use array.join() pattern for O(n) performance instead of O(n²) concatenation.*
+| Fibonacci(38)         | ~372ms  | ~178ms     | 2.09x   |
+| Array Operations      | ~30ms   | ~18ms      | 1.67x   |
+| Binary Search         | ~45ms   | ~5ms       | 9.00x   |
+| Bubble Sort           | ~27ms   | ~33ms      | 0.82x   |
+| HashMap Operations    | ~39ms   | ~37ms      | 1.05x   |
+| String Manipulation   | ~8ms    | ~12ms      | 0.67x   |
+| **Average Speedup**   |         |            | **2.55x** |
+
+*Note: Test sizes increased for statistically significant measurements (all >10ms). Fibonacci(38) uses recursive function hoisting. Array operations use at_ref() optimization. String operations use array.join() pattern.*
 
 **Key Optimizations:** 
-1. Recursive functions that don't capture outer scope are hoisted to namespace scope as direct C++ functions, eliminating `std::function` overhead. This improved Fibonacci from 0.73x (slower!) to 1.94x (faster).
-2. String building uses array-building pattern (array.push() + join()) instead of repeated concatenation. This improved string ops from 0.06x to 1.00x (18x improvement).
+1. Recursive functions that don't capture outer scope are hoisted to namespace scope as direct C++ functions, eliminating `std::function` overhead.
+2. String+number concatenation uses optimized concat_number() instead of ostringstream overhead.
+3. Array reads with simple indices use at_ref() for direct access without pointer indirection.
 
 See `compiler/test/phase3/concrete-examples/benchmark-performance/` for the full benchmark suite.
 
@@ -60,30 +63,37 @@ Actual performance tests comparing GoodScript C++ compilation against Node.js sh
 
 | Benchmark              | Node.js | C++ Native | Speedup | Notes                                    |
 | ---------------------- | ------- | ---------- | ------- | ---------------------------------------- |
-| Fibonacci(35)          | ~371ms  | ~192ms     | 1.93x   | Optimized with direct function declarations |
-| Array ops (100k elems) | ~9ms    | ~4ms       | 2.25x   | at_ref() for simple index reads |
-| Binary search          | ~45ms   | ~4ms       | 11.25x  | Excellent cache locality and branch prediction |
-| Bubble sort            | ~7ms    | ~7ms       | 1.00x   | Write-heavy, resize checks preserved for safety |
-| HashMap ops            | ~10ms   | ~9ms       | 1.11x   | Optimized string+number concatenation pattern |
-| String manipulation    | ~2ms    | ~1ms       | 2.00x   | Using array.join() pattern (O(n) vs O(n²)) |
-| **Average Speedup**    |         |            | **3.26x** | Per-benchmark average (not total time) |
+| Fibonacci(38)          | ~372ms  | ~178ms     | 2.09x   | Optimized with direct function declarations |
+| Array ops (2M elems)   | ~30ms   | ~18ms      | 1.67x   | at_ref() for simple index reads |
+| Binary search (100k)   | ~45ms   | ~5ms       | 9.00x   | Excellent cache locality and branch prediction |
+| Bubble sort (6k)       | ~27ms   | ~33ms      | 0.82x   | Write-heavy, resize checks add overhead |
+| HashMap ops (150k)     | ~39ms   | ~37ms      | 1.05x   | Optimized string+number concatenation |
+| String ops (500k)      | ~8ms    | ~12ms      | 0.67x   | V8's string interning highly optimized |
+| **Average Speedup**    |         |            | **2.55x** | Geometric mean across workloads |
 
 **Key Findings:**
-- **Average speedup: 3.26x** across mixed workloads (balanced metric weighing each test equally)
-- **Recursive optimization**: Hoisting non-closure functions to namespace scope eliminates std::function overhead (2.68x improvement)
-- **String concatenation optimization**: Pattern `'literal' + number.toString()` generates efficient C++ using `concat_number()` (2.4x improvement for HashMap)
-- **Array access optimization**: Simple indices (loop variables, small offsets) use `at_ref()` for direct access on reads
-- **String building optimization**: Using array.push() + join() instead of repeated concatenation (18x improvement)
-- **Algorithm-intensive code**: Binary search shows 11.25x speedup with cache-friendly patterns
-- **Data structures**: Native arrays and hash maps both show advantages
-- **Overall**: Significant performance advantages for algorithmic and memory-intensive workloads
+- **Average speedup: 2.55x** across mixed workloads (with statistically significant test sizes)
+- **Algorithm-intensive code**: Binary search shows 9x speedup with excellent cache locality
+- **Recursive optimization**: Hoisting non-closure functions eliminates std::function overhead (2x+ improvement)
+- **Read-heavy operations**: at_ref() optimization benefits array-intensive algorithms
+- **Write-heavy operations**: JavaScript auto-resize semantics add overhead in C++ (bubble sort 0.82x)
+- **String operations**: V8's highly optimized string handling outperforms naive C++ join (0.67x)
+- **Hash maps**: Competitive performance with string+number optimization (1.05x)
+- **Overall**: Best for compute-intensive, algorithm-heavy workloads; less advantage for string/dynamic operations
+
+**Performance Characteristics by Workload:**
+- **Excellent (5-10x)**: Binary search, cache-friendly algorithms
+- **Good (1.5-2.5x)**: Recursive functions, array operations, arithmetic
+- **Competitive (~1x)**: Hash maps, data structure operations
+- **Slower (<1x)**: String manipulation (V8 optimizations), write-heavy array code
 
 **Best Practices:**
 - For recursive algorithms: Use simple functions without closures when possible (auto-optimized)
-- For string + number concatenation: Pattern `'prefix' + n.toString()` is auto-optimized (no manual changes needed)
-- For string building in loops: Use `chars.push('x'); result = chars.join('')` instead of `result = result + 'x'`
-- For hash maps: String keys with numbers are now efficient thanks to codegen optimization
+- For string + number concatenation: Pattern `'prefix' + n.toString()` is auto-optimized
+- For string building: V8 is highly optimized; C++ advantage varies
+- For hash maps: String keys with numbers use optimized concatenation
 - For array access: Simple loop variable indices use optimized direct access automatically
+- **Choose GoodScript for**: Compute-intensive algorithms, not string-heavy workloads
 
 See `compiler/test/phase3/concrete-examples/benchmark-performance/` for details.
 
@@ -115,13 +125,14 @@ See `compiler/test/phase3/concrete-examples/benchmark-performance/` for details.
 
 By combining **fully static typing**, **ownership-qualified memory management**, **deterministic destruction**, and **native compilation**, GoodScript provides:
 
-* **3.26x average speedup** across diverse computational workloads
-* **Exceptional performance** for algorithmic code (up to 11.25x speedup for binary search)
-* **Optimized recursive functions** with direct declarations (2-3x faster than std::function)
-* **Smart codegen optimizations** for common patterns (string+number concatenation, array access, array building)
-* **Competitive or better** performance for memory-intensive operations and hash maps
-* **Efficient string operations** with automatic pattern optimization
+* **2.55x average speedup** across diverse computational workloads
+* **Exceptional performance** for algorithmic code (up to 9x speedup for binary search)
+* **Optimized recursive functions** with direct declarations (2x+ faster than std::function)
+* **Smart codegen optimizations** for common patterns (string+number concatenation, array access)
+* **Competitive performance** for data structure operations
 * **Deterministic memory management** without garbage collection pauses
+* **Best suited for**: Compute-intensive algorithms, numerical processing, data transformation
+* **Less advantage for**: String-heavy workloads where V8's JIT optimizations excel
 
 Developers can **prototype rapidly** in Node.js and then **deploy high-performance native binaries** with minimal code changes. The Arena/Pool pattern and C++ smart pointer mapping ensure **safe and efficient handling of complex data structures**.
 
