@@ -471,10 +471,10 @@ export class Compiler {
       if (targetArch) {
         cmd += ` -target ${targetArch}`;
         // When cross-compiling, don't use -march=native
-        cmd += ' -O3 -DNDEBUG -ffast-math -funroll-loops';
+        cmd += ' -O3 -DNDEBUG -ffast-math -fno-finite-math-only -funroll-loops';
       } else {
         // Native compilation: use -march=native for optimal performance
-        cmd += ' -O3 -march=native -DNDEBUG -ffast-math -funroll-loops';
+        cmd += ' -O3 -march=native -DNDEBUG -ffast-math -fno-finite-math-only -funroll-loops';
       }
       
       // Add include path for runtime headers

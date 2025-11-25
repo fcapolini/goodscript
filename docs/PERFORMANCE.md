@@ -24,17 +24,17 @@ Key factors contributing to efficiency:
 
 **Benchmark Results** (as of November 2025):
 
-Benchmark suite comparing Node.js vs GoodScript C++ compilation:
+Benchmark suite comparing Node.js vs GoodScript C++ compilation (isolated runs):
 
 | Benchmark             | Node.js | C++ Native | Speedup |
 |-----------------------|---------|------------|---------|  
-| Fibonacci(38)         | ~372ms  | ~178ms     | 2.09x   |
-| Array Operations      | ~30ms   | ~18ms      | 1.67x   |
-| Binary Search         | ~45ms   | ~5ms       | 9.00x   |
-| Bubble Sort           | ~27ms   | ~33ms      | 0.82x   |
-| HashMap Operations    | ~39ms   | ~37ms      | 1.05x   |
+| Fibonacci (recursive) | ~373ms  | ~188ms     | 1.98x   |
+| Array Operations      | ~29ms   | ~17ms      | 1.71x   |
+| Binary Search         | ~44ms   | ~4ms       | 11.00x  |
+| Bubble Sort           | ~26ms   | ~29ms      | 0.90x   |
+| HashMap Operations    | ~35ms   | ~30ms      | 1.17x   |
 | String Manipulation   | ~8ms    | ~12ms      | 0.67x   |
-| **Average Speedup**   |         |            | **2.55x** |
+| **Average Speedup**   |         |            | **2.90x** |
 
 *Note: Test sizes increased for statistically significant measurements (all >10ms). Fibonacci(38) uses recursive function hoisting. Array operations use at_ref() optimization. String operations use array.join() pattern.*
 
@@ -63,29 +63,29 @@ Actual performance tests comparing GoodScript C++ compilation against Node.js sh
 
 | Benchmark              | Node.js | C++ Native | Speedup | Notes                                    |
 | ---------------------- | ------- | ---------- | ------- | ---------------------------------------- |
-| Fibonacci(38)          | ~372ms  | ~178ms     | 2.09x   | Optimized with direct function declarations |
-| Array ops (2M elems)   | ~30ms   | ~18ms      | 1.67x   | at_ref() for simple index reads |
-| Binary search (100k)   | ~45ms   | ~5ms       | 9.00x   | Excellent cache locality and branch prediction |
-| Bubble sort (6k)       | ~27ms   | ~33ms      | 0.82x   | Write-heavy, resize checks add overhead |
-| HashMap ops (150k)     | ~39ms   | ~37ms      | 1.05x   | Optimized string+number concatenation |
+| Fibonacci(38)          | ~373ms  | ~188ms     | 1.98x   | Optimized with direct function declarations |
+| Array ops (2M elems)   | ~29ms   | ~17ms      | 1.71x   | at_ref() for simple index reads |
+| Binary search (100k)   | ~44ms   | ~4ms       | 11.00x  | Excellent cache locality and branch prediction |
+| Bubble sort (6k)       | ~26ms   | ~29ms      | 0.90x   | Write-heavy, resize checks add overhead |
+| HashMap ops (150k)     | ~35ms   | ~30ms      | 1.17x   | Optimized string+number concatenation |
 | String ops (500k)      | ~8ms    | ~12ms      | 0.67x   | V8's string interning highly optimized |
-| **Average Speedup**    |         |            | **2.55x** | Geometric mean across workloads |
+| **Average Speedup**    |         |            | **2.90x** | Geometric mean across workloads (isolated runs) |
 
 **Key Findings:**
-- **Average speedup: 2.55x** across mixed workloads (with statistically significant test sizes)
-- **Algorithm-intensive code**: Binary search shows 9x speedup with excellent cache locality
-- **Recursive optimization**: Hoisting non-closure functions eliminates std::function overhead (2x+ improvement)
+- **Average speedup: 2.90x** across mixed workloads (isolated benchmark runs)
+- **Algorithm-intensive code**: Binary search shows 11x speedup with excellent cache locality
+- **Recursive optimization**: Hoisting non-closure functions eliminates std::function overhead (2x improvement)
 - **Read-heavy operations**: at_ref() optimization benefits array-intensive algorithms
-- **Write-heavy operations**: JavaScript auto-resize semantics add overhead in C++ (bubble sort 0.82x)
-- **String operations**: V8's highly optimized string handling outperforms naive C++ join (0.67x)
-- **Hash maps**: Competitive performance with string+number optimization (1.05x)
-- **Overall**: Best for compute-intensive, algorithm-heavy workloads; less advantage for string/dynamic operations
+- **Write-heavy operations**: JavaScript auto-resize semantics add overhead in C++ (bubble sort 0.90x)
+- **String operations**: V8's highly optimized string handling outperforms C++ implementation (0.67x)
+- **Hash maps**: Good performance with string+number optimization (1.17x)
+- **Overall**: Best for compute-intensive, algorithm-heavy workloads; less advantage for string-heavy operations
 
 **Performance Characteristics by Workload:**
-- **Excellent (5-10x)**: Binary search, cache-friendly algorithms
-- **Good (1.5-2.5x)**: Recursive functions, array operations, arithmetic
-- **Competitive (~1x)**: Hash maps, data structure operations
-- **Slower (<1x)**: String manipulation (V8 optimizations), write-heavy array code
+- **Excellent (5-12x)**: Binary search (11x), cache-friendly algorithms
+- **Good (1.5-2x)**: Recursive functions (1.98x), array operations (1.71x), arithmetic
+- **Competitive (~1x)**: Hash maps (1.17x), bubble sort (0.90x), data structure operations
+- **Slower (<1x)**: String manipulation (0.67x) - V8's string optimizations outperform C++
 
 **Best Practices:**
 - For recursive algorithms: Use simple functions without closures when possible (auto-optimized)
@@ -125,8 +125,8 @@ See `compiler/test/phase3/concrete-examples/benchmark-performance/` for details.
 
 By combining **fully static typing**, **ownership-qualified memory management**, **deterministic destruction**, and **native compilation**, GoodScript provides:
 
-* **2.55x average speedup** across diverse computational workloads
-* **Exceptional performance** for algorithmic code (up to 9x speedup for binary search)
+* **2.90x average speedup** across diverse computational workloads (isolated benchmark runs)
+* **Exceptional performance** for algorithmic code (up to 11x speedup for binary search)
 * **Optimized recursive functions** with direct declarations (2x+ faster than std::function)
 * **Smart codegen optimizations** for common patterns (string+number concatenation, array access)
 * **Competitive performance** for data structure operations

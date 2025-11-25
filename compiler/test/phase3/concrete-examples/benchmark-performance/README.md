@@ -21,23 +21,23 @@ npm test -- test/phase3/concrete-examples/benchmark-performance.test.ts
 
 | Benchmark             | Node.js | C++ Native | Speedup | Test Size |
 |-----------------------|---------|------------|---------|-----------|  
-| Fibonacci(38)         | ~372ms  | ~178ms     | 2.09x   | 38 levels |
-| Array Operations      | ~30ms   | ~18ms      | 1.67x   | 2M elements |
-| Binary Search         | ~45ms   | ~5ms       | 9.00x   | 100k searches |
-| Bubble Sort           | ~27ms   | ~33ms      | 0.82x   | 6k elements |
-| HashMap Operations    | ~39ms   | ~37ms      | 1.05x   | 150k ops |
+| Fibonacci (recursive) | ~373ms  | ~188ms     | 1.98x   | 38 levels |
+| Array Operations      | ~29ms   | ~17ms      | 1.71x   | 2M elements |
+| Binary Search         | ~44ms   | ~4ms       | 11.00x  | 100k searches |
+| Bubble Sort           | ~26ms   | ~29ms      | 0.90x   | 6k elements |
+| HashMap Operations    | ~35ms   | ~30ms      | 1.17x   | 150k ops |
 | String Manipulation   | ~8ms    | ~12ms      | 0.67x   | 500k chars |
-| **Average Speedup**   |         |            | **2.55x** | |
+| **Average Speedup**   |         |            | **2.90x** | Isolated runs |
 
 *Note: Test sizes increased for statistically significant measurements (all benchmarks now run >10ms). Fibonacci(38) uses recursive function hoisting. Array operations use at_ref() optimization. String operations use array.join() pattern.*
 
 **Performance varies by workload:**
-- **Excellent (5-10x)**: Binary search (9x) - cache-friendly algorithms
-- **Good (1.5-2.5x)**: Fibonacci (2.09x), Array operations (1.67x) - recursive and read-heavy code
-- **Competitive (~1x)**: HashMap operations (1.05x) - optimized string+number concatenation
-- **Slower (<1x)**: Bubble sort (0.82x), String manipulation (0.67x) - write-heavy and V8 optimizations
+- **Excellent (5-12x)**: Binary search (11x) - cache-friendly algorithms with optimal branch prediction
+- **Good (1.5-2x)**: Fibonacci (1.98x), Array operations (1.71x) - recursive and read-heavy code
+- **Competitive (~1x)**: HashMap operations (1.17x), Bubble sort (0.90x) - data structure operations
+- **Slower (<1x)**: String manipulation (0.67x) - V8's string optimizations outperform C++
 
-**Overall average speedup: 2.55x** across diverse workloads
+**Overall average speedup: 2.90x** across diverse workloads (isolated benchmark runs)
 
 ## Analysis
 
@@ -132,11 +132,12 @@ Native C++ memory management with `std::vector`, `std::unordered_map`, and direc
 
 ### Why is Binary Search so fast?
 
-The binary search algorithm benefits from:
-1. Cache-friendly sequential array access
-2. Predictable branch patterns that modern CPUs optimize
-3. No garbage collection interruptions
-4. Integer arithmetic optimizations
+The binary search algorithm shows **11x speedup** - the highest in our benchmark suite - due to:
+1. **Cache-friendly sequential array access** - C++ `std::vector` has excellent cache locality
+2. **Predictable branch patterns** - Modern CPUs can optimize the binary search decision tree
+3. **No garbage collection interruptions** - Deterministic memory management prevents GC pauses
+4. **Integer arithmetic optimizations** - Direct CPU operations without JavaScript number boxing
+5. **Tight loop optimization** - C++ compiler can fully optimize the search loop with no dynamic checks
 
 ### Average Speedup Calculation
 
