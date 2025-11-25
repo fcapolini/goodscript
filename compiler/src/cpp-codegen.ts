@@ -2366,9 +2366,9 @@ export class CppCodegen {
       const indexExpr = this.generateExpression(expr.left.argumentExpression);
       this.addInclude('<algorithm>');
       this.currentAssignmentTarget = previousAssignmentTarget;
-      // Use a helper that resizes if needed: if (index >= arr.size()) arr.resize(index + 1);
-      // Cast index to int to handle double indices from arithmetic
-      // Dereference the pointer returned by operator[] to assign the value
+      
+      // Always use full resize logic for assignments to maintain JS semantics
+      // (Even "simple" indices might need resize if array starts smaller than loop bound)
       return `([&]() { auto& __arr = ${arrayExpr}; auto __idx = static_cast<int>(${indexExpr}); if (__idx >= static_cast<int>(__arr.size())) __arr.resize(__idx + 1); return (*__arr[__idx]) = ${right}; }())`;
     }
     
@@ -2537,6 +2537,42 @@ export class CppCodegen {
       return !text.includes('.');
     }
     return false;
+  }
+  
+  /**
+   * Helper to check if an array index is "simple" (safe for direct access)
+   * Simple indices: identifiers (i, j), binary arithmetic (i+1, n-1), numeric literals
+   * These are typically safe when used within loop bounds
+   * 
+   * IMPORTANT: This should only be used when we're confident bounds are checked
+   * by the loop itself (e.g., for (i = 0; i < n; i++) where n = arr.length())
+   * NOT for dynamic/computed indices that might cause resize
+   */
+  private isSimpleArrayIndex(expr: ts.Expression): boolean {
+    if (ts.isIdentifier(expr)) {
+      return true;  // Loop variable like i, j
+    }
+    if (ts.isNumericLiteral(expr)) {
+      // Only small constants - large indices might be sparse array access
+      const value = parseInt(expr.text, 10);
+      return value >= 0 && value < 100;  // Conservative limit
+    }
+    if (ts.isBinaryExpression(expr)) {
+      // Arithmetic like i+1, j-1 - but NOT random arithmetic
+      const op = expr.operatorToken.kind;
+      if (op === ts.SyntaxKind.PlusToken || op === ts.SyntaxKind.MinusToken) {
+        // Only allow simple patterns: identifier +/- small constant
+        if (ts.isIdentifier(expr.left) && ts.isNumericLiteral(expr.right)) {
+          const offset = parseInt(expr.right.text, 10);
+          return offset >= -10 && offset <= 10;  // Conservative offset
+        }
+        if (ts.isIdentifier(expr.right) && ts.isNumericLiteral(expr.left)) {
+          const offset = parseInt(expr.left.text, 10);
+          return offset >= -10 && offset <= 10;
+        }
+      }
+    }
+    return false;  // Everything else is potentially unsafe
   }
   
   /**
@@ -3633,6 +3669,20 @@ export class CppCodegen {
       const typeString = this.checker.typeToString(type);
       if (typeString === 'string' || typeString === 'String' || typeString.includes('gs::String')) {
         needsDeref = false;  // String indexing returns char, not pointer
+      }
+    }
+    
+    // Optimization: Use at_ref() for simple indices (loop variables, arithmetic)
+    // This avoids pointer indirection overhead in tight loops
+    const isSimpleIndex = this.isSimpleArrayIndex(expr.argumentExpression);
+    if (isSimpleIndex && needsDeref && this.checker) {
+      const type = this.checker.getTypeAtLocation(expr.expression);
+      const typeString = this.checker.typeToString(type);
+      // Only for arrays (not maps or strings)
+      if (!typeString.includes('Map') && !typeString.includes('unordered_map') &&
+          !typeString.includes('String') && !typeString.includes('string')) {
+        // Use direct reference access
+        return `${object}.at_ref(${index})`;
       }
     }
     

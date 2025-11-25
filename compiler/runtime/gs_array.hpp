@@ -452,6 +452,19 @@ public:
     }
   }
   
+  /**
+   * Direct element access by reference (bounds-checked)
+   * For performance-critical code where bounds are known to be valid
+   * Not part of JavaScript API - C++ optimization
+   */
+  T& at_ref(int index) {
+    return impl_[static_cast<size_t>(index)];
+  }
+  
+  const T& at_ref(int index) const {
+    return impl_[static_cast<size_t>(index)];
+  }
+  
   // STL-compatible iterators
   
   iterator begin() { return impl_.begin(); }

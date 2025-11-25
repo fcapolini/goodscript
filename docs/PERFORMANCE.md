@@ -28,13 +28,13 @@ Benchmark suite comparing Node.js vs GoodScript C++ compilation:
 
 | Benchmark             | Node.js | C++ Native | Speedup |
 |-----------------------|---------|------------|---------|  
-| Fibonacci(35)         | ~390ms  | ~185ms     | 2.11x   |
+| Fibonacci(35)         | ~371ms  | ~192ms     | 1.93x   |
 | Array Operations      | ~9ms    | ~4ms       | 2.25x   |
-| Binary Search         | ~47ms   | ~4ms       | 11.75x  |
-| Bubble Sort           | ~7ms    | ~8ms       | 0.88x   |
-| HashMap Operations    | ~11ms   | ~8ms       | 1.38x   |
-| String Manipulation   | ~1ms    | ~1ms       | 1.00x   |
-| **Average Speedup**   |         |            | **3.23x** |*Note: Recursive functions are now optimized with direct declarations (2.68x faster). String operations use array.join() pattern for O(n) performance instead of O(n²) concatenation.*
+| Binary Search         | ~45ms   | ~4ms       | 11.25x  |
+| Bubble Sort           | ~7ms    | ~7ms       | 1.00x   |
+| HashMap Operations    | ~10ms   | ~9ms       | 1.11x   |
+| String Manipulation   | ~2ms    | ~1ms       | 2.00x   |
+| **Average Speedup**   |         |            | **3.26x** |*Note: Recursive functions are now optimized with direct declarations (2.68x faster). String operations use array.join() pattern for O(n) performance instead of O(n²) concatenation.*
 
 **Key Optimizations:** 
 1. Recursive functions that don't capture outer scope are hoisted to namespace scope as direct C++ functions, eliminating `std::function` overhead. This improved Fibonacci from 0.73x (slower!) to 1.94x (faster).
@@ -60,21 +60,22 @@ Actual performance tests comparing GoodScript C++ compilation against Node.js sh
 
 | Benchmark              | Node.js | C++ Native | Speedup | Notes                                    |
 | ---------------------- | ------- | ---------- | ------- | ---------------------------------------- |
-| Fibonacci(35)          | ~390ms  | ~185ms     | 2.11x   | Optimized with direct function declarations |
-| Array ops (100k elems) | ~9ms    | ~4ms       | 2.25x   | Native memory operations |
-| Binary search          | ~47ms   | ~4ms       | 11.75x  | Excellent cache locality and branch prediction |
-| Bubble sort            | ~7ms    | ~8ms       | 0.88x   | Competitive with JIT |
-| HashMap ops            | ~11ms   | ~8ms       | 1.38x   | Optimized string+number concatenation pattern |
-| String manipulation    | ~1ms    | ~1ms       | 1.00x   | Using array.join() pattern (O(n) vs O(n²)) |
-| **Average Speedup**    |         |            | **3.23x** | Per-benchmark average (not total time) |
+| Fibonacci(35)          | ~371ms  | ~192ms     | 1.93x   | Optimized with direct function declarations |
+| Array ops (100k elems) | ~9ms    | ~4ms       | 2.25x   | at_ref() for simple index reads |
+| Binary search          | ~45ms   | ~4ms       | 11.25x  | Excellent cache locality and branch prediction |
+| Bubble sort            | ~7ms    | ~7ms       | 1.00x   | Write-heavy, resize checks preserved for safety |
+| HashMap ops            | ~10ms   | ~9ms       | 1.11x   | Optimized string+number concatenation pattern |
+| String manipulation    | ~2ms    | ~1ms       | 2.00x   | Using array.join() pattern (O(n) vs O(n²)) |
+| **Average Speedup**    |         |            | **3.26x** | Per-benchmark average (not total time) |
 
 **Key Findings:**
-- **Average speedup: 3.23x** across mixed workloads (balanced metric weighing each test equally)
+- **Average speedup: 3.26x** across mixed workloads (balanced metric weighing each test equally)
 - **Recursive optimization**: Hoisting non-closure functions to namespace scope eliminates std::function overhead (2.68x improvement)
 - **String concatenation optimization**: Pattern `'literal' + number.toString()` generates efficient C++ using `concat_number()` (2.4x improvement for HashMap)
+- **Array access optimization**: Simple indices (loop variables, small offsets) use `at_ref()` for direct access on reads
 - **String building optimization**: Using array.push() + join() instead of repeated concatenation (18x improvement)
-- **Algorithm-intensive code**: Binary search shows 11.75x speedup with cache-friendly patterns
-- **Data structures**: Native arrays and hash maps both show significant advantages
+- **Algorithm-intensive code**: Binary search shows 11.25x speedup with cache-friendly patterns
+- **Data structures**: Native arrays and hash maps both show advantages
 - **Overall**: Significant performance advantages for algorithmic and memory-intensive workloads
 
 **Best Practices:**
@@ -82,6 +83,7 @@ Actual performance tests comparing GoodScript C++ compilation against Node.js sh
 - For string + number concatenation: Pattern `'prefix' + n.toString()` is auto-optimized (no manual changes needed)
 - For string building in loops: Use `chars.push('x'); result = chars.join('')` instead of `result = result + 'x'`
 - For hash maps: String keys with numbers are now efficient thanks to codegen optimization
+- For array access: Simple loop variable indices use optimized direct access automatically
 
 See `compiler/test/phase3/concrete-examples/benchmark-performance/` for details.
 
@@ -113,10 +115,10 @@ See `compiler/test/phase3/concrete-examples/benchmark-performance/` for details.
 
 By combining **fully static typing**, **ownership-qualified memory management**, **deterministic destruction**, and **native compilation**, GoodScript provides:
 
-* **3.23x average speedup** across diverse computational workloads
-* **Exceptional performance** for algorithmic code (up to 11.75x speedup for binary search)
+* **3.26x average speedup** across diverse computational workloads
+* **Exceptional performance** for algorithmic code (up to 11.25x speedup for binary search)
 * **Optimized recursive functions** with direct declarations (2-3x faster than std::function)
-* **Smart codegen optimizations** for common patterns (string+number concatenation, array building)
+* **Smart codegen optimizations** for common patterns (string+number concatenation, array access, array building)
 * **Competitive or better** performance for memory-intensive operations and hash maps
 * **Efficient string operations** with automatic pattern optimization
 * **Deterministic memory management** without garbage collection pauses
