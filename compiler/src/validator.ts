@@ -625,8 +625,14 @@ export class Validator {
     const getTrueName = this.getBaseTypeName(trueType, checker);
     const getFalseName = this.getBaseTypeName(falseType, checker);
 
+    // Allow ternaries where one branch is a value type and the other is explicitly null/undefined
+    // e.g., value ? value : null, or undefined ? null : value
+    const isNullOrUndefined = (name: string) => name === 'null' || name === 'undefined' || name === 'void';
+    
     // If types are incompatible (different base types), reject
-    if (getTrueName !== getFalseName) {
+    // Exception: allow if one side is the actual type and other is null/undefined
+    if (getTrueName !== getFalseName && 
+        !(isNullOrUndefined(getTrueName) || isNullOrUndefined(getFalseName))) {
       this.addError(
         `Ternary expression branches must have compatible types. Got '${getTrueName}' and '${getFalseName}'. ` +
         `Use explicit type conversion or refactor to avoid mixed types.`,

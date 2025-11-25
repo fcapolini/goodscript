@@ -393,23 +393,63 @@ public:
     return result;
   }
   
-  // Array subscript operators
-  // Use decltype to handle std::vector<bool> which returns a proxy type
+  // Array subscript operators return pointers (nullable)
+  // Returns nullptr for out-of-bounds access (JavaScript undefined semantics)
+  // In GoodScript, null and undefined are synonyms
   
-  auto operator[](int index) -> decltype(impl_[index]) {
-    return impl_[index];
+  // Static bool constants for vector<bool> edge case
+  // std::vector<bool> is specialized and doesn't allow &impl_[index]
+  // So we return pointers to these static constants instead
+  static inline const bool TRUE_VALUE = true;
+  static inline const bool FALSE_VALUE = false;
+  
+  // Non-const int index
+  T* operator[](int index) {
+    if (index < 0 || index >= static_cast<int>(impl_.size())) {
+      return nullptr;
+    }
+    if constexpr (std::is_same_v<T, bool>) {
+      // For bool arrays, return pointer to static constant
+      return impl_[index] ? const_cast<bool*>(&TRUE_VALUE) : const_cast<bool*>(&FALSE_VALUE);
+    } else {
+      return &impl_[index];
+    }
   }
   
-  auto operator[](int index) const -> decltype(impl_[index]) {
-    return impl_[index];
+  // Const int index
+  const T* operator[](int index) const {
+    if (index < 0 || index >= static_cast<int>(impl_.size())) {
+      return nullptr;
+    }
+    if constexpr (std::is_same_v<T, bool>) {
+      return impl_[index] ? &TRUE_VALUE : &FALSE_VALUE;
+    } else {
+      return &impl_[index];
+    }
   }
   
-  auto operator[](size_t index) -> decltype(impl_[index]) {
-    return impl_[index];
+  // Non-const size_t index
+  T* operator[](size_t index) {
+    if (index >= impl_.size()) {
+      return nullptr;
+    }
+    if constexpr (std::is_same_v<T, bool>) {
+      return impl_[index] ? const_cast<bool*>(&TRUE_VALUE) : const_cast<bool*>(&FALSE_VALUE);
+    } else {
+      return &impl_[index];
+    }
   }
   
-  auto operator[](size_t index) const -> decltype(impl_[index]) {
-    return impl_[index];
+  // Const size_t index
+  const T* operator[](size_t index) const {
+    if (index >= impl_.size()) {
+      return nullptr;
+    }
+    if constexpr (std::is_same_v<T, bool>) {
+      return impl_[index] ? &TRUE_VALUE : &FALSE_VALUE;
+    } else {
+      return &impl_[index];
+    }
   }
   
   // STL-compatible iterators

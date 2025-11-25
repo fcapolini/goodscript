@@ -1,9 +1,9 @@
 # Phase 3: C++ Code Generation
 
-**Status:** ✅ ~96% Complete (894 tests passing)
+**Status:** ✅ ~98% Complete (896 tests passing)
 
 **Test Coverage:** 
-- 66 basic feature tests (100% passing)
+- 68 basic feature tests (100% passing)
 - 28 runtime library tests (100% passing)
 - 28 RegExp runtime tests (100% passing) ✅
 - 9 RegExp codegen tests (100% passing) ✅
@@ -25,6 +25,17 @@
   - ⏸️ interface-shapes - Requires: interface virtual methods, polymorphic arrays, method resolution
 
 **Recent Updates (Nov 25, 2025):**
+- ✅ **JavaScript-Compatible Array Bounds Checking** - Pointer-based approach:
+  - `gs::Array<T>::operator[]` returns `T*` (pointer) instead of `T&` (reference)
+  - Returns `nullptr` for out-of-bounds access (matches JavaScript `undefined` semantics)
+  - Auto-dereference in codegen: `arr[i]` → `(*arr[i])` for value usage
+  - Static bool constants for `std::vector<bool>` (solves bit-packing issue)
+  - Property access optimization: `arr[i].name` → `arr[i]->name` (no dereference)
+  - JSON.stringify updated to handle pointer returns
+  - Array assignment fixed: `arr[i] = x` → `(*arr[i]) = x`
+  - Ternary validator relaxed: allows `value ? value : null` patterns
+  - 896 tests passing (+2 from 894)
+  - All 12/12 active concrete examples still passing
 - ✅ **Optional Unwrapping & Null Check Fixes** - 5 critical codegen bugs resolved:
   - Compound null checks: `(x !== null && x !== undefined)` now correctly generates `.has_value()` for `optional<T>` or boolean context for smart pointers
   - Element access unwrapping: Array subscripts on `.match()` results now properly add `.value()` prefix

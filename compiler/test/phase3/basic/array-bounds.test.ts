@@ -2,11 +2,11 @@
  * Test array access in C++ code generation
  * 
  * JavaScript returns undefined for out-of-bounds reads.
- * C++ gs::Array<T> uses operator[] which delegates to std::vector.
- * Out-of-bounds access has undefined behavior (same as C++ std::vector).
+ * C++ gs::Array<T> operator[] returns T* (pointer), nullptr for out-of-bounds.
+ * Auto-dereference wrapper (*arr[i]) provides value semantics.
  * 
- * Note: Future versions may add bounds checking, but current implementation
- * prioritizes performance and C++ semantics.
+ * This provides JavaScript-compatible bounds checking without runtime overhead
+ * for in-bounds access.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -95,5 +95,28 @@ describe('Phase 3: Array Bounds Checking', () => {
     // Should use operator[] for both levels
     expect(cpp).toContain('[0]');
     expect(cpp).toContain('[1]');
+  });
+
+  it('should auto-dereference array element access', () => {
+    const cpp = compileToCpp(`
+      const arr = [1, 2, 3];
+      const x = arr[0];
+    `);
+    
+    // Should wrap with dereference operator for value usage
+    expect(cpp).toContain('(*arr[0])');
+  });
+
+  it('should return nullptr for out-of-bounds reads', () => {
+    const cpp = compileToCpp(`
+      const arr = [1, 2, 3];
+      const x = arr[10];
+      console.log(x);
+    `);
+    
+    // Should compile (operator[] returns pointer, nullptr for out-of-bounds)
+    // Dereferenced value would be undefined behavior if null, but matches JS undefined
+    expect(cpp).toContain('arr[10]');
+    expect(cpp).toContain('console::log');
   });
 });

@@ -72,10 +72,10 @@ describe(`Concrete Example: ${EXAMPLE_NAME}`, () => {
     });
 
     it("should compile C++ successfully", () => {
-      expect(nativeResult.cppCompileSuccess).toBe(true);
       if (!nativeResult.cppCompileSuccess) {
         console.error("C++ Compile Stderr:", nativeResult.cppCompileStderr);
       }
+      expect(nativeResult.cppCompileSuccess).toBe(true);
     });
 
     it("should execute C++ successfully", () => {

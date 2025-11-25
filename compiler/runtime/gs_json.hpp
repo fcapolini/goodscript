@@ -100,7 +100,12 @@ public:
     
     for (int i = 0; i < arr.length(); ++i) {
       if (i > 0) oss << ',';
-      oss << stringify(arr[i]).str();
+      auto ptr = arr[i];
+      if (ptr) {
+        oss << stringify(*ptr).str();
+      } else {
+        oss << "null";
+      }
     }
     
     oss << ']';
@@ -114,7 +119,12 @@ public:
     
     for (int i = 0; i < arr.length(); ++i) {
       if (i > 0) oss << ',';
-      oss << arr[i];
+      auto ptr = arr[i];
+      if (ptr) {
+        oss << *ptr;
+      } else {
+        oss << "null";
+      }
     }
     
     oss << ']';
@@ -128,7 +138,12 @@ public:
     
     for (int i = 0; i < arr.length(); ++i) {
       if (i > 0) oss << ',';
-      oss << stringify(arr[i]).str();
+      auto ptr = arr[i];
+      if (ptr) {
+        oss << stringify(*ptr).str();
+      } else {
+        oss << "null";
+      }
     }
     
     oss << ']';
@@ -142,7 +157,12 @@ public:
     
     for (int i = 0; i < arr.length(); ++i) {
       if (i > 0) oss << ',';
-      oss << (arr[i] ? "true" : "false");
+      auto ptr = arr[i];
+      if (ptr) {
+        oss << (*ptr ? "true" : "false");
+      } else {
+        oss << "null";
+      }
     }
     
     oss << ']';

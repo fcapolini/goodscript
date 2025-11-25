@@ -2177,7 +2177,8 @@ export class CppCodegen {
       this.currentAssignmentTarget = previousAssignmentTarget;
       // Use a helper that resizes if needed: if (index >= arr.size()) arr.resize(index + 1);
       // Cast index to int to handle double indices from arithmetic
-      return `([&]() { auto& __arr = ${arrayExpr}; auto __idx = static_cast<int>(${indexExpr}); if (__idx >= static_cast<int>(__arr.size())) __arr.resize(__idx + 1); return __arr[__idx] = ${right}; }())`;
+      // Dereference the pointer returned by operator[] to assign the value
+      return `([&]() { auto& __arr = ${arrayExpr}; auto __idx = static_cast<int>(${indexExpr}); if (__idx >= static_cast<int>(__arr.size())) __arr.resize(__idx + 1); return (*__arr[__idx]) = ${right}; }())`;
     }
     
     // For assignment to smart pointer fields, wrap new expressions
@@ -2664,7 +2665,10 @@ export class CppCodegen {
    * Generate property access
    */
   private generatePropertyAccess(expr: ts.PropertyAccessExpression): string {
-    const object = this.generateExpression(expr.expression);
+    // For element access expressions, generate without dereferencing (we'll use -> instead)
+    const object = ts.isElementAccessExpression(expr.expression)
+      ? this.generateElementAccess(expr.expression, { noDeref: true })
+      : this.generateExpression(expr.expression);
     const propertyName = expr.name.getText();
     const property = this.escapeIdentifier(propertyName);
     
@@ -2752,7 +2756,8 @@ export class CppCodegen {
     }
     
     // Determine the accessor (. or ->)
-    let accessor = '.';
+    // Element access returns pointer, so use ->
+    let accessor = ts.isElementAccessExpression(expr.expression) ? '->' : '.';
     let needsOptionalUnwrap = false;
     
     // Special handling for 'this' - it's a pointer in C++
@@ -2760,7 +2765,7 @@ export class CppCodegen {
       accessor = '->';
     }
     // Check if the expression is a smart pointer using our helper
-    else if (this.isSmartPointerType(expr.expression)) {
+    else if (!ts.isElementAccessExpression(expr.expression) && this.isSmartPointerType(expr.expression)) {
       accessor = '->';
     }
     // Check if it's a variable that might need optional unwrapping
@@ -3195,12 +3200,9 @@ export class CppCodegen {
   
   /**
    * Generate element access (array/map indexing)
-   * 
-   * For arrays, we need bounds checking to match JavaScript semantics.
-   * JavaScript returns undefined for out-of-bounds reads; we return default value (0, false, etc.)
-   * to avoid exceptions while maintaining safety.
+   * Array access returns T* (pointer) for bounds checking - automatically dereferenced when used as value
    */
-  private generateElementAccess(expr: ts.ElementAccessExpression): string {
+  private generateElementAccess(expr: ts.ElementAccessExpression, options?: { noDeref?: boolean }): string {
     let object = this.generateExpression(expr.expression);
     let index = this.generateExpression(expr.argumentExpression);
     const accessor = (object === 'this') ? '->' : '.';
@@ -3314,13 +3316,13 @@ export class CppCodegen {
       }
     }
     
-    // For arrays, use operator[] (gs::Array has bounds-checked operator[])
-    // JavaScript returns undefined for out-of-bounds, gs::Array returns std::optional
-    if (object === 'this') {
-      return `${object}${accessor}vec[${index}]`;
-    }
+    // Array access returns T* (pointer) - dereference for value usage
+    // Don't dereference if this is the target of property access (arr[i].name)
+    // or if explicitly requested via options
+    const needsDeref = !options?.noDeref;
+    const arrayAccess = object === 'this' ? `${object}->${index}` : `${object}[${index}]`;
     
-    return `${object}[${index}]`;
+    return needsDeref ? `(*${arrayAccess})` : arrayAccess;
   }
   
   /**

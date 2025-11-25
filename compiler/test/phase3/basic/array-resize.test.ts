@@ -32,9 +32,9 @@ describe('Phase 3: Array Auto-Resize', () => {
     `;
     const cpp = compileToCpp(source);
     
-    // Should contain resize logic
+    // Should contain resize logic and dereferenced assignment
     expect(cpp).toContain('resize');
-    expect(cpp).toContain('[__idx] = 42');
+    expect(cpp).toContain('(*__arr[__idx]) = 42');
   });
   
   it('should handle assignment in a loop', () => {
