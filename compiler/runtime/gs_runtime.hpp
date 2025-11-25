@@ -27,6 +27,7 @@
  */
 
 #include "gs_string.hpp"
+#include "gs_string_builder.hpp"
 #include "gs_array.hpp"
 #include "gs_map.hpp"
 #include "gs_property.hpp"

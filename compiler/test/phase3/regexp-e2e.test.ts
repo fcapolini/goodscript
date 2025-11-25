@@ -48,6 +48,7 @@ describe('RegExp End-to-End C++ Tests', () => {
     const runtimeDir = path.join(__dirname, '../../runtime');
     const headers = [
       'gs_string.hpp',
+      'gs_string_builder.hpp',
       'gs_array.hpp',
       'gs_array_impl.hpp',
       'gs_map.hpp',

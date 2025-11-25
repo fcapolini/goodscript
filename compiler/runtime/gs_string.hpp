@@ -46,6 +46,14 @@ public:
   }
   
   /**
+   * Reserve capacity for string growth (performance optimization)
+   * Not part of JavaScript API, but useful for performance-critical code
+   */
+  void reserve(int capacity) {
+    impl_.reserve(capacity);
+  }
+  
+  /**
    * Returns the character at the specified index
    * Equivalent to TypeScript: str.charAt(index)
    */
@@ -428,6 +436,24 @@ public:
   
   String operator+(const String& other) const {
     return String(impl_ + other.impl_);
+  }
+  
+  // Optimize for rvalue (temporary) on left side: String("temp") + other
+  String operator+(String&& other) const {
+    other.impl_.insert(0, impl_);
+    return std::move(other);
+  }
+  
+  // Optimize for lvalue += rvalue
+  friend String operator+(String&& left, const String& right) {
+    left.impl_ += right.impl_;
+    return std::move(left);
+  }
+  
+  // Optimize for both rvalues
+  friend String operator+(String&& left, String&& right) {
+    left.impl_ += right.impl_;
+    return std::move(left);
   }
   
   String& operator+=(const String& other) {

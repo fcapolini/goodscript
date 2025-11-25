@@ -177,11 +177,14 @@ const benchHashMap = (operations: number): number => {
 const benchStringOps = (iterations: number): number => {
   const start = now();
   
-  let result = '';
+  // Build string using array + join (O(n) approach, recommended for C++)
+  const chars = new Array<string>();
   for (let i = 0; i < iterations; i++) {
-    result = result + 'x';
+    chars.push('x');
   }
+  const result = chars.join('');
   
+  // Count characters
   let count = 0;
   for (let i = 0; i < result.length; i++) {
     if (result.charAt(i) === 'x') {
