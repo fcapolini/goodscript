@@ -132,7 +132,7 @@ describe('RegExp Runtime Library', () => {
     
     // Compile C++ with PCRE2 if required
     const cppBinary = path.join(cppOutDir, testName);
-    let compileCmd = `g++ -std=c++20 -I. ${cppSourceFile} -o ${cppBinary}`;
+    let compileCmd = `zig c++ -std=c++20 -I. ${cppSourceFile} -o ${cppBinary}`;
     
     if (options?.pcre2Required) {
       // Try to find PCRE2 via pkg-config or brew

@@ -11,10 +11,16 @@
  * - T | null | undefined -> std::optional<T>
  * 
  * All generated code is wrapped in the 'gs' namespace to avoid keyword conflicts.
+ * 
+ * Architecture: Hybrid approach with gradual migration to AST-based generation
+ * - New code uses AST nodes from src/cpp/ast.ts
+ * - Legacy code uses direct string generation
+ * - Both emit to the same output buffer
  */
 
 import * as ts from 'typescript';
 import { Parser } from './parser';
+import { cpp, render, CppNode } from './cpp';
 
 /**
  * C++ reserved keywords that must be avoided even in gs:: namespace
@@ -158,6 +164,23 @@ export class CppCodegen {
   }
   
   /**
+   * Emit a C++ AST node (renders to string and emits each line)
+   * This allows gradual migration to AST-based generation
+   */
+  private emitNode(node: CppNode): void {
+    const rendered = render(node, { indentSize: 2, indentChar: ' ' });
+    const lines = rendered.split('\n');
+    for (const line of lines) {
+      if (line === '') {
+        this.output.push('');
+      } else {
+        // Apply current indent level to each line
+        this.output.push(this.INDENT.repeat(this.indentLevel) + line);
+      }
+    }
+  }
+  
+  /**
    * Increase indent level
    */
   private indent(): void {
@@ -192,6 +215,178 @@ export class CppCodegen {
     this.hoistedFunctions = [];
     this.hoistedFunctionNames.clear();
   }
+  
+  // ============================================================================
+  // AST-based expression generation (gradual migration)
+  // ============================================================================
+  
+  /**
+   * Convert TypeScript literal to C++ AST literal
+   * Returns null if not a simple literal (use legacy string generation)
+   */
+  private tsLiteralToCppLiteral(expr: ts.Expression): import('./cpp').Expression | null {
+    if (ts.isNumericLiteral(expr)) {
+      const num = parseFloat(expr.text);
+      return cpp.numberLit(num);
+    } else if (ts.isStringLiteral(expr)) {
+      // Use GoodScript-specific gs::String wrapper
+      return cpp.gsString(expr.text);
+    } else if (expr.kind === ts.SyntaxKind.TrueKeyword) {
+      return cpp.boolLit(true);
+    } else if (expr.kind === ts.SyntaxKind.FalseKeyword) {
+      return cpp.boolLit(false);
+    } else if (expr.kind === ts.SyntaxKind.NullKeyword || 
+               expr.kind === ts.SyntaxKind.UndefinedKeyword) {
+      // Use std::nullopt for null/undefined
+      return cpp.nullopt();
+    }
+    return null;
+  }
+  
+  /**
+   * Try to convert TypeScript expression to C++ AST expression
+   * Returns null if conversion not yet implemented (use legacy generation)
+   */
+  private tryConvertToCppExpr(expr: ts.Expression): import('./cpp').Expression | null {
+    // Start with simple literals
+    const literal = this.tsLiteralToCppLiteral(expr);
+    if (literal) {
+      return literal;
+    }
+    
+    // Identifiers
+    if (ts.isIdentifier(expr)) {
+      const text = expr.getText();
+      
+      // Special identifiers
+      if (text === 'undefined') return cpp.nullopt();
+      if (text === 'NaN') return cpp.member(cpp.id('gs::Number'), 'NaN');
+      if (text === 'Infinity') return cpp.member(cpp.id('gs::Number'), 'INFINITY');
+      if (text === 'Math') return cpp.id('gs::Math');
+      if (text === 'Number') return cpp.id('gs::Number');
+      if (text === 'this') return cpp.id('this');
+      
+      const escaped = this.escapeIdentifier(text);
+      
+      // NOTE: Pointer variable dereferencing is context-dependent
+      // (don't deref in null checks), so we don't handle it in AST mode yet.
+      // Fall back to legacy for pointer vars.
+      if (this.pointerVars.has(escaped)) {
+        return null;  // Fall back to legacy
+      }
+      
+      // Handle unwrapped optionals
+      if (this.unwrappedOptionals.has(escaped)) {
+        // .value() is a method call, not a property
+        return cpp.call(cpp.member(cpp.id(escaped), 'value'), []);
+      }
+      
+      return cpp.id(escaped);
+    }
+    
+    // Binary expressions
+    if (ts.isBinaryExpression(expr)) {
+      // For now, don't use AST for binary expressions involving pointer variables
+      // because we need context-aware dereferencing (don't deref in null checks)
+      if (ts.isIdentifier(expr.left) && this.pointerVars.has(this.escapeIdentifier(expr.left.getText()))) {
+        return null;  // Fall back to legacy
+      }
+      if (ts.isIdentifier(expr.right) && this.pointerVars.has(this.escapeIdentifier(expr.right.getText()))) {
+        return null;  // Fall back to legacy
+      }
+      
+      // Don't use AST for comparisons with null/undefined
+      // because we need type information to decide between nullptr and std::nullopt
+      const leftIsNull = ts.isIdentifier(expr.left) && expr.left.getText() === 'undefined' ||
+                        expr.left.kind === ts.SyntaxKind.NullKeyword;
+      const rightIsNull = ts.isIdentifier(expr.right) && expr.right.getText() === 'undefined' ||
+                         expr.right.kind === ts.SyntaxKind.NullKeyword;
+      if (leftIsNull || rightIsNull) {
+        return null;  // Fall back to legacy which has proper type-aware handling
+      }
+      
+      const left = this.tryConvertToCppExpr(expr.left);
+      const right = this.tryConvertToCppExpr(expr.right);
+      
+      if (left && right) {
+        let op = expr.operatorToken.getText();
+        
+        // Map TypeScript operators to C++ operators
+        if (op === '===') op = '==';
+        if (op === '!==') op = '!=';
+        
+        // Handle modulo operator for doubles
+        // In TypeScript, % works on numbers (which are doubles), but in C++ % only works on integers
+        if (op === '%') {
+          // For the common case of checking if a number is even/odd (x % 2),
+          // cast to int since we're checking divisibility
+          if (ts.isNumericLiteral(expr.right) && !expr.right.getText().includes('.')) {
+            return cpp.binary(
+              cpp.call(cpp.id('static_cast<int>'), [left]),
+              '%',
+              cpp.call(cpp.id('static_cast<int>'), [right])
+            );
+          }
+          // For general modulo, use std::fmod
+          return cpp.call(cpp.id('std::fmod'), [left, right]);
+        }
+        
+        return cpp.binary(left, op, right);
+      }
+    }
+    
+    // Parenthesized expressions
+    if (ts.isParenthesizedExpression(expr)) {
+      const inner = this.tryConvertToCppExpr(expr.expression);
+      if (inner) {
+        return cpp.paren(inner);
+      }
+    }
+    
+    // Prefix unary expressions (!x, -x, ++x, etc.)
+    if (ts.isPrefixUnaryExpression(expr)) {
+      const operand = this.tryConvertToCppExpr(expr.operand);
+      if (operand) {
+        const op = ts.tokenToString(expr.operator);
+        return cpp.unary(op!, operand);
+      }
+    }
+    
+    // Postfix unary expressions (x++, x--)
+    if (ts.isPostfixUnaryExpression(expr)) {
+      const operand = this.tryConvertToCppExpr(expr.operand);
+      if (operand) {
+        const op = ts.tokenToString(expr.operator);
+        return cpp.postfix(operand, op!);
+      }
+    }
+    
+    // Conditional (ternary) expressions
+    if (ts.isConditionalExpression(expr)) {
+      const condition = this.tryConvertToCppExpr(expr.condition);
+      const whenTrue = this.tryConvertToCppExpr(expr.whenTrue);
+      const whenFalse = this.tryConvertToCppExpr(expr.whenFalse);
+      
+      if (condition && whenTrue && whenFalse) {
+        return cpp.ternary(condition, whenTrue, whenFalse);
+      }
+    }
+    
+    // Array literals
+    if (ts.isArrayLiteralExpression(expr)) {
+      // Array literals need type context (gs::Array<T>{...})
+      // which requires type inference from parent/context
+      // For now, fall back to legacy which handles this
+      return null;
+    }
+    
+    // For now, return null for more complex expressions
+    return null;
+  }
+  
+  // ============================================================================
+  // Legacy string-based generation methods
+  // ============================================================================
   
   /**
    * Add helper functions for GoodScript runtime
@@ -2063,6 +2258,13 @@ export class CppCodegen {
    * Generate expression
    */
   private generateExpression(expr: ts.Expression): string {
+    // Try AST-based conversion first (gradual migration)
+    const cppExpr = this.tryConvertToCppExpr(expr);
+    if (cppExpr) {
+      return render(cppExpr, { indentSize: 0 }).trim();
+    }
+    
+    // Fall back to legacy string generation
     if (ts.isNumericLiteral(expr)) {
       return expr.text;
     } else if (ts.isStringLiteral(expr)) {

@@ -260,6 +260,22 @@ export class CppBuilder {
     return new AST.SubscriptExpr(object, index);
   }
 
+  paren(expression: AST.Expression): AST.ParenExpr {
+    return new AST.ParenExpr(expression);
+  }
+
+  postfix(operand: AST.Expression, operator: string): AST.UnaryExpr {
+    return new AST.UnaryExpr(operator, operand, false);
+  }
+
+  ternary(condition: AST.Expression, whenTrue: AST.Expression, whenFalse: AST.Expression): AST.ConditionalExpr {
+    return new AST.ConditionalExpr(condition, whenTrue, whenFalse);
+  }
+
+  initList(elements: AST.Expression[]): AST.InitializerList {
+    return new AST.InitializerList(elements);
+  }
+
   id(name: string): AST.Identifier {
     return new AST.Identifier(name);
   }
@@ -414,6 +430,35 @@ export class CppBuilder {
    */
   assignOp(lhs: AST.Expression, op: string, rhs: AST.Expression): AST.BinaryExpr {
     return this.binary(lhs, `${op}=`, rhs);
+  }
+
+  // ============================================================================
+  // GoodScript-specific helpers
+  // ============================================================================
+
+  /**
+   * Create a GoodScript string: gs::String("...")
+   * This wraps the C++ string literal in gs::String constructor
+   */
+  gsString(value: string): AST.CallExpr {
+    return this.call(
+      this.id('gs::String'),
+      [this.stringLit(value)]
+    );
+  }
+
+  /**
+   * Create std::nullopt (for optional types)
+   */
+  nullopt(): AST.Identifier {
+    return this.id('std::nullopt');
+  }
+
+  /**
+   * Create nullptr (for pointer types)
+   */
+  nullptr(): AST.Identifier {
+    return this.id('nullptr');
   }
 }
 

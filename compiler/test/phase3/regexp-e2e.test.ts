@@ -74,15 +74,16 @@ describe('RegExp End-to-End C++ Tests', () => {
     
     // Try to compile with Zig (GoodScript standard) or g++
     const binary = path.join(tempDir, 'test');
-    let compiler = 'g++';
+    let compiler = 'zig c++';
     let pcre2Flags = '';
     
     // Check if Zig is available
     try {
-      execSync('which zig', { stdio: 'pipe' });
-      compiler = 'zig c++';
+      execSync('zig version', { stdio: 'pipe' });
     } catch {
       // Fall back to g++
+      console.warn('Zig not found, falling back to g++');
+      compiler = 'g++';
     }
     
     // Try to find PCRE2

@@ -132,7 +132,7 @@ describe('Runtime Library Equivalence', () => {
     // Compile C++
     const cppBinary = path.join(cppOutDir, testName);
     try {
-      execSync(`g++ -std=c++20 -I. ${cppSourceFile} -o ${cppBinary}`, {
+      execSync(`zig c++ -std=c++20 -I. ${cppSourceFile} -o ${cppBinary}`, {
         cwd: cppOutDir,
         stdio: 'pipe'
       });

@@ -6,7 +6,11 @@
 
 import { describe, it, expect } from 'vitest';
 import { CppCodegen } from '../../../src/cpp-codegen';
+import { AstCodegen } from '../../../src/cpp/codegen';
 import ts from 'typescript';
+
+// Toggle between legacy and AST-based codegen
+const USE_AST_CODEGEN = true;
 
 /**
  * Helper to compile TypeScript source to C++
@@ -19,8 +23,13 @@ function compileToCpp(source: string): string {
     true
   );
   
-  const codegen = new CppCodegen();
-  return codegen.generate(sourceFile);
+  if (USE_AST_CODEGEN) {
+    const codegen = new AstCodegen();
+    return codegen.generate(sourceFile);
+  } else {
+    const codegen = new CppCodegen();
+    return codegen.generate(sourceFile);
+  }
 }
 
 describe('Phase 3: Primitive Types', () => {

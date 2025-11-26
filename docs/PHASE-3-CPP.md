@@ -1,26 +1,40 @@
 # Phase 3: C++ Code Generation
 
-**Status:** ✅ ~98% Complete (929 tests passing)
+**Status:** ✅ ~98% Complete (929+ tests passing)
 
 ## Architecture
 
-The C++ code generation uses an **AST-based approach** (as of Nov 25, 2025):
+The C++ code generation uses an **AST-based approach**:
 
+### Current Implementation (Nov 26, 2025)
+
+**New AST-Based Codegen:**
+- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (490 lines)
+  - Pure AST transformation from TypeScript AST → C++ AST
+  - No string concatenation during generation
+  - Type-safe, composable, easily testable
+  - **Currently passing 36/37 basic tests (97.3%)**
+
+**AST Infrastructure:**
 - **`src/cpp/ast.ts`** - C++ AST node type definitions (735 lines)
 - **`src/cpp/builder.ts`** - Fluent API for constructing AST (405 lines)
 - **`src/cpp/renderer.ts`** - AST to formatted C++ code converter (672 lines)
-- **`src/cpp-codegen.ts`** - Main codegen (uses string generation, migration to AST pending)
 
-Benefits of AST-based approach:
-- Type-safe construction at compile time
-- Composable and reusable code patterns
-- Testable without string comparisons
-- Enables transformations and optimizations
-- Clean separation: construction vs. rendering
+**Legacy Implementation:**
+- **`src/cpp-codegen.ts`** - String-based codegen (3500+ lines)
+  - Currently used for full feature set
+  - Migration to AST-based approach in progress
+
+### Benefits of AST-Based Approach
+- **Type safety:** Compile-time validation of C++ structure
+- **Composability:** Clean separation of concerns (transform → AST → render)
+- **Maintainability:** Each feature is 10-30 lines of code
+- **Incremental development:** Add features one at a time, test immediately
+- **No formatting bugs:** Renderer handles all indentation, braces, semicolons
 
 See `src/cpp/README.md` for usage examples.
 
-**Test Coverage:** 
+**Test Coverage (Legacy Codegen):** 
 - 68 basic feature tests (100% passing)
 - 28 runtime library tests (100% passing)
 - 28 RegExp runtime tests (100% passing) ✅
@@ -43,7 +57,42 @@ See `src/cpp/README.md` for usage examples.
   - ⏸️ hash-map - Requires: tuple literals, tuple subscript operator, mixed-type array literals
   - ⏸️ interface-shapes - Requires: interface virtual methods, polymorphic arrays, method resolution
 
-**Recent Updates (Nov 25, 2025):**
+**Recent Updates (Nov 26, 2025):**
+- ✅ **New AST-Based Codegen Implementation** - Clean-room rebuild:
+  - Created `src/cpp/codegen.ts` (490 lines) using pure AST transformation
+  - **36/37 basic tests passing (97.3%)** with minimal code
+  - Incremental development: each feature 10-30 lines
+  - Features implemented:
+    - ✅ Primitive types (number→double, string→gs::String, boolean→bool)
+    - ✅ Variables (const/let with type inference, auto for untyped)
+    - ✅ Functions with parameters and return types
+    - ✅ Binary expressions (arithmetic, comparison, === → ==, !== → !=)
+    - ✅ Control flow (if/else, for, while, for-of with range-based for)
+    - ✅ Classes with fields, constructors, methods
+    - ✅ Interfaces (rendered as structs)
+    - ✅ Arrays (gs::Array<T>, literals, iteration)
+    - ✅ Generic types (Map<K,V> → gs::Map<K,V> with recursive type args)
+    - ✅ Property access (obj.prop → obj->prop, this.prop → this->prop)
+    - ✅ Parameter passing optimization:
+      - Primitives by value
+      - Strings by const &
+      - User types by const &
+      - Arrays by mutable &
+    - ✅ User-defined type namespacing (Point → gs::Point)
+    - ✅ Unicode string support
+    - ✅ Namespace wrapping (gs::)
+    - ✅ Keyword escaping (class → class_)
+  - Added RangeForStmt AST node for C++ range-based for loops
+  - Added isStruct flag to Class for interface→struct rendering
+  - Added passByConstRef and passByMutableRef flags to Parameter
+  - Fixed ThisKeyword handling (not an Identifier)
+  - Benefits demonstrated:
+    - No indentation bugs, no brace-matching issues
+    - Type-safe AST construction
+    - Easy to add features incrementally
+    - Clean separation: transform → AST → render
+
+**Previous Updates (Nov 25, 2025):**
 - ✅ **Map Pointer-Based Null Checking** - Extended pointer approach to Map:
   - `gs::Map<K,V>::get()` now returns `V*` instead of `std::optional<V>`
   - `gs::Map<K,V>::operator[]` added returning `V*` (const and non-const overloads)

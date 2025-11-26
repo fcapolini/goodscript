@@ -134,8 +134,9 @@ export class CppRenderer implements AST.CppVisitor<string> {
       parts.push(this.line(`template<${node.templateParams.map(p => `typename ${p}`).join(', ')}>`));
     }
 
-    // Class declaration
-    let classDecl = `class ${node.name}`;
+    // Class/struct declaration
+    const keyword = node.isStruct ? 'struct' : 'class';
+    let classDecl = `${keyword} ${node.name}`;
     if (node.baseClass) {
       classDecl += ` : public ${node.baseClass}`;
     }
@@ -354,7 +355,14 @@ export class CppRenderer implements AST.CppVisitor<string> {
   }
 
   visitParameter(node: AST.Parameter): string {
-    let result = `${node.type.toString()} ${node.name}`;
+    let result = '';
+    if (node.passByMutableRef) {
+      result = `${node.type.toString()}& ${node.name}`;
+    } else if (node.passByConstRef) {
+      result = `const ${node.type.toString()}& ${node.name}`;
+    } else {
+      result = `${node.type.toString()} ${node.name}`;
+    }
     if (node.defaultValue) {
       result += ` = ${node.defaultValue.accept(this)}`;
     }
@@ -362,7 +370,8 @@ export class CppRenderer implements AST.CppVisitor<string> {
   }
 
   visitVariableDecl(node: AST.VariableDecl): string {
-    let result = this.line(`${node.type.toString()} ${node.name}`);
+    const constModifier = node.isConst ? 'const ' : '';
+    let result = this.line(`${constModifier}${node.type.toString()} ${node.name}`);
     if (node.initializer) {
       result += ` = ${node.initializer.accept(this)}`;
     }
@@ -475,6 +484,30 @@ export class CppRenderer implements AST.CppVisitor<string> {
 
     parts.push(this.line('}'));
 
+    return parts.join('\n');
+  }
+  
+  visitRangeForStmt(node: AST.RangeForStmt): string {
+    const parts: string[] = [];
+    
+    // for (const auto& varName : iterable) {
+    const constPrefix = node.isConst ? 'const ' : '';
+    const header = `for (${constPrefix}auto& ${node.variable} : ${node.iterable.accept(this)}) {`;
+    
+    parts.push(this.line(header));
+    
+    // Body
+    this.increaseIndent();
+    if (node.body instanceof AST.Block) {
+      for (const stmt of node.body.statements) {
+        parts.push(stmt.accept(this));
+      }
+    } else {
+      parts.push(node.body.accept(this));
+    }
+    this.decreaseIndent();
+
+    parts.push(this.line('}'));
     return parts.join('\n');
   }
 
@@ -646,6 +679,25 @@ export class CppRenderer implements AST.CppVisitor<string> {
       `{${k.accept(this)}, ${v.accept(this)}}`
     ).join(', ');
     return `{${entries}}`;
+  }
+
+  visitParenExpr(node: AST.ParenExpr): string {
+    return `(${node.expression.accept(this)})`;
+  }
+
+  visitConditionalExpr(node: AST.ConditionalExpr): string {
+    const cond = node.condition.accept(this);
+    const whenTrue = node.whenTrue.accept(this);
+    const whenFalse = node.whenFalse.accept(this);
+    return `(${cond} ? ${whenTrue} : ${whenFalse})`;
+  }
+
+  visitInitializerList(node: AST.InitializerList): string {
+    if (node.elements.length === 0) {
+      return '{}';
+    }
+    const elements = node.elements.map(e => e.accept(this)).join(', ');
+    return `{${elements}}`;
   }
 }
 

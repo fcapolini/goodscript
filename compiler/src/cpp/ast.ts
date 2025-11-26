@@ -35,6 +35,7 @@ export interface CppVisitor<T> {
   visitIfStmt(node: IfStmt): T;
   visitWhileStmt(node: WhileStmt): T;
   visitForStmt(node: ForStmt): T;
+  visitRangeForStmt(node: RangeForStmt): T;
   visitBlock(node: Block): T;
   visitBinaryExpr(node: BinaryExpr): T;
   visitUnaryExpr(node: UnaryExpr): T;
@@ -52,6 +53,9 @@ export interface CppVisitor<T> {
   visitTryCatch(node: TryCatch): T;
   visitBreakStmt(node: BreakStmt): T;
   visitContinueStmt(node: ContinueStmt): T;
+  visitParenExpr(node: ParenExpr): T;
+  visitConditionalExpr(node: ConditionalExpr): T;
+  visitInitializerList(node: InitializerList): T;
 }
 
 // ============================================================================
@@ -202,7 +206,8 @@ export class Class extends CppNode {
     public readonly constructors: Constructor[],
     public readonly methods: Method[],
     public readonly baseClass?: string,
-    public readonly templateParams: string[] = []
+    public readonly templateParams: string[] = [],
+    public readonly isStruct: boolean = false
   ) {
     super();
   }
@@ -288,7 +293,9 @@ export class Parameter extends CppNode {
   constructor(
     public readonly name: string,
     public readonly type: CppType,
-    public readonly defaultValue?: Expression
+    public readonly defaultValue?: Expression,
+    public readonly passByConstRef: boolean = false,
+    public readonly passByMutableRef: boolean = false
   ) {
     super();
   }
@@ -309,6 +316,7 @@ export type Statement =
   | IfStmt 
   | WhileStmt 
   | ForStmt 
+  | RangeForStmt
   | Block
   | ThrowStmt
   | TryCatch
@@ -319,7 +327,8 @@ export class VariableDecl extends CppNode {
   constructor(
     public readonly name: string,
     public readonly type: CppType,
-    public readonly initializer?: Expression
+    public readonly initializer?: Expression,
+    public readonly isConst: boolean = false
   ) {
     super();
   }
@@ -395,6 +404,21 @@ export class ForStmt extends CppNode {
   }
 }
 
+export class RangeForStmt extends CppNode {
+  constructor(
+    public readonly variable: string,
+    public readonly isConst: boolean,
+    public readonly iterable: Expression,
+    public readonly body: Statement
+  ) {
+    super();
+  }
+
+  accept<T>(visitor: CppVisitor<T>): T {
+    return visitor.visitRangeForStmt(this);
+  }
+}
+
 export class Block extends CppNode {
   constructor(
     public readonly statements: Statement[]
@@ -462,7 +486,10 @@ export type Expression =
   | New
   | Lambda
   | ArrayInit
-  | MapInit;
+  | MapInit
+  | ParenExpr
+  | ConditionalExpr
+  | InitializerList;
 
 export class BinaryExpr extends CppNode {
   constructor(
@@ -625,5 +652,43 @@ export class MapInit extends CppNode {
 
   accept<T>(visitor: CppVisitor<T>): T {
     return visitor.visitMapInit(this);
+  }
+}
+
+export class ParenExpr extends CppNode {
+  constructor(
+    public readonly expression: Expression
+  ) {
+    super();
+  }
+
+  accept<T>(visitor: CppVisitor<T>): T {
+    return visitor.visitParenExpr(this);
+  }
+}
+
+export class ConditionalExpr extends CppNode {
+  constructor(
+    public readonly condition: Expression,
+    public readonly whenTrue: Expression,
+    public readonly whenFalse: Expression
+  ) {
+    super();
+  }
+
+  accept<T>(visitor: CppVisitor<T>): T {
+    return visitor.visitConditionalExpr(this);
+  }
+}
+
+export class InitializerList extends CppNode {
+  constructor(
+    public readonly elements: Expression[]
+  ) {
+    super();
+  }
+
+  accept<T>(visitor: CppVisitor<T>): T {
+    return visitor.visitInitializerList(this);
   }
 }
