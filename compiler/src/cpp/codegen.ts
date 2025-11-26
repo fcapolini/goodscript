@@ -71,9 +71,10 @@ export class AstCodegen {
       }
       
       // In C++, 'const' on objects makes them immutable, but in TypeScript,
-      // 'const' just means the binding can't be reassigned. Only use 'const'
-      // in C++ for primitive types (number, bool, string).
-      const useConst = isConst && this.isPrimitiveType(cppType);
+      // 'const' just means the binding can't be reassigned.
+      // - Primitives (number, bool) and strings: can be const
+      // - Class instances: should NOT be const (objects are mutable)
+      const useConst = isConst && this.isConstableType(cppType, decl.initializer);
       
       // VariableDecl constructor: (name, type, initializer, isConst)
       result.push(new ast.VariableDecl(name, cppType, init, useConst));
@@ -246,6 +247,14 @@ export class AstCodegen {
       }
     }
     
+    if (ts.isThrowStatement(node)) {
+      return this.visitThrowStatement(node);
+    }
+    
+    if (ts.isTryStatement(node)) {
+      return this.visitTryStatement(node);
+    }
+    
     // Unsupported statement types
     return undefined;
   }
@@ -335,6 +344,42 @@ export class AstCodegen {
     return new ast.RangeForStmt(varName, isConst, iterable, body);
   }
   
+  private visitThrowStatement(node: ts.ThrowStatement): ast.ThrowStmt {
+    const expr = node.expression ? this.visitExpression(node.expression) : cpp.id('std::runtime_error("Unknown error")');
+    return new ast.ThrowStmt(expr);
+  }
+  
+  private visitTryStatement(node: ts.TryStatement): ast.TryCatch {
+    let tryBlock = this.visitBlock(node.tryBlock);
+    
+    // C++ catch needs a variable name and type
+    let catchVar = 'e';
+    let catchType = new ast.CppType('const std::exception', [], false, true); // const std::exception&
+    let catchBlock = new ast.Block([]);
+    
+    if (node.catchClause) {
+      if (node.catchClause.variableDeclaration) {
+        catchVar = this.escapeName(node.catchClause.variableDeclaration.name.getText());
+        // Try to determine the exception type, default to std::exception
+        if (node.catchClause.variableDeclaration.type) {
+          const typeText = node.catchClause.variableDeclaration.type.getText();
+          catchType = new ast.CppType(`const gs::${typeText}`, [], false, true);
+        }
+      }
+      catchBlock = this.visitBlock(node.catchClause.block);
+    }
+    
+    // TODO: Handle finally blocks (C++ doesn't have direct equivalent)
+    // For now, we can add finally block statements to both try and catch blocks
+    if (node.finallyBlock) {
+      const finallyStatements = this.visitBlock(node.finallyBlock).statements;
+      tryBlock = new ast.Block([...tryBlock.statements, ...finallyStatements]);
+      catchBlock = new ast.Block([...catchBlock.statements, ...finallyStatements]);
+    }
+    
+    return new ast.TryCatch(tryBlock, catchVar, catchType, catchBlock);
+  }
+  
   private visitExpression(node: ts.Expression): ast.Expression {
     if (ts.isNumericLiteral(node)) {
       // For numeric literals, create a raw identifier with the number value
@@ -395,6 +440,17 @@ export class AstCodegen {
   }
   
   private visitBinaryExpression(node: ts.BinaryExpression): ast.Expression {
+    // Handle instanceof specially
+    if (node.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword) {
+      const obj = this.visitExpression(node.left);
+      const typeName = node.right.getText();
+      // In C++, we'll use dynamic_cast for instanceof checks
+      // obj instanceof Type → dynamic_cast<Type*>(&obj) != nullptr
+      // This assumes the object is a pointer or reference
+      // For now, just generate a simple type check comment
+      return cpp.id(`/* instanceof ${typeName} check */`);
+    }
+    
     const left = this.visitExpression(node.left);
     const right = this.visitExpression(node.right);
     
@@ -548,13 +604,41 @@ export class AstCodegen {
   }
   
   /**
-   * Check if a C++ type is a primitive (number, bool, or literal string)
+   * Check if a C++ type is a primitive (number, bool)
    */
   private isPrimitiveType(type: ast.CppType): boolean {
     const name = type.name;
     return name === 'double' || name === 'int' || name === 'bool' || 
            name === 'float' || name === 'long' || name === 'short';
-    // Note: gs::String is NOT primitive - it's an object that can be mutated
+  }
+  
+  /**
+   * Check if a variable can be const in C++.
+   * - Primitives (number, bool): yes
+   * - Strings: yes (immutable in TypeScript)
+   * - Objects created with new: no (mutable)
+   * - Other types: yes if not a new expression
+   */
+  private isConstableType(type: ast.CppType, initializer?: ts.Expression): boolean {
+    const name = type.name;
+    
+    // Primitives are always constable
+    if (this.isPrimitiveType(type)) {
+      return true;
+    }
+    
+    // Strings are constable (immutable in TypeScript)
+    if (name === 'gs::String') {
+      return true;
+    }
+    
+    // If initialized with 'new', it's a mutable object - not constable
+    if (initializer && ts.isNewExpression(initializer)) {
+      return false;
+    }
+    
+    // Other cases: default to constable
+    return true;
   }
   
   /**
