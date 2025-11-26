@@ -16,10 +16,14 @@ export class AstCodegen {
   generate(sourceFile: ts.SourceFile): string {
     const includes = [new ast.Include('gs_runtime.hpp', false)];
     const declarations: ast.Declaration[] = [];
+    const mainStatements: ast.Statement[] = [];
     
+    // Separate declarations from top-level statements
     for (const stmt of sourceFile.statements) {
       if (ts.isVariableStatement(stmt)) {
-        declarations.push(...this.visitVariableStatement(stmt));
+        // Top-level variables go into main()
+        const decls = this.visitVariableStatement(stmt);
+        mainStatements.push(...decls.map(d => d as any)); // VariableDecl can act as Statement
       } else if (ts.isFunctionDeclaration(stmt)) {
         const func = this.visitFunction(stmt);
         if (func) declarations.push(func);
@@ -29,11 +33,26 @@ export class AstCodegen {
       } else if (ts.isInterfaceDeclaration(stmt)) {
         const iface = this.visitInterface(stmt);
         if (iface) declarations.push(iface);
+      } else if (ts.isExpressionStatement(stmt)) {
+        // Top-level expressions go into main()
+        mainStatements.push(new ast.ExpressionStmt(this.visitExpression(stmt.expression)));
       }
     }
     
     const ns = new ast.Namespace('gs', declarations);
-    const tu = new ast.TranslationUnit(includes, [ns]);
+    
+    // Create main function if there are top-level statements
+    let mainFunction: ast.Function | undefined;
+    if (mainStatements.length > 0) {
+      mainFunction = new ast.Function(
+        'main',
+        new ast.CppType('int'),
+        [],
+        new ast.Block([...mainStatements, new ast.ReturnStmt(cpp.id('0'))])
+      );
+    }
+    
+    const tu = new ast.TranslationUnit(includes, [ns], mainFunction);
     
     return render(tu);
   }
@@ -51,8 +70,13 @@ export class AstCodegen {
         init = this.visitExpression(decl.initializer);
       }
       
+      // In C++, 'const' on objects makes them immutable, but in TypeScript,
+      // 'const' just means the binding can't be reassigned. Only use 'const'
+      // in C++ for primitive types (number, bool, string).
+      const useConst = isConst && this.isPrimitiveType(cppType);
+      
       // VariableDecl constructor: (name, type, initializer, isConst)
-      result.push(new ast.VariableDecl(name, cppType, init, isConst));
+      result.push(new ast.VariableDecl(name, cppType, init, useConst));
     }
     
     return result;
@@ -86,6 +110,26 @@ export class AstCodegen {
     const constructors: ast.Constructor[] = [];
     const methods: ast.Method[] = [];
     
+    // Handle extends clause
+    let baseClass: string | undefined;
+    const baseClasses: string[] = [];
+    
+    if (node.heritageClauses) {
+      for (const clause of node.heritageClauses) {
+        if (clause.token === ts.SyntaxKind.ExtendsKeyword) {
+          // extends - single base class
+          if (clause.types.length > 0) {
+            baseClass = this.escapeName(clause.types[0].expression.getText());
+          }
+        } else if (clause.token === ts.SyntaxKind.ImplementsKeyword) {
+          // implements - multiple interfaces (treated as base classes in C++)
+          for (const type of clause.types) {
+            baseClasses.push(this.escapeName(type.expression.getText()));
+          }
+        }
+      }
+    }
+    
     // Collect fields
     for (const member of node.members) {
       if (ts.isPropertyDeclaration(member)) {
@@ -107,10 +151,8 @@ export class AstCodegen {
           params.push(new ast.Parameter(paramName, paramType, undefined, passByConstRef, passByMutableRef));
         }
         
-        const body = member.body ? this.visitBlock(member.body) : new ast.Block([]);
-        
-        // Create member initializers from constructor body assignments
-        const initList: ast.MemberInitializer[] = [];
+        // Extract super() call and generate initializer list
+        const { initList, body } = this.processConstructorBody(member.body, baseClass);
         
         constructors.push(new ast.Constructor(params, initList, body));
       }
@@ -137,7 +179,7 @@ export class AstCodegen {
       }
     }
     
-    return new ast.Class(name, fields, constructors, methods);
+    return new ast.Class(name, fields, constructors, methods, baseClass, [], false, baseClasses);
   }
   
   private visitInterface(node: ts.InterfaceDeclaration): ast.Class | undefined {
@@ -345,6 +387,10 @@ export class AstCodegen {
       return cpp.initList(elements);
     }
     
+    if (ts.isNewExpression(node)) {
+      return this.visitNewExpression(node);
+    }
+    
     return cpp.id('/* UNSUPPORTED */');
   }
   
@@ -358,6 +404,18 @@ export class AstCodegen {
     if (op === '!==') op = '!=';
     
     return cpp.binary(left, op, right);
+  }
+  
+  private visitNewExpression(node: ts.NewExpression): ast.Expression {
+    // Get the class name
+    const className = this.escapeName(node.expression.getText());
+    
+    // Get constructor arguments
+    const args = node.arguments ? node.arguments.map(arg => this.visitExpression(arg)) : [];
+    
+    // In C++, we create objects on the stack by default
+    // new ClassName(args) → gs::ClassName(args)
+    return cpp.call(cpp.id(`gs::${className}`), args);
   }
   
   private visitCallExpression(node: ts.CallExpression): ast.Expression {
@@ -487,5 +545,71 @@ export class AstCodegen {
       .replace(/\\/g, '\\\\')
       .replace(/"/g, '\\"')
       .replace(/\n/g, '\\n');
+  }
+  
+  /**
+   * Check if a C++ type is a primitive (number, bool, or literal string)
+   */
+  private isPrimitiveType(type: ast.CppType): boolean {
+    const name = type.name;
+    return name === 'double' || name === 'int' || name === 'bool' || 
+           name === 'float' || name === 'long' || name === 'short';
+    // Note: gs::String is NOT primitive - it's an object that can be mutated
+  }
+  
+  /**
+   * Process constructor body to extract super() calls and convert them to initializer list.
+   * Returns the initializer list and the modified body (without super() call).
+   */
+  private processConstructorBody(
+    body: ts.Block | undefined,
+    baseClassName: string | undefined
+  ): { initList: ast.MemberInitializer[], body: ast.Block } {
+    const initList: ast.MemberInitializer[] = [];
+    
+    if (!body) {
+      return { initList, body: new ast.Block([]) };
+    }
+    
+    // Look for super() call in the first statement
+    const statements = body.statements;
+    const remainingStatements: ast.Statement[] = [];
+    let foundSuper = false;
+    
+    for (let i = 0; i < statements.length; i++) {
+      const stmt = statements[i];
+      
+      // Check if this is a super() call
+      if (ts.isExpressionStatement(stmt) && ts.isCallExpression(stmt.expression)) {
+        const call = stmt.expression;
+        if (call.expression.kind === ts.SyntaxKind.SuperKeyword) {
+          // Found super() call
+          foundSuper = true;
+          
+          if (baseClassName) {
+            // Convert arguments to expressions
+            const args = call.arguments.map(arg => this.visitExpression(arg));
+            
+            // Pass arguments as array to MemberInitializer
+            // This will render as: BaseClass(arg1, arg2, ...)
+            initList.push(new ast.MemberInitializer(baseClassName, args));
+          }
+          
+          // Skip this statement (don't add to body)
+          continue;
+        }
+      }
+      
+      // Not a super() call, add to remaining statements
+      const cppStmt = this.visitStatement(stmt);
+      if (cppStmt) {
+        remainingStatements.push(cppStmt);
+      }
+    }
+    
+    return {
+      initList,
+      body: new ast.Block(remainingStatements)
+    };
   }
 }

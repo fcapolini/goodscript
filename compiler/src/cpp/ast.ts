@@ -207,7 +207,8 @@ export class Class extends CppNode {
     public readonly methods: Method[],
     public readonly baseClass?: string,
     public readonly templateParams: string[] = [],
-    public readonly isStruct: boolean = false
+    public readonly isStruct: boolean = false,
+    public readonly baseClasses: string[] = [] // Support multiple base classes for implements
   ) {
     super();
   }
@@ -250,7 +251,7 @@ export class Constructor extends CppNode {
 export class MemberInitializer {
   constructor(
     public readonly memberName: string,
-    public readonly value: Expression
+    public readonly value: Expression | Expression[] // Support both single and multiple arguments
   ) {}
 }
 

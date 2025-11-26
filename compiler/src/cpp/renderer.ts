@@ -137,9 +137,19 @@ export class CppRenderer implements AST.CppVisitor<string> {
     // Class/struct declaration
     const keyword = node.isStruct ? 'struct' : 'class';
     let classDecl = `${keyword} ${node.name}`;
+    
+    // Handle base classes (backwards compatible with single baseClass)
+    const bases: string[] = [];
     if (node.baseClass) {
-      classDecl += ` : public ${node.baseClass}`;
+      bases.push(`public ${node.baseClass}`);
     }
+    if (node.baseClasses && node.baseClasses.length > 0) {
+      bases.push(...node.baseClasses.map(bc => `public ${bc}`));
+    }
+    if (bases.length > 0) {
+      classDecl += ` : ${bases.join(', ')}`;
+    }
+    
     parts.push(this.line(`${classDecl} {`));
 
     this.increaseIndent();
@@ -245,9 +255,16 @@ export class CppRenderer implements AST.CppVisitor<string> {
 
     // Initializer list
     if (node.initializerList.length > 0) {
-      const inits = node.initializerList.map(init => 
-        `${init.memberName}(${init.value.accept(this)})`
-      );
+      const inits = node.initializerList.map(init => {
+        if (Array.isArray(init.value)) {
+          // Multiple arguments for base class constructor
+          const args = init.value.map(v => v.accept(this)).join(', ');
+          return `${init.memberName}(${args})`;
+        } else {
+          // Single expression
+          return `${init.memberName}(${init.value.accept(this)})`;
+        }
+      });
       signature += `\n${this.indent()}  : ${inits.join(', ')}`;
     }
 
@@ -284,9 +301,14 @@ export class CppRenderer implements AST.CppVisitor<string> {
 
     // Initializer list
     if (node.initializerList.length > 0) {
-      const inits = node.initializerList.map(init => 
-        `${init.memberName}(${init.value.accept(this)})`
-      );
+      const inits = node.initializerList.map(init => {
+        if (Array.isArray(init.value)) {
+          const args = init.value.map(v => v.accept(this)).join(', ');
+          return `${init.memberName}(${args})`;
+        } else {
+          return `${init.memberName}(${init.value.accept(this)})`;
+        }
+      });
       signature += `\n${this.indent()}  : ${inits.join(', ')}`;
     }
 

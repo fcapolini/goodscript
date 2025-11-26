@@ -3,3 +3,4 @@ notes/
 # Temporary test directories
 compiler/test/phase3/regexp-test-*/
 compiler/test/phase3/runtime-test-*/
+compiler/test/regexp-e2e-*/
