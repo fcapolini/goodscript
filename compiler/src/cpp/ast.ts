@@ -24,6 +24,7 @@ export interface CppVisitor<T> {
   visitInclude(node: Include): T;
   visitNamespace(node: Namespace): T;
   visitClass(node: Class): T;
+  visitEnum(node: Enum): T;
   visitFunction(node: Function): T;
   visitMethod(node: Method): T;
   visitConstructor(node: Constructor): T;
@@ -191,12 +192,32 @@ export class Namespace extends CppNode {
 // Declarations
 // ============================================================================
 
-export type Declaration = Class | Function | VariableDecl | Namespace;
+export type Declaration = Class | Enum | Function | VariableDecl | Namespace;
 
 export enum AccessSpecifier {
   Public = 'public',
   Private = 'private',
   Protected = 'protected'
+}
+
+export class Enum extends CppNode {
+  constructor(
+    public readonly name: string,
+    public readonly members: EnumMember[]
+  ) {
+    super();
+  }
+
+  accept<T>(visitor: CppVisitor<T>): T {
+    return visitor.visitEnum(this);
+  }
+}
+
+export class EnumMember {
+  constructor(
+    public readonly name: string,
+    public readonly value?: number
+  ) {}
 }
 
 export class Class extends CppNode {

@@ -244,6 +244,33 @@ export class CppRenderer implements AST.CppVisitor<string> {
     return parts.join('\n');
   }
 
+  visitEnum(node: AST.Enum): string {
+    const parts: string[] = [];
+    
+    parts.push(this.line(`enum class ${node.name} {`));
+    
+    this.increaseIndent();
+    const members: string[] = [];
+    for (let i = 0; i < node.members.length; i++) {
+      const member = node.members[i];
+      let memberStr = member.name;
+      if (member.value !== undefined) {
+        memberStr += ` = ${member.value}`;
+      }
+      // Add comma except for last member
+      if (i < node.members.length - 1) {
+        memberStr += ',';
+      }
+      members.push(this.line(memberStr));
+    }
+    parts.push(...members);
+    this.decreaseIndent();
+    
+    parts.push(this.line('};'));
+    
+    return parts.join('\n');
+  }
+
   /**
    * Render constructor with class name (called from visitClass)
    */

@@ -11,9 +11,12 @@ import { render } from './renderer';
 import { cpp } from './builder';
 
 export class AstCodegen {
+  private enumNames = new Set<string>(); // Track enum names for property access
+  
   constructor(private checker?: ts.TypeChecker) {}
   
   generate(sourceFile: ts.SourceFile): string {
+    this.enumNames.clear(); // Reset for each file
     const includes = [new ast.Include('gs_runtime.hpp', false)];
     const declarations: ast.Declaration[] = [];
     const mainStatements: ast.Statement[] = [];
@@ -33,6 +36,9 @@ export class AstCodegen {
       } else if (ts.isInterfaceDeclaration(stmt)) {
         const iface = this.visitInterface(stmt);
         if (iface) declarations.push(iface);
+      } else if (ts.isEnumDeclaration(stmt)) {
+        const enumDecl = this.visitEnum(stmt);
+        if (enumDecl) declarations.push(enumDecl);
       } else if (ts.isExpressionStatement(stmt)) {
         // Top-level expressions go into main()
         mainStatements.push(new ast.ExpressionStmt(this.visitExpression(stmt.expression)));
@@ -198,6 +204,31 @@ export class AstCodegen {
     
     // Interfaces become structs (public by default)
     return new ast.Class(name, fields, [], [], undefined, [], true);
+  }
+  
+  private visitEnum(node: ts.EnumDeclaration): ast.Enum | undefined {
+    const name = this.escapeName(node.name.text);
+    this.enumNames.add(name); // Track enum name
+    const members: ast.EnumMember[] = [];
+    
+    let nextValue = 0;
+    for (const member of node.members) {
+      const memberName = this.escapeName(member.name.getText());
+      let value: number | undefined;
+      
+      if (member.initializer) {
+        if (ts.isNumericLiteral(member.initializer)) {
+          value = parseInt(member.initializer.text, 10);
+          nextValue = value + 1;
+        }
+      } else {
+        value = nextValue++;
+      }
+      
+      members.push(new ast.EnumMember(memberName, value));
+    }
+    
+    return new ast.Enum(name, members);
   }
   
   private visitBlock(node: ts.Block): ast.Block {
@@ -511,6 +542,12 @@ export class AstCodegen {
     // Handle console, Math, Number as namespaces
     if (ts.isIdentifier(node.expression)) {
       const objName = node.expression.text;
+      
+      // Check if it's an enum access
+      if (this.enumNames.has(objName)) {
+        return cpp.id(`gs::${objName}::${prop}`);
+      }
+      
       if (objName === 'console' || objName === 'Math' || objName === 'Number') {
         return cpp.id(`gs::${objName}::${prop}`);
       }
