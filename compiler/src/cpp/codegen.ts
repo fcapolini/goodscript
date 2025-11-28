@@ -14,12 +14,14 @@ export class AstCodegen {
   private enumNames = new Set<string>(); // Track enum names for property access
   private currentFunctionReturnType?: ast.CppType; // Track current function return type for null handling
   private unwrappedOptionals = new Set<string>(); // Track variables known to be non-null in current scope
+  private variableTypes = new Map<string, ast.CppType>(); // Track variable types for smart pointer detection
   
   constructor(private checker?: ts.TypeChecker) {}
   
   generate(sourceFile: ts.SourceFile): string {
     this.enumNames.clear(); // Reset for each file
     this.unwrappedOptionals.clear(); // Reset for each file
+    this.variableTypes.clear(); // Reset for each file
     const includes = [new ast.Include('gs_runtime.hpp', false)];
     const declarations: ast.Declaration[] = [];
     const mainStatements: ast.Statement[] = [];
@@ -73,6 +75,9 @@ export class AstCodegen {
     for (const decl of node.declarationList.declarations) {
       const name = this.escapeName(decl.name.getText());
       const cppType = this.mapType(decl.type!);
+      
+      // Track variable type for smart pointer detection
+      this.variableTypes.set(name, cppType);
       
       let init: ast.Expression | undefined;
       if (decl.initializer) {
@@ -159,6 +164,8 @@ export class AstCodegen {
         const fieldName = this.escapeName(member.name.getText());
         const fieldType = member.type ? this.mapType(member.type) : new ast.CppType('auto');
         fields.push(new ast.Field(fieldName, fieldType));
+        // Track field types (prefixed with this. for class members)
+        this.variableTypes.set(`this.${fieldName}`, fieldType);
       }
     }
     
@@ -662,11 +669,6 @@ export class AstCodegen {
   private visitPropertyAccess(node: ts.PropertyAccessExpression): ast.Expression {
     const prop = node.name.text;
     
-    // Handle 'this' - use this->property in C++
-    if (node.expression.kind === ts.SyntaxKind.ThisKeyword) {
-      return cpp.id(`this->${prop}`);
-    }
-    
     // Handle console, Math, Number as namespaces
     if (ts.isIdentifier(node.expression)) {
       const objName = node.expression.text;
@@ -681,8 +683,25 @@ export class AstCodegen {
       }
     }
     
+    // Handle 'this' - use this->property in C++
+    if (node.expression.kind === ts.SyntaxKind.ThisKeyword) {
+      // Check if the field is a smart pointer type
+      const fieldName = `this.${prop}`;
+      const fieldType = this.variableTypes.get(fieldName);
+      const isPointer = fieldType ? this.isSmartPointerType(fieldType) : false;
+      
+      // For consistency, wrap isPointer fields in another layer
+      // this.input where input is share<String> → this->input (which is a shared_ptr)
+      // So accessing properties on it needs another ->
+      return cpp.member(cpp.id('this'), prop, true); // Always use -> for this
+    }
+    
     const obj = this.visitExpression(node.expression);
-    return cpp.member(obj, prop);
+    
+    // Check if the object is a smart pointer type (needs -> instead of .)
+    const isPointer = this.isSmartPointerAccess(node.expression);
+    
+    return cpp.member(obj, prop, isPointer);
   }
   
   private mapType(typeNode: ts.TypeNode | undefined): ast.CppType {
@@ -840,6 +859,43 @@ export class AstCodegen {
     
     // Other cases: default to constable
     return true;
+  }
+  
+  /**
+   * Check if a property access should use -> (for smart pointers) instead of .
+   */
+  private isSmartPointerAccess(expr: ts.Expression): boolean {
+    // Check if it's an identifier and look up its type
+    if (ts.isIdentifier(expr)) {
+      const varName = this.escapeName(expr.text);
+      const varType = this.variableTypes.get(varName);
+      if (varType) {
+        return this.isSmartPointerType(varType);
+      }
+    }
+    
+    // Check if it's 'this.property' access (class field)
+    if (ts.isPropertyAccessExpression(expr)) {
+      if (expr.expression.kind === ts.SyntaxKind.ThisKeyword) {
+        const fieldName = `this.${expr.name.text}`;
+        const fieldType = this.variableTypes.get(fieldName);
+        if (fieldType) {
+          return this.isSmartPointerType(fieldType);
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Check if a C++ type is a smart pointer (std::unique_ptr, std::shared_ptr, std::weak_ptr)
+   */
+  private isSmartPointerType(type: ast.CppType): boolean {
+    const name = type.name;
+    return name.startsWith('std::unique_ptr<') || 
+           name.startsWith('std::shared_ptr<') || 
+           name.startsWith('std::weak_ptr<');
   }
   
   /**
