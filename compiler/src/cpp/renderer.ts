@@ -292,7 +292,7 @@ export class CppRenderer implements AST.CppVisitor<string> {
           return `${init.memberName}(${init.value.accept(this)})`;
         }
       });
-      signature += `\n${this.indent()}  : ${inits.join(', ')}`;
+      signature += ` : ${inits.join(', ')}`;
     }
 
     parts.push(this.line(`${signature} {`));

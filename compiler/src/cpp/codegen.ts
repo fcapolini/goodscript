@@ -12,6 +12,7 @@ import { cpp } from './builder';
 
 export class AstCodegen {
   private enumNames = new Set<string>(); // Track enum names for property access
+  private currentFunctionReturnType?: ast.CppType; // Track current function return type for null handling
   
   constructor(private checker?: ts.TypeChecker) {}
   
@@ -74,6 +75,12 @@ export class AstCodegen {
       let init: ast.Expression | undefined;
       if (decl.initializer) {
         init = this.visitExpression(decl.initializer);
+        
+        // If initializing optional type with null, use std::nullopt instead of nullptr
+        if (init instanceof ast.Identifier && init.name === 'nullptr' && 
+            cppType.toString().startsWith('std::optional')) {
+          init = cpp.id('std::nullopt');
+        }
       }
       
       // In C++, 'const' on objects makes them immutable, but in TypeScript,
@@ -95,6 +102,10 @@ export class AstCodegen {
     const name = this.escapeName(node.name.text);
     const returnType = node.type ? this.mapType(node.type) : new ast.CppType('void');
     
+    // Track return type for null handling in return statements
+    const previousReturnType = this.currentFunctionReturnType;
+    this.currentFunctionReturnType = returnType;
+    
     const params: ast.Parameter[] = [];
     for (const param of node.parameters) {
       const paramName = this.escapeName(param.name.getText());
@@ -105,6 +116,9 @@ export class AstCodegen {
     }
     
     const body = node.body ? this.visitBlock(node.body) : new ast.Block([]);
+    
+    // Restore previous return type
+    this.currentFunctionReturnType = previousReturnType;
     
     return new ast.Function(name, returnType, params, body);
   }
@@ -171,6 +185,10 @@ export class AstCodegen {
         const methodName = this.escapeName(member.name.getText());
         const returnType = member.type ? this.mapType(member.type) : new ast.CppType('void');
         
+        // Track return type for null handling in return statements
+        const previousReturnType = this.currentFunctionReturnType;
+        this.currentFunctionReturnType = returnType;
+        
         const params: ast.Parameter[] = [];
         for (const param of member.parameters) {
           const paramName = this.escapeName(param.name.getText());
@@ -181,6 +199,9 @@ export class AstCodegen {
         }
         
         const body = member.body ? this.visitBlock(member.body) : new ast.Block([]);
+        
+        // Restore previous return type
+        this.currentFunctionReturnType = previousReturnType;
         
         methods.push(new ast.Method(methodName, returnType, params, body));
       }
@@ -244,7 +265,14 @@ export class AstCodegen {
   
   private visitStatement(node: ts.Statement): ast.Statement | undefined {
     if (ts.isReturnStatement(node)) {
-      const expr = node.expression ? this.visitExpression(node.expression) : undefined;
+      let expr = node.expression ? this.visitExpression(node.expression) : undefined;
+      
+      // If returning null and function returns optional, use std::nullopt
+      if (expr instanceof ast.Identifier && expr.name === 'nullptr' && 
+          this.currentFunctionReturnType?.toString().startsWith('std::optional')) {
+        expr = cpp.id('std::nullopt');
+      }
+      
       return new ast.ReturnStmt(expr);
     }
     
@@ -436,6 +464,10 @@ export class AstCodegen {
       return cpp.id('false');
     }
     
+    if (node.kind === ts.SyntaxKind.NullKeyword) {
+      return cpp.id('nullptr');
+    }
+    
     if (ts.isIdentifier(node)) {
       return cpp.id(this.escapeName(node.text));
     }
@@ -482,13 +514,21 @@ export class AstCodegen {
       return cpp.id(`/* instanceof ${typeName} check */`);
     }
     
-    const left = this.visitExpression(node.left);
-    const right = this.visitExpression(node.right);
+    let left = this.visitExpression(node.left);
+    let right = this.visitExpression(node.right);
     
     // Map operators
     let op = node.operatorToken.getText();
     if (op === '===') op = '==';
     if (op === '!==') op = '!=';
+    
+    // If comparing with null and one side might be optional, use std::nullopt
+    if (node.left.kind === ts.SyntaxKind.NullKeyword && left instanceof ast.Identifier && left.name === 'nullptr') {
+      left = cpp.id('std::nullopt');
+    }
+    if (node.right.kind === ts.SyntaxKind.NullKeyword && right instanceof ast.Identifier && right.name === 'nullptr') {
+      right = cpp.id('std::nullopt');
+    }
     
     return cpp.binary(left, op, right);
   }
@@ -563,6 +603,24 @@ export class AstCodegen {
       return new ast.CppType('auto');
     }
     
+    // Handle union types (T | null → std::optional<T>)
+    if (ts.isUnionTypeNode(typeNode)) {
+      // Check if it's a nullable type (T | null | undefined)
+      const nonNullableTypes = typeNode.types.filter(t => 
+        t.kind !== ts.SyntaxKind.NullKeyword && 
+        t.kind !== ts.SyntaxKind.UndefinedKeyword
+      );
+      
+      if (nonNullableTypes.length === 1) {
+        // T | null → std::optional<T>
+        const innerType = this.mapType(nonNullableTypes[0]);
+        return new ast.CppType('std::optional', [innerType]);
+      }
+      
+      // Multiple non-null types - not supported, use auto
+      return new ast.CppType('auto');
+    }
+    
     // Array types: number[] → gs::Array<double>
     if (ts.isArrayTypeNode(typeNode)) {
       const elementType = this.mapType(typeNode.elementType);
@@ -588,6 +646,10 @@ export class AstCodegen {
     
     if (text === 'boolean') {
       return new ast.CppType('bool');
+    }
+    
+    if (text === 'void') {
+      return new ast.CppType('void');
     }
     
     // User-defined types need gs:: prefix
