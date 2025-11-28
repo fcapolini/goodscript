@@ -658,7 +658,8 @@ export class AstCodegen {
       
       // Regular method call: obj.method(args) or obj->method(args)
       const objExpr = this.visitExpression(obj);
-      return cpp.call(cpp.member(objExpr, method), args);
+      const isPointer = this.isSmartPointerAccess(obj);
+      return cpp.call(cpp.member(objExpr, method, isPointer), args);
     }
     
     // Regular function call

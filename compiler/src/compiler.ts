@@ -170,8 +170,16 @@ export class Compiler {
       if (d.severity !== 'error') return true;
       
       // Allow ownership type errors for both TypeScript and native targets
+      // TS2304: Cannot find name 'X'
+      if (d.code === 'TS2304') {
+        const message = d.message.toLowerCase();
+        if (message.includes("'own'") || message.includes("'share'") || message.includes("'use'")) {
+          return true;
+        }
+      }
+      
+      // Also check TS2552 for backwards compatibility
       if (d.code === 'TS2552') {
-        // "Cannot find name 'X'" - check if it's an ownership type
         const message = d.message.toLowerCase();
         if (message.includes("'own'") || message.includes("'share'") || message.includes("'use'")) {
           return true;

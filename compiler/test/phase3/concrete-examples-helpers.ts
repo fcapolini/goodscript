@@ -8,6 +8,7 @@ import {
   mkdirSync,
   existsSync,
   readFileSync,
+  readdirSync,
   rmSync,
 } from "fs";
 import { tmpdir } from "os";
@@ -121,7 +122,7 @@ export function compileExample(
   }
 
   // Compile to JavaScript
-  compiler.compile({
+  const jsResult = compiler.compile({
     files: [srcFile],
     outDir,
     target: "typescript",
@@ -129,10 +130,18 @@ export function compileExample(
   });
 
   const jsFile = join(outDir, "main.js");
-  const jsCode = existsSync(jsFile) ? readFileSync(jsFile, "utf-8") : "";
+  let jsCode = existsSync(jsFile) ? readFileSync(jsFile, "utf-8") : "";
+  
+  // Debug compilation result
+  console.error(`\n[${exampleName}] JS: success=${jsResult.success}, diagnostics=${jsResult.diagnostics.length}, fileStats=${JSON.stringify(jsResult.fileStats)}`);
+  if (jsResult.diagnostics.length > 0) {
+    jsResult.diagnostics.slice(0, 3).forEach(d => {
+      console.error(`  - [${d.severity}] [${d.code}] ${d.message.substring(0, 80)}`);
+    });
+  }
 
   // Compile to C++
-  compiler.compile({
+  const cppResult = compiler.compile({
     files: [srcFile],
     outDir,
     target: "native",
@@ -140,7 +149,31 @@ export function compileExample(
   });
 
   const cppFile = join(outDir, "main.cpp");
-  const cppCode = existsSync(cppFile) ? readFileSync(cppFile, "utf-8") : "";
+  let cppCode = existsSync(cppFile) ? readFileSync(cppFile, "utf-8") : "";
+  
+  // Debug compilation result
+  console.error(`[${exampleName}] C++: success=${cppResult.success}, diagnostics=${cppResult.diagnostics.length}, file exists at main.cpp: ${existsSync(cppFile)}`);
+  if (cppResult.diagnostics.length > 0) {
+    cppResult.diagnostics.slice(0, 3).forEach(d => {
+      console.error(`  - [${d.severity}] [${d.code}] ${d.message.substring(0, 80)}`);
+    });
+  }
+  
+  // Check if cpp file was generated in a subdirectory
+  if (!cppCode) {
+    const altCppFile = join(outDir, "src", "main.cpp");
+    if (existsSync(altCppFile)) {
+      cppCode = readFileSync(altCppFile, "utf-8");
+      console.error(`[${exampleName}] Found C++ at src/main.cpp (${cppCode.length} bytes)`);
+    } else {
+      // List what's actually in the dist directory
+      if (existsSync(outDir)) {
+        const files = readdirSync(outDir, { recursive: true, withFileTypes: true });
+        const fileList = files.map(f => (f.isDirectory() ? f.name + '/' : f.name)).join(', ');
+        console.error(`[${exampleName}] Dist contents: ${fileList || '(empty)'}`);
+      }
+    }
+  }
 
   return {
     exampleName,
