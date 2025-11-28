@@ -13,11 +13,13 @@ import { cpp } from './builder';
 export class AstCodegen {
   private enumNames = new Set<string>(); // Track enum names for property access
   private currentFunctionReturnType?: ast.CppType; // Track current function return type for null handling
+  private unwrappedOptionals = new Set<string>(); // Track variables known to be non-null in current scope
   
   constructor(private checker?: ts.TypeChecker) {}
   
   generate(sourceFile: ts.SourceFile): string {
     this.enumNames.clear(); // Reset for each file
+    this.unwrappedOptionals.clear(); // Reset for each file
     const includes = [new ast.Include('gs_runtime.hpp', false)];
     const declarations: ast.Declaration[] = [];
     const mainStatements: ast.Statement[] = [];
@@ -253,12 +255,18 @@ export class AstCodegen {
   }
   
   private visitBlock(node: ts.Block): ast.Block {
+    // Save current unwrapped state for block scoping
+    const savedUnwrapped = new Set(this.unwrappedOptionals);
+    
     const statements: ast.Statement[] = [];
     
     for (const stmt of node.statements) {
       const cppStmt = this.visitStatement(stmt);
       if (cppStmt) statements.push(cppStmt);
     }
+    
+    // Restore unwrapped state when block exits
+    this.unwrappedOptionals = savedUnwrapped;
     
     return new ast.Block(statements);
   }
@@ -319,10 +327,25 @@ export class AstCodegen {
   }
   
   private visitIfStatement(node: ts.IfStatement): ast.IfStmt {
+    // Detect null checks BEFORE visiting condition
+    const unwrappedVar = this.extractNullCheck(node.expression);
+    
+    // Visit condition WITHOUT unwrapping (condition contains the null check itself)
     const condition = this.visitExpression(node.expression);
+    
+    // Process then block WITH unwrapped variable in scope
+    if (unwrappedVar) {
+      this.unwrappedOptionals.add(unwrappedVar);
+    }
+    
     const thenBlock = ts.isBlock(node.thenStatement) 
       ? this.visitBlock(node.thenStatement)
       : new ast.Block([this.visitStatement(node.thenStatement)!]);
+    
+    // Remove from unwrapped set after then block
+    if (unwrappedVar) {
+      this.unwrappedOptionals.delete(unwrappedVar);
+    }
     
     const elseBlock = node.elseStatement 
       ? (ts.isBlock(node.elseStatement)
@@ -468,8 +491,19 @@ export class AstCodegen {
       return cpp.id('nullptr');
     }
     
+    if (node.kind === ts.SyntaxKind.ThisKeyword) {
+      return cpp.id('this');
+    }
+    
     if (ts.isIdentifier(node)) {
-      return cpp.id(this.escapeName(node.text));
+      const varName = this.escapeName(node.text);
+      
+      // If this identifier is tracked as unwrapped, add .value() to access the optional
+      if (this.unwrappedOptionals.has(varName)) {
+        return cpp.id(`${varName}.value()`);
+      }
+      
+      return cpp.id(varName);
     }
     
     if (ts.isBinaryExpression(node)) {
@@ -484,6 +518,12 @@ export class AstCodegen {
       return this.visitPropertyAccess(node);
     }
     
+    if (ts.isElementAccessExpression(node)) {
+      const obj = this.visitExpression(node.expression);
+      const index = this.visitExpression(node.argumentExpression!);
+      return cpp.binary(obj, '[]', index);  // Generates obj[index]
+    }
+    
     if (ts.isPostfixUnaryExpression(node)) {
       const operand = this.visitExpression(node.operand);
       const op = node.operator === ts.SyntaxKind.PlusPlusToken ? '++' : '--';
@@ -495,11 +535,54 @@ export class AstCodegen {
       return cpp.initList(elements);
     }
     
+    if (ts.isParenthesizedExpression(node)) {
+      // Just visit the inner expression, parentheses will be added if needed
+      return this.visitExpression(node.expression);
+    }
+    
     if (ts.isNewExpression(node)) {
       return this.visitNewExpression(node);
     }
     
     return cpp.id('/* UNSUPPORTED */');
+  }
+  
+  /**
+   * Extract variable name from null check expressions like:
+   * - x !== null
+   * - x !== null && otherCondition
+   * Returns the variable name if found, undefined otherwise
+   */
+  private extractNullCheck(expr: ts.Expression): string | undefined {
+    // Handle: x !== null
+    if (ts.isBinaryExpression(expr)) {
+      const op = expr.operatorToken.kind;
+      if (op === ts.SyntaxKind.ExclamationEqualsEqualsToken || op === ts.SyntaxKind.ExclamationEqualsToken) {
+        // Check if comparing with null
+        const isLeftNull = expr.left.kind === ts.SyntaxKind.NullKeyword;
+        const isRightNull = expr.right.kind === ts.SyntaxKind.NullKeyword;
+        
+        if (isRightNull && ts.isIdentifier(expr.left)) {
+          return this.escapeName(expr.left.text);
+        }
+        if (isLeftNull && ts.isIdentifier(expr.right)) {
+          return this.escapeName(expr.right.text);
+        }
+      }
+      
+      // Handle: x !== null && otherCondition
+      if (op === ts.SyntaxKind.AmpersandAmpersandToken) {
+        // Check left side of &&
+        const leftCheck = this.extractNullCheck(expr.left);
+        if (leftCheck) return leftCheck;
+        
+        // Check right side of &&
+        const rightCheck = this.extractNullCheck(expr.right);
+        if (rightCheck) return rightCheck;
+      }
+    }
+    
+    return undefined;
   }
   
   private visitBinaryExpression(node: ts.BinaryExpression): ast.Expression {
@@ -561,7 +644,12 @@ export class AstCodegen {
         }
       }
       
-      // Regular method call: obj->method(args)
+      // For 'this', use this->method() directly
+      if (obj.kind === ts.SyntaxKind.ThisKeyword) {
+        return cpp.call(cpp.id(`this->${method}`), args);
+      }
+      
+      // Regular method call: obj.method(args) or obj->method(args)
       const objExpr = this.visitExpression(obj);
       return cpp.call(cpp.member(objExpr, method), args);
     }
@@ -628,9 +716,22 @@ export class AstCodegen {
     }
     
     // Generic types: Map<K, V> → gs::Map<K, V>
+    // Also handle ownership types: own<T>, share<T>, use<T>
     if (ts.isTypeReferenceNode(typeNode) && typeNode.typeArguments) {
       const baseName = typeNode.typeName.getText();
       const typeArgs = typeNode.typeArguments.map(arg => this.mapType(arg).toString());
+      
+      // Ownership types map to smart pointers
+      if (baseName === 'own') {
+        return new ast.CppType(`std::unique_ptr<${typeArgs[0]}>`);
+      }
+      if (baseName === 'share') {
+        return new ast.CppType(`std::shared_ptr<${typeArgs[0]}>`);
+      }
+      if (baseName === 'use') {
+        return new ast.CppType(`std::weak_ptr<${typeArgs[0]}>`);
+      }
+      
       return new ast.CppType(`gs::${baseName}<${typeArgs.join(', ')}>`);
     }
     
@@ -691,7 +792,8 @@ export class AstCodegen {
   }
   
   private escapeName(name: string): string {
-    const keywords = new Set(['class', 'namespace', 'template']);
+    // C++ keywords and common macros that conflict
+    const keywords = new Set(['class', 'namespace', 'template', 'EOF']);
     return keywords.has(name) ? name + '_' : name;
   }
   

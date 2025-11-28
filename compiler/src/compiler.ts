@@ -12,7 +12,7 @@ import { OwnershipAnalyzer } from './ownership-analyzer';
 import { Validator } from './validator';
 import { NullCheckAnalyzer } from './null-check-analyzer';
 import { TypeScriptCodegen } from './ts-codegen';
-import { CppCodegen } from './cpp-codegen';
+import { AstCodegen } from './cpp/codegen'; // AST-based codegen with optional unwrapping
 import { Diagnostic, SourceLocation } from './types';
 
 export interface CompileOptions {
@@ -42,7 +42,7 @@ export class Compiler {
   private nullCheckAnalyzer: NullCheckAnalyzer;
   private validator: Validator;
   private tsCodegen: TypeScriptCodegen;
-  private cppCodegen: CppCodegen;
+  private cppCodegen: AstCodegen;
 
   constructor() {
     this.parser = new Parser();
@@ -50,7 +50,7 @@ export class Compiler {
     this.nullCheckAnalyzer = new NullCheckAnalyzer();
     this.validator = new Validator();
     this.tsCodegen = new TypeScriptCodegen();
-    this.cppCodegen = new CppCodegen();
+    this.cppCodegen = new AstCodegen();
   }
 
   /**
@@ -506,8 +506,8 @@ export class Compiler {
       if (!sourceFile.isDeclarationFile && this.isGoodScriptFile(sourceFile.fileName)) {
         const sourceFilePath = path.resolve(sourceFile.fileName);
         
-        // Generate C++ code with type checker for type inference
-        const cppCode = this.cppCodegen.generate(sourceFile, checker);
+        // Generate C++ code
+        const cppCode = this.cppCodegen.generate(sourceFile);
         
         // Compute relative path from root directory
         const relativePath = path.relative(rootDir, sourceFilePath);
