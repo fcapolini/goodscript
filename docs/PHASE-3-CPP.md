@@ -1,20 +1,20 @@
 # Phase 3: C++ Code Generation
 
-**Status:** ✅ ~93% Complete (882/946 tests passing - 93.2%)
+**Status:** ✅ ~93.5% Complete (885/946 tests passing - 93.5%)
 
 ## Architecture
 
 The C++ code generation uses an **AST-based approach**:
 
-### Current Implementation (Nov 29, 2025)
+### Current Implementation (Nov 29, 2025 - Evening)
 
 **New AST-Based Codegen:**
-- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~1,300 lines)
+- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~1,410 lines)
   - Pure AST transformation from TypeScript AST → C++ AST
   - No string concatenation during generation
   - Type-safe, composable, easily testable
-  - **Currently passing 882/946 tests (93.2%)**
-  - **47 failures remaining** (down from 64 on Nov 28)
+  - **Currently passing 885/946 tests (93.5%)**
+  - **44 failures remaining** (down from 48 earlier today)
 
 **AST Infrastructure:**
 - **`src/cpp/ast.ts`** - C++ AST node type definitions (717 lines)

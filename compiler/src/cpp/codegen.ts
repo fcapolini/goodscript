@@ -15,6 +15,7 @@ export class AstCodegen {
   private currentFunctionReturnType?: ast.CppType; // Track current function return type for null handling
   private unwrappedOptionals = new Set<string>(); // Track variables known to be non-null in current scope
   private variableTypes = new Map<string, ast.CppType>(); // Track variable types for smart pointer detection
+  private pointerVariables = new Set<string>(); // Track variables that are pointers (from Map.get(), etc.)
   
   constructor(private checker?: ts.TypeChecker) {}
   
@@ -22,6 +23,7 @@ export class AstCodegen {
     this.enumNames.clear(); // Reset for each file
     this.unwrappedOptionals.clear(); // Reset for each file
     this.variableTypes.clear(); // Reset for each file
+    this.pointerVariables.clear(); // Reset for each file
     const includes = [new ast.Include('gs_runtime.hpp', false)];
     const declarations: ast.Declaration[] = [];
     const mainStatements: ast.Statement[] = [];
@@ -80,7 +82,15 @@ export class AstCodegen {
     
     for (const decl of node.declarationList.declarations) {
       const name = this.escapeName(decl.name.getText());
-      let cppType = this.mapType(decl.type!);
+      
+      // Get C++ type from explicit annotation if present
+      let cppType: ast.CppType;
+      if (decl.type) {
+        cppType = this.mapType(decl.type);
+      } else {
+        // Use auto for inferred types - let C++ compiler figure it out
+        cppType = new ast.CppType('auto');
+      }
       
       // Special handling for function types (arrow functions)
       // If initializer is an arrow function and we don't have an explicit type,
@@ -97,6 +107,18 @@ export class AstCodegen {
         cppType = new ast.CppType(`std::function<${returnType}(${paramTypeStr})>`);
       }
       
+      // Check if initializer is Map.get() which returns a pointer, not optional
+      if (decl.initializer && this.isMapGetCall(decl.initializer)) {
+        // Map.get() returns V*, so if cppType is std::optional<T>, change to const T*
+        const typeStr = cppType.toString();
+        if (typeStr.startsWith('std::optional<') && typeStr.endsWith('>')) {
+          const innerType = typeStr.slice('std::optional<'.length, -1);
+          cppType = new ast.CppType(`const ${innerType}*`);
+        }
+        // Track this variable as a pointer
+        this.pointerVariables.add(name);
+      }
+      
       // Track variable type for smart pointer detection
       this.variableTypes.set(name, cppType);
       
@@ -104,9 +126,22 @@ export class AstCodegen {
       if (decl.initializer) {
         init = this.visitExpression(decl.initializer);
         
+        // If initializer is an array subscript (returns pointer), dereference it
+        if (ts.isElementAccessExpression(decl.initializer)) {
+          init = cpp.unary('*', init);
+        }
+        
+        // If the variable has share<T> type (std::shared_ptr), wrap the initializer
+        const typeStr = cppType.toString();
+        if (typeStr.startsWith('std::shared_ptr<') && typeStr.endsWith('>')) {
+          const elementType = typeStr.slice('std::shared_ptr<'.length, -1);
+          // Wrap in make_shared
+          init = cpp.call(cpp.id(`std::make_shared<${elementType}>`), [init]);
+        }
+        
         // If initializing optional type with null, use std::nullopt instead of nullptr
         if (init instanceof ast.Identifier && init.name === 'nullptr' && 
-            cppType.toString().startsWith('std::optional')) {
+            typeStr.startsWith('std::optional')) {
           init = cpp.id('std::nullopt');
         }
       }
@@ -242,8 +277,9 @@ export class AstCodegen {
         // Restore previous return type
         this.currentFunctionReturnType = previousReturnType;
         
-        // Determine if method should be const (doesn't modify this)
-        const isConst = this.shouldMethodBeConst(member);
+        // TypeScript doesn't have const methods, so we don't mark methods as const
+        // to maintain 1:1 compatibility with TypeScript semantics
+        const isConst = false;
         
         methods.push(new ast.Method(methodName, returnType, params, body, ast.AccessSpecifier.Public, isConst));
       }
@@ -314,6 +350,12 @@ export class AstCodegen {
   private visitStatement(node: ts.Statement): ast.Statement | undefined {
     if (ts.isReturnStatement(node)) {
       let expr = node.expression ? this.visitExpression(node.expression) : undefined;
+      
+      // If returning a pointer variable, dereference it
+      if (expr instanceof ast.Identifier && ts.isIdentifier(node.expression!) && 
+          this.pointerVariables.has(this.escapeName(node.expression.text))) {
+        expr = cpp.unary('*', expr);
+      }
       
       // If returning null and function returns optional, use std::nullopt
       if (expr instanceof ast.Identifier && expr.name === 'nullptr' && 
@@ -544,9 +586,14 @@ export class AstCodegen {
       
       const escapedName = this.escapeName(varName);
       
-      // If this identifier is tracked as unwrapped, add .value() to access the optional
+      // If this identifier is tracked as unwrapped
       if (this.unwrappedOptionals.has(escapedName)) {
-        return cpp.id(`${escapedName}.value()`);
+        // Use * for pointer variables, .value() for optionals
+        if (this.pointerVariables.has(escapedName)) {
+          return cpp.unary('*', cpp.id(escapedName));
+        } else {
+          return cpp.id(`${escapedName}.value()`);
+        }
       }
       
       return cpp.id(escapedName);
@@ -714,23 +761,57 @@ export class AstCodegen {
       }
     }
     
-    let left = this.visitExpression(node.left);
-    let right = this.visitExpression(node.right);
-    
     // Map operators
     let op = node.operatorToken.getText();
     if (op === '===') op = '==';
     if (op === '!==') op = '!=';
     
-    // If comparing with null and one side might be optional, use std::nullopt
-    if (node.left.kind === ts.SyntaxKind.NullKeyword && left instanceof ast.Identifier && left.name === 'nullptr') {
-      left = cpp.id('std::nullopt');
-    }
-    if (node.right.kind === ts.SyntaxKind.NullKeyword && right instanceof ast.Identifier && right.name === 'nullptr') {
-      right = cpp.id('std::nullopt');
+    // Check if we're comparing with null/undefined BEFORE visiting expressions
+    const isLeftNull = node.left.kind === ts.SyntaxKind.NullKeyword;
+    const isRightNull = node.right.kind === ts.SyntaxKind.NullKeyword;
+    const isLeftUndefined = ts.isIdentifier(node.left) && node.left.text === 'undefined';
+    const isRightUndefined = ts.isIdentifier(node.right) && node.right.text === 'undefined';
+    
+    // Check if either side is a Map.get() call which returns a pointer
+    const isLeftMapGet = this.isMapGetCall(node.left);
+    const isRightMapGet = this.isMapGetCall(node.right);
+    
+    // Check if either side is an identifier that holds a pointer value
+    const isLeftPointer = ts.isIdentifier(node.left) && this.pointerVariables.has(this.escapeName(node.left.text));
+    const isRightPointer = ts.isIdentifier(node.right) && this.pointerVariables.has(this.escapeName(node.right.text));
+    
+    // Now visit the expressions
+    let left = this.visitExpression(node.left);
+    let right = this.visitExpression(node.right);
+    
+    // If comparing a pointer (Map.get() or pointer variable) with undefined/null, replace with nullptr
+    if ((isLeftMapGet || isLeftPointer) && (isRightNull || isRightUndefined)) {
+      right = cpp.id('nullptr');
+    } else if ((isRightMapGet || isRightPointer) && (isLeftNull || isLeftUndefined)) {
+      left = cpp.id('nullptr');
+    } else {
+      // For other optional comparisons, use std::nullopt for null (undefined already mapped)
+      if (isLeftNull && left instanceof ast.Identifier && left.name === 'nullptr') {
+        left = cpp.id('std::nullopt');
+      }
+      if (isRightNull && right instanceof ast.Identifier && right.name === 'nullptr') {
+        right = cpp.id('std::nullopt');
+      }
     }
     
     return cpp.binary(left, op, right);
+  }
+  
+  /**
+   * Check if an expression is a call to Map.get() or similar methods that return pointers
+   */
+  private isMapGetCall(node: ts.Expression): boolean {
+    if (!ts.isCallExpression(node)) return false;
+    if (!ts.isPropertyAccessExpression(node.expression)) return false;
+    
+    const methodName = node.expression.name.text;
+    // Map.get(), Array operator[], etc. return pointers
+    return methodName === 'get';
   }
   
   private visitNewExpression(node: ts.NewExpression): ast.Expression {
@@ -876,7 +957,15 @@ export class AstCodegen {
   }
   
   private visitCallExpression(node: ts.CallExpression): ast.Expression {
-    const args = node.arguments.map(arg => this.visitExpression(arg));
+    // Visit arguments and dereference array subscripts
+    const args = node.arguments.map(arg => {
+      let argExpr = this.visitExpression(arg);
+      // If argument is an array subscript, dereference it (returns pointer)
+      if (ts.isElementAccessExpression(arg)) {
+        argExpr = cpp.unary('*', argExpr);
+      }
+      return argExpr;
+    });
     
     // Handle property access: obj.method(args)
     if (ts.isPropertyAccessExpression(node.expression)) {
@@ -955,13 +1044,23 @@ export class AstCodegen {
     
     const obj = this.visitExpression(node.expression);
     
-    // Special case: array.length should be array.length() (method call)
-    if (prop === 'length' && this.checker) {
-      const objType = this.checker.getTypeAtLocation(node.expression);
-      const objTypeStr = this.checker.typeToString(objType);
-      // Check if this is an array type
-      if (objTypeStr.endsWith('[]') || objTypeStr.startsWith('Array<') || objTypeStr === 'string') {
-        return cpp.call(cpp.member(obj, 'length'), []);
+    // Special case: array.length and map.size should be method calls
+    if (this.checker) {
+      if (prop === 'length') {
+        const objType = this.checker.getTypeAtLocation(node.expression);
+        const objTypeStr = this.checker.typeToString(objType);
+        // Check if this is an array type
+        if (objTypeStr.endsWith('[]') || objTypeStr.startsWith('Array<') || objTypeStr === 'string') {
+          return cpp.call(cpp.member(obj, 'length'), []);
+        }
+      }
+      if (prop === 'size') {
+        const objType = this.checker.getTypeAtLocation(node.expression);
+        const objTypeStr = this.checker.typeToString(objType);
+        // Check if this is a Map or Set type
+        if (objTypeStr.startsWith('Map<') || objTypeStr.startsWith('Set<')) {
+          return cpp.call(cpp.member(obj, 'size'), []);
+        }
       }
     }
     
@@ -1083,7 +1182,16 @@ export class AstCodegen {
   private escapeName(name: string): string {
     // C++ keywords and common macros that conflict
     const keywords = new Set(['class', 'namespace', 'template', 'EOF']);
-    return keywords.has(name) ? name + '_' : name;
+    let result = keywords.has(name) ? name + '_' : name;
+    
+    // Sanitize Unicode characters to hex codes for portability
+    // Convert non-ASCII characters to _uXXXX_ format
+    result = result.replace(/[^\x00-\x7F]/g, (char) => {
+      const code = char.charCodeAt(0);
+      return `_u${code.toString(16)}_`;
+    });
+    
+    return result;
   }
   
   private escapeString(str: string): string {
@@ -1173,34 +1281,44 @@ export class AstCodegen {
    * Methods that don't modify member variables should be const.
    */
   private shouldMethodBeConst(method: ts.MethodDeclaration): boolean {
-    const methodName = method.name.getText();
-    
-    // Common const methods: toString, toJSON, getters, has, isEmpty, etc.
-    const constMethodNames = ['toString', 'toJSON', 'isEmpty', 'has', 'contains', 'get'];
-    if (constMethodNames.some(name => methodName === name || methodName.startsWith('get'))) {
-      return true;
-    }
-    
-    // Check if method body has any assignments to 'this'
+    // Check if method body has any mutations to 'this' or its properties
     if (!method.body) {
       return true; // Abstract methods can be const
     }
     
-    let hasThisAssignment = false;
+    let hasMutation = false;
     const visit = (node: ts.Node): void => {
+      // Check for direct assignments to this.field
       if (ts.isBinaryExpression(node) && 
           node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
         if (ts.isPropertyAccessExpression(node.left) &&
             node.left.expression.kind === ts.SyntaxKind.ThisKeyword) {
-          hasThisAssignment = true;
+          hasMutation = true;
         }
       }
+      
+      // Check for method calls on this.field that mutate state
+      // e.g., this.map.set(), this.array.push()
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+        const methodName = node.expression.name.text;
+        const mutatingMethods = ['set', 'push', 'pop', 'shift', 'unshift', 'splice', 'delete_', 'clear'];
+        
+        if (mutatingMethods.includes(methodName)) {
+          // Check if this is called on a this.field
+          const obj = node.expression.expression;
+          if (ts.isPropertyAccessExpression(obj) && 
+              obj.expression.kind === ts.SyntaxKind.ThisKeyword) {
+            hasMutation = true;
+          }
+        }
+      }
+      
       ts.forEachChild(node, visit);
     };
     
     visit(method.body);
     
-    return !hasThisAssignment;
+    return !hasMutation;
   }
   
   /**

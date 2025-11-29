@@ -30,8 +30,8 @@ class StringPool {
       return existing;
     }
 
-    // Create new shared string
-    const shared = value;
+    // Create new shared string - explicitly typed to ensure proper wrapping
+    const shared: share<string> = value;
     this.strings.set(value, shared);
     this.stats.set(value, 1);
     return shared;
