@@ -119,21 +119,39 @@ export class AstCodegen {
         this.pointerVariables.add(name);
       }
       
-      // Track variable type for smart pointer detection
-      this.variableTypes.set(name, cppType);
-      
       let init: ast.Expression | undefined;
+      let isShareArraySubscript = false;  // Track if we're initializing from share<T>[]
+      
       if (decl.initializer) {
         init = this.visitExpression(decl.initializer);
         
-        // If initializer is an array subscript (returns pointer), dereference it
-        if (ts.isElementAccessExpression(decl.initializer)) {
-          init = cpp.unary('*', init);
+        // If initializer is an array subscript, check if we need to dereference
+        // Only dereference if the array does NOT contain smart pointers
+        if (ts.isElementAccessExpression(decl.initializer) && this.checker) {
+          const arrayExpr = decl.initializer.expression;
+          const arrayType = this.checker.getTypeAtLocation(arrayExpr);
+          const arrayTypeStr = this.checker.typeToString(arrayType);
+          
+          // Check if array element type is share<T> (maps to std::shared_ptr<T>)
+          // If so, don't dereference - we want the shared_ptr itself
+          // Also track this variable as holding a smart pointer
+          const shareMatch = arrayTypeStr.match(/(?:Array<)?share<([^>]+)>/);
+          
+          if (shareMatch) {
+            // This variable will hold a shared_ptr, update its type
+            const elementType = shareMatch[1];
+            cppType = new ast.CppType(`std::shared_ptr<gs::${elementType}>`);
+            isShareArraySubscript = true;  // Don't wrap again below
+          } else {
+            // Not a share<T> array, safe to dereference
+            init = cpp.unary('*', init);
+          }
         }
         
         // If the variable has share<T> type (std::shared_ptr), wrap the initializer
+        // BUT skip if we just got it from a share<T> array (already wrapped)
         const typeStr = cppType.toString();
-        if (typeStr.startsWith('std::shared_ptr<') && typeStr.endsWith('>')) {
+        if (typeStr.startsWith('std::shared_ptr<') && typeStr.endsWith('>') && !isShareArraySubscript) {
           const elementType = typeStr.slice('std::shared_ptr<'.length, -1);
           // Wrap in make_shared
           init = cpp.call(cpp.id(`std::make_shared<${elementType}>`), [init]);
@@ -145,6 +163,9 @@ export class AstCodegen {
           init = cpp.id('std::nullopt');
         }
       }
+      
+      // Track variable type for smart pointer detection (AFTER potentially updating cppType)
+      this.variableTypes.set(name, cppType);
       
       // In C++, 'const' on objects makes them immutable, but in TypeScript,
       // 'const' just means the binding can't be reassigned.
@@ -351,9 +372,21 @@ export class AstCodegen {
     if (ts.isReturnStatement(node)) {
       let expr = node.expression ? this.visitExpression(node.expression) : undefined;
       
-      // If returning an array subscript (returns pointer), dereference it
-      if (expr && node.expression && ts.isElementAccessExpression(node.expression)) {
-        expr = cpp.unary('*', expr);
+      // If returning an array subscript, check if we need to dereference
+      // Only dereference if the array does NOT contain smart pointers
+      if (expr && node.expression && ts.isElementAccessExpression(node.expression) && this.checker) {
+        const arrayExpr = node.expression.expression;
+        const arrayType = this.checker.getTypeAtLocation(arrayExpr);
+        const arrayTypeStr = this.checker.typeToString(arrayType);
+        
+        // Check if array element type is share<T> (maps to std::shared_ptr<T>)
+        // If so, don't dereference - we want the shared_ptr itself
+        const isShareArray = arrayTypeStr.match(/(?:Array<)?share<[^>]+>/);
+        
+        if (!isShareArray) {
+          // Not a share<T> array, safe to dereference
+          expr = cpp.unary('*', expr);
+        }
       }
       
       // If returning a pointer variable, dereference it
@@ -983,54 +1016,92 @@ export class AstCodegen {
   }
   
   private visitCallExpression(node: ts.CallExpression): ast.Expression {
-    // Visit arguments and dereference array subscripts
-    const args = node.arguments.map(arg => {
+    // Handle property access: obj.method(args) first to get method name
+    let methodName: string | undefined;
+    let objNode: ts.Expression | undefined;
+    
+    if (ts.isPropertyAccessExpression(node.expression)) {
+      methodName = node.expression.name.text;
+      objNode = node.expression.expression;
+    }
+    
+    // Visit arguments and apply special handling
+    const args = node.arguments.map((arg, index) => {
       let argExpr = this.visitExpression(arg);
-      // If argument is an array subscript, dereference it (returns pointer)
-      if (ts.isElementAccessExpression(arg)) {
-        argExpr = cpp.unary('*', argExpr);
+      
+      // If argument is an array subscript, check if we need to dereference
+      // Only dereference if the array does NOT contain smart pointers
+      if (ts.isElementAccessExpression(arg) && this.checker) {
+        const arrayExpr = arg.expression;
+        const arrayType = this.checker.getTypeAtLocation(arrayExpr);
+        const arrayTypeStr = this.checker.typeToString(arrayType);
+        
+        // Check if array element type is share<T> (maps to std::shared_ptr<T>)
+        // If so, don't dereference - we want the shared_ptr itself
+        const isShareArray = arrayTypeStr.match(/(?:Array<)?share<[^>]+>/);
+        
+        if (!isShareArray) {
+          // Not a share<T> array, safe to dereference
+          argExpr = cpp.unary('*', argExpr);
+        }
       }
+      
+      // Special handling for .push() on Array<share<T>>
+      // If pushing to an array of shared_ptrs, wrap the argument
+      if (methodName === 'push' && index === 0 && objNode && this.checker) {
+        const objType = this.checker.getTypeAtLocation(objNode);
+        const objTypeStr = this.checker.typeToString(objType);
+        
+        // Check if array element type is share<T>
+        // Pattern: "share<TypeName>[]" or "Array<share<TypeName>>"
+        const shareArrayMatch = objTypeStr.match(/(?:Array<)?share<([^>]+)>/);
+        if (shareArrayMatch) {
+          const elementType = shareArrayMatch[1];
+          // Wrap in std::make_shared if the argument is a new expression or stack object
+          if (ts.isNewExpression(arg) || ts.isIdentifier(arg)) {
+            argExpr = cpp.call(cpp.id(`std::make_shared<gs::${elementType}>`), [argExpr]);
+          }
+        }
+      }
+      
       return argExpr;
     });
     
     // Handle property access: obj.method(args)
-    if (ts.isPropertyAccessExpression(node.expression)) {
-      const obj = node.expression.expression;
-      const method = node.expression.name.text;
-      
+    if (ts.isPropertyAccessExpression(node.expression) && objNode && methodName) {
       // Special case: console.log, Math.max, etc.
-      if (ts.isIdentifier(obj)) {
-        const objName = obj.text;
+      if (ts.isIdentifier(objNode)) {
+        const objName = objNode.text;
         if (objName === 'console' || objName === 'Math' || objName === 'Number') {
-          return cpp.call(cpp.id(`gs::${objName}::${method}`), args);
+          return cpp.call(cpp.id(`gs::${objName}::${methodName}`), args);
         }
       }
       
       // Special case: number instance methods (toFixed, toExponential, toPrecision)
       // value.toFixed(2) → gs::Number::toFixed(value, 2)
-      if (this.checker && (method === 'toFixed' || method === 'toExponential' || method === 'toPrecision')) {
-        const objType = this.checker.getTypeAtLocation(obj);
+      if (this.checker && (methodName === 'toFixed' || methodName === 'toExponential' || methodName === 'toPrecision')) {
+        const objType = this.checker.getTypeAtLocation(objNode);
         const objTypeStr = this.checker.typeToString(objType);
         if (objTypeStr === 'number') {
-          const objExpr = this.visitExpression(obj);
+          const objExpr = this.visitExpression(objNode);
           // Call static method with object as first argument
-          return cpp.call(cpp.id(`gs::Number::${method}`), [objExpr, ...args]);
+          return cpp.call(cpp.id(`gs::Number::${methodName}`), [objExpr, ...args]);
         }
       }
       
       // For 'this', use this->method() directly
-      if (obj.kind === ts.SyntaxKind.ThisKeyword) {
-        return cpp.call(cpp.id(`this->${method}`), args);
+      if (objNode.kind === ts.SyntaxKind.ThisKeyword) {
+        return cpp.call(cpp.id(`this->${methodName}`), args);
       }
       
       // Regular method call: obj.method(args) or obj->method(args)
-      const objExpr = this.visitExpression(obj);
+      const objExpr = this.visitExpression(objNode);
       
       // Check if obj is an array subscript or smart pointer - needs ->
-      const isArraySubscript = ts.isElementAccessExpression(obj);
-      const isPointer = isArraySubscript || this.isSmartPointerAccess(obj);
+      const isArraySubscript = ts.isElementAccessExpression(objNode);
+      const isPointer = isArraySubscript || this.isSmartPointerAccess(objNode);
       
-      return cpp.call(cpp.member(objExpr, method, isPointer), args);
+      return cpp.call(cpp.member(objExpr, methodName, isPointer), args);
     }
     
     // Regular function call
