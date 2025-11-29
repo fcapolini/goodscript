@@ -1,20 +1,20 @@
 # Phase 3: C++ Code Generation
 
-**Status:** ✅ ~93.5% Complete (885/946 tests passing - 93.5%)
+**Status:** ✅ ~94% Complete (889/946 tests passing - 94.0%)
 
 ## Architecture
 
 The C++ code generation uses an **AST-based approach**:
 
-### Current Implementation (Nov 29, 2025 - Evening)
+### Current Implementation (Nov 29, 2025 - Late Evening)
 
 **New AST-Based Codegen:**
-- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~1,410 lines)
+- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~1,450 lines)
   - Pure AST transformation from TypeScript AST → C++ AST
   - No string concatenation during generation
   - Type-safe, composable, easily testable
-  - **Currently passing 885/946 tests (93.5%)**
-  - **44 failures remaining** (down from 48 earlier today)
+  - **Currently passing 889/946 tests (94.0%)**
+  - **40 failures remaining** (down from 44 mid-evening, 48 earlier today)
 
 **AST Infrastructure:**
 - **`src/cpp/ast.ts`** - C++ AST node type definitions (717 lines)
@@ -41,7 +41,8 @@ See `src/cpp/README.md` for usage examples.
 - 28 RegExp runtime tests (100% passing) ✅
 - 9 RegExp codegen tests (100% passing) ✅
 - 6 RegExp e2e tests (100% passing) ✅
-- 100/107 concrete example tests (93.5% passing) ✅ (up from 94/96)
+- 103/107 concrete example tests (96.3% passing) ✅ (up from 100/107)
+  - regex-validator: 9/9 tests passing ✅ NEW!
 - 4 runtime Property/LiteralObject tests (100% passing) ✅
 - 7 super() call tests (100% passing) ✅
 - 10 inheritance tests (100% passing) ✅ (generic base classes now supported)
