@@ -2,6 +2,8 @@
 
 #include <cmath>
 #include <limits>
+#include <sstream>
+#include <iomanip>
 
 namespace gs {
 
@@ -43,6 +45,25 @@ public:
 
   static int parseInt(const char* str, int radix = 10) {
     return static_cast<int>(std::strtol(str, nullptr, radix));
+  }
+  
+  // Instance-like methods (for codegen)
+  static std::string toFixed(double value, int digits = 0) {
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(digits) << value;
+    return out.str();
+  }
+  
+  static std::string toExponential(double value, int digits = 0) {
+    std::ostringstream out;
+    out << std::scientific << std::setprecision(digits) << value;
+    return out.str();
+  }
+  
+  static std::string toPrecision(double value, int precision) {
+    std::ostringstream out;
+    out << std::setprecision(precision) << value;
+    return out.str();
   }
 };
 

@@ -47,6 +47,12 @@ export class AstCodegen {
       } else if (ts.isExpressionStatement(stmt)) {
         // Top-level expressions go into main()
         mainStatements.push(new ast.ExpressionStmt(this.visitExpression(stmt.expression)));
+      } else {
+        // Handle other statement types (if, for, while, for-of, try, etc.)
+        const statement = this.visitStatement(stmt);
+        if (statement) {
+          mainStatements.push(statement);
+        }
       }
     }
     
@@ -74,7 +80,22 @@ export class AstCodegen {
     
     for (const decl of node.declarationList.declarations) {
       const name = this.escapeName(decl.name.getText());
-      const cppType = this.mapType(decl.type!);
+      let cppType = this.mapType(decl.type!);
+      
+      // Special handling for function types (arrow functions)
+      // If initializer is an arrow function and we don't have an explicit type,
+      // use std::function to allow recursion
+      if (decl.initializer && ts.isArrowFunction(decl.initializer)) {
+        const arrowFunc = decl.initializer;
+        const returnType = arrowFunc.type ? this.mapType(arrowFunc.type) : new ast.CppType('double');
+        const paramTypes = arrowFunc.parameters.map(p => 
+          p.type ? this.mapType(p.type) : new ast.CppType('double')
+        );
+        
+        // Build std::function<ReturnType(ParamType1, ParamType2, ...)>
+        const paramTypeStr = paramTypes.map(t => t.toString()).join(', ');
+        cppType = new ast.CppType(`std::function<${returnType}(${paramTypeStr})>`);
+      }
       
       // Track variable type for smart pointer detection
       this.variableTypes.set(name, cppType);
@@ -138,6 +159,14 @@ export class AstCodegen {
     const constructors: ast.Constructor[] = [];
     const methods: ast.Method[] = [];
     
+    // Handle type parameters for generic classes
+    const templateParams: string[] = [];
+    if (node.typeParameters) {
+      for (const typeParam of node.typeParameters) {
+        templateParams.push(typeParam.name.text);
+      }
+    }
+    
     // Handle extends clause
     let baseClass: string | undefined;
     const baseClasses: string[] = [];
@@ -147,12 +176,13 @@ export class AstCodegen {
         if (clause.token === ts.SyntaxKind.ExtendsKeyword) {
           // extends - single base class
           if (clause.types.length > 0) {
-            baseClass = this.escapeName(clause.types[0].expression.getText());
+            // Get full type including template arguments
+            baseClass = this.escapeName(clause.types[0].getText());
           }
         } else if (clause.token === ts.SyntaxKind.ImplementsKeyword) {
           // implements - multiple interfaces (treated as base classes in C++)
           for (const type of clause.types) {
-            baseClasses.push(this.escapeName(type.expression.getText()));
+            baseClasses.push(this.escapeName(type.getText()));
           }
         }
       }
@@ -212,11 +242,14 @@ export class AstCodegen {
         // Restore previous return type
         this.currentFunctionReturnType = previousReturnType;
         
-        methods.push(new ast.Method(methodName, returnType, params, body));
+        // Determine if method should be const (doesn't modify this)
+        const isConst = this.shouldMethodBeConst(member);
+        
+        methods.push(new ast.Method(methodName, returnType, params, body, ast.AccessSpecifier.Public, isConst));
       }
     }
     
-    return new ast.Class(name, fields, constructors, methods, baseClass, [], false, baseClasses);
+    return new ast.Class(name, fields, constructors, methods, baseClass, templateParams, false, baseClasses);
   }
   
   private visitInterface(node: ts.InterfaceDeclaration): ast.Class | undefined {
@@ -472,7 +505,6 @@ export class AstCodegen {
   private visitExpression(node: ts.Expression): ast.Expression {
     if (ts.isNumericLiteral(node)) {
       // For numeric literals, create a raw identifier with the number value
-      // (Literal class adds quotes)
       return cpp.id(node.text);
     }
     
@@ -503,14 +535,21 @@ export class AstCodegen {
     }
     
     if (ts.isIdentifier(node)) {
-      const varName = this.escapeName(node.text);
+      const varName = node.text;
       
-      // If this identifier is tracked as unwrapped, add .value() to access the optional
-      if (this.unwrappedOptionals.has(varName)) {
-        return cpp.id(`${varName}.value()`);
+      // Handle special identifiers
+      if (varName === 'undefined') {
+        return cpp.id('std::nullopt');
       }
       
-      return cpp.id(varName);
+      const escapedName = this.escapeName(varName);
+      
+      // If this identifier is tracked as unwrapped, add .value() to access the optional
+      if (this.unwrappedOptionals.has(escapedName)) {
+        return cpp.id(`${escapedName}.value()`);
+      }
+      
+      return cpp.id(escapedName);
     }
     
     if (ts.isBinaryExpression(node)) {
@@ -528,7 +567,7 @@ export class AstCodegen {
     if (ts.isElementAccessExpression(node)) {
       const obj = this.visitExpression(node.expression);
       const index = this.visitExpression(node.argumentExpression!);
-      return cpp.binary(obj, '[]', index);  // Generates obj[index]
+      return cpp.subscript(obj, index);  // Generates obj[index]
     }
     
     if (ts.isPostfixUnaryExpression(node)) {
@@ -537,9 +576,55 @@ export class AstCodegen {
       return cpp.postfix(operand, op);
     }
     
+    if (ts.isPrefixUnaryExpression(node)) {
+      const operand = this.visitExpression(node.operand);
+      let op = '';
+      switch (node.operator) {
+        case ts.SyntaxKind.PlusToken: op = '+'; break;
+        case ts.SyntaxKind.MinusToken: op = '-'; break;
+        case ts.SyntaxKind.ExclamationToken: op = '!'; break;
+        case ts.SyntaxKind.TildeToken: op = '~'; break;
+        case ts.SyntaxKind.PlusPlusToken: op = '++'; break;
+        case ts.SyntaxKind.MinusMinusToken: op = '--'; break;
+      }
+      return cpp.unary(op, operand);
+    }
+    
     if (ts.isArrayLiteralExpression(node)) {
       const elements = node.elements.map(el => this.visitExpression(el));
-      return cpp.initList(elements);
+      
+      // Try to determine element type from context using TypeChecker
+      let elementType: string | undefined;
+      if (this.checker) {
+        const type = this.checker.getTypeAtLocation(node);
+        const typeStr = this.checker.typeToString(type);
+        
+        // Extract element type from type string like "number[]" or "Array<number>"
+        if (typeStr.endsWith('[]')) {
+          const baseType = typeStr.slice(0, -2);
+          elementType = this.mapTypeScriptTypeToCpp(baseType);
+        } else if (typeStr.startsWith('Array<')) {
+          const match = typeStr.match(/^Array<(.+)>$/);
+          if (match) {
+            elementType = this.mapTypeScriptTypeToCpp(match[1]);
+          }
+        }
+        
+        // Also try to get type arguments from type reference
+        if (!elementType && (type as any).target) {
+          const typeRef = type as ts.TypeReference;
+          const typeArgs = this.checker.getTypeArguments(typeRef);
+          if (typeArgs && typeArgs.length > 0) {
+            const argStr = this.checker.typeToString(typeArgs[0]);
+            elementType = this.mapTypeScriptTypeToCpp(argStr);
+          }
+        }
+      }
+      
+      // Generate gs::Array<T>({...}) with explicit template parameter if we know the type
+      // This prevents type inference issues with int vs double literals
+      const arrayType = elementType ? `gs::Array<${elementType}>` : 'gs::Array';
+      return cpp.call(cpp.id(arrayType), [cpp.initList(elements)]);
     }
     
     if (ts.isParenthesizedExpression(node)) {
@@ -549,6 +634,14 @@ export class AstCodegen {
     
     if (ts.isNewExpression(node)) {
       return this.visitNewExpression(node);
+    }
+    
+    if (ts.isArrowFunction(node)) {
+      return this.visitArrowFunction(node);
+    }
+    
+    if (ts.isTemplateExpression(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+      return this.visitTemplateLiteral(node);
     }
     
     return cpp.id('/* UNSUPPORTED */');
@@ -561,18 +654,20 @@ export class AstCodegen {
    * Returns the variable name if found, undefined otherwise
    */
   private extractNullCheck(expr: ts.Expression): string | undefined {
-    // Handle: x !== null
+    // Handle: x !== null or x !== undefined
     if (ts.isBinaryExpression(expr)) {
       const op = expr.operatorToken.kind;
       if (op === ts.SyntaxKind.ExclamationEqualsEqualsToken || op === ts.SyntaxKind.ExclamationEqualsToken) {
-        // Check if comparing with null
+        // Check if comparing with null or undefined
         const isLeftNull = expr.left.kind === ts.SyntaxKind.NullKeyword;
         const isRightNull = expr.right.kind === ts.SyntaxKind.NullKeyword;
+        const isLeftUndefined = ts.isIdentifier(expr.left) && expr.left.text === 'undefined';
+        const isRightUndefined = ts.isIdentifier(expr.right) && expr.right.text === 'undefined';
         
-        if (isRightNull && ts.isIdentifier(expr.left)) {
+        if ((isRightNull || isRightUndefined) && ts.isIdentifier(expr.left)) {
           return this.escapeName(expr.left.text);
         }
-        if (isLeftNull && ts.isIdentifier(expr.right)) {
+        if ((isLeftNull || isLeftUndefined) && ts.isIdentifier(expr.right)) {
           return this.escapeName(expr.right.text);
         }
       }
@@ -604,6 +699,21 @@ export class AstCodegen {
       return cpp.id(`/* instanceof ${typeName} check */`);
     }
     
+    // Handle modulo operator specially for floating point
+    if (node.operatorToken.kind === ts.SyntaxKind.PercentToken && this.checker) {
+      const leftType = this.checker.getTypeAtLocation(node.left);
+      const rightType = this.checker.getTypeAtLocation(node.right);
+      const leftTypeStr = this.checker.typeToString(leftType);
+      const rightTypeStr = this.checker.typeToString(rightType);
+      
+      // If either operand is 'number' (maps to double), use std::fmod
+      if (leftTypeStr === 'number' || rightTypeStr === 'number') {
+        const left = this.visitExpression(node.left);
+        const right = this.visitExpression(node.right);
+        return cpp.call(cpp.id('std::fmod'), [left, right]);
+      }
+    }
+    
     let left = this.visitExpression(node.left);
     let right = this.visitExpression(node.right);
     
@@ -625,14 +735,144 @@ export class AstCodegen {
   
   private visitNewExpression(node: ts.NewExpression): ast.Expression {
     // Get the class name
-    const className = this.escapeName(node.expression.getText());
+    let className = this.escapeName(node.expression.getText());
     
     // Get constructor arguments
     const args = node.arguments ? node.arguments.map(arg => this.visitExpression(arg)) : [];
     
+    // For generic types like Map, Array, etc., try to get template parameters from type checker
+    if (this.checker) {
+      const type = this.checker.getTypeAtLocation(node);
+      
+      // Try to extract type arguments for generic types
+      if (type.aliasSymbol || (type as any).target) {
+        const typeRef = type as ts.TypeReference;
+        const typeArgs = this.checker.getTypeArguments(typeRef);
+        
+        if (typeArgs && typeArgs.length > 0) {
+          // Map TypeScript type arguments to C++ types
+          const cppTypeArgs = typeArgs.map(arg => {
+            const argStr = this.checker!.typeToString(arg);
+            return this.mapTypeScriptTypeToCpp(argStr);
+          });
+          
+          className = `${className}<${cppTypeArgs.join(', ')}>`;
+        }
+      }
+      
+      // Fallback: try string parsing if type arguments weren't extracted
+      if (!className.includes('<') && (className === 'Map' || className === 'Array' || className === 'Set')) {
+        const typeStr = this.checker.typeToString(type);
+        if (typeStr.includes('<')) {
+          const match = typeStr.match(/^(\w+)<(.+)>$/);
+          if (match) {
+            const baseName = match[1];
+            const templateArgs = match[2];
+            const cppTemplateArgs = templateArgs.split(',').map(t => 
+              this.mapTypeScriptTypeToCpp(t.trim())
+            ).join(', ');
+            className = `${baseName}<${cppTemplateArgs}>`;
+          }
+        }
+      }
+    }
+    
     // In C++, we create objects on the stack by default
     // new ClassName(args) → gs::ClassName(args)
     return cpp.call(cpp.id(`gs::${className}`), args);
+  }
+  
+  /**
+   * Map TypeScript type string to C++ type string
+   */
+  private mapTypeScriptTypeToCpp(tsType: string): string {
+    switch (tsType) {
+      case 'string': return 'gs::String';
+      case 'number': return 'double';
+      case 'boolean': return 'bool';
+      case 'void': return 'void';
+      default:
+        // For custom types, prefix with gs:: namespace
+        return tsType.startsWith('gs::') ? tsType : `gs::${tsType}`;
+    }
+  }
+  
+  private visitArrowFunction(node: ts.ArrowFunction): ast.Expression {
+    // Arrow functions in TypeScript: (x) => x * 2
+    // In C++, use lambdas: [](auto x) { return x * 2; }
+    
+    const params: ast.Parameter[] = [];
+    for (const param of node.parameters) {
+      const paramName = this.escapeName(param.name.getText());
+      // For lambdas, use auto for parameter types unless explicitly typed
+      const paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
+      params.push(new ast.Parameter(paramName, paramType));
+    }
+    
+    // Get return type if specified, otherwise undefined (C++ will infer)
+    const returnType = node.type ? this.mapType(node.type) : undefined;
+    
+    // Arrow function body can be an expression or a block
+    let body: ast.Block | ast.Expression;
+    if (ts.isBlock(node.body)) {
+      body = this.visitBlock(node.body);
+    } else {
+      // Expression body: (x) => x * 2
+      // Convert to: [](auto x) { return x * 2; }
+      const expr = this.visitExpression(node.body);
+      body = new ast.Block([new ast.ReturnStmt(expr)]);
+    }
+    
+    // Create a lambda expression
+    // Use [&] capture to capture all by reference (safe for immediate use)
+    return new ast.Lambda(params, body, returnType, '[&]');
+  }
+  
+  private visitTemplateLiteral(node: ts.TemplateExpression | ts.NoSubstitutionTemplateLiteral): ast.Expression {
+    // Template literal: `Hello ${name}, you are ${age} years old`
+    // Convert to: gs::String("Hello ") + gs::String(name) + gs::String(", you are ") + gs::String(std::to_string(age)) + gs::String(" years old")
+    
+    if (ts.isNoSubstitutionTemplateLiteral(node)) {
+      // Simple template with no substitutions: `hello`
+      const text = node.text;
+      const escaped = this.escapeString(text);
+      return cpp.call(cpp.id('gs::String'), [cpp.id(`"${escaped}"`)]);
+    }
+    
+    // Template with substitutions
+    const parts: ast.Expression[] = [];
+    
+    // Add head text
+    if (node.head.text) {
+      const escaped = this.escapeString(node.head.text);
+      parts.push(cpp.call(cpp.id('gs::String'), [cpp.id(`"${escaped}"`)]));
+    }
+    
+    // Add template spans (expression + text)
+    for (const span of node.templateSpans) {
+      const expr = this.visitExpression(span.expression);
+      
+      // Wrap expression in gs::String::from() to handle any type (String, numbers, etc.)
+      const wrappedExpr = cpp.call(cpp.id('gs::String::from'), [expr]);
+      parts.push(wrappedExpr);
+      
+      if (span.literal.text) {
+        const escaped = this.escapeString(span.literal.text);
+        parts.push(cpp.call(cpp.id('gs::String'), [cpp.id(`"${escaped}"`)]));
+      }
+    }
+    
+    // Concatenate all parts with +
+    if (parts.length === 0) {
+      return cpp.call(cpp.id('gs::String'), [cpp.id('""')]);
+    }
+    
+    let result = parts[0];
+    for (let i = 1; i < parts.length; i++) {
+      result = cpp.binary(result, '+', parts[i]);
+    }
+    
+    return result;
   }
   
   private visitCallExpression(node: ts.CallExpression): ast.Expression {
@@ -651,6 +891,18 @@ export class AstCodegen {
         }
       }
       
+      // Special case: number instance methods (toFixed, toExponential, toPrecision)
+      // value.toFixed(2) → gs::Number::toFixed(value, 2)
+      if (this.checker && (method === 'toFixed' || method === 'toExponential' || method === 'toPrecision')) {
+        const objType = this.checker.getTypeAtLocation(obj);
+        const objTypeStr = this.checker.typeToString(objType);
+        if (objTypeStr === 'number') {
+          const objExpr = this.visitExpression(obj);
+          // Call static method with object as first argument
+          return cpp.call(cpp.id(`gs::Number::${method}`), [objExpr, ...args]);
+        }
+      }
+      
       // For 'this', use this->method() directly
       if (obj.kind === ts.SyntaxKind.ThisKeyword) {
         return cpp.call(cpp.id(`this->${method}`), args);
@@ -658,7 +910,11 @@ export class AstCodegen {
       
       // Regular method call: obj.method(args) or obj->method(args)
       const objExpr = this.visitExpression(obj);
-      const isPointer = this.isSmartPointerAccess(obj);
+      
+      // Check if obj is an array subscript or smart pointer - needs ->
+      const isArraySubscript = ts.isElementAccessExpression(obj);
+      const isPointer = isArraySubscript || this.isSmartPointerAccess(obj);
+      
       return cpp.call(cpp.member(objExpr, method, isPointer), args);
     }
     
@@ -699,8 +955,21 @@ export class AstCodegen {
     
     const obj = this.visitExpression(node.expression);
     
+    // Special case: array.length should be array.length() (method call)
+    if (prop === 'length' && this.checker) {
+      const objType = this.checker.getTypeAtLocation(node.expression);
+      const objTypeStr = this.checker.typeToString(objType);
+      // Check if this is an array type
+      if (objTypeStr.endsWith('[]') || objTypeStr.startsWith('Array<') || objTypeStr === 'string') {
+        return cpp.call(cpp.member(obj, 'length'), []);
+      }
+    }
+    
+    // Check if object is an array subscript (arr[i]) - these return pointers, so use ->
+    const isArraySubscript = ts.isElementAccessExpression(node.expression);
+    
     // Check if the object is a smart pointer type (needs -> instead of .)
-    const isPointer = this.isSmartPointerAccess(node.expression);
+    const isPointer = isArraySubscript || this.isSmartPointerAccess(node.expression);
     
     return cpp.member(obj, prop, isPointer);
   }
@@ -900,6 +1169,41 @@ export class AstCodegen {
   }
   
   /**
+   * Determine if a method should be marked as const.
+   * Methods that don't modify member variables should be const.
+   */
+  private shouldMethodBeConst(method: ts.MethodDeclaration): boolean {
+    const methodName = method.name.getText();
+    
+    // Common const methods: toString, toJSON, getters, has, isEmpty, etc.
+    const constMethodNames = ['toString', 'toJSON', 'isEmpty', 'has', 'contains', 'get'];
+    if (constMethodNames.some(name => methodName === name || methodName.startsWith('get'))) {
+      return true;
+    }
+    
+    // Check if method body has any assignments to 'this'
+    if (!method.body) {
+      return true; // Abstract methods can be const
+    }
+    
+    let hasThisAssignment = false;
+    const visit = (node: ts.Node): void => {
+      if (ts.isBinaryExpression(node) && 
+          node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+        if (ts.isPropertyAccessExpression(node.left) &&
+            node.left.expression.kind === ts.SyntaxKind.ThisKeyword) {
+          hasThisAssignment = true;
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    
+    visit(method.body);
+    
+    return !hasThisAssignment;
+  }
+  
+  /**
    * Process constructor body to extract super() calls and convert them to initializer list.
    * Returns the initializer list and the modified body (without super() call).
    */
@@ -913,7 +1217,7 @@ export class AstCodegen {
       return { initList, body: new ast.Block([]) };
     }
     
-    // Look for super() call in the first statement
+    // Look for super() call and this.field = expr assignments
     const statements = body.statements;
     const remainingStatements: ast.Statement[] = [];
     let foundSuper = false;
@@ -942,7 +1246,46 @@ export class AstCodegen {
         }
       }
       
-      // Not a super() call, add to remaining statements
+      // Check if this is a this.field = expr assignment
+      if (ts.isExpressionStatement(stmt) && ts.isBinaryExpression(stmt.expression)) {
+        const binExpr = stmt.expression;
+        if (binExpr.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+          // Check if left side is this.field
+          if (ts.isPropertyAccessExpression(binExpr.left) &&
+              binExpr.left.expression.kind === ts.SyntaxKind.ThisKeyword) {
+            const fieldName = binExpr.left.name.getText();
+            
+            // Special handling for new Map(), new Array(), new Set() with no args
+            // and for empty array literals []
+            // Use {} for default initialization to avoid template parameter issues
+            let value: ast.Expression;
+            if (ts.isNewExpression(binExpr.right)) {
+              const className = binExpr.right.expression.getText();
+              const hasArgs = binExpr.right.arguments && binExpr.right.arguments.length > 0;
+              
+              if (!hasArgs && (className === 'Map' || className === 'Set' || className === 'Array')) {
+                // Use {} for default initialization
+                value = cpp.initList([]);
+              } else {
+                value = this.visitExpression(binExpr.right);
+              }
+            } else if (ts.isArrayLiteralExpression(binExpr.right) && binExpr.right.elements.length === 0) {
+              // Empty array literal [] → {}
+              value = cpp.initList([]);
+            } else {
+              value = this.visitExpression(binExpr.right);
+            }
+            
+            // Add to initializer list
+            initList.push(new ast.MemberInitializer(fieldName, value));
+            
+            // Skip this statement (don't add to body)
+            continue;
+          }
+        }
+      }
+      
+      // Not a special statement, add to remaining statements
       const cppStmt = this.visitStatement(stmt);
       if (cppStmt) {
         remainingStatements.push(cppStmt);

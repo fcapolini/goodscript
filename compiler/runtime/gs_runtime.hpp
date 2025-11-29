@@ -26,6 +26,8 @@
  *   - gs::weak_ptr<T>: Non-atomic weak pointer for single-threaded use
  */
 
+#include <functional>
+
 #include "gs_string.hpp"
 #include "gs_string_builder.hpp"
 #include "gs_array.hpp"

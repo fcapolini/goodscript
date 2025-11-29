@@ -3,6 +3,8 @@
 #include <string>
 #include <string_view>
 #include <optional>
+#include <sstream>
+#include <cmath>
 
 namespace gs {
 
@@ -34,6 +36,68 @@ public:
   String& operator=(String&& other) noexcept = default;
   String& operator=(const char* s) { impl_ = s; return *this; }
   String& operator=(const std::string& s) { impl_ = s; return *this; }
+  
+  // Static factory methods
+  
+  /**
+   * Converts any value to a String (for template literal support)
+   * Handles: String, const char*, numeric types
+   */
+  static String from(const String& s) {
+    return s;
+  }
+  
+  static String from(const char* s) {
+    return String(s);
+  }
+  
+  static String from(const std::string& s) {
+    return String(s);
+  }
+  
+  static String from(double value) {
+    // Match JavaScript number formatting:
+    // - Integers don't show decimal point
+    // - Floats show minimal decimal places
+    if (std::floor(value) == value && std::abs(value) < 1e15) {
+      // It's an integer value
+      return String(std::to_string(static_cast<long long>(value)));
+    } else {
+      // It's a float - use minimal representation
+      std::ostringstream out;
+      out << value;
+      return String(out.str());
+    }
+  }
+  
+  static String from(int value) {
+    return String(std::to_string(value));
+  }
+  
+  static String from(long value) {
+    return String(std::to_string(value));
+  }
+  
+  static String from(bool value) {
+    return String(value ? "true" : "false");
+  }
+  
+  // Support for optional types
+  static String from(const std::optional<double>& opt) {
+    return opt.has_value() ? from(opt.value()) : String("undefined");
+  }
+  
+  static String from(const std::optional<int>& opt) {
+    return opt.has_value() ? from(opt.value()) : String("undefined");
+  }
+  
+  static String from(const std::optional<bool>& opt) {
+    return opt.has_value() ? from(opt.value()) : String("undefined");
+  }
+  
+  static String from(const std::optional<String>& opt) {
+    return opt.has_value() ? opt.value() : String("undefined");
+  }
   
   // TypeScript/JavaScript String API
   
