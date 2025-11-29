@@ -148,16 +148,13 @@ export class AstCodegen {
           init = this.visitExpression(decl.initializer);
         }
         
-        // If initializer is an array subscript, check if we need to dereference
-        // Only dereference if the array does NOT contain smart pointers
+        // If initializer is an array subscript from a share<T> array, track variable type
         if (ts.isElementAccessExpression(decl.initializer) && this.checker) {
           const arrayExpr = decl.initializer.expression;
           const arrayType = this.checker.getTypeAtLocation(arrayExpr);
           const arrayTypeStr = this.checker.typeToString(arrayType);
           
           // Check if array element type is share<T> (maps to std::shared_ptr<T>)
-          // If so, don't dereference - we want the shared_ptr itself
-          // Also track this variable as holding a smart pointer
           const shareMatch = arrayTypeStr.match(/(?:Array<)?share<([^>]+)>/);
           
           if (shareMatch) {
@@ -165,9 +162,6 @@ export class AstCodegen {
             const elementType = shareMatch[1];
             cppType = new ast.CppType(`std::shared_ptr<gs::${elementType}>`);
             isShareArraySubscript = true;  // Don't wrap again below
-          } else {
-            // Not a share<T> array, safe to dereference
-            init = cpp.unary('*', init);
           }
         }
         
@@ -792,6 +786,16 @@ export class AstCodegen {
       return this.visitTemplateLiteral(node);
     }
     
+    if (ts.isConditionalExpression(node)) {
+      // Ternary operator: condition ? whenTrue : whenFalse
+      const condition = this.visitExpression(node.condition);
+      const whenTrue = this.visitExpression(node.whenTrue);
+      const whenFalse = this.visitExpression(node.whenFalse);
+      
+      // C++ has the same ternary syntax
+      return cpp.ternary(condition, whenTrue, whenFalse);
+    }
+    
     return cpp.id('/* UNSUPPORTED */');
   }
   
@@ -1064,7 +1068,7 @@ export class AstCodegen {
     let objNode: ts.Expression | undefined;
     
     if (ts.isPropertyAccessExpression(node.expression)) {
-      methodName = node.expression.name.text;
+      methodName = this.escapeName(node.expression.name.text);
       objNode = node.expression.expression;
     }
     
@@ -1098,18 +1102,26 @@ export class AstCodegen {
       // Special case: console.log, Math.max, JSON.stringify, etc.
       if (ts.isIdentifier(objNode)) {
         const objName = objNode.text;
-        if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON') {
+        if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON' || objName === 'Date') {
           return cpp.call(cpp.id(`gs::${objName}::${methodName}`), args);
         }
       }
       
-      // Special case: number instance methods (toFixed, toExponential, toPrecision)
+      // Special case: number instance methods (toFixed, toExponential, toPrecision, toString)
       // value.toFixed(2) → gs::Number::toFixed(value, 2)
-      if (this.checker && (methodName === 'toFixed' || methodName === 'toExponential' || methodName === 'toPrecision')) {
+      // value.toString() → gs::Number::toString(value)
+      if (this.checker && (methodName === 'toFixed' || methodName === 'toExponential' || methodName === 'toPrecision' || methodName === 'toString')) {
         const objType = this.checker.getTypeAtLocation(objNode);
         const objTypeStr = this.checker.typeToString(objType);
         if (objTypeStr === 'number') {
-          const objExpr = this.visitExpression(objNode);
+          let objExpr = this.visitExpression(objNode);
+          
+          // If objNode is an array subscript, we need to dereference it
+          // because visitExpression() didn't dereference (it thought it was part of property access)
+          if (ts.isElementAccessExpression(objNode)) {
+            objExpr = cpp.unary('*', objExpr);
+          }
+          
           // Call static method with object as first argument
           return cpp.call(cpp.id(`gs::Number::${methodName}`), [objExpr, ...args]);
         }
@@ -1147,7 +1159,7 @@ export class AstCodegen {
         return cpp.id(`gs::${objName}::${prop}`);
       }
       
-      if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON') {
+      if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON' || objName === 'Date') {
         return cpp.id(`gs::${objName}::${prop}`);
       }
     }
@@ -1205,10 +1217,15 @@ export class AstCodegen {
     // Handle union types (T | null → std::optional<T>)
     if (ts.isUnionTypeNode(typeNode)) {
       // Check if it's a nullable type (T | null | undefined)
-      const nonNullableTypes = typeNode.types.filter(t => 
-        t.kind !== ts.SyntaxKind.NullKeyword && 
-        t.kind !== ts.SyntaxKind.UndefinedKeyword
-      );
+      const nonNullableTypes = typeNode.types.filter(t => {
+        // Check for null keyword
+        if (t.kind === ts.SyntaxKind.NullKeyword) return false;
+        // Check for undefined keyword
+        if (t.kind === ts.SyntaxKind.UndefinedKeyword) return false;
+        // Check for literal null type
+        if (ts.isLiteralTypeNode(t) && t.literal.kind === ts.SyntaxKind.NullKeyword) return false;
+        return true;
+      });
       
       if (nonNullableTypes.length === 1) {
         // T | null → std::optional<T>
@@ -1310,7 +1327,7 @@ export class AstCodegen {
   
   private escapeName(name: string): string {
     // C++ keywords and common macros that conflict
-    const keywords = new Set(['class', 'namespace', 'template', 'EOF']);
+    const keywords = new Set(['class', 'namespace', 'template', 'EOF', 'delete']);
     let result = keywords.has(name) ? name + '_' : name;
     
     // Sanitize Unicode characters to hex codes for portability

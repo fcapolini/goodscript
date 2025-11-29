@@ -84,19 +84,19 @@ public:
   
   // Support for optional types
   static String from(const std::optional<double>& opt) {
-    return opt.has_value() ? from(opt.value()) : String("undefined");
+    return opt.has_value() ? from(opt.value()) : String("null");
   }
   
   static String from(const std::optional<int>& opt) {
-    return opt.has_value() ? from(opt.value()) : String("undefined");
+    return opt.has_value() ? from(opt.value()) : String("null");
   }
   
   static String from(const std::optional<bool>& opt) {
-    return opt.has_value() ? from(opt.value()) : String("undefined");
+    return opt.has_value() ? from(opt.value()) : String("null");
   }
   
   static String from(const std::optional<String>& opt) {
-    return opt.has_value() ? opt.value() : String("undefined");
+    return opt.has_value() ? opt.value() : String("null");
   }
   
   // TypeScript/JavaScript String API

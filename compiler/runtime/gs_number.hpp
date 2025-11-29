@@ -48,6 +48,28 @@ public:
   }
   
   // Instance-like methods (for codegen)
+  static std::string toString(double value) {
+    // Handle special cases
+    if (std::isnan(value)) return "NaN";
+    if (std::isinf(value)) return value > 0 ? "Infinity" : "-Infinity";
+    
+    // For integers, don't include decimal point
+    if (std::floor(value) == value && std::abs(value) < 1e15) {
+      std::ostringstream out;
+      out << std::fixed << std::setprecision(0) << value;
+      return out.str();
+    }
+    
+    // For floating point, use default formatting
+    std::ostringstream out;
+    out << value;
+    return out.str();
+  }
+  
+  static std::string toString(int value) {
+    return std::to_string(value);
+  }
+  
   static std::string toFixed(double value, int digits = 0) {
     std::ostringstream out;
     out << std::fixed << std::setprecision(digits) << value;

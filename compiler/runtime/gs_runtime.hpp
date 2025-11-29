@@ -39,6 +39,7 @@
 #include "gs_object.hpp"
 #include "gs_number.hpp"
 #include "gs_tuple.hpp"
+#include "gs_date.hpp"
 
 // RegExp support (requires PCRE2 library)
 // Define GS_ENABLE_REGEXP to include RegExp support
