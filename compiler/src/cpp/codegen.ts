@@ -16,6 +16,7 @@ export class AstCodegen {
   private unwrappedOptionals = new Set<string>(); // Track variables known to be non-null in current scope
   private variableTypes = new Map<string, ast.CppType>(); // Track variable types for smart pointer detection
   private pointerVariables = new Set<string>(); // Track variables that are pointers (from Map.get(), etc.)
+  private templateParameters = new Set<string>(); // Track template parameter names (T, K, V, etc.)
   
   constructor(private checker?: ts.TypeChecker) {}
   
@@ -24,6 +25,7 @@ export class AstCodegen {
     this.unwrappedOptionals.clear(); // Reset for each file
     this.variableTypes.clear(); // Reset for each file
     this.pointerVariables.clear(); // Reset for each file
+    this.templateParameters.clear(); // Reset for each file
     const includes = [new ast.Include('gs_runtime.hpp', false)];
     const declarations: ast.Declaration[] = [];
     const mainStatements: ast.Statement[] = [];
@@ -31,7 +33,20 @@ export class AstCodegen {
     // Separate declarations from top-level statements
     for (const stmt of sourceFile.statements) {
       if (ts.isVariableStatement(stmt)) {
-        // Top-level variables go into main()
+        // Check if this is a generic arrow function (needs to be at namespace scope)
+        if (stmt.declarationList.declarations.length === 1) {
+          const decl = stmt.declarationList.declarations[0];
+          if (decl.initializer && ts.isArrowFunction(decl.initializer) && 
+              decl.initializer.typeParameters && decl.initializer.typeParameters.length > 0) {
+            // Generic arrow function - add to namespace declarations
+            const name = this.escapeName(decl.name.getText());
+            const func = this.visitGenericArrowFunction(name, decl.initializer);
+            declarations.push(func);
+            continue; // Skip adding to mainStatements
+          }
+        }
+        
+        // Regular variables go into main()
         const decls = this.visitVariableStatement(stmt);
         mainStatements.push(...decls.map(d => d as any)); // VariableDecl can act as Statement
       } else if (ts.isFunctionDeclaration(stmt)) {
@@ -95,8 +110,11 @@ export class AstCodegen {
       // Special handling for function types (arrow functions)
       // If initializer is an arrow function and we don't have an explicit type,
       // use std::function to allow recursion
-      if (decl.initializer && ts.isArrowFunction(decl.initializer)) {
+      // Note: Generic arrow functions are handled at top level, not here
+      if (decl.initializer && ts.isArrowFunction(decl.initializer) && 
+          !(decl.initializer.typeParameters && decl.initializer.typeParameters.length > 0)) {
         const arrowFunc = decl.initializer;
+        
         let returnType: ast.CppType;
         if (arrowFunc.type) {
           returnType = this.mapType(arrowFunc.type);
@@ -243,7 +261,9 @@ export class AstCodegen {
     const templateParams: string[] = [];
     if (node.typeParameters) {
       for (const typeParam of node.typeParameters) {
-        templateParams.push(typeParam.name.text);
+        const paramName = typeParam.name.text;
+        templateParams.push(paramName);
+        this.templateParameters.add(paramName); // Track as template parameter
       }
     }
     
@@ -919,6 +939,16 @@ export class AstCodegen {
   }
   
   private visitBinaryExpression(node: ts.BinaryExpression): ast.Expression {
+    // Special case: array.length = n → array.resize(n)
+    if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+        ts.isPropertyAccessExpression(node.left) &&
+        node.left.name.text === 'length') {
+      // This is an assignment to .length property - use resize() for arrays
+      const obj = this.visitExpression(node.left.expression);
+      const newSize = this.visitExpression(node.right);
+      return cpp.call(cpp.member(obj, 'resize'), [newSize]);
+    }
+    
     // Handle instanceof specially
     if (node.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword) {
       const obj = this.visitExpression(node.left);
@@ -1066,6 +1096,10 @@ export class AstCodegen {
       case 'void': return 'void';
       case 'never': return 'gs::String';  // Use gs::String as placeholder for empty arrays
       default:
+        // Check if it's a template parameter (don't add gs:: prefix)
+        if (this.templateParameters.has(tsType)) {
+          return tsType;
+        }
         // For custom types, prefix with gs:: namespace
         return tsType.startsWith('gs::') ? tsType : `gs::${tsType}`;
     }
@@ -1100,6 +1134,53 @@ export class AstCodegen {
     // Create a lambda expression
     // Use [&] capture to capture all by reference (safe for immediate use)
     return new ast.Lambda(params, body, returnType, '[&]');
+  }
+  
+  /**
+   * Visit a generic arrow function (e.g., const reverseArray = <T>(arr: T[]): T[] => {...})
+   * Generates a template function instead of a std::function variable
+   */
+  private visitGenericArrowFunction(name: string, node: ts.ArrowFunction): ast.Function {
+    // Extract template parameters
+    const templateParams: string[] = [];
+    if (node.typeParameters) {
+      for (const typeParam of node.typeParameters) {
+        const paramName = typeParam.name.text;
+        templateParams.push(paramName);
+        this.templateParameters.add(paramName); // Track for type mapping
+      }
+    }
+    
+    // Extract function parameters
+    const params: ast.Parameter[] = [];
+    for (const param of node.parameters) {
+      const paramName = this.escapeName(param.name.getText());
+      const paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
+      params.push(new ast.Parameter(paramName, paramType));
+    }
+    
+    // Get return type
+    const returnType = node.type ? this.mapType(node.type) : new ast.CppType('auto');
+    
+    // Extract function body
+    let body: ast.Block;
+    if (ts.isBlock(node.body)) {
+      body = this.visitBlock(node.body);
+    } else {
+      // Expression body: (x) => x * 2
+      const expr = this.visitExpression(node.body);
+      body = new ast.Block([new ast.ReturnStmt(expr)]);
+    }
+    
+    // Clear template parameters after processing function
+    if (node.typeParameters) {
+      for (const typeParam of node.typeParameters) {
+        this.templateParameters.delete(typeParam.name.text);
+      }
+    }
+    
+    // Create template function
+    return new ast.Function(name, returnType, params, body, templateParams);
   }
   
   private visitTemplateLiteral(node: ts.TemplateExpression | ts.NoSubstitutionTemplateLiteral): ast.Expression {
@@ -1374,8 +1455,12 @@ export class AstCodegen {
       return new ast.CppType('gs::String');  // Safe placeholder for empty arrays
     }
     
-    // User-defined types need gs:: prefix
+    // User-defined types need gs:: prefix (unless they are template parameters)
     if (ts.isTypeReferenceNode(typeNode)) {
+      // Don't add gs:: prefix to template parameters like T, K, V
+      if (this.templateParameters.has(text)) {
+        return new ast.CppType(text);
+      }
       return new ast.CppType(`gs::${text}`);
     }
     
@@ -1414,7 +1499,7 @@ export class AstCodegen {
   
   private escapeName(name: string): string {
     // C++ keywords and common macros that conflict
-    const keywords = new Set(['class', 'namespace', 'template', 'EOF', 'delete']);
+    const keywords = new Set(['class', 'namespace', 'template', 'EOF', 'delete', 'char']);
     let result = keywords.has(name) ? name + '_' : name;
     
     // Sanitize Unicode characters to hex codes for portability
@@ -1538,6 +1623,13 @@ export class AstCodegen {
             node.left.expression.kind === ts.SyntaxKind.ThisKeyword) {
           hasMutation = true;
         }
+        // Also check for assignments to this.field.property (e.g., this.items.length = n)
+        // which becomes this.items.resize(n) in C++
+        if (ts.isPropertyAccessExpression(node.left) &&
+            ts.isPropertyAccessExpression(node.left.expression) &&
+            node.left.expression.expression.kind === ts.SyntaxKind.ThisKeyword) {
+          hasMutation = true;
+        }
       }
       
       // Check for method calls on this that might mutate
@@ -1551,10 +1643,10 @@ export class AstCodegen {
       }
       
       // Check for method calls on this.field that mutate state
-      // e.g., this.map.set(), this.array.push()
+      // e.g., this.map.set(), this.array.push(), this.array.resize()
       if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
         const methodName = node.expression.name.text;
-        const mutatingMethods = ['set', 'push', 'pop', 'shift', 'unshift', 'splice', 'delete_', 'clear'];
+        const mutatingMethods = ['set', 'push', 'pop', 'shift', 'unshift', 'splice', 'delete_', 'clear', 'resize'];
         
         if (mutatingMethods.includes(methodName)) {
           // Check if this is called on a this.field
