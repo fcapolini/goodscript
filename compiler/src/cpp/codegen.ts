@@ -330,6 +330,11 @@ export class AstCodegen {
       }
     }
     
+    // If this is an error class (name ends with "Error"), make it inherit from std::exception
+    if (name.endsWith('Error') && !baseClass) {
+      baseClass = 'std::exception';
+    }
+    
     return new ast.Class(name, fields, constructors, methods, baseClass, templateParams, false, baseClasses);
   }
   
@@ -603,10 +608,16 @@ export class AstCodegen {
     if (node.catchClause) {
       if (node.catchClause.variableDeclaration) {
         catchVar = this.escapeName(node.catchClause.variableDeclaration.name.getText());
-        // Try to determine the exception type, default to std::exception
+        // Try to determine the exception type from the catch clause type annotation
         if (node.catchClause.variableDeclaration.type) {
           const typeText = node.catchClause.variableDeclaration.type.getText();
           catchType = new ast.CppType(`const gs::${typeText}`, [], false, true);
+        } else {
+          // If no type annotation, scan catch block for instanceof checks
+          const instanceofType = this.findInstanceofTypeInCatch(node.catchClause.block, catchVar);
+          if (instanceofType) {
+            catchType = new ast.CppType(`const gs::${instanceofType}`, [], false, true);
+          }
         }
       }
       catchBlock = this.visitBlock(node.catchClause.block);
@@ -621,6 +632,27 @@ export class AstCodegen {
     }
     
     return new ast.TryCatch(tryBlock, catchVar, catchType, catchBlock);
+  }
+  
+  /**
+   * Find instanceof checks in a catch block to determine the exception type
+   * e.g., if (e instanceof ValidationError) → ValidationError
+   */
+  private findInstanceofTypeInCatch(block: ts.Block, varName: string): string | undefined {
+    let foundType: string | undefined;
+    
+    const visit = (node: ts.Node): void => {
+      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword) {
+        // Check if left side is the catch variable
+        if (ts.isIdentifier(node.left) && node.left.text === varName) {
+          foundType = node.right.getText();
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    
+    visit(block);
+    return foundType;
   }
   
   private visitExpression(node: ts.Expression): ast.Expression {
@@ -681,6 +713,14 @@ export class AstCodegen {
       // Handle special identifiers
       if (varName === 'undefined') {
         return cpp.id('std::nullopt');
+      }
+      
+      // Handle global constants
+      if (varName === 'NaN') {
+        return cpp.id('gs::Number::NaN');
+      }
+      if (varName === 'Infinity') {
+        return cpp.id('gs::Number::Infinity');
       }
       
       // Handle global types/objects
@@ -883,11 +923,19 @@ export class AstCodegen {
     if (node.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword) {
       const obj = this.visitExpression(node.left);
       const typeName = node.right.getText();
-      // In C++, we'll use dynamic_cast for instanceof checks
-      // obj instanceof Type → dynamic_cast<Type*>(&obj) != nullptr
-      // This assumes the object is a pointer or reference
-      // For now, just generate a simple type check comment
-      return cpp.id(`/* instanceof ${typeName} check */`);
+      
+      // For exception objects in catch blocks, use dynamic_cast
+      // e instanceof Type → dynamic_cast<const gs::Type*>(&e) != nullptr
+      // Note: const is needed because catch variables are const references
+      return cpp.binary(
+        cpp.call(
+          cpp.id('dynamic_cast'),
+          [cpp.unary('&', obj)],
+          [new ast.CppType(`const gs::${typeName}`, [], false, false, true)] // const pointer type
+        ),
+        '!=',
+        cpp.id('nullptr')
+      );
     }
     
     // Handle modulo operator specially for floating point
@@ -1488,6 +1536,16 @@ export class AstCodegen {
           node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
         if (ts.isPropertyAccessExpression(node.left) &&
             node.left.expression.kind === ts.SyntaxKind.ThisKeyword) {
+          hasMutation = true;
+        }
+      }
+      
+      // Check for method calls on this that might mutate
+      // e.g., this.divide() where divide is non-const
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+        if (node.expression.expression.kind === ts.SyntaxKind.ThisKeyword) {
+          // Calling a method on this - conservatively assume it might mutate
+          // (We could check if the called method is const, but that requires tracking)
           hasMutation = true;
         }
       }
