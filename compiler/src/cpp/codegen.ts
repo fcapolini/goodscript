@@ -123,7 +123,30 @@ export class AstCodegen {
       let isShareArraySubscript = false;  // Track if we're initializing from share<T>[]
       
       if (decl.initializer) {
-        init = this.visitExpression(decl.initializer);
+        // Special case: empty array literal with explicitly-typed variable
+        // Use the variable's type to determine the array element type
+        if (ts.isArrayLiteralExpression(decl.initializer) && 
+            decl.initializer.elements.length === 0 &&
+            decl.type) {
+          const varTypeStr = decl.type.getText();
+          // Extract element type from "number[]" or "Array<number>"
+          let elementType: string | undefined;
+          if (varTypeStr.endsWith('[]')) {
+            elementType = this.mapTypeScriptTypeToCpp(varTypeStr.slice(0, -2));
+          } else {
+            const match = varTypeStr.match(/Array<(.+)>/);
+            if (match) {
+              elementType = this.mapTypeScriptTypeToCpp(match[1]);
+            }
+          }
+          if (elementType) {
+            init = cpp.call(cpp.id(`gs::Array<${elementType}>`), [cpp.initList([])]);
+          } else {
+            init = this.visitExpression(decl.initializer);
+          }
+        } else {
+          init = this.visitExpression(decl.initializer);
+        }
         
         // If initializer is an array subscript, check if we need to dereference
         // Only dereference if the array does NOT contain smart pointers
@@ -298,9 +321,8 @@ export class AstCodegen {
         // Restore previous return type
         this.currentFunctionReturnType = previousReturnType;
         
-        // TypeScript doesn't have const methods, so we don't mark methods as const
-        // to maintain 1:1 compatibility with TypeScript semantics
-        const isConst = false;
+        // Check if method should be const (doesn't modify 'this')
+        const isConst = this.shouldMethodBeConst(member);
         
         methods.push(new ast.Method(methodName, returnType, params, body, ast.AccessSpecifier.Public, isConst));
       }
@@ -372,23 +394,6 @@ export class AstCodegen {
     if (ts.isReturnStatement(node)) {
       let expr = node.expression ? this.visitExpression(node.expression) : undefined;
       
-      // If returning an array subscript, check if we need to dereference
-      // Only dereference if the array does NOT contain smart pointers
-      if (expr && node.expression && ts.isElementAccessExpression(node.expression) && this.checker) {
-        const arrayExpr = node.expression.expression;
-        const arrayType = this.checker.getTypeAtLocation(arrayExpr);
-        const arrayTypeStr = this.checker.typeToString(arrayType);
-        
-        // Check if array element type is share<T> (maps to std::shared_ptr<T>)
-        // If so, don't dereference - we want the shared_ptr itself
-        const isShareArray = arrayTypeStr.match(/(?:Array<)?share<[^>]+>/);
-        
-        if (!isShareArray) {
-          // Not a share<T> array, safe to dereference
-          expr = cpp.unary('*', expr);
-        }
-      }
-      
       // If returning a pointer variable, dereference it
       if (expr instanceof ast.Identifier && ts.isIdentifier(node.expression!) && 
           this.pointerVariables.has(this.escapeName(node.expression.text))) {
@@ -440,6 +445,14 @@ export class AstCodegen {
     
     if (ts.isTryStatement(node)) {
       return this.visitTryStatement(node);
+    }
+    
+    if (ts.isBreakStatement(node)) {
+      return new ast.BreakStmt();
+    }
+    
+    if (ts.isContinueStatement(node)) {
+      return new ast.ContinueStmt();
     }
     
     // Unsupported statement types
@@ -671,8 +684,38 @@ export class AstCodegen {
     
     if (ts.isElementAccessExpression(node)) {
       const obj = this.visitExpression(node.expression);
-      const index = this.visitExpression(node.argumentExpression!);
-      return cpp.subscript(obj, index);  // Generates obj[index]
+      let index = this.visitExpression(node.argumentExpression!);
+      
+      // Cast index to int if it's not already
+      // TypeScript number maps to C++ double, but array indices need int
+      if (this.checker) {
+        const indexType = this.checker.getTypeAtLocation(node.argumentExpression!);
+        const indexTypeStr = this.checker.typeToString(indexType);
+        if (indexTypeStr === 'number') {
+          index = cpp.cast(new ast.CppType('int'), index);
+        }
+      }
+      
+      // gs::Array<T>::operator[] returns T*, which needs dereferencing in most contexts.
+      // However, if this subscript is part of a property/method access chain (arr[i].prop),
+      // we should NOT dereference here because we'll use -> instead.
+      // Check if parent is a property access expression
+      const parent = node.parent;
+      const isPartOfPropertyAccess = parent && (
+        ts.isPropertyAccessExpression(parent) && parent.expression === node ||
+        ts.isCallExpression(parent) && ts.isPropertyAccessExpression(parent.expression) && 
+          parent.expression.expression === node
+      );
+      
+      const subscript = cpp.subscript(obj, index);
+      
+      if (isPartOfPropertyAccess) {
+        // Don't dereference - parent will use -> to access
+        return subscript;
+      } else {
+        // Dereference to get value
+        return cpp.unary('*', subscript);
+      }
     }
     
     if (ts.isPostfixUnaryExpression(node)) {
@@ -1029,23 +1072,6 @@ export class AstCodegen {
     const args = node.arguments.map((arg, index) => {
       let argExpr = this.visitExpression(arg);
       
-      // If argument is an array subscript, check if we need to dereference
-      // Only dereference if the array does NOT contain smart pointers
-      if (ts.isElementAccessExpression(arg) && this.checker) {
-        const arrayExpr = arg.expression;
-        const arrayType = this.checker.getTypeAtLocation(arrayExpr);
-        const arrayTypeStr = this.checker.typeToString(arrayType);
-        
-        // Check if array element type is share<T> (maps to std::shared_ptr<T>)
-        // If so, don't dereference - we want the shared_ptr itself
-        const isShareArray = arrayTypeStr.match(/(?:Array<)?share<[^>]+>/);
-        
-        if (!isShareArray) {
-          // Not a share<T> array, safe to dereference
-          argExpr = cpp.unary('*', argExpr);
-        }
-      }
-      
       // Special handling for .push() on Array<share<T>>
       // If pushing to an array of shared_ptrs, wrap the argument
       if (methodName === 'push' && index === 0 && objNode && this.checker) {
@@ -1069,10 +1095,10 @@ export class AstCodegen {
     
     // Handle property access: obj.method(args)
     if (ts.isPropertyAccessExpression(node.expression) && objNode && methodName) {
-      // Special case: console.log, Math.max, etc.
+      // Special case: console.log, Math.max, JSON.stringify, etc.
       if (ts.isIdentifier(objNode)) {
         const objName = objNode.text;
-        if (objName === 'console' || objName === 'Math' || objName === 'Number') {
+        if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON') {
           return cpp.call(cpp.id(`gs::${objName}::${methodName}`), args);
         }
       }
@@ -1121,7 +1147,7 @@ export class AstCodegen {
         return cpp.id(`gs::${objName}::${prop}`);
       }
       
-      if (objName === 'console' || objName === 'Math' || objName === 'Number') {
+      if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON') {
         return cpp.id(`gs::${objName}::${prop}`);
       }
     }
@@ -1331,6 +1357,16 @@ export class AstCodegen {
     // Strings are constable (immutable in TypeScript)
     if (name === 'gs::String') {
       return true;
+    }
+    
+    // Arrays are mutable - not constable
+    if (name.startsWith('gs::Array<')) {
+      return false;
+    }
+    
+    // Maps and Sets are mutable - not constable
+    if (name.startsWith('gs::Map<') || name.startsWith('gs::Set<')) {
+      return false;
     }
     
     // If initialized with 'new', it's a mutable object - not constable
