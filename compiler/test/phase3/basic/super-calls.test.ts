@@ -50,10 +50,11 @@ class Derived extends Base {
     const cpp = compileToCpp(source);
     
     expect(cpp).toContain('class Derived : public Base {');
-    expect(cpp).toContain('Derived(double v, const gs::String& n) : Base(v) {');
-    expect(cpp).toContain('this->name = n;');
+    expect(cpp).toContain('Derived(double v, const gs::String& n) : Base(v), name(n) {');
     // Should NOT contain the super() call in the body
     expect(cpp).not.toMatch(/super\s*\(/);
+    // Field initialization should be in initializer list, not body
+    expect(cpp).not.toContain('this->name = n;');
   });
 
   it('should handle super() with multiple arguments', () => {
@@ -145,9 +146,10 @@ class Derived extends Base {
 
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('Derived(double v, const gs::String& n) : Base(v) {');
-    expect(cpp).toContain('this->name = n;');
+    expect(cpp).toContain('Derived(double v, const gs::String& n) : Base(v), name(n) {');
     expect(cpp).toContain('gs::console::log');
+    // Field initialization should be in initializer list, not body
+    expect(cpp).not.toContain('this->name = n;');
   });
 
   it('should compile and run code with super()', () => {
@@ -246,8 +248,11 @@ console.log(child.c);
 
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('Parent(double a, double b) : GrandParent(a) {');
-    expect(cpp).toContain('Child(double a, double b, double c) : Parent(a, b) {');
+    expect(cpp).toContain('Parent(double a, double b) : GrandParent(a), b(b) {');
+    expect(cpp).toContain('Child(double a, double b, double c) : Parent(a, b), c(c) {');
+    // Field initialization should be in initializer list, not body
+    expect(cpp).not.toContain('this->b = b;');
+    expect(cpp).not.toContain('this->c = c;');
     
     // Compile and run
     const tempDir = join(tmpdir(), `gs-test-${Date.now()}`);

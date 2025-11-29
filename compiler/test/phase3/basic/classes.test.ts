@@ -54,9 +54,11 @@ describe('Phase 3: Classes', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('Point(double x, double y) {');
-    expect(cpp).toContain('this->x = x;');
-    expect(cpp).toContain('this->y = y;');
+    expect(cpp).toContain('class Point {');
+    expect(cpp).toContain('Point(double x, double y) : x(x), y(y) {');
+    // Field initialization should be in initializer list, not body
+    expect(cpp).not.toContain('this->x = x;');
+    expect(cpp).not.toContain('this->y = y;');
   });
   
   it('should generate class with methods', () => {

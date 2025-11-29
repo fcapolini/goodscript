@@ -42,7 +42,6 @@ export class Compiler {
   private nullCheckAnalyzer: NullCheckAnalyzer;
   private validator: Validator;
   private tsCodegen: TypeScriptCodegen;
-  private cppCodegen: AstCodegen;
 
   constructor() {
     this.parser = new Parser();
@@ -50,7 +49,6 @@ export class Compiler {
     this.nullCheckAnalyzer = new NullCheckAnalyzer();
     this.validator = new Validator();
     this.tsCodegen = new TypeScriptCodegen();
-    this.cppCodegen = new AstCodegen();
   }
 
   /**
@@ -509,13 +507,16 @@ export class Compiler {
     const rootDir = compilerOptions.rootDir || this.getCommonSourceDirectory(program);
     const checker = program.getTypeChecker();
 
+    // Create C++ codegen with TypeChecker for better type inference
+    const cppCodegen = new AstCodegen(checker);
+
     // Process each GoodScript source file
     for (const sourceFile of program.getSourceFiles()) {
       if (!sourceFile.isDeclarationFile && this.isGoodScriptFile(sourceFile.fileName)) {
         const sourceFilePath = path.resolve(sourceFile.fileName);
         
         // Generate C++ code
-        const cppCode = this.cppCodegen.generate(sourceFile);
+        const cppCode = cppCodegen.generate(sourceFile);
         
         // Compute relative path from root directory
         const relativePath = path.relative(rootDir, sourceFilePath);
