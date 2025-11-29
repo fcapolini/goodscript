@@ -97,7 +97,14 @@ export class AstCodegen {
       // use std::function to allow recursion
       if (decl.initializer && ts.isArrowFunction(decl.initializer)) {
         const arrowFunc = decl.initializer;
-        const returnType = arrowFunc.type ? this.mapType(arrowFunc.type) : new ast.CppType('double');
+        let returnType: ast.CppType;
+        if (arrowFunc.type) {
+          returnType = this.mapType(arrowFunc.type);
+        } else {
+          // Infer return type: check if function body has return statements with values
+          const hasReturnValue = this.arrowFunctionHasReturnValue(arrowFunc);
+          returnType = hasReturnValue ? new ast.CppType('double') : new ast.CppType('void');
+        }
         const paramTypes = arrowFunc.parameters.map(p => 
           p.type ? this.mapType(p.type) : new ast.CppType('double')
         );
@@ -676,6 +683,11 @@ export class AstCodegen {
         return cpp.id('std::nullopt');
       }
       
+      // Handle global types/objects
+      if (varName === 'String') {
+        return cpp.id('gs::String');
+      }
+      
       const escapedName = this.escapeName(varName);
       
       // If this identifier is tracked as unwrapped
@@ -1126,10 +1138,10 @@ export class AstCodegen {
     
     // Handle property access: obj.method(args)
     if (ts.isPropertyAccessExpression(node.expression) && objNode && methodName) {
-      // Special case: console.log, Math.max, JSON.stringify, etc.
+      // Special case: console.log, Math.max, JSON.stringify, String.fromCharCode, etc.
       if (ts.isIdentifier(objNode)) {
         const objName = objNode.text;
-        if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON' || objName === 'Date') {
+        if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON' || objName === 'Date' || objName === 'String') {
           return cpp.call(cpp.id(`gs::${objName}::${methodName}`), args);
         }
       }
@@ -1177,7 +1189,7 @@ export class AstCodegen {
   private visitPropertyAccess(node: ts.PropertyAccessExpression): ast.Expression {
     const prop = node.name.text;
     
-    // Handle console, Math, Number as namespaces
+    // Handle console, Math, Number, String as namespaces
     if (ts.isIdentifier(node.expression)) {
       const objName = node.expression.text;
       
@@ -1186,7 +1198,7 @@ export class AstCodegen {
         return cpp.id(`gs::${objName}::${prop}`);
       }
       
-      if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON' || objName === 'Date') {
+      if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON' || objName === 'Date' || objName === 'String') {
         return cpp.id(`gs::${objName}::${prop}`);
       }
     }
@@ -1597,5 +1609,30 @@ export class AstCodegen {
       initList,
       body: new ast.Block(remainingStatements)
     };
+  }
+  
+  /**
+   * Check if an arrow function returns a value (vs void)
+   */
+  private arrowFunctionHasReturnValue(node: ts.ArrowFunction): boolean {
+    // If body is an expression (not a block), it always returns a value
+    if (!ts.isBlock(node.body)) {
+      return true;
+    }
+    
+    // Check if any return statement has a value
+    let hasReturnValue = false;
+    const visit = (n: ts.Node): void => {
+      if (ts.isReturnStatement(n) && n.expression) {
+        hasReturnValue = true;
+      }
+      // Don't recurse into nested functions
+      if (!ts.isFunctionLike(n) || n === node) {
+        ts.forEachChild(n, visit);
+      }
+    };
+    visit(node.body);
+    
+    return hasReturnValue;
   }
 }

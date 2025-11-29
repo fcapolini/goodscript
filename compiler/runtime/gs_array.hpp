@@ -405,8 +405,12 @@ public:
   
   // Non-const int index
   T* operator[](int index) {
-    if (index < 0 || index >= static_cast<int>(impl_.size())) {
+    if (index < 0) {
       return nullptr;
+    }
+    // Auto-expand array to accommodate the index (JavaScript semantics)
+    if (index >= static_cast<int>(impl_.size())) {
+      impl_.resize(index + 1);
     }
     if constexpr (std::is_same_v<T, bool>) {
       // For bool arrays, return pointer to static constant
@@ -430,8 +434,9 @@ public:
   
   // Non-const size_t index
   T* operator[](size_t index) {
+    // Auto-expand array to accommodate the index (JavaScript semantics)
     if (index >= impl_.size()) {
-      return nullptr;
+      impl_.resize(index + 1);
     }
     if constexpr (std::is_same_v<T, bool>) {
       return impl_[index] ? const_cast<bool*>(&TRUE_VALUE) : const_cast<bool*>(&FALSE_VALUE);
