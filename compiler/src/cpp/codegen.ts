@@ -279,8 +279,9 @@ export class AstCodegen {
         for (const param of member.parameters) {
           const paramName = this.escapeName(param.name.getText());
           const paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
-          const passByConstRef = this.shouldPassByConstRef(param.type);
-          const passByMutableRef = this.shouldPassByMutableRef(param.type);
+          // In constructors, arrays should be passed by const ref (they're just assigned to fields)
+          const passByConstRef = param.type && ts.isArrayTypeNode(param.type) ? true : this.shouldPassByConstRef(param.type);
+          const passByMutableRef = param.type && ts.isArrayTypeNode(param.type) ? false : this.shouldPassByMutableRef(param.type);
           params.push(new ast.Parameter(paramName, paramType, undefined, passByConstRef, passByMutableRef));
         }
         
@@ -387,6 +388,32 @@ export class AstCodegen {
   private visitStatement(node: ts.Statement): ast.Statement | undefined {
     if (ts.isReturnStatement(node)) {
       let expr = node.expression ? this.visitExpression(node.expression) : undefined;
+      
+      // If returning a ternary with pointer branches and function returns optional, convert
+      if (expr instanceof ast.ConditionalExpr && 
+          this.currentFunctionReturnType?.toString().startsWith('std::optional') &&
+          node.expression && ts.isConditionalExpression(node.expression)) {
+        // Check if this is a pattern like: result !== undefined ? result : null
+        // where result is from Map.get() (pointer)
+        const isPointerTernary = this.isMapGetCall(node.expression.whenTrue) ||
+                                 (ts.isIdentifier(node.expression.whenTrue) && 
+                                  this.pointerVariables.has(this.escapeName(node.expression.whenTrue.text)));
+        
+        if (isPointerTernary) {
+          // Extract the inner type from std::optional<T>
+          const optType = this.currentFunctionReturnType.toString();
+          const match = optType.match(/std::optional<(.+)>/);
+          if (match) {
+            const innerType = match[1];
+            // Convert: (result != nullptr ? result : nullptr) 
+            // To:      (result != nullptr ? std::make_optional(*result) : std::nullopt)
+            const condition = expr.condition;
+            const whenTrue = cpp.call(cpp.id('std::make_optional'), [cpp.unary('*', expr.whenTrue)]);
+            const whenFalse = cpp.id('std::nullopt');
+            expr = cpp.ternary(condition, whenTrue, whenFalse);
+          }
+        }
+      }
       
       // If returning a pointer variable, dereference it
       if (expr instanceof ast.Identifier && ts.isIdentifier(node.expression!) && 
@@ -1303,7 +1330,7 @@ export class AstCodegen {
     // String should be passed by const ref
     if (typeText === 'string') return true;
     
-    // Arrays are passed by mutable ref, not const ref
+    // Arrays are passed by mutable ref, not const ref (unless in constructor)
     if (ts.isArrayTypeNode(typeNode)) return false;
     
     // Class/interface types should be passed by const ref
