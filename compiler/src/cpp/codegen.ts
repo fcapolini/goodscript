@@ -351,6 +351,11 @@ export class AstCodegen {
     if (ts.isReturnStatement(node)) {
       let expr = node.expression ? this.visitExpression(node.expression) : undefined;
       
+      // If returning an array subscript (returns pointer), dereference it
+      if (expr && node.expression && ts.isElementAccessExpression(node.expression)) {
+        expr = cpp.unary('*', expr);
+      }
+      
       // If returning a pointer variable, dereference it
       if (expr instanceof ast.Identifier && ts.isIdentifier(node.expression!) && 
           this.pointerVariables.has(this.escapeName(node.expression.text))) {
@@ -558,6 +563,26 @@ export class AstCodegen {
         cpp.id('gs::String'),
         [cpp.id(`"${escaped}"`)] // Use id() not literal() to avoid double-quoting
       );
+    }
+    
+    // Handle regular expression literals: /pattern/flags
+    if (node.kind === ts.SyntaxKind.RegularExpressionLiteral) {
+      const regexText = node.getText();
+      // Parse /pattern/flags
+      const lastSlash = regexText.lastIndexOf('/');
+      const pattern = regexText.substring(1, lastSlash);
+      const flags = regexText.substring(lastSlash + 1);
+      
+      // Use raw string literal for pattern to avoid escaping issues
+      // R"(pattern)" syntax handles most regex patterns without escaping
+      const args: ast.Expression[] = [cpp.id(`R"(${pattern})"`)];
+      
+      // Add flags if present
+      if (flags) {
+        args.push(cpp.id(`"${flags}"`));
+      }
+      
+      return cpp.call(cpp.id('gs::RegExp'), args);
     }
     
     if (node.kind === ts.SyntaxKind.TrueKeyword) {
@@ -872,6 +897,7 @@ export class AstCodegen {
       case 'number': return 'double';
       case 'boolean': return 'bool';
       case 'void': return 'void';
+      case 'never': return 'gs::String';  // Use gs::String as placeholder for empty arrays
       default:
         // For custom types, prefix with gs:: namespace
         return tsType.startsWith('gs::') ? tsType : `gs::${tsType}`;
@@ -1139,6 +1165,12 @@ export class AstCodegen {
     
     if (text === 'void') {
       return new ast.CppType('void');
+    }
+    
+    // TypeScript's 'never' type - represents impossible values
+    // For array types, use gs::String as a safe placeholder (empty array will work with any type)
+    if (text === 'never') {
+      return new ast.CppType('gs::String');  // Safe placeholder for empty arrays
     }
     
     // User-defined types need gs:: prefix

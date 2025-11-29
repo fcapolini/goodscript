@@ -28,7 +28,7 @@ private:
   pcre2_code* compiled_;
   std::string pattern_;
   std::string flags_;
-  int lastIndex_;
+  mutable int lastIndex_;  // Mutable for global/sticky regex state
   bool global_;
   bool ignoreCase_;
   bool multiline_;
@@ -37,7 +37,7 @@ private:
   bool sticky_;
   
   // Match data for reuse
-  pcre2_match_data* match_data_;
+  mutable pcre2_match_data* match_data_;  // Mutable for internal caching
   
   // Compile the pattern with appropriate flags
   void compile() {
@@ -210,7 +210,7 @@ public:
    * Tests if the pattern matches the string
    * Equivalent to TypeScript: regex.test(str)
    */
-  bool test(const std::string& subject) {
+  bool test(const std::string& subject) const {
     uint32_t options = 0;
     PCRE2_SIZE start_offset = 0;
     
@@ -247,7 +247,7 @@ public:
   }
   
   // Overload for gs::String
-  bool test(const gs::String& subject) {
+  bool test(const gs::String& subject) const {
     return test(subject.str());
   }
   
@@ -256,7 +256,7 @@ public:
    * Equivalent to TypeScript: regex.exec(str)
    * Returns null if no match found
    */
-  std::optional<std::vector<std::string>> exec(const std::string& subject) {
+  std::optional<std::vector<std::string>> exec(const std::string& subject) const {
     uint32_t options = 0;
     PCRE2_SIZE start_offset = 0;
     
@@ -310,7 +310,7 @@ public:
   }
   
   // Overload for gs::String
-  std::optional<std::vector<std::string>> exec(const gs::String& subject) {
+  std::optional<std::vector<std::string>> exec(const gs::String& subject) const {
     return exec(subject.str());
   }
   
