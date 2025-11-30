@@ -26,11 +26,12 @@ export class AstCodegen {
   private templateParameters = new Set<string>(); // Track template parameter names (T, K, V, etc.)
   private interfaceMethods = new Map<string, Set<string>>(); // Map interface name -> set of method names
   private interfaceNames = new Set<string>(); // Track interface/abstract class names
+  private hoistedFunctions = new Set<string>(); // Track functions hoisted to namespace scope
   private ownershipChecker: OwnershipAwareTypeChecker;
   
   constructor(private checker?: ts.TypeChecker, optimizationOptions?: OptimizationOptions) {
     this.ownershipChecker = new OwnershipAwareTypeChecker(checker!);
-    this.optimizationOptions = optimizationOptions || { level: 0 }; // Default: no optimization
+    this.optimizationOptions = optimizationOptions || { level: 1 }; // Default: basic optimization
   }
   
   generate(sourceFile: ts.SourceFile): string {
@@ -41,6 +42,7 @@ export class AstCodegen {
     this.templateParameters.clear(); // Reset for each file
     this.interfaceMethods.clear(); // Reset for each file
     this.interfaceNames.clear(); // Reset for each file
+    this.hoistedFunctions.clear(); // Reset for each file
     const includes = [new ast.Include('gs_runtime.hpp', false)];
     const declarations: ast.Declaration[] = [];
     const mainStatements: ast.Statement[] = [];
@@ -51,13 +53,26 @@ export class AstCodegen {
         // Check if this is a generic arrow function (needs to be at namespace scope)
         if (stmt.declarationList.declarations.length === 1) {
           const decl = stmt.declarationList.declarations[0];
-          if (decl.initializer && ts.isArrowFunction(decl.initializer) && 
-              decl.initializer.typeParameters && decl.initializer.typeParameters.length > 0) {
-            // Generic arrow function - add to namespace declarations
-            const name = cppUtils.escapeName(decl.name.getText());
-            const func = this.visitGenericArrowFunction(name, decl.initializer);
-            declarations.push(func);
-            continue; // Skip adding to mainStatements
+          if (decl.initializer && ts.isArrowFunction(decl.initializer)) {
+            const arrowFunc = decl.initializer;
+            
+            // Hoist generic arrow functions
+            if (arrowFunc.typeParameters && arrowFunc.typeParameters.length > 0) {
+              const name = cppUtils.escapeName(decl.name.getText());
+              const func = this.visitGenericArrowFunction(name, arrowFunc);
+              declarations.push(func);
+              this.hoistedFunctions.add(name);
+              continue; // Skip adding to mainStatements
+            }
+            
+            // Hoist non-closure arrow functions (don't capture external variables)
+            if (!this.arrowFunctionUsesClosure(arrowFunc, sourceFile, decl.name.getText())) {
+              const name = cppUtils.escapeName(decl.name.getText());
+              const func = this.visitNonClosureArrowFunction(name, arrowFunc);
+              declarations.push(func);
+              this.hoistedFunctions.add(name);
+              continue; // Skip adding to mainStatements
+            }
           }
         }
         
@@ -238,12 +253,24 @@ export class AstCodegen {
         );
         
         // Build std::function<ReturnType(ParamType1, ParamType2, ...)>
-        // Check if any parameter types are interfaces and add const& for them
+        // Check if any parameter types are interfaces or arrays and add appropriate references
         const paramTypeStrs = paramTypes.map((t, idx) => {
           const param = arrowFunc.parameters[idx];
+          const paramName = param.name.getText();
           const isInterface = param.type && ts.isTypeReferenceNode(param.type) && 
                               this.interfaceNames.has(cppUtils.escapeName(param.type.typeName.getText()));
-          return isInterface ? `const ${t.toString()}&` : t.toString();
+          const isArray = param.type && ts.isArrayTypeNode(param.type);
+          
+          if (isInterface || (isArray && !this.doesLambdaModifyParameter(arrowFunc, paramName))) {
+            // Pass by const reference (read-only)
+            return `const ${t.toString()}&`;
+          } else if (isArray) {
+            // Pass by mutable reference (modified in lambda)
+            return `${t.toString()}&`;
+          } else {
+            // Pass by value
+            return t.toString();
+          }
         });
         const paramTypeStr = paramTypeStrs.join(', ');
         cppType = new ast.CppType(`std::function<${returnType}(${paramTypeStr})>`);
@@ -1144,6 +1171,11 @@ export class AstCodegen {
       
       const escapedName = cppUtils.escapeName(varName);
       
+      // If this is a hoisted function, qualify with gs::
+      if (this.hoistedFunctions.has(escapedName)) {
+        return cpp.id(`gs::${escapedName}`);
+      }
+      
       // If this identifier is tracked as unwrapped
       if (this.unwrappedOptionals.has(escapedName)) {
         // Check if it's a smart pointer null check (compared with nullptr)
@@ -1804,9 +1836,21 @@ export class AstCodegen {
       // Check if parameter type is an interface - interfaces must be passed by const reference
       const isInterface = param.type && ts.isTypeReferenceNode(param.type) && 
                           this.interfaceNames.has(cppUtils.escapeName(param.type.typeName.getText()));
-      const passByConstRef = isInterface || tsUtils.shouldPassByConstRef(param.type);
       
-      params.push(new ast.Parameter(paramName, paramType, undefined, passByConstRef));
+      // For arrays in lambdas: pass by const reference if not modified, mutable reference if modified
+      const isArray = param.type && ts.isArrayTypeNode(param.type);
+      let passByConstRef = isInterface || tsUtils.shouldPassByConstRef(param.type);
+      let passByMutableRef = false;
+      
+      if (isArray && !this.doesLambdaModifyParameter(node, paramName)) {
+        // Array is not modified - pass by const reference to avoid expensive copy
+        passByConstRef = true;
+      } else if (isArray) {
+        // Array is modified - pass by mutable reference
+        passByMutableRef = true;
+      }
+      
+      params.push(new ast.Parameter(paramName, paramType, undefined, passByConstRef, passByMutableRef));
       
       // Track parameter type for smart pointer detection
       this.variableTypes.set(paramName, paramType);
@@ -2590,5 +2634,149 @@ export class AstCodegen {
       initList,
       body: new ast.Block(remainingStatements)
     };
+  }
+  
+  /**
+   * Check if a lambda function modifies a parameter (e.g., assigns to array elements)
+   */
+  private doesLambdaModifyParameter(node: ts.ArrowFunction, paramName: string): boolean {
+    const checkNode = (n: ts.Node): boolean => {
+      // Check for assignments to array elements: arr[i] = value
+      if (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+        const left = n.left;
+        // Check if left side is an element access on the parameter
+        if (ts.isElementAccessExpression(left)) {
+          const objName = left.expression.getText();
+          if (objName === paramName) {
+            return true; // Found assignment to parameter array element
+          }
+        }
+      }
+      
+      // Recursively check children
+      return ts.forEachChild(n, checkNode) || false;
+    };
+    
+    return checkNode(node.body);
+  }
+  
+  /**
+   * Check if an arrow function uses any variables from the enclosing scope (closure)
+   * Returns true if the function captures external variables, false otherwise
+   */
+  private arrowFunctionUsesClosure(node: ts.ArrowFunction, sourceFile: ts.SourceFile, functionName?: string): boolean {
+    // Collect parameter names to exclude from closure check
+    const paramNames = new Set<string>();
+    for (const param of node.parameters) {
+      paramNames.add(param.name.getText());
+    }
+    
+    // Collect all top-level declarations in the source file
+    const topLevelNames = new Set<string>();
+    for (const stmt of sourceFile.statements) {
+      if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+        topLevelNames.add(stmt.name.text);
+      } else if (ts.isVariableStatement(stmt)) {
+        for (const decl of stmt.declarationList.declarations) {
+          topLevelNames.add(decl.name.getText());
+        }
+      } else if (ts.isClassDeclaration(stmt) && stmt.name) {
+        topLevelNames.add(stmt.name.text);
+      } else if (ts.isInterfaceDeclaration(stmt)) {
+        topLevelNames.add(stmt.name.text);
+      } else if (ts.isEnumDeclaration(stmt)) {
+        topLevelNames.add(stmt.name.text);
+      }
+    }
+    
+    // Check if function body references any external variables
+    const checkNode = (n: ts.Node): boolean => {
+      // Skip parameter declarations
+      if (node.parameters.some(p => p === n)) {
+        return false;
+      }
+      
+      // Check for identifier references
+      if (ts.isIdentifier(n)) {
+        const name = n.text;
+        
+        // Skip if it's a parameter
+        if (paramNames.has(name)) {
+          return false;
+        }
+        
+        // Skip if it's a self-reference (recursive call)
+        if (functionName && name === functionName) {
+          return false;
+        }
+        
+        // Skip built-in types and globals
+        const builtIns = ['console', 'Date', 'Array', 'Map', 'Set', 'String', 'Number', 
+                          'Math', 'JSON', 'Promise', 'undefined', 'null', 'true', 'false'];
+        if (builtIns.includes(name)) {
+          return false;
+        }
+        
+        // If it references a top-level name, it's using closure
+        // But only if it's a variable, not a class/interface/enum (those are types)
+        const parent = n.parent;
+        if (topLevelNames.has(name) && !ts.isTypeReferenceNode(parent)) {
+          return true; // References another top-level variable - closure detected
+        }
+      }
+      
+      // Recursively check children
+      return ts.forEachChild(n, checkNode) || false;
+    };
+    
+    return checkNode(node.body);
+  }
+  
+  /**
+   * Visit a non-closure arrow function and convert to a regular function declaration
+   * This avoids the overhead of std::function wrapper for functions that don't capture variables
+   */
+  private visitNonClosureArrowFunction(name: string, node: ts.ArrowFunction): ast.Function {
+    // Extract function parameters
+    const params: ast.Parameter[] = [];
+    for (const param of node.parameters) {
+      const paramName = cppUtils.escapeName(param.name.getText());
+      const paramType = param.type ? this.mapType(param.type) : new ast.CppType('double');
+      
+      // Check if parameter should be passed by reference
+      const isInterface = param.type && ts.isTypeReferenceNode(param.type) && 
+                          this.interfaceNames.has(cppUtils.escapeName(param.type.typeName.getText()));
+      const isArray = param.type && ts.isArrayTypeNode(param.type);
+      let passByConstRef = isInterface || tsUtils.shouldPassByConstRef(param.type);
+      let passByMutableRef = false;
+      
+      if (isArray && !this.doesLambdaModifyParameter(node, paramName)) {
+        passByConstRef = true;
+      } else if (isArray) {
+        passByMutableRef = true;
+      }
+      
+      params.push(new ast.Parameter(paramName, paramType, undefined, passByConstRef, passByMutableRef));
+      
+      // Track parameter type
+      this.variableTypes.set(paramName, paramType);
+      this.ownershipChecker.registerVariable(paramName, param);
+    }
+    
+    // Get return type
+    const returnType = node.type ? this.mapType(node.type) : 
+                       (tsUtils.arrowFunctionHasReturnValue(node) ? new ast.CppType('double') : new ast.CppType('void'));
+    
+    // Convert body
+    let body: ast.Block;
+    if (ts.isBlock(node.body)) {
+      body = this.visitBlock(node.body);
+    } else {
+      // Expression body: convert to return statement
+      const expr = this.visitExpression(node.body);
+      body = new ast.Block([new ast.ReturnStmt(expr)]);
+    }
+    
+    return new ast.Function(name, returnType, params, body);
   }
 }

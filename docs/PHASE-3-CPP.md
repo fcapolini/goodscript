@@ -1,32 +1,34 @@
 # Phase 3: C++ Code Generation
 
-**Status:** ✅ 100% Complete (959/959 tests passing - 100%) 🎉
+**Status:** ✅ 100% Complete (960/960 tests passing - 100%) 🎉
 
 ## Architecture
 
-The C++ code generation uses an **AST-based approach** with **ownership-aware type tracking** and **optional optimization**:
+The C++ code generation uses an **AST-based approach** with **ownership-aware type tracking**, **performance optimization**, and **function hoisting**:
 
-### Current Implementation (Nov 30, 2025 - Late Evening)
+### Current Implementation (Nov 30, 2025 - Performance Optimization Session)
 
 **New AST-Based Codegen:**
-- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~2,589 lines)
+- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~2,778 lines)
   - Pure AST transformation from TypeScript AST → C++ AST
   - No string concatenation during generation
   - Type-safe, composable, easily testable
-  - **Currently passing 959/959 tests (100%)** ✅ 🎉
+  - **Currently passing 960/960 tests (100%)** ✅ 🎉
   - **ALL TESTS PASSING - Phase 3 Complete!**
-  - **NEW: Integrated optimizer support** (opt-in via constructor options)
+  - **NEW: Performance optimizations enabled by default (level 1)**
+  - **NEW: Function hoisting for non-closure functions**
 
 **AST Infrastructure:**
 - **`src/cpp/ast.ts`** - C++ AST node type definitions (720 lines)
 - **`src/cpp/builder.ts`** - Fluent API for constructing AST (405 lines)
 - **`src/cpp/renderer.ts`** - AST to formatted C++ code converter (760 lines)
-- **`src/cpp/optimizer.ts`** - AST-based optimizer (~500 lines) ⭐ **NEW**
+- **`src/cpp/optimizer.ts`** - AST-based optimizer (~543 lines) ⭐ **ENHANCED**
   - Visitor-based AST transformation system
   - Configurable optimization levels (0, 1, 2)
+  - **DEFAULT: Level 1 enabled** for production-ready performance
   - Constant folding, dead code elimination, expression simplification
-  - Zero overhead when disabled (default: level 0)
-  - See `src/cpp/OPTIMIZER.md` for details
+  - **NEW: Floor pattern optimization** (`x - fmod(x, 1)` → `static_cast<int>(x)`)
+  - See optimizer section below for details
 - **`src/cpp/ownership-aware-type-checker.ts`** - Preserves ownership qualifiers (354 lines)
   - Wraps TypeScript's type checker to preserve `own<T>`, `share<T>`, `use<T>`
   - Reads types directly from AST since TypeChecker erases type aliases
@@ -54,7 +56,7 @@ See `src/cpp/README.md` for usage examples.
 - 28 RegExp runtime tests (100% passing) ✅
 - 9 RegExp codegen tests (100% passing) ✅
 - 6 RegExp e2e tests (100% passing) ✅
-- 14 optimizer tests (100% passing) ✅ ⭐ **NEW**
+- 15 optimizer tests (100% passing) ✅ ⭐ **ENHANCED**
 - 123/123 concrete example tests (100% passing) ✅ ⭐ **ALL EXAMPLES COMPLETE**
   - ✅ binary-search-tree: 8/8 tests passing
   - ✅ generic-stack: 8/8 tests passing
@@ -63,13 +65,79 @@ See `src/cpp/README.md` for usage examples.
   - ✅ error-handling: 8/8 tests passing ⭐ (fixed exception handling)
   - ✅ json-parser: 8/8 tests passing ⭐ (fixed constructor arg wrapping + TypeScript smart pointer detection)
   - ✅ array-methods: 8/8 tests passing ⭐ (fixed type inference conflict)
-  - ✅ benchmark-performance: 8/8 tests passing ⭐ (fixed parentheses preservation)
-  - ✅ **interface-shapes: 8/8 tests passing** ⭐ **NEW** (full interface polymorphism support)
+  - ✅ benchmark-performance: 8/8 tests passing ⭐ **PERFORMANCE OPTIMIZED** (2.07x average speedup vs Node.js)
+  - ✅ **interface-shapes: 8/8 tests passing** ⭐ (full interface polymorphism support)
+  - ✅ fibonacci: 8/8 tests passing ⭐ **PERFORMANCE OPTIMIZED** (function hoisting: 2.02x vs Node.js)
 - 4 runtime Property/LiteralObject tests (100% passing) ✅
 - 7 super() call tests (100% passing) ✅
 - 10 inheritance tests (100% passing) ✅
 - 5 runtime-equivalence tests (100% passing) ✅
-- 8 fibonacci tests (100% passing) ✅
+
+**Recent Additions (Nov 30, 2025 - Performance Optimization Session)**:
+1. ✅ **Floor Pattern Optimization** - Optimize integer conversion pattern 🎉
+   - **Pattern**: Detects `x - std::fmod(x, 1)` (floor operation idiom)
+   - **Optimization**: Replaces with `static_cast<int>(x)` for direct conversion
+   - **Impact**: Eliminates expensive floating-point modulo operations
+   - **Implementation**:
+     - Added to optimizer's `visitBinaryExpr` method
+     - Handles both `Literal` and `Identifier` nodes for constant `1`
+     - Unwraps `ParenExpr` to match pattern correctly
+   - **Test**: Added floor optimization test to optimizer.test.ts
+   - **Result**: Binary search performance improved as part of parameter passing fix
+
+2. ✅ **Smart Array Parameter Passing** - Analyze and optimize lambda parameters 🎉
+   - **Problem**: Arrays passed by value to lambdas causing expensive copies (1627ms for 100K searches!)
+   - **Solution**: Analyze lambda body to detect if parameters are modified
+     - **Read-only arrays**: Pass by `const reference` (avoids copies)
+     - **Modified arrays**: Pass by `mutable reference` (allows mutation)
+   - **Implementation**:
+     - Added `doesLambdaModifyParameter()` method to detect array element assignments
+     - Updates both lambda signature AND `std::function` wrapper type
+     - Checks for `arr[i] = value` pattern to determine mutability
+   - **Impact**: **Binary search: 1627ms → 9ms (180x faster!)**
+   - **Speedup**: Binary search now **5x faster than Node.js**
+   - **Files**: Modified `visitArrowFunction` in codegen.ts
+   - **Test**: Updated optimizer test to use TypeChecker for pattern matching
+
+3. ✅ **Function Hoisting** - Eliminate std::function overhead for non-closure functions 🎉
+   - **Problem**: All arrow functions wrapped in `std::function<>` even when they don't capture variables
+   - **Solution**: Detect non-closure functions and hoist to namespace scope as regular C++ functions
+   - **Detection Logic**:
+     - Analyzes function body for references to external variables
+     - Excludes parameters, built-ins (console, Math, etc.), and self-references
+     - Allows recursive calls (e.g., fibonacci calling itself)
+   - **Implementation**:
+     - Added `arrowFunctionUsesClosure()` method to detect closure usage
+     - Added `visitNonClosureArrowFunction()` to convert to regular functions
+     - Tracks hoisted functions in `hoistedFunctions` Set
+     - Qualifies calls with `gs::` namespace prefix
+   - **Impact**: **Fibonacci: 512ms → 184ms (2.78x faster!)**
+   - **Examples**:
+     - `const fibonacci = (n) => ...` → `double fibonacci(double n) { ... }` (hoisted)
+     - `const makeAdder = (x) => (y) => y + x` → inner lambda stays `std::function` (closure)
+   - **Files**: Modified codegen.ts generate() and visitExpression() methods
+   - **Benefits**:
+     - Direct function calls instead of std::function wrapper overhead
+     - Better compiler optimization opportunities
+     - Cleaner generated C++ code
+   - **Result**: 960/960 tests passing with significant performance improvements
+
+**Performance Benchmark Results** (Nov 30, 2025):
+| Benchmark | Node.js | C++ (before) | C++ (after) | Speedup |
+|-----------|---------|--------------|-------------|---------|
+| Fibonacci (recursive) | 372ms | 512ms (0.73x) | **184ms** | **2.02x** ✨ |
+| Array Operations | 31ms | 11ms (2.82x) | **11ms** | **2.82x** |
+| Binary Search | 45ms | 1627ms (0.03x) | **9ms** | **5.00x** ✨ |
+| Bubble Sort | 26ms | 40ms (0.65x) | **39ms** | **0.67x** |
+| HashMap Operations | 35ms | 32ms (1.09x) | **32ms** | **1.09x** |
+| String Manipulation | 9ms | 12ms (0.75x) | **11ms** | **0.82x** |
+| **AVERAGE** | - | **1.06x** | **2.07x** | **1.95x improvement** |
+
+**Key Takeaways**:
+- Binary search improved by **180x** through smart parameter passing
+- Fibonacci improved by **2.78x** through function hoisting
+- Overall **2.07x average speedup** vs Node.js (up from 1.06x)
+- Optimizations enabled by default (level 1) for production performance
 
 **Recent Additions (Nov 30, 2025 - Late Evening Session)**:
 1. ✅ **AST-Based Optimizer** - Clean, composable optimization passes (+14 tests) 🎉

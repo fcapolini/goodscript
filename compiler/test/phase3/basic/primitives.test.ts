@@ -75,7 +75,8 @@ describe('Phase 3: Basic Expressions', () => {
   it('should generate arithmetic operations', () => {
     const cpp = compileToCpp(`const result: number = 1 + 2 * 3;`);
     
-    expect(cpp).toContain('const double result = 1 + 2 * 3;');
+    // With optimization (level 1), constant folding produces: const double result = 7;
+    expect(cpp).toContain('const double result = 7;');
   });
   
   it('should convert === to ==', () => {

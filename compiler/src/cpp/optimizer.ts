@@ -265,6 +265,37 @@ class AstOptimizer implements ast.CppVisitor<ast.CppNode> {
     const left = this.visitExpression(node.left);
     const right = this.visitExpression(node.right);
     
+    // Optimize floor pattern: x - std::fmod(x, 1) => static_cast<int>(x)
+    if (this.options.constantFolding && node.operator === '-') {
+      // Unwrap parentheses if present
+      let rightExpr = right;
+      if (rightExpr instanceof ast.ParenExpr) {
+        rightExpr = rightExpr.expression;
+      }
+      
+      // Check if right side is std::fmod(x, 1)
+      if (rightExpr instanceof ast.CallExpr && 
+          rightExpr.callee instanceof ast.Identifier && 
+          rightExpr.callee.name === 'std::fmod' &&
+          rightExpr.args.length === 2) {
+        
+        const fmodArg1 = rightExpr.args[0];
+        const fmodArg2 = rightExpr.args[1];
+        
+        // Check if second arg is literal 1 (can be Literal or Identifier with name '1')
+        const isOne = (fmodArg2 instanceof ast.Literal && fmodArg2.value === '1') ||
+                      (fmodArg2 instanceof ast.Identifier && fmodArg2.name === '1');
+        
+        if (isOne) {
+          // Check if left and fmod's first arg are the same identifier
+          if (this.areSameExpression(left, fmodArg1)) {
+            // Replace with static_cast<int>(x)
+            return new ast.Cast(new ast.CppType('int'), left);
+          }
+        }
+      }
+    }
+    
     // Constant folding
     if (this.options.constantFolding) {
       const folded = this.foldBinaryExpr(left, node.operator, right);
@@ -351,7 +382,7 @@ class AstOptimizer implements ast.CppVisitor<ast.CppNode> {
     const tryBlock = this.visitBlock(node.tryBlock) as ast.Block;
     const catchBlock = this.visitBlock(node.catchBlock) as ast.Block;
     
-    return new ast.TryCatch(tryBlock, node.exceptionVar, node.exceptionType, catchBlock);
+    return new ast.TryCatch(tryBlock, node.catchVar, node.catchType, catchBlock);
   }
   
   visitBreakStmt(node: ast.BreakStmt): ast.CppNode {
@@ -406,6 +437,25 @@ class AstOptimizer implements ast.CppVisitor<ast.CppNode> {
   
   private visitStatement(stmt: ast.Statement): ast.Statement {
     return stmt.accept(this) as ast.Statement;
+  }
+  
+  /**
+   * Check if two expressions are structurally identical
+   */
+  private areSameExpression(a: ast.Expression, b: ast.Expression): boolean {
+    // Simple case: both are identifiers with the same name
+    if (a instanceof ast.Identifier && b instanceof ast.Identifier) {
+      return a.name === b.name;
+    }
+    
+    // Simple case: both are literals with the same value
+    if (a instanceof ast.Literal && b instanceof ast.Literal) {
+      return a.value === b.value;
+    }
+    
+    // TODO: Add more complex cases if needed (member expressions, etc.)
+    
+    return false;
   }
   
   /**

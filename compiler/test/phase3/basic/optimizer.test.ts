@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { AstCodegen } from '../../../src/cpp/codegen';
 import ts from 'typescript';
 
-function compileWithOptimization(source: string, level: 0 | 1 | 2 = 1): string {
+function compileWithOptimization(source: string, level: 0 | 1 | 2 = 1, useTypeChecker: boolean = false): string {
   const sourceFile = ts.createSourceFile(
     'test.ts',
     source,
@@ -14,7 +14,22 @@ function compileWithOptimization(source: string, level: 0 | 1 | 2 = 1): string {
     true
   );
   
-  const codegen = new AstCodegen(undefined, { level });
+  let checker: ts.TypeChecker | undefined;
+  if (useTypeChecker) {
+    // Create a full program to get type checking
+    const compilerOptions: ts.CompilerOptions = {
+      target: ts.ScriptTarget.ES2020,
+      module: ts.ModuleKind.CommonJS,
+    };
+    const host = ts.createCompilerHost(compilerOptions);
+    const program = ts.createProgram(['test.ts'], compilerOptions, {
+      ...host,
+      getSourceFile: (fileName) => fileName === 'test.ts' ? sourceFile : undefined,
+    });
+    checker = program.getTypeChecker();
+  }
+  
+  const codegen = new AstCodegen(checker, { level });
   return codegen.generate(sourceFile);
 }
 
@@ -139,6 +154,22 @@ describe('C++ AST Optimizer', () => {
       const cpp = compileWithOptimization(source, 1);
       
       expect(cpp).toContain('double x = 1;');
+    });
+  });
+  
+  describe('Performance Optimizations', () => {
+    it('should optimize floor pattern x - (x % 1) to static_cast<int>(x)', () => {
+      const source = `
+        function getIndex(mid: number): number {
+          const midIdx = mid - (mid % 1);
+          return midIdx;
+        }
+      `;
+      const cpp = compileWithOptimization(source, 1, true); // Use type checker
+      
+      // Should optimize to static_cast<int>(mid)
+      expect(cpp).toContain('static_cast<int>(mid)');
+      expect(cpp).not.toContain('std::fmod');
     });
   });
   
