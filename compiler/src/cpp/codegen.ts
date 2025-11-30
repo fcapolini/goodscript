@@ -278,6 +278,27 @@ export class AstCodegen {
           }
         } else {
           init = this.visitExpression(decl.initializer);
+          
+          // Check if we need to wrap the initializer in a smart pointer
+          // Case: const shared: share<T> = plainValue;
+          if (decl.type) {
+            const varTypeText = decl.type.getText();
+            const varOwnership = this.ownershipChecker.getTypeOfExpression(decl.name as ts.Expression);
+            const initOwnership = this.ownershipChecker.getTypeOfExpression(decl.initializer);
+            
+            // If variable is share<T> but initializer is plain T, wrap it
+            if (varOwnership?.ownership === 'share' && !initOwnership?.ownership) {
+              const innerType = varOwnership.baseType;
+              const cppInnerType = this.mapTypeScriptTypeToCpp(innerType);
+              init = cpp.call(cpp.id(`std::make_shared<${cppInnerType}>`), [init]);
+            }
+            // If variable is own<T> but initializer is plain T, wrap it
+            else if (varOwnership?.ownership === 'own' && !initOwnership?.ownership) {
+              const innerType = varOwnership.baseType;
+              const cppInnerType = this.mapTypeScriptTypeToCpp(innerType);
+              init = cpp.call(cpp.id(`std::make_unique<${cppInnerType}>`), [init]);
+            }
+          }
         }
         
         // ALL class instances are now created as smart pointers by visitNewExpression
@@ -1639,9 +1660,10 @@ export class AstCodegen {
         const innerTypeStr = innerType.toString();
         
         // Skip optional wrapping for smart pointers - they're already nullable
-        if (innerTypeStr.includes('std::shared_ptr') || 
-            innerTypeStr.includes('std::unique_ptr') ||
-            innerTypeStr.includes('std::weak_ptr')) {
+        // Check if the type STARTS with a smart pointer (not just contains one as a type argument)
+        if (innerTypeStr.startsWith('std::shared_ptr<') || 
+            innerTypeStr.startsWith('std::unique_ptr<') ||
+            innerTypeStr.startsWith('std::weak_ptr<')) {
           return innerType;
         }
         
@@ -1923,6 +1945,16 @@ export class AstCodegen {
               value = cpp.initList([]);
             } else {
               value = this.visitExpression(binExpr.right);
+            }
+            
+            // Check if field type is optional and value is nullptr - use std::nullopt
+            const fieldTypeKey = `this.${fieldName}`;
+            const fieldType = this.variableTypes.get(fieldTypeKey);
+            if (fieldType && value instanceof ast.Identifier && value.name === 'nullptr') {
+              const fieldTypeStr = fieldType.toString();
+              if (fieldTypeStr.startsWith('std::optional<')) {
+                value = cpp.id('std::nullopt');
+              }
             }
             
             // Add to initializer list
