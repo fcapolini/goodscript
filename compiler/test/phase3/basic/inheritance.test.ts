@@ -79,7 +79,7 @@ class MyClass implements IFoo {
 
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('struct IFoo {');
+    expect(cpp).toContain('class IFoo {'); // Interfaces are now classes (abstract base classes)
     expect(cpp).toContain('class MyClass : public IFoo {');
   });
 

@@ -105,7 +105,7 @@ describe('Phase 3: Classes', () => {
 });
 
 describe('Phase 3: Interfaces', () => {
-  it('should generate struct for interface', () => {
+  it('should generate class for interface (abstract base class)', () => {
     const source = `
       interface Point {
         x: number;
@@ -114,9 +114,10 @@ describe('Phase 3: Interfaces', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('struct Point {');
+    expect(cpp).toContain('class Point {');
     expect(cpp).toContain('double x;');
     expect(cpp).toContain('double y;');
+    expect(cpp).toContain('virtual  ~Point() = default;'); // Virtual destructor
     expect(cpp).toContain('};');
   });
   

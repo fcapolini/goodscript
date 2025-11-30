@@ -285,7 +285,10 @@ export class Method extends CppNode {
     public readonly access: AccessSpecifier = AccessSpecifier.Public,
     public readonly isConst: boolean = false,
     public readonly isStatic: boolean = false,
-    public readonly isVirtual: boolean = false
+    public readonly isVirtual: boolean = false,
+    public readonly isPureVirtual: boolean = false,
+    public readonly isOverride: boolean = false,
+    public readonly isDefault: boolean = false
   ) {
     super();
   }

@@ -22,6 +22,7 @@ export class AstCodegen {
   private pointerVariables = new Set<string>(); // Track variables that are pointers (from Map.get(), etc.)
   private structuredBindingVariables = new Set<string>(); // Track variables from tuple destructuring (for-of with [key, value])
   private templateParameters = new Set<string>(); // Track template parameter names (T, K, V, etc.)
+  private interfaceMethods = new Map<string, Set<string>>(); // Map interface name -> set of method names
   private ownershipChecker: OwnershipAwareTypeChecker;
   
   constructor(private checker?: ts.TypeChecker) {
@@ -34,6 +35,7 @@ export class AstCodegen {
     this.variableTypes.clear(); // Reset for each file
     this.pointerVariables.clear(); // Reset for each file
     this.templateParameters.clear(); // Reset for each file
+    this.interfaceMethods.clear(); // Reset for each file
     const includes = [new ast.Include('gs_runtime.hpp', false)];
     const declarations: ast.Declaration[] = [];
     const mainStatements: ast.Statement[] = [];
@@ -513,9 +515,18 @@ export class AstCodegen {
         // Check if method should be const (doesn't modify 'this') and if it's static
         // Static methods cannot be const in C++
         const isStatic = member.modifiers?.some(mod => mod.kind === ts.SyntaxKind.StaticKeyword) ?? false;
-        const isConst = !isStatic && tsUtils.shouldMethodBeConst(member);
         
-        methods.push(new ast.Method(methodName, returnType, params, body, ast.AccessSpecifier.Public, isConst, isStatic));
+        // Check if method overrides an interface method
+        // Only mark as virtual/override if method actually exists in one of the implemented interfaces
+        const interfaceMethodNames = this.getInterfaceMethodNames(baseClasses);
+        const isVirtual = interfaceMethodNames.has(methodName);
+        const isOverride = interfaceMethodNames.has(methodName);
+        
+        // If overriding an interface method, use const=true to match interface signature
+        // Otherwise, check if method mutates this
+        const isConst = isOverride ? true : (!isStatic && tsUtils.shouldMethodBeConst(member));
+        
+        methods.push(new ast.Method(methodName, returnType, params, body, ast.AccessSpecifier.Public, isConst, isStatic, isVirtual, false, isOverride, false));
       }
     }
     
@@ -530,8 +541,10 @@ export class AstCodegen {
   private visitInterface(node: ts.InterfaceDeclaration): ast.Class | undefined {
     const name = cppUtils.escapeName(node.name.text);
     const fields: ast.Field[] = [];
+    const methods: ast.Method[] = [];
+    const methodNames = new Set<string>(); // Track method names for this interface
     
-    // Convert interface properties to fields
+    // Convert interface properties to fields (rare, but possible)
     for (const member of node.members) {
       if (ts.isPropertySignature(member) && member.name) {
         const fieldName = cppUtils.escapeName(member.name.getText());
@@ -540,8 +553,78 @@ export class AstCodegen {
       }
     }
     
-    // Interfaces become structs (public by default)
-    return new ast.Class(name, fields, [], [], undefined, [], true);
+    // Convert interface method signatures to pure virtual methods
+    for (const member of node.members) {
+      if (ts.isMethodSignature(member) && member.name) {
+        const methodName = cppUtils.escapeName(member.name.getText());
+        methodNames.add(methodName); // Cache method name
+        const returnType = member.type ? this.mapType(member.type) : new ast.CppType('void');
+        
+        const params: ast.Parameter[] = [];
+        if (member.parameters) {
+          for (const param of member.parameters) {
+            const paramName = cppUtils.escapeName(param.name.getText());
+            const paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
+            const passByConstRef = tsUtils.shouldPassByConstRef(param.type);
+            const passByMutableRef = tsUtils.shouldPassByMutableRef(param.type);
+            params.push(new ast.Parameter(paramName, paramType, undefined, passByConstRef, passByMutableRef));
+          }
+        }
+        
+        // Pure virtual method - no body, marked as virtual and pure virtual
+        // Interface methods are const by default (they're typically accessors/getters)
+        const emptyBody = new ast.Block([]);
+        methods.push(new ast.Method(
+          methodName, 
+          returnType, 
+          params, 
+          emptyBody, 
+          ast.AccessSpecifier.Public, 
+          true,  // isConst - interface methods are const by default
+          false, // isStatic
+          true,  // isVirtual
+          true,  // isPureVirtual
+          false, // isOverride
+          false  // isDefault
+        ));
+      }
+    }
+    
+    // Cache interface method names for later use by implementing classes
+    this.interfaceMethods.set(name, methodNames);
+    
+    // Add virtual destructor
+    const destructorBody = new ast.Block([]);
+    methods.push(new ast.Method(
+      `~${name}`,
+      new ast.CppType(''),
+      [],
+      destructorBody,
+      ast.AccessSpecifier.Public,
+      false, // isConst
+      false, // isStatic
+      true,  // isVirtual
+      false, // isPureVirtual (= default, not = 0)
+      false, // isOverride
+      true   // isDefault (generates = default)
+    ));
+    
+    // Interfaces become abstract base classes (not structs)
+    return new ast.Class(name, fields, [], methods, undefined, [], false);
+  }
+  
+  private getInterfaceMethodNames(interfaceNames: string[]): Set<string> {
+    const methodNames = new Set<string>();
+    
+    // Lookup cached method names for each interface
+    for (const interfaceName of interfaceNames) {
+      const methods = this.interfaceMethods.get(interfaceName);
+      if (methods) {
+        methods.forEach(m => methodNames.add(m));
+      }
+    }
+    
+    return methodNames;
   }
   
   private visitEnum(node: ts.EnumDeclaration): ast.Enum | undefined {

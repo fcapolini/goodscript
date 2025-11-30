@@ -146,6 +146,9 @@ export class CppBuilder {
       isConst?: boolean;
       isStatic?: boolean;
       isVirtual?: boolean;
+      isPureVirtual?: boolean;
+      isOverride?: boolean;
+      isDefault?: boolean;
     } = {}
   ): AST.Method {
     return new AST.Method(
@@ -156,7 +159,10 @@ export class CppBuilder {
       options.access || AST.AccessSpecifier.Public,
       options.isConst || false,
       options.isStatic || false,
-      options.isVirtual || false
+      options.isVirtual || false,
+      options.isPureVirtual || false,
+      options.isOverride || false,
+      options.isDefault || false
     );
   }
 

@@ -364,6 +364,19 @@ export class CppRenderer implements AST.CppVisitor<string> {
     signature += node.params.map(p => p.accept(this)).join(', ');
     signature += ')';
     if (node.isConst) signature += ' const';
+    if (node.isOverride) signature += ' override';
+    
+    // Handle special cases (pure virtual and default)
+    if (node.isPureVirtual) {
+      // Pure virtual method - no body
+      parts.push(this.line(`${signature} = 0;`));
+      return parts.join('\n');
+    }
+    if (node.isDefault) {
+      // Default implementation (for destructors)
+      parts.push(this.line(`${signature} = default;`));
+      return parts.join('\n');
+    }
 
     parts.push(this.line(`${signature} {`));
 

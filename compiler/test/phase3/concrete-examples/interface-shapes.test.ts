@@ -12,12 +12,12 @@ import {
 
 const EXAMPLE_NAME = "interface-shapes";
 
-// TODO: Multiple codegen issues to fix:
-// 1. Interface methods not generated as pure virtual functions in base class
-// 2. Interface implementation not generating method definitions
-// 3. Polymorphic array literals: Array<Shape> = [Rectangle, Circle, Triangle] needs covariance
-// 4. Method calls on interface references not resolving to implementations
-describe.skip(`Concrete Example: ${EXAMPLE_NAME}`, () => {
+// Interface support has been implemented:
+// ✓ 1. Interface methods generated as pure virtual functions in base class
+// ✓ 2. Interface implementation generates method definitions with override
+// ✓ 3. Virtual destructors added to interfaces
+// ✓ 4. Method calls on interface references resolve to implementations via virtual dispatch
+describe(`Concrete Example: ${EXAMPLE_NAME}`, () => {
   let tmpDir: string;
 
   beforeEach(() => {
