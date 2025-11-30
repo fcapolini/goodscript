@@ -1,6 +1,6 @@
 # Phase 3: C++ Code Generation
 
-**Status:** ✅ ~98% Complete (923/946 tests passing - 97.6%)
+**Status:** ✅ ~98% Complete (929/946 tests passing - 98.2%)
 
 ## Architecture
 
@@ -13,8 +13,8 @@ The C++ code generation uses an **AST-based approach** with **ownership-aware ty
   - Pure AST transformation from TypeScript AST → C++ AST
   - No string concatenation during generation
   - Type-safe, composable, easily testable
-  - **Currently passing 923/946 tests (97.6%)**
-  - **6 failures remaining** (down from 26 earlier this evening)
+  - **Currently passing 929/946 tests (98.2%)**
+  - **17 skipped tests remaining** (no failures!)
 
 **AST Infrastructure:**
 - **`src/cpp/ast.ts`** - C++ AST node type definitions (717 lines)
@@ -46,7 +46,7 @@ See `src/cpp/README.md` for usage examples.
 - 28 runtime library tests (100% passing)
 - 28 RegExp runtime tests (100% passing) ✅
 - 9 RegExp codegen tests (100% passing) ✅
-- 6 RegExp e2e tests (0% passing) - PCRE2 integration issues
+- 6 RegExp e2e tests (100% passing) ✅ **NEW** (fixed missing header)
 - 123/123 concrete example tests (100% passing) ✅ ⭐ **ALL EXAMPLES COMPLETE**
   - ✅ binary-search-tree: 8/8 tests passing
   - ✅ generic-stack: 8/8 tests passing
@@ -63,7 +63,13 @@ See `src/cpp/README.md` for usage examples.
 - 8 fibonacci tests (100% passing) ✅
 
 **Recent Fixes (Nov 30, 2025 - Evening Session)**:
-1. ✅ **Parentheses Preservation** - Maintain operator precedence from TypeScript
+1. ✅ **RegExp E2E Missing Header** - Include gs_date.hpp in test setup
+   - Problem: Test copied runtime headers to temp directory but missed gs_date.hpp
+   - Root cause: Incomplete header list in regexp-e2e.test.ts
+   - Solution: Added gs_date.hpp to the headers array
+   - Fixed all regexp-e2e tests (+6 tests)
+
+2. ✅ **Parentheses Preservation** - Maintain operator precedence from TypeScript
    - Problem: `left + ((right - left) / 2)` generated as `left + right - left / 2` causing wrong calculation
    - Root cause: Stripping parentheses from ParenthesizedExpression nodes
    - Solution: Use `ast.ParenExpr` to preserve parentheses in generated C++
@@ -115,12 +121,15 @@ See `src/cpp/README.md` for usage examples.
 2. ✅ Generic type variable declarations - Preserve template parameters in type inference
 3. ✅ Smart pointer to array element access - Dereference smart pointer before subscript: `(*board)[i]`
 
-**Remaining Failures (6 tests across 1 test suite):**
-- regexp-e2e (6 tests) - PCRE2 library integration issues
+**Remaining Work (17 skipped tests):**
+- These are intentionally skipped tests, not failures
+- All active test suites passing (100%)
+- Phase 3 C++ codegen effectively complete! 🎉
 
 **Next Priorities:**
-1. Investigate RegExp E2E PCRE2 integration
-2. Reach 946/946 (100%) - only 6 tests remaining!
+1. Investigate skipped tests (likely edge cases or TODO items)
+2. Performance optimizations (C++ should outperform Node.js)
+3. Move to Phase 4: Ecosystem and standard library
 
 **Completed concrete examples (15/15 - 100%):** ⭐
   - ✅ benchmark-performance (8/8) - **Unlocked Nov 30, 2025** via parentheses preservation

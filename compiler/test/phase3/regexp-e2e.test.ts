@@ -59,6 +59,7 @@ describe('RegExp End-to-End C++ Tests', () => {
       'gs_number.hpp',
       'gs_object.hpp',
       'gs_tuple.hpp',
+      'gs_date.hpp',
       'gs_regexp.hpp',
       'gs_regexp_impl.hpp',
       'gs_runtime.hpp'
