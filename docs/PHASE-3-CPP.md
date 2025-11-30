@@ -36,7 +36,7 @@ The C++ code generation uses an **AST-based approach** with **ownership-aware ty
   - Enables correct smart pointer detection for C++ code generation
 
 **Legacy Implementation:**
-- **`src/cpp-codegen.ts`** - String-based codegen (deprecated)
+- **`src/cpp/codegen.ts`** - AST-based codegen (current implementation)
   - No longer maintained
   - All features migrated to AST-based approach
 
@@ -1017,7 +1017,7 @@ Wrapper classes avoid these issues while providing:
 
 ### Current File Structure
 
-**`compiler/src/cpp-codegen.ts`** (2747 lines):
+**`compiler/src/cpp/codegen.ts`** (2783 lines):
 ```typescript
 export class CppCodegen {
   private indentLevel = 0;

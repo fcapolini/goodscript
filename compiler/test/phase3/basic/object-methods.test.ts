@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { CppCodegen } from '../../../src/cpp-codegen';
+import { CppCodegen } from '../../../src/cpp/codegen';
 import { compileSource, hasError } from '../../phase1/test-helpers';
 import ts from 'typescript';
 

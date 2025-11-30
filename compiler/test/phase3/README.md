@@ -1,6 +1,6 @@
 # Phase 3: C++ Code Generation Tests
 
-This directory contains tests for the C++ code generator (`cpp-codegen.ts`), which transforms GoodScript TypeScript AST to idiomatic C++ code with smart pointer-based ownership semantics.
+This directory contains tests for the C++ code generator (`cpp/codegen.ts`), which transforms GoodScript TypeScript AST to idiomatic C++ code with smart pointer-based ownership semantics.
 
 ## Test Organization
 
@@ -218,7 +218,7 @@ Generated C++ should be:
 - `/docs/MEMORY-OWNERSHIP.md` - Ownership semantics formal proof
 - `/docs/COMPILATION-TARGET.md` - Why C++ was chosen
 - `/.github/copilot-instructions.md` - Development guidelines
-- `/compiler/src/cpp-codegen.ts` - Code generator implementation
+- `/compiler/src/cpp/codegen.ts` - Code generator implementation
 
 ---
 

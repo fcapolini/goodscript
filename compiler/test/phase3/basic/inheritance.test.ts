@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { CppCodegen } from '../../../src/cpp-codegen';
+import { CppCodegen } from '../../../src/cpp/codegen';
 import { AstCodegen } from '../../../src/cpp/codegen';
 import { writeFileSync, mkdirSync } from 'fs';
 import { execSync } from 'child_process';

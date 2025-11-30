@@ -1,8 +1,7 @@
 /**
  * AST-Based C++ Code Generator
  * 
- * Minimal proof-of-concept - supports only const number/string/boolean variables
- * Will be built up incrementally to replace the legacy cpp-codegen.ts
+ * Transforms TypeScript AST to C++ code with ownership semantics.
  */
 
 import * as ts from 'typescript';
@@ -542,13 +541,13 @@ export class AstCodegen {
         if (clause.token === ts.SyntaxKind.ExtendsKeyword) {
           // extends - single base class
           if (clause.types.length > 0) {
-            // Get full type including template arguments
-            baseClass = cppUtils.escapeName(clause.types[0].getText());
+            // Map type arguments (e.g., Container<string> → Container<gs::String>)
+            baseClass = this.mapHeritageType(clause.types[0]);
           }
         } else if (clause.token === ts.SyntaxKind.ImplementsKeyword) {
           // implements - multiple interfaces (treated as base classes in C++)
           for (const type of clause.types) {
-            baseClasses.push(cppUtils.escapeName(type.getText()));
+            baseClasses.push(this.mapHeritageType(type));
           }
         }
       }
@@ -2197,6 +2196,23 @@ export class AstCodegen {
     return cpp.member(obj, prop, isPointer);
   }
   
+  /**
+   * Map a heritage clause expression to C++ type, handling template arguments.
+   * Example: Container<string> → Container<gs::String>
+   */
+  private mapHeritageType(expr: ts.ExpressionWithTypeArguments): string {
+    const baseName = cppUtils.escapeName(expr.expression.getText());
+    
+    if (expr.typeArguments && expr.typeArguments.length > 0) {
+      // Has template arguments - map each one
+      const mappedArgs = expr.typeArguments.map(arg => this.mapType(arg).toString());
+      return `${baseName}<${mappedArgs.join(', ')}>`;
+    }
+    
+    // No template arguments
+    return baseName;
+  }
+
   private mapType(typeNode: ts.TypeNode | undefined): ast.CppType {
     // Handle undefined type (use auto)
     if (!typeNode) {
@@ -2780,3 +2796,6 @@ export class AstCodegen {
     return new ast.Function(name, returnType, params, body);
   }
 }
+
+// Export as CppCodegen for backward compatibility
+export { AstCodegen as CppCodegen };

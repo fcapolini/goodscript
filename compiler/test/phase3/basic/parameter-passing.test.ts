@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { CppCodegen } from '../../../src/cpp-codegen';
+import { CppCodegen } from '../../../src/cpp/codegen';
 import { AstCodegen } from '../../../src/cpp/codegen';
 import ts from 'typescript';
 

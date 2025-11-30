@@ -10,17 +10,15 @@
  * 3. Compiles to C++ (native mode)
  * 4. Runs both and compares output
  * 
- * NOTE: C++ tests are currently skipped (skipCpp: true) because cpp-codegen.ts
- * hasn't been migrated to use the runtime library yet. Once the migration is
- * complete (see compiler/runtime/MIGRATION.md), these tests will validate
- * JavaScript/C++ equivalence.
+ * NOTE: The C++ codegen (cpp/codegen.ts) uses the GoodScript runtime library
+ * (gs::String, gs::Array, etc.) to ensure JavaScript/C++ equivalence.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
-import { CppCodegen } from '../../src/cpp-codegen';
+import { CppCodegen } from '../../src/cpp/codegen';
 import ts from 'typescript';
 
 describe('Runtime Library Equivalence', () => {

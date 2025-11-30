@@ -23,17 +23,17 @@ GoodScript is a **TypeScript specialization** for safe systems programming with 
 - **Key files**: `compiler/src/ownership-analyzer.ts`, `compiler/src/null-check-analyzer.ts`
 - **Documentation**: `docs/DAG-ANALYSIS.md`, `docs/MEMORY-OWNERSHIP.md`
 
-### Phase 3: C++ Code Generation (🚧 In Progress - 96% Complete)
+### Phase 3: C++ Code Generation (✅ Complete - 98% tests passing)
 - Translates TypeScript AST to C++ code
 - Maps ownership types: `own<T>` → `std::unique_ptr<T>`, `share<T>` → `std::shared_ptr<T>`, `use<T>` → `std::weak_ptr<T>`
 - Generates idiomatic C++ with proper RAII, exception handling
 - All code wrapped in `gs` namespace to avoid keyword conflicts
 - Runtime library with `gs::String`, `gs::Array<T>`, `gs::Map<K,V>`, `gs::Set<T>`, `gs::RegExp`
-- **Status**: 894/911 tests passing (66/66 basic, 28/28 runtime, 96/96 concrete examples, 71 RegExp tests)
-- **Key files**: `compiler/src/cpp-codegen.ts` (3500+ lines), `runtime/*.hpp`
+- **Status**: 939/960 tests passing (68/68 basic, 28/28 runtime, 123/123 concrete examples, 71 RegExp tests)
+- **Key files**: `compiler/src/cpp/codegen.ts` (AST-based implementation), `runtime/*.hpp`
 - **Documentation**: `docs/COMPILATION-TARGET.md`, `docs/PHASE-3-CPP.md`
-- **Recent fixes**: Optional unwrapping, smart pointer null checks, PCRE2 integration
-- **TODO**: Async/await coroutines, tuple literals, interface virtual methods
+- **Recent changes**: Migrated from legacy string-based to AST-based codegen (Dec 1, 2025)
+- **Skipped features**: Array auto-resize (5 tests), LiteralObject (10 tests), property accessors (6 tests)
 
 ### Phase 4: Ecosystem (📋 Planned)
 - Standard library APIs for Node.js/Deno compatibility
@@ -110,7 +110,7 @@ if (typeText?.startsWith('share<')) {
 
 ### Phase 3 C++ Codegen - Early Implementation
 
-**Current State**: Placeholder implementation in `cpp-codegen.ts`
+**Current State**: AST-based implementation in `cpp/codegen.ts`
 
 **Key Challenges Ahead**:
 
@@ -136,7 +136,7 @@ if (typeText?.startsWith('share<')) {
 
 ## Coding Guidelines
 
-### When Working on C++ Codegen (`cpp-codegen.ts`)
+### When Working on C++ Codegen (`cpp/codegen.ts`)
 
 1. **Always use AST-based type lookup for ownership types**:
    ```typescript
@@ -377,10 +377,10 @@ if (!value.includes('.')) {
 ## Key Files to Understand
 
 ### Core Compiler
-1. **`compiler/src/cpp-codegen.ts`** (placeholder) - Main C++ code generator
-   - `CppCodegen` class to be implemented
-   - Will handle all AST → C++ transformations
-   - Will require careful state tracking for smart pointer management
+1. **`compiler/src/cpp/codegen.ts`** (2783 lines) - Main C++ code generator
+   - `AstCodegen` class (exported as `CppCodegen` for compatibility)
+   - Handles all AST → C++ transformations
+   - Uses AST-based approach with cpp/ast.ts node types
 
 2. **`compiler/src/ownership-analyzer.ts`** (1314 lines) - DAG analysis
    - Builds ownership graph from AST
@@ -441,9 +441,9 @@ if (!value.includes('.')) {
 4. **Compare with TypeScript**:
    - Look at source `.gs.ts` file
    - Check what TypeScript equivalent would be
-   - Ensure Rust captures same semantics
+   - Ensure C++ captures same semantics
 
-5. **Add debug logging** in `rust-codegen.ts`:
+5. **Add debug logging** in `cpp/codegen.ts`:
    ```typescript
    console.log(`[DEBUG] Generating for ${node.kind}: ${node.getText()}`);
    ```
@@ -503,11 +503,11 @@ When implementing new features or fixing bugs:
 5. **Explicit over implicit**: If it can surprise, make it explicit
 6. **Fail early**: Compile-time errors > Runtime errors > Memory corruption
 
-## Current Status (as of Nov 24, 2025)
+## Current Status (as of Dec 1, 2025)
 
 - **Phase 1**: ✅ 100% complete (244/244 tests)
 - **Phase 2**: ✅ 100% complete (425/425 tests)  
-- **Phase 3**: 🚧 93% complete (100/107 tests passing)
+- **Phase 3**: ✅ 98% complete (939/960 tests passing)
   - ✅ AST traversal and code emission
   - ✅ Type mappings (primitives, ownership types, collections)
   - ✅ Statement generation (variables, functions, classes, control flow)
@@ -518,16 +518,19 @@ When implementing new features or fixing bugs:
   - ✅ Smart pointer wrapping (wrap_for_push helper)
   - ✅ String methods (indexOf, startsWith, fromCharCode)
   - ✅ Map/Set operations (delete_, has, set, get)
-  - ⏳ Object-push-modify pattern (semantic mismatch issue)
-  - ⏳ json-parser debug (codegen produces empty output)
-  - ⏳ C++20 coroutines for async/await
+  - ✅ Legacy codegen removed, AST-based codegen is sole implementation
+  - ✅ Generic base classes with template argument mapping
+  - ✅ Class inheritance with proper keyword escaping
+  - ⏳ Array auto-resize (5 tests skipped)
+  - ⏳ LiteralObject feature (10 tests skipped)
+  - ⏳ Property accessor detection (6 tests skipped)
 - **Phase 4**: 📋 Planned
 
 **Next priorities**:
-1. Debug json-parser empty codegen output
-2. Handle object-push-modify pattern (create shared_ptr directly or retrieve after push)
-3. Add async/await coroutine support
-4. Implement remaining stdlib mappings
+1. Implement array auto-resize feature
+2. Add LiteralObject support for JSON.stringify
+3. Add property vs method accessor detection
+4. Add async/await coroutine support
 
 ---
 

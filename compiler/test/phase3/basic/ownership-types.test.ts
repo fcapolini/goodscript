@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { CppCodegen } from '../../../src/cpp-codegen';
+import { CppCodegen } from '../../../src/cpp/codegen';
 import ts from 'typescript';
 
 function compileToCpp(source: string): string {
@@ -59,7 +59,7 @@ describe('Phase 3: Ownership - own<T>', () => {
 });
 
 describe('Phase 3: Ownership - share<T>', () => {
-  it('should generate gs::shared_ptr for share<T>', () => {
+  it('should generate std::shared_ptr for share<T>', () => {
     const source = `
       class Data {
         value: number;
@@ -69,7 +69,7 @@ describe('Phase 3: Ownership - share<T>', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('gs::shared_ptr<gs::Data>');
+    expect(cpp).toContain('std::shared_ptr<gs::Data>');
   });
   
   it('should generate class with share<T> field', () => {
@@ -80,12 +80,12 @@ describe('Phase 3: Ownership - share<T>', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('gs::Array<gs::shared_ptr<gs::String>>');
+    expect(cpp).toContain('gs::Array<std::shared_ptr<gs::String>>');
   });
 });
 
 describe('Phase 3: Ownership - use<T>', () => {
-  it('should generate gs::weak_ptr for use<T>', () => {
+  it('should generate std::weak_ptr for use<T>', () => {
     const source = `
       class Node {
         parent: use<Node>;
@@ -93,7 +93,7 @@ describe('Phase 3: Ownership - use<T>', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('gs::weak_ptr<gs::Node>');
+    expect(cpp).toContain('std::weak_ptr<gs::Node>');
   });
 });
 
@@ -106,8 +106,8 @@ describe('Phase 3: Nullable Types', () => {
     `;
     const cpp = compileToCpp(source);
     
-    // For now, just verify it compiles - we'll refine nullable handling later
-    expect(cpp).toContain('struct User');
+    // Interfaces become classes in C++
+    expect(cpp).toContain('class User');
     expect(cpp).toContain('email');
   });
   
@@ -150,6 +150,6 @@ describe('Phase 3: Collection Types', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('gs::Map<gs::String, gs::shared_ptr<gs::Data>>');
+    expect(cpp).toContain('gs::Map<gs::String, std::shared_ptr<gs::Data>>');
   });
 });

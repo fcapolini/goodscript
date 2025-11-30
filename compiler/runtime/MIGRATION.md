@@ -1,6 +1,6 @@
 # Migration Guide: Using GoodScript Runtime Wrappers
 
-This guide explains how to update `cpp-codegen.ts` to generate code that uses the new GoodScript runtime wrapper classes (`gs::String`, `gs::Array`, etc.) instead of raw C++ STL types.
+This guide explains how the C++ codegen (`cpp/codegen.ts`) generates code that uses the GoodScript runtime wrapper classes (`gs::String`, `gs::Array`, etc.) instead of raw C++ STL types.
 
 ## Overview of Changes
 

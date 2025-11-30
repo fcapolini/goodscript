@@ -76,7 +76,11 @@ if (result.diagnostics.length > 0) {
 compiler/
 ├── src/
 │   ├── compiler.ts            # Main compilation orchestrator
-│   ├── cpp-codegen.ts         # C++ code generator (Phase 3)
+│   ├── cpp/                   # C++ code generation (Phase 3)
+│   │   ├── codegen.ts         # AST-based C++ generator
+│   │   ├── ast.ts             # C++ AST node types
+│   │   ├── builder.ts         # Fluent API for building AST
+│   │   └── renderer.ts        # AST to C++ source code
 │   ├── parser.ts              # TypeScript AST parser
 │   ├── validator.ts           # Phase 1 restrictions enforcer
 │   ├── ownership-analyzer.ts  # Phase 2 ownership tracking

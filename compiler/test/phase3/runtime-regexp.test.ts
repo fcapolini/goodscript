@@ -19,7 +19,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
-import { CppCodegen } from '../../src/cpp-codegen';
+import { CppCodegen } from '../../src/cpp/codegen';
 import ts from 'typescript';
 
 describe('RegExp Runtime Library', () => {

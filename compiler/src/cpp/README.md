@@ -333,5 +333,5 @@ Potential improvements to the AST system:
 ## See Also
 
 - `test/cpp-ast.test.ts` - Unit tests demonstrating usage
-- `src/cpp-codegen.ts` - Current implementation (to be migrated)
+- `src/cpp/codegen.ts` - Current AST-based implementation
 - `docs/PHASE-3-CPP.md` - C++ code generation documentation

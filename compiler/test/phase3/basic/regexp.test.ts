@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CppCodegen } from '../../../src/cpp-codegen';
+import { CppCodegen } from '../../../src/cpp/codegen';
 import ts from 'typescript';
 
 describe('C++ Codegen - RegExp Support', () => {
@@ -18,7 +18,7 @@ describe('C++ Codegen - RegExp Support', () => {
     const code = `const pattern = /hello/;`;
     const cpp = compile(code);
     
-    expect(cpp).toContain('gs::RegExp(R"(hello)", "")');
+    expect(cpp).toContain('gs::RegExp(R"(hello)")');
   });
   
   it('should generate regex with flags', () => {
@@ -42,7 +42,7 @@ const result = pattern.test("hello world");
     `;
     const cpp = compile(code);
     
-    expect(cpp).toContain('gs::RegExp(R"(hello)", "")');
+    expect(cpp).toContain('gs::RegExp(R"(hello)")');
     expect(cpp).toContain('.test(');
   });
   
@@ -66,7 +66,7 @@ const result = text.replace(pattern, "GoodScript");
     `;
     const cpp = compile(code);
     
-    expect(cpp).toContain('gs::RegExp(R"(world)", "")');
+    expect(cpp).toContain('gs::RegExp(R"(world)")');
     expect(cpp).toContain('.replace(');
   });
   
@@ -78,7 +78,7 @@ const parts = text.split(pattern);
     `;
     const cpp = compile(code);
     
-    expect(cpp).toContain('gs::RegExp(R"(,)", "")');
+    expect(cpp).toContain('gs::RegExp(R"(,)")');
     expect(cpp).toContain('.split(');
   });
   
@@ -86,7 +86,7 @@ const parts = text.split(pattern);
     const code = `const emailPattern = /^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$/;`;
     const cpp = compile(code);
     
-    expect(cpp).toContain('gs::RegExp(R"(^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$)", "")');
+    expect(cpp).toContain('gs::RegExp(R"(^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$)")');
   });
   
   it('should preserve special regex characters', () => {
