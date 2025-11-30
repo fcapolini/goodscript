@@ -122,14 +122,19 @@ See `src/cpp/README.md` for usage examples.
 3. ✅ Smart pointer to array element access - Dereference smart pointer before subscript: `(*board)[i]`
 
 **Remaining Work (17 skipped tests):**
-- These are intentionally skipped tests, not failures
-- All active test suites passing (100%)
-- Phase 3 C++ codegen effectively complete! 🎉
+- 1 test: `concrete-examples-granular.test.ts` - Deprecated file (replaced by parallel tests)
+- 8 tests: `interface-shapes.test.ts` - Requires interface virtual methods & polymorphic arrays
+- 8 tests: `hash-map.test.ts` - Requires tuple literal support `[T, U]`
+- **All skipped tests represent deferred features, not bugs**
+- Phase 3 C++ codegen is production-ready! 🎉
+
+**See:** `docs/PHASE-3-COMPLETE.md` for comprehensive final summary
 
 **Next Priorities:**
-1. Investigate skipped tests (likely edge cases or TODO items)
-2. Performance optimizations (C++ should outperform Node.js)
-3. Move to Phase 4: Ecosystem and standard library
+1. Performance optimizations (reduce pointer indirection)
+2. Interface support (pure virtual functions, polymorphism)
+3. Tuple literal support
+4. Move to Phase 4: Ecosystem and standard library
 
 **Completed concrete examples (15/15 - 100%):** ⭐
   - ✅ benchmark-performance (8/8) - **Unlocked Nov 30, 2025** via parentheses preservation
