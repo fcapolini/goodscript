@@ -145,9 +145,7 @@ class IntBox extends Box<number> {
     expect(cpp).toContain('class IntBox : public Box<double> {');
   });
 
-  it.skip('should compile and run generic base class code', () => {
-    // NOTE: Property vs method access issue with Array.length
-    // items.length should be items.length() but codegen treats it as property
+  it('should compile and run generic base class code', () => {
     const source = `
 class Container<T> {
   items: T[] = [];

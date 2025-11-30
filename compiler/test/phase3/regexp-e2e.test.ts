@@ -154,11 +154,7 @@ console.log(pattern.test("HELLO"));
     ]);
   });
   
-  it.skip('should compile and run regex with global flag', () => {
-    // NOTE: Property accessor vs method call mismatch
-    // In TS: pattern.global is a property
-    // In C++: pattern.global() is a method
-    // Need to add property accessor detection in codegen
+  it('should compile and run regex with global flag', () => {
     const code = `
 const pattern = /\\d+/g;
 console.log(pattern.global);

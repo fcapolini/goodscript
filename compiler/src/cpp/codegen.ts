@@ -448,12 +448,16 @@ export class AstCodegen {
       // IMPORTANT: Infer actual C++ type for auto variables
       // For array methods like filter(), map(), the return type is the same array type
       if (cppType.toString() === 'auto' && decl.initializer) {
-        if (ts.isCallExpression(decl.initializer) && 
+        // RegExp literal
+        if (decl.initializer.kind === ts.SyntaxKind.RegularExpressionLiteral) {
+          cppType = new ast.CppType('gs::RegExp');
+        }
+        // Array methods that return the same array type
+        else if (ts.isCallExpression(decl.initializer) && 
             ts.isPropertyAccessExpression(decl.initializer.expression)) {
           const methodName = decl.initializer.expression.name.text;
           const objExpr = decl.initializer.expression.expression;
           
-          // Array methods that return the same array type
           if (['filter', 'map', 'sort', 'reverse'].includes(methodName)) {
             if (ts.isIdentifier(objExpr)) {
               const objName = cppUtils.escapeName(objExpr.text);
@@ -605,9 +609,17 @@ export class AstCodegen {
           const passByConstRef = tsUtils.shouldPassByConstRef(param.type);
           const passByMutableRef = tsUtils.shouldPassByMutableRef(param.type);
           params.push(new ast.Parameter(paramName, paramType, undefined, passByConstRef, passByMutableRef));
+          // Track parameter types for length() detection
+          this.variableTypes.set(paramName, paramType);
         }
         
         const body = member.body ? this.visitBlock(member.body) : new ast.Block([]);
+        
+        // Clear parameter types after processing method body
+        for (const param of member.parameters) {
+          const paramName = cppUtils.escapeName(param.name.getText());
+          this.variableTypes.delete(paramName);
+        }
         
         // Restore previous return type
         this.currentFunctionReturnType = previousReturnType;
@@ -2148,8 +2160,43 @@ export class AstCodegen {
     let obj = this.visitExpression(node.expression);
     
     // Special case: array.length and map.size should be method calls
-    if (this.checker) {
-      if (prop === 'length') {
+    if (prop === 'length') {
+      // Check if accessing .length on a this.field or parameter
+      if (ts.isPropertyAccessExpression(node.expression) && 
+          node.expression.expression.kind === ts.SyntaxKind.ThisKeyword) {
+        const fieldName = `this.${node.expression.name.text}`;
+        const fieldType = this.variableTypes.get(fieldName);
+        if (fieldType) {
+          const typeStr = fieldType.toString();
+          // Check for array types - arrays themselves are values, use .
+          if (typeStr.includes('gs::Array<') || typeStr.includes('std::vector<')) {
+            return cpp.call(cpp.member(obj, 'length', false), []);
+          }
+          // Check for string types - could be value or smart pointer
+          if (typeStr.includes('gs::String')) {
+            const isSmartPtrToString = typeStr.includes('std::shared_ptr<gs::String>') || 
+                                     typeStr.includes('std::unique_ptr<gs::String>') ||
+                                     typeStr.includes('std::weak_ptr<gs::String>');
+            return cpp.call(cpp.member(obj, 'length', isSmartPtrToString), []);
+          }
+        }
+      }
+      // Check for identifier (local variable or parameter)
+      if (ts.isIdentifier(node.expression)) {
+        const varName = node.expression.text;
+        const varType = this.variableTypes.get(varName);
+        if (varType) {
+          const typeStr = varType.toString();
+          if (typeStr.includes('gs::Array<') || typeStr.includes('std::vector<')) {
+            return cpp.call(cpp.member(obj, 'length'), []);
+          }
+          if (typeStr.includes('gs::String')) {
+            return cpp.call(cpp.member(obj, 'length'), []);
+          }
+        }
+      }
+      // Fall back to type checker
+      if (this.checker) {
         const objType = this.checker.getTypeAtLocation(node.expression);
         const objTypeStr = this.checker.typeToString(objType);
         // Check if this is an array type or string
@@ -2157,23 +2204,35 @@ export class AstCodegen {
             objTypeStr === 'string' || objTypeStr === 'String') {
           return cpp.call(cpp.member(obj, 'length'), []);
         }
-        // Check if accessing .length on a this.field where field is a String smart pointer
-        if (ts.isPropertyAccessExpression(node.expression) && 
-            node.expression.expression.kind === ts.SyntaxKind.ThisKeyword) {
-          const fieldName = `this.${node.expression.name.text}`;
-          const fieldType = this.variableTypes.get(fieldName);
-          if (fieldType && fieldType.toString().includes('gs::String')) {
-            // Field is shared_ptr<gs::String>, use -> for member access
-            return cpp.call(cpp.member(obj, 'length', true), []);
-          }
-        }
       }
-      if (prop === 'size') {
+    }
+    if (prop === 'size') {
+      if (this.checker) {
         const objType = this.checker.getTypeAtLocation(node.expression);
         const objTypeStr = this.checker.typeToString(objType);
         // Check if this is a Map or Set type
         if (objTypeStr.startsWith('Map<') || objTypeStr.startsWith('Set<')) {
           return cpp.call(cpp.member(obj, 'size'), []);
+        }
+      }
+    }
+    
+    // Special case: RegExp properties (global, ignoreCase, multiline) are methods in C++
+    if (prop === 'global' || prop === 'ignoreCase' || prop === 'multiline') {
+      // Check if it's a RegExp type
+      if (ts.isIdentifier(node.expression)) {
+        const varName = node.expression.text;
+        const varType = this.variableTypes.get(varName);
+        if (varType && varType.toString().includes('gs::RegExp')) {
+          return cpp.call(cpp.member(obj, prop), []);
+        }
+      }
+      // Check with type checker as fallback
+      if (this.checker) {
+        const objType = this.checker.getTypeAtLocation(node.expression);
+        const objTypeStr = this.checker.typeToString(objType);
+        if (objTypeStr === 'RegExp' || objTypeStr.includes('RegExp')) {
+          return cpp.call(cpp.member(obj, prop), []);
         }
       }
     }
