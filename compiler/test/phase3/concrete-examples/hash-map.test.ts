@@ -12,11 +12,12 @@ import {
 
 const EXAMPLE_NAME = "hash-map";
 
-// TODO: Multiple codegen issues to fix:
-// 1. Tuple construction: gs::Array<double>{key, value} - needs tuple literal support
-// 2. Tuple subscript: entry[0], entry[1] - gs::Tuple needs operator[]
-// 3. Mixed-type array literals: [string, number] needs proper tuple type inference
-describe.skip(`Concrete Example: ${EXAMPLE_NAME}`, () => {
+// Tuple support: Implemented!
+// - Tuple types: [string, number] → std::pair<gs::String, double>
+// - Tuple literals: [key, value] → std::make_pair(key, value)
+// - Tuple element access: entry[0] → entry.first, entry[1] → entry.second
+// - Tuple destructuring: for (const [key, value] of map) → for (const auto& [key, value] : map)
+describe(`Concrete Example: ${EXAMPLE_NAME}`, () => {
   let tmpDir: string;
 
   beforeEach(() => {

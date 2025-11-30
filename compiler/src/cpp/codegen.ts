@@ -20,6 +20,7 @@ export class AstCodegen {
   private smartPointerNullChecks = new Set<string>(); // Track smart pointer variables checked against nullptr
   private variableTypes = new Map<string, ast.CppType>(); // Track variable types for smart pointer detection
   private pointerVariables = new Set<string>(); // Track variables that are pointers (from Map.get(), etc.)
+  private structuredBindingVariables = new Set<string>(); // Track variables from tuple destructuring (for-of with [key, value])
   private templateParameters = new Set<string>(); // Track template parameter names (T, K, V, etc.)
   private ownershipChecker: OwnershipAwareTypeChecker;
   
@@ -818,14 +819,36 @@ export class AstCodegen {
   
   private visitForOfStatement(node: ts.ForOfStatement): ast.RangeForStmt {
     // for (const num of numbers) → for (const auto& num : numbers)
+    // for (const [key, value] of map) → for (const auto& [key, value] : map)
     
     let varName = 'item';
     let isConst = false;
     
     if (ts.isVariableDeclarationList(node.initializer)) {
       const decl = node.initializer.declarations[0];
-      varName = cppUtils.escapeName(decl.name.getText());
       isConst = (node.initializer.flags & ts.NodeFlags.Const) !== 0;
+      
+      // Check for array binding pattern (destructuring)
+      if (ts.isArrayBindingPattern(decl.name)) {
+        // for (const [key, value] of map)
+        // Extract element names
+        const elements = decl.name.elements
+          .filter(e => !ts.isOmittedExpression(e))
+          .map(e => {
+            if (ts.isBindingElement(e) && ts.isIdentifier(e.name)) {
+              const name = cppUtils.escapeName(e.name.text);
+              // Track structured binding variables - they are references, not pointers
+              this.structuredBindingVariables.add(name);
+              return name;
+            }
+            return 'item';
+          });
+        
+        // Create structured binding: [key, value]
+        varName = `[${elements.join(', ')}]`;
+      } else {
+        varName = cppUtils.escapeName(decl.name.getText());
+      }
     }
     
     const iterable = this.visitExpression(node.expression);
@@ -1006,6 +1029,38 @@ export class AstCodegen {
       let obj = this.visitExpression(node.expression);
       let index = this.visitExpression(node.argumentExpression!);
       
+      // Check if object expression type is a tuple and index is numeric
+      if (this.checker && ts.isNumericLiteral(node.argumentExpression!)) {
+        const objType = this.checker.getTypeAtLocation(node.expression);
+        const objTypeStr = this.checker.typeToString(objType);
+        
+        // Detect tuple type: [string, number] or [T, U, V, ...]
+        if (objTypeStr.startsWith('[') && objTypeStr.endsWith(']') && !objTypeStr.endsWith('[]')) {
+          const indexValue = parseInt(node.argumentExpression!.getText(), 10);
+          
+          // Check if obj is an array subscript result (which returns a pointer)
+          // The array subscript handler already dereferenced it (*arr[i])
+          // So we just need to parenthesize it, not add another dereference
+          const isArraySubscript = ts.isElementAccessExpression(node.expression);
+          if (isArraySubscript) {
+            // obj is already (*arr[i]), just parenthesize for member access
+            obj = cpp.paren(obj);
+          }
+          
+          // For 2-element tuples (std::pair), use .first and .second
+          if (objTypeStr.split(',').length === 2) {
+            if (indexValue === 0) {
+              return cpp.member(obj, 'first');
+            } else if (indexValue === 1) {
+              return cpp.member(obj, 'second');
+            }
+          } else {
+            // For 3+ element tuples, use std::get<N>()
+            return cpp.call(cpp.id(`std::get<${indexValue}>`), [obj]);
+          }
+        }
+      }
+      
       // Check if the object is a smart pointer to an array
       // e.g., shared_ptr<Array<T>> or unique_ptr<Array<T>>
       // NOTE: Check actual C++ type, not just TypeScript ownership annotation
@@ -1093,6 +1148,26 @@ export class AstCodegen {
     if (ts.isArrayLiteralExpression(node)) {
       const elements = node.elements.map(el => this.visitExpression(el));
       
+      // Check if this is a tuple literal based on context
+      if (this.checker) {
+        const type = this.checker.getTypeAtLocation(node);
+        const typeStr = this.checker.typeToString(type);
+        
+        // Detect tuple type: [string, number] or [T, U, V, ...]
+        // TypeChecker represents tuples as "[string, number]" in typeToString
+        if (typeStr.startsWith('[') && typeStr.endsWith(']') && !typeStr.endsWith('[]')) {
+          // It's a tuple!
+          if (elements.length === 2) {
+            // Use std::make_pair for 2-element tuples
+            return cpp.call(cpp.id('std::make_pair'), elements);
+          } else {
+            // Use std::make_tuple for other sizes
+            return cpp.call(cpp.id('std::make_tuple'), elements);
+          }
+        }
+      }
+      
+      // Not a tuple - handle as regular array
       // Try to determine element type from context using TypeChecker
       let elementType: string | undefined;
       if (this.checker) {
@@ -1309,6 +1384,34 @@ export class AstCodegen {
     let left = this.visitExpression(node.left);
     let right = this.visitExpression(node.right);
     
+    // Dereference pointer variables when used in arithmetic/comparison (except null checks)
+    // This handles Map.get() results: `current + 1` → `*current + 1`
+    // BUT: Don't dereference structured binding variables (they're already references)
+    // AND: Don't dereference if already unwrapped (unwrappedOptionals logic already dereferenced)
+    const isArithmeticOp = ['+', '-', '*', '/', '%', '<', '>', '<=', '>='].includes(op);
+    if (isArithmeticOp) {
+      // Dereference left if it's a pointer variable (but not already dereferenced or structured binding)
+      if (ts.isIdentifier(node.left)) {
+        const varName = cppUtils.escapeName(node.left.text);
+        const alreadyDereferenced = this.unwrappedOptionals.has(varName) && this.pointerVariables.has(varName);
+        if (this.pointerVariables.has(varName) && 
+            !this.structuredBindingVariables.has(varName) &&
+            !alreadyDereferenced) {
+          left = cpp.unary('*', left);
+        }
+      }
+      // Dereference right if it's a pointer variable (but not already dereferenced or structured binding)
+      if (ts.isIdentifier(node.right)) {
+        const varName = cppUtils.escapeName(node.right.text);
+        const alreadyDereferenced = this.unwrappedOptionals.has(varName) && this.pointerVariables.has(varName);
+        if (this.pointerVariables.has(varName) && 
+            !this.structuredBindingVariables.has(varName) &&
+            !alreadyDereferenced) {
+          right = cpp.unary('*', right);
+        }
+      }
+    }
+    
     // If comparing a pointer/shared_ptr with undefined/null, replace with nullptr
     if ((isLeftMapGet || isLeftPointer || isLeftSharedPtr) && (isRightNull || isRightUndefined)) {
       right = cpp.id('nullptr');
@@ -1488,6 +1591,19 @@ export class AstCodegen {
         // Check if it's a template parameter (don't add gs:: prefix)
         if (this.templateParameters.has(tsType)) {
           return tsType;
+        }
+        
+        // Handle tuple types: [string, number] → std::pair<gs::String, double>
+        // TypeChecker represents tuples as "[T, U, V, ...]" in typeToString
+        if (tsType.startsWith('[') && tsType.endsWith(']') && !tsType.endsWith('[]')) {
+          const inner = tsType.slice(1, -1).trim();
+          const types = inner.split(',').map(t => this.mapTypeScriptTypeToCpp(t.trim()));
+          
+          if (types.length === 2) {
+            return `std::pair<${types[0]}, ${types[1]}>`;
+          } else {
+            return `std::tuple<${types.join(', ')}>`;
+          }
         }
         
         // Handle ownership types: own<T>, share<T>, use<T>
@@ -1881,6 +1997,24 @@ export class AstCodegen {
       
       // Multiple non-null types - not supported, use auto
       return new ast.CppType('auto');
+    }
+    
+    // Tuple types: [string, number] → std::pair<gs::String, double>
+    // Or [T, U, V] → std::tuple<T, U, V> for 3+ elements
+    if (ts.isTupleTypeNode(typeNode)) {
+      const elementTypes = typeNode.elements.map(el => {
+        // Named tuple elements have type member
+        const elemType = (el as any).type || el;
+        return this.mapType(elemType).toString();
+      });
+      
+      if (elementTypes.length === 2) {
+        // Use std::pair for 2-element tuples
+        return new ast.CppType(`std::pair<${elementTypes[0]}, ${elementTypes[1]}>`);
+      } else {
+        // Use std::tuple for other sizes
+        return new ast.CppType(`std::tuple<${elementTypes.join(', ')}>`);
+      }
     }
     
     // Array types: number[] → gs::Array<double>
