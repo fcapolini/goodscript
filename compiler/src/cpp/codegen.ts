@@ -971,8 +971,18 @@ export class AstCodegen {
       
       // Check if the object is a smart pointer to an array
       // e.g., shared_ptr<Array<T>> or unique_ptr<Array<T>>
-      const objOwnershipType = this.ownershipChecker.getTypeOfExpression(node.expression);
-      const isSmartPtrToArray = objOwnershipType?.ownership && objOwnershipType.baseType === 'Array';
+      // NOTE: Check actual C++ type, not just TypeScript ownership annotation
+      // because Array types are no longer wrapped in smart pointers by default
+      let isSmartPtrToArray = false;
+      if (ts.isIdentifier(node.expression)) {
+        const varName = cppUtils.escapeName(node.expression.text);
+        const varType = this.variableTypes.get(varName);
+        if (varType) {
+          const typeStr = varType.toString();
+          isSmartPtrToArray = (typeStr.startsWith('std::shared_ptr<gs::Array<') || 
+                              typeStr.startsWith('std::unique_ptr<gs::Array<'));
+        }
+      }
       
       // If obj is a smart pointer to an array, we need to dereference it first
       // board[i] where board is shared_ptr<Array<T>> becomes (*board)[i]
@@ -1188,57 +1198,34 @@ export class AstCodegen {
     const isRightPointer = ts.isIdentifier(node.right) && this.pointerVariables.has(cppUtils.escapeName(node.right.text));
     
     // Check if either side is a shared_ptr type (share<T>)
+    // NOTE: Check the actual C++ type, not just TypeScript ownership
+    // For example, Array.find() returns optional<T>, not T directly
     let isLeftSharedPtr = false;
     let isRightSharedPtr = false;
     if (this.checker) {
-      // Check if left side is share<T> type or a user-defined class (which becomes shared_ptr)
-      if (!isLeftNull && !isLeftUndefined) {
-        const leftType = this.checker.getTypeAtLocation(node.left);
-        const leftTypeStr = this.checker.typeToString(leftType);
-        
-        // For union types like "JsonValue | null", check if the non-null type is a class
-        let symbol = leftType.getSymbol();
-        if (!symbol && leftType.isUnion()) {
-          // Get the first non-null/undefined type from the union
-          const nonNullTypes = leftType.types.filter(t => {
-            const flags = t.flags;
-            return !(flags & ts.TypeFlags.Null) && !(flags & ts.TypeFlags.Undefined);
-          });
-          if (nonNullTypes.length > 0) {
-            symbol = nonNullTypes[0].getSymbol();
-          }
+      // Check if left side has a C++ smart pointer type
+      if (!isLeftNull && !isLeftUndefined && ts.isIdentifier(node.left)) {
+        const varName = cppUtils.escapeName(node.left.text);
+        const varType = this.variableTypes.get(varName);
+        if (varType) {
+          const typeStr = varType.toString();
+          // Check if the DIRECT type is a smart pointer (not optional<smart_ptr>)
+          isLeftSharedPtr = typeStr.startsWith('std::shared_ptr<') || 
+                           typeStr.startsWith('std::unique_ptr<') ||
+                           typeStr.startsWith('std::weak_ptr<');
         }
-        
-        const isUserClass = symbol && (symbol.flags & ts.SymbolFlags.Class);
-        
-        isLeftSharedPtr = leftTypeStr.includes('share<') || 
-                          !!isUserClass ||  // User-defined classes → shared_ptr in C++
-                          (ts.isIdentifier(node.left) && this.variableTypes.has(cppUtils.escapeName(node.left.text)) &&
-                           this.variableTypes.get(cppUtils.escapeName(node.left.text))!.toString().includes('std::shared_ptr'));
       }
-      // Check if right side is share<T> type or a user-defined class
-      if (!isRightNull && !isRightUndefined) {
-        const rightType = this.checker.getTypeAtLocation(node.right);
-        const rightTypeStr = this.checker.typeToString(rightType);
-        
-        // For union types, check if the non-null type is a class
-        let symbol = rightType.getSymbol();
-        if (!symbol && rightType.isUnion()) {
-          const nonNullTypes = rightType.types.filter(t => {
-            const flags = t.flags;
-            return !(flags & ts.TypeFlags.Null) && !(flags & ts.TypeFlags.Undefined);
-          });
-          if (nonNullTypes.length > 0) {
-            symbol = nonNullTypes[0].getSymbol();
-          }
+      
+      // Check if right side has a C++ smart pointer type
+      if (!isRightNull && !isRightUndefined && ts.isIdentifier(node.right)) {
+        const varName = cppUtils.escapeName(node.right.text);
+        const varType = this.variableTypes.get(varName);
+        if (varType) {
+          const typeStr = varType.toString();
+          isRightSharedPtr = typeStr.startsWith('std::shared_ptr<') || 
+                            typeStr.startsWith('std::unique_ptr<') ||
+                            typeStr.startsWith('std::weak_ptr<');
         }
-        
-        const isUserClass = symbol && (symbol.flags & ts.SymbolFlags.Class);
-        
-        isRightSharedPtr = rightTypeStr.includes('share<') ||
-                           !!isUserClass ||  // User-defined classes → shared_ptr in C++
-                           (ts.isIdentifier(node.right) && this.variableTypes.has(cppUtils.escapeName(node.right.text)) &&
-                            this.variableTypes.get(cppUtils.escapeName(node.right.text))!.toString().includes('std::shared_ptr'));
       }
     }
     
