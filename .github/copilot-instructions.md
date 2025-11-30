@@ -29,11 +29,13 @@ GoodScript is a **TypeScript specialization** for safe systems programming with 
 - Generates idiomatic C++ with proper RAII, exception handling
 - All code wrapped in `gs` namespace to avoid keyword conflicts
 - Runtime library with `gs::String`, `gs::Array<T>`, `gs::Map<K,V>`, `gs::Set<T>`, `gs::RegExp`
-- **Status**: 939/960 tests passing (68/68 basic, 28/28 runtime, 123/123 concrete examples, 71 RegExp tests)
+- **Status**: 941/960 tests passing (68/68 basic, 28/28 runtime, 123/123 concrete examples, 71 RegExp tests)
 - **Key files**: `compiler/src/cpp/codegen.ts` (AST-based implementation), `runtime/*.hpp`
 - **Documentation**: `docs/COMPILATION-TARGET.md`, `docs/PHASE-3-CPP.md`
-- **Recent changes**: Migrated from legacy string-based to AST-based codegen (Dec 1, 2025)
-- **Skipped features**: Array auto-resize (5 tests), LiteralObject (10 tests), property accessors (6 tests)
+- **Recent changes**: 
+  - Migrated from legacy string-based to AST-based codegen (Dec 1, 2025)
+  - Fixed property accessor detection for array.length and RegExp properties (Dec 1, 2025)
+- **Skipped features**: Array auto-resize (5 tests), LiteralObject (10 tests), property accessors (4 tests)
 
 ### Phase 4: Ecosystem (📋 Planned)
 - Standard library APIs for Node.js/Deno compatibility
@@ -507,7 +509,7 @@ When implementing new features or fixing bugs:
 
 - **Phase 1**: ✅ 100% complete (244/244 tests)
 - **Phase 2**: ✅ 100% complete (425/425 tests)  
-- **Phase 3**: ✅ 98% complete (939/960 tests passing)
+- **Phase 3**: ✅ 98% complete (941/960 tests passing)
   - ✅ AST traversal and code emission
   - ✅ Type mappings (primitives, ownership types, collections)
   - ✅ Statement generation (variables, functions, classes, control flow)
@@ -521,15 +523,17 @@ When implementing new features or fixing bugs:
   - ✅ Legacy codegen removed, AST-based codegen is sole implementation
   - ✅ Generic base classes with template argument mapping
   - ✅ Class inheritance with proper keyword escaping
+  - ✅ Property accessor detection (array.length(), RegExp.global())
+  - ✅ Parameter type tracking in methods
   - ⏳ Array auto-resize (5 tests skipped)
   - ⏳ LiteralObject feature (10 tests skipped)
-  - ⏳ Property accessor detection (6 tests skipped)
+  - ⏳ Optional field access (4 tests skipped)
 - **Phase 4**: 📋 Planned
 
 **Next priorities**:
 1. Implement array auto-resize feature
 2. Add LiteralObject support for JSON.stringify
-3. Add property vs method accessor detection
+3. Add optional field access (field?: type)
 4. Add async/await coroutine support
 
 ---
