@@ -115,7 +115,30 @@ export class AstCodegen {
         cppType = this.mapType(decl.type);
       } else if (decl.initializer && ts.isNewExpression(decl.initializer)) {
         // Infer type from new expression - all class instances are smart pointers
-        const className = decl.initializer.expression.getText();
+        // Use the same logic as visitNewExpression to get className with template parameters
+        let className = cppUtils.escapeName(decl.initializer.expression.getText());
+        
+        // Try to extract generic type arguments
+        if (this.checker) {
+          const type = this.checker.getTypeAtLocation(decl.initializer);
+          
+          // Try to extract type arguments for generic types
+          if (type.aliasSymbol || (type as any).target) {
+            const typeRef = type as ts.TypeReference;
+            const typeArgs = this.checker.getTypeArguments(typeRef);
+            
+            if (typeArgs && typeArgs.length > 0) {
+              // Map TypeScript type arguments to C++ types
+              const cppTypeArgs = typeArgs.map(arg => {
+                const argStr = this.checker!.typeToString(arg);
+                return this.mapTypeScriptTypeToCpp(argStr);
+              });
+              
+              className = `${className}<${cppTypeArgs.join(', ')}>`;
+            }
+          }
+        }
+        
         const ownershipType = this.getOwnershipTypeForNew(decl.initializer);
         if (ownershipType === 'unique') {
           cppType = new ast.CppType(`std::unique_ptr<gs::${className}>`);
@@ -886,8 +909,19 @@ export class AstCodegen {
     }
     
     if (ts.isElementAccessExpression(node)) {
-      const obj = this.visitExpression(node.expression);
+      let obj = this.visitExpression(node.expression);
       let index = this.visitExpression(node.argumentExpression!);
+      
+      // Check if the object is a smart pointer to an array
+      // e.g., shared_ptr<Array<T>> or unique_ptr<Array<T>>
+      const objOwnershipType = this.ownershipChecker.getTypeOfExpression(node.expression);
+      const isSmartPtrToArray = objOwnershipType?.ownership && objOwnershipType.baseType === 'Array';
+      
+      // If obj is a smart pointer to an array, we need to dereference it first
+      // board[i] where board is shared_ptr<Array<T>> becomes (*board)[i]
+      if (isSmartPtrToArray) {
+        obj = cpp.paren(cpp.unary('*', obj));
+      }
       
       // Cast index to int if it's not already
       // TypeScript number maps to C++ double, but array indices need int
@@ -1416,24 +1450,23 @@ export class AstCodegen {
       // Special handling for .push() on Array<share<T>>
       // If pushing to an array of shared_ptrs, wrap the argument
       if (methodName === 'push' && index === 0 && objNode && this.checker) {
-        const objType = this.checker.getTypeAtLocation(objNode);
-        const objTypeStr = this.checker.typeToString(objType);
+        // Use OwnershipAwareTypeChecker to check if array has smart pointer elements
+        const arrayHasSharedElements = this.ownershipChecker.hasSmartPointerElements(objNode);
         
-        // Check if array element type is share<T>
-        // Pattern: "share<TypeName>[]" or "Array<share<TypeName>>"
-        const shareArrayMatch = objTypeStr.match(/(?:Array<)?share<([^>]+)>/);
-        if (shareArrayMatch) {
-          const elementType = shareArrayMatch[1];
+        if (arrayHasSharedElements) {
+          // Get the element type from the array type
+          const arrayType = this.ownershipChecker.getTypeOfExpression(objNode);
+          const elementType = arrayType?.elementType?.baseType;
           
-          // Check if the argument itself is already a share<T> type (variable or field)
-          // If so, don't wrap it; otherwise, wrap it
-          const argType = this.checker.getTypeAtLocation(arg);
-          const argTypeStr = this.checker.typeToString(argType);
-          const isAlreadyShared = argTypeStr.includes('share<');
-          
-          // Wrap in std::make_shared unless it's already a share<T>
-          if (!isAlreadyShared) {
-            argExpr = cpp.call(cpp.id(`std::make_shared<gs::${elementType}>`), [argExpr]);
+          if (elementType) {
+            // Check if the argument is already a smart pointer using OwnershipAwareTypeChecker
+            const argOwnership = this.ownershipChecker.getTypeOfExpression(arg);
+            const isAlreadyShared = argOwnership?.ownership === 'share';
+            
+            // Wrap in std::make_shared unless it's already a share<T>
+            if (!isAlreadyShared) {
+              argExpr = cpp.call(cpp.id(`std::make_shared<gs::${elementType}>`), [argExpr]);
+            }
           }
         }
       }
