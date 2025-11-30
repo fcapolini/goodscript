@@ -711,7 +711,12 @@ export class AstCodegen {
       
       // Check if this is a smart pointer null check (comparing with nullptr, not std::nullopt)
       // This happens when the variable type is a user-defined class or share<T>
-      if (condition instanceof ast.BinaryExpr && 
+      // BUT only if it's actually a smart pointer type, not a raw pointer
+      const varType = this.variableTypes.get(unwrappedVar);
+      const isActuallySmartPointer = varType && cppUtils.isSmartPointerType(varType);
+      
+      if (isActuallySmartPointer &&
+          condition instanceof ast.BinaryExpr && 
           (condition.right instanceof ast.Identifier && condition.right.name === 'nullptr' ||
            condition.left instanceof ast.Identifier && condition.left.name === 'nullptr')) {
         this.smartPointerNullChecks.add(unwrappedVar);
@@ -826,12 +831,20 @@ export class AstCodegen {
         // Try to determine the exception type from the catch clause type annotation
         if (node.catchClause.variableDeclaration.type) {
           const typeText = node.catchClause.variableDeclaration.type.getText();
-          catchType = new ast.CppType(`const gs::${typeText}`, [], false, true);
+          // User-defined exception types are thrown as shared_ptr, so catch as shared_ptr
+          const cppType = `std::shared_ptr<gs::${typeText}>`;
+          catchType = new ast.CppType(cppType);
+          // Track this as a smart pointer variable so we use -> for member access
+          this.variableTypes.set(catchVar, new ast.CppType(cppType));
         } else {
           // If no type annotation, scan catch block for instanceof checks
           const instanceofType = tsUtils.findInstanceofTypeInCatch(node.catchClause.block, catchVar);
           if (instanceofType) {
-            catchType = new ast.CppType(`const gs::${instanceofType}`, [], false, true);
+            // User-defined exception types are thrown as shared_ptr, so catch as shared_ptr
+            const cppType = `std::shared_ptr<gs::${instanceofType}>`;
+            catchType = new ast.CppType(cppType);
+            // Track this as a smart pointer variable so we use -> for member access
+            this.variableTypes.set(catchVar, new ast.CppType(cppType));
           }
         }
       }
@@ -1149,14 +1162,13 @@ export class AstCodegen {
       const obj = this.visitExpression(node.left);
       const typeName = node.right.getText();
       
-      // For exception objects in catch blocks, use dynamic_cast
-      // e instanceof Type → dynamic_cast<const gs::Type*>(&e) != nullptr
-      // Note: const is needed because catch variables are const references
+      // For exception objects caught as shared_ptr, use dynamic_pointer_cast
+      // e instanceof Type → std::dynamic_pointer_cast<gs::Type>(e) != nullptr
       return cpp.binary(
         cpp.call(
-          cpp.id('dynamic_cast'),
-          [cpp.unary('&', obj)],
-          [new ast.CppType(`const gs::${typeName}`, [], false, false, true)] // const pointer type
+          cpp.id('std::dynamic_pointer_cast'),
+          [obj],
+          [new ast.CppType(`gs::${typeName}`)] // Type without pointer decoration
         ),
         '!=',
         cpp.id('nullptr')
