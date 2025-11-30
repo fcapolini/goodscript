@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
 #include <optional>
@@ -13,29 +14,139 @@ template<typename T> class Array;
 /**
  * GoodScript Map class - TypeScript-compatible map wrapper
  * 
- * Wraps std::unordered_map with a TypeScript/JavaScript Map-like API.
+ * Preserves insertion order like JavaScript Map.
+ * Uses a vector to track insertion order and an unordered_map for O(1) lookup.
  * Designed for composition, not inheritance from std::unordered_map.
  */
 template<typename K, typename V>
 class Map {
 private:
-  std::unordered_map<K, V> impl_;
+  std::vector<std::pair<K, V>> items_;  // Insertion-ordered storage
+  std::unordered_map<K, size_t> index_; // Key -> index in items_ for O(1) lookup
   
   // Allow Object class to access impl_ for keys/values/entries
   friend class Object;
 
 public:
+  // Custom iterator that skips tombstones
+  class iterator {
+  private:
+    typename std::vector<std::pair<K, V>>::iterator current_;
+    typename std::vector<std::pair<K, V>>::iterator end_;
+    const std::unordered_map<K, size_t>* index_;
+    
+    void skip_tombstones() {
+      while (current_ != end_ && index_->find(current_->first) == index_->end()) {
+        ++current_;
+      }
+    }
+    
+  public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = std::pair<K, V>;
+    using difference_type = std::ptrdiff_t;
+    using pointer = std::pair<K, V>*;
+    using reference = std::pair<K, V>&;
+    
+    iterator(typename std::vector<std::pair<K, V>>::iterator current,
+             typename std::vector<std::pair<K, V>>::iterator end,
+             const std::unordered_map<K, size_t>* index)
+      : current_(current), end_(end), index_(index) {
+      skip_tombstones();
+    }
+    
+    reference operator*() { return *current_; }
+    pointer operator->() { return &(*current_); }
+    
+    iterator& operator++() {
+      ++current_;
+      skip_tombstones();
+      return *this;
+    }
+    
+    iterator operator++(int) {
+      iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+    
+    bool operator==(const iterator& other) const {
+      return current_ == other.current_;
+    }
+    
+    bool operator!=(const iterator& other) const {
+      return current_ != other.current_;
+    }
+  };
+  
+  class const_iterator {
+  private:
+    typename std::vector<std::pair<K, V>>::const_iterator current_;
+    typename std::vector<std::pair<K, V>>::const_iterator end_;
+    const std::unordered_map<K, size_t>* index_;
+    
+    void skip_tombstones() {
+      while (current_ != end_ && index_->find(current_->first) == index_->end()) {
+        ++current_;
+      }
+    }
+    
+  public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = std::pair<K, V>;
+    using difference_type = std::ptrdiff_t;
+    using pointer = const std::pair<K, V>*;
+    using reference = const std::pair<K, V>&;
+    
+    const_iterator(typename std::vector<std::pair<K, V>>::const_iterator current,
+                   typename std::vector<std::pair<K, V>>::const_iterator end,
+                   const std::unordered_map<K, size_t>* index)
+      : current_(current), end_(end), index_(index) {
+      skip_tombstones();
+    }
+    
+    reference operator*() const { return *current_; }
+    pointer operator->() const { return &(*current_); }
+    
+    const_iterator& operator++() {
+      ++current_;
+      skip_tombstones();
+      return *this;
+    }
+    
+    const_iterator operator++(int) {
+      const_iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+    
+    bool operator==(const const_iterator& other) const {
+      return current_ == other.current_;
+    }
+    
+    bool operator!=(const const_iterator& other) const {
+      return current_ != other.current_;
+    }
+  };
+
   // Type aliases for STL compatibility
   using key_type = K;
   using mapped_type = V;
-  using value_type = typename std::unordered_map<K, V>::value_type;
-  using iterator = typename std::unordered_map<K, V>::iterator;
-  using const_iterator = typename std::unordered_map<K, V>::const_iterator;
+  using value_type = std::pair<K, V>;
+  // iterator and const_iterator are defined as classes above
   
   // Constructors
   Map() = default;
-  Map(std::initializer_list<value_type> init) : impl_(init) {}
-  Map(std::unordered_map<K, V> map) : impl_(std::move(map)) {}
+  Map(std::initializer_list<value_type> init) {
+    for (const auto& [k, v] : init) {
+      set(k, v);
+    }
+  }
+  Map(std::unordered_map<K, V> map) {
+    for (auto& [k, v] : map) {
+      set(std::move(k), std::move(v));
+    }
+  }
   Map(const Map& other) = default;
   Map(Map&& other) noexcept = default;
   
@@ -50,7 +161,8 @@ public:
    * Helps avoid rehashing during bulk inserts
    */
   void reserve(int capacity) {
-    impl_.reserve(static_cast<size_t>(capacity));
+    items_.reserve(static_cast<size_t>(capacity));
+    index_.reserve(static_cast<size_t>(capacity));
   }
   
   /**
@@ -58,31 +170,60 @@ public:
    * Equivalent to TypeScript: map.size
    */
   int size() const {
-    return static_cast<int>(impl_.size());
+    return static_cast<int>(items_.size());
   }
   
   /**
    * Sets the value for the key in the map
    * Equivalent to TypeScript: map.set(key, value)
    * Returns the map itself for chaining
+   * Preserves insertion order - updates don't change order
    */
   Map<K, V>& set(const K& key, const V& value) {
-    impl_[key] = value;
+    auto it = index_.find(key);
+    if (it != index_.end()) {
+      // Key exists - update value in place
+      items_[it->second].second = value;
+    } else {
+      // New key - append to items and record index
+      index_[key] = items_.size();
+      items_.emplace_back(key, value);
+    }
     return *this;
   }
   
   Map<K, V>& set(const K& key, V&& value) {
-    impl_[key] = std::move(value);
+    auto it = index_.find(key);
+    if (it != index_.end()) {
+      items_[it->second].second = std::move(value);
+    } else {
+      index_[key] = items_.size();
+      items_.emplace_back(key, std::move(value));
+    }
     return *this;
   }
   
   Map<K, V>& set(K&& key, const V& value) {
-    impl_[std::move(key)] = value;
+    auto it = index_.find(key);
+    if (it != index_.end()) {
+      items_[it->second].second = value;
+    } else {
+      auto key_copy = key;
+      index_[std::move(key)] = items_.size();
+      items_.emplace_back(std::move(key_copy), value);
+    }
     return *this;
   }
   
   Map<K, V>& set(K&& key, V&& value) {
-    impl_[std::move(key)] = std::move(value);
+    auto it = index_.find(key);
+    if (it != index_.end()) {
+      items_[it->second].second = std::move(value);
+    } else {
+      auto key_copy = key;
+      index_[std::move(key)] = items_.size();
+      items_.emplace_back(std::move(key_copy), std::move(value));
+    }
     return *this;
   }
   
@@ -92,17 +233,17 @@ public:
    * Returns pointer to allow null return (matches JS undefined semantics)
    */
   V* get(const K& key) {
-    auto it = impl_.find(key);
-    if (it != impl_.end()) {
-      return &it->second;
+    auto it = index_.find(key);
+    if (it != index_.end()) {
+      return &items_[it->second].second;
     }
     return nullptr;
   }
   
   const V* get(const K& key) const {
-    auto it = impl_.find(key);
-    if (it != impl_.end()) {
-      return &it->second;
+    auto it = index_.find(key);
+    if (it != index_.end()) {
+      return &items_[it->second].second;
     }
     return nullptr;
   }
@@ -113,17 +254,17 @@ public:
    * Matches Array operator[] semantics (returns pointer)
    */
   V* operator[](const K& key) {
-    auto it = impl_.find(key);
-    if (it != impl_.end()) {
-      return &it->second;
+    auto it = index_.find(key);
+    if (it != index_.end()) {
+      return &items_[it->second].second;
     }
     return nullptr;
   }
   
   const V* operator[](const K& key) const {
-    auto it = impl_.find(key);
-    if (it != impl_.end()) {
-      return &it->second;
+    auto it = index_.find(key);
+    if (it != index_.end()) {
+      return &items_[it->second].second;
     }
     return nullptr;
   }
@@ -133,16 +274,29 @@ public:
    * Equivalent to TypeScript: map.has(key)
    */
   bool has(const K& key) const {
-    return impl_.find(key) != impl_.end();
+    return index_.find(key) != index_.end();
   }
   
   /**
    * Removes the specified element from the map
    * Equivalent to TypeScript: map.delete(key)
    * Returns true if the element was removed, false otherwise
+   * Maintains insertion order by using tombstone (null key)
    */
   bool delete_(const K& key) {
-    return impl_.erase(key) > 0;
+    auto it = index_.find(key);
+    if (it != index_.end()) {
+      size_t idx = it->second;
+      index_.erase(it);
+      // Mark as deleted by clearing the pair (tombstone)
+      items_[idx] = {};
+      // Periodically compact if too many tombstones
+      if (index_.size() < items_.size() / 2 && items_.size() > 100) {
+        compact();
+      }
+      return true;
+    }
+    return false;
   }
   
   // Note: 'delete' is a C++ keyword, so we use 'delete_' instead
@@ -153,23 +307,50 @@ public:
    * Equivalent to TypeScript: map.clear()
    */
   void clear() {
-    impl_.clear();
+    items_.clear();
+    index_.clear();
   }
+
+private:
+  /**
+   * Compact the items_ vector by removing tombstones
+   * and updating the index_ map
+   */
+  void compact() {
+    std::vector<std::pair<K, V>> new_items;
+    new_items.reserve(index_.size());
+    std::unordered_map<K, size_t> new_index;
+    new_index.reserve(index_.size());
+    
+    for (size_t i = 0; i < items_.size(); ++i) {
+      // Check if this slot is occupied (not a tombstone)
+      if (index_.find(items_[i].first) != index_.end()) {
+        new_index[items_[i].first] = new_items.size();
+        new_items.push_back(std::move(items_[i]));
+      }
+    }
+    
+    items_ = std::move(new_items);
+    index_ = std::move(new_index);
+  }
+
+public:
   
   /**
    * Calls a callback function for each key-value pair in the map
    * Equivalent to TypeScript: map.forEach(callback)
+   * Iterates in insertion order
    */
   template<typename Fn>
   void forEach(Fn&& callback) {
-    for (auto& [key, value] : impl_) {
+    for (auto& [key, value] : *this) {
       callback(value, key);
     }
   }
   
   template<typename Fn>
   void forEach(Fn&& callback) const {
-    for (const auto& [key, value] : impl_) {
+    for (const auto& [key, value] : *this) {
       callback(value, key);
     }
   }
@@ -177,10 +358,11 @@ public:
   /**
    * Returns an array of all keys in the map
    * Equivalent to TypeScript: Array.from(map.keys())
+   * Returns keys in insertion order
    */
   Array<K> keys() const {
     Array<K> result;
-    for (const auto& [key, value] : impl_) {
+    for (const auto& [key, value] : *this) {
       result.push(key);
     }
     return result;
@@ -189,10 +371,11 @@ public:
   /**
    * Returns an array of all values in the map
    * Equivalent to TypeScript: Array.from(map.values())
+   * Returns values in insertion order
    */
   Array<V> values() const {
     Array<V> result;
-    for (const auto& [key, value] : impl_) {
+    for (const auto& [key, value] : *this) {
       result.push(value);
     }
     return result;
@@ -201,48 +384,55 @@ public:
   /**
    * Returns an array of [key, value] pairs
    * Equivalent to TypeScript: Array.from(map.entries())
+   * Returns entries in insertion order
    */
   Array<std::pair<K, V>> entries() const {
     Array<std::pair<K, V>> result;
-    for (const auto& [key, value] : impl_) {
+    for (const auto& [key, value] : *this) {
       result.push(std::make_pair(key, value));
     }
     return result;
   }
   
-  // STL-compatible iterators
+  // STL-compatible iterators (in insertion order, automatically skip tombstones)
   
-  iterator begin() { return impl_.begin(); }
-  iterator end() { return impl_.end(); }
-  const_iterator begin() const { return impl_.begin(); }
-  const_iterator end() const { return impl_.end(); }
-  const_iterator cbegin() const { return impl_.cbegin(); }
-  const_iterator cend() const { return impl_.cend(); }
+  iterator begin() { return iterator(items_.begin(), items_.end(), &index_); }
+  iterator end() { return iterator(items_.end(), items_.end(), &index_); }
+  const_iterator begin() const { return const_iterator(items_.begin(), items_.end(), &index_); }
+  const_iterator end() const { return const_iterator(items_.end(), items_.end(), &index_); }
+  const_iterator cbegin() const { return const_iterator(items_.cbegin(), items_.cend(), &index_); }
+  const_iterator cend() const { return const_iterator(items_.cend(), items_.cend(), &index_); }
   
   // Conversion operators for C++ interop
   
   /**
-   * Explicit access to underlying std::unordered_map
+   * Build and return an unordered_map from current items
+   * Note: This loses insertion order information
    */
-  const std::unordered_map<K, V>& map() const {
-    return impl_;
-  }
-  
-  /**
-   * Get underlying std::unordered_map (mutable)
-   */
-  std::unordered_map<K, V>& map() {
-    return impl_;
+  std::unordered_map<K, V> to_unordered_map() const {
+    std::unordered_map<K, V> result;
+    for (const auto& [key, value] : *this) {
+      result[key] = value;
+    }
+    return result;
   }
   
   // Comparison operators
   
   bool operator==(const Map<K, V>& other) const {
-    return impl_ == other.impl_;
+    if (index_.size() != other.index_.size()) return false;
+    // Compare all key-value pairs (order-independent)
+    for (const auto& [key, idx] : index_) {
+      auto it = other.index_.find(key);
+      if (it == other.index_.end() || items_[idx].second != other.items_[it->second].second) {
+        return false;
+      }
+    }
+    return true;
   }
   
   bool operator!=(const Map<K, V>& other) const {
-    return impl_ != other.impl_;
+    return !(*this == other);
   }
 };
 

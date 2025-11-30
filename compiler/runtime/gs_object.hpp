@@ -57,7 +57,7 @@ public:
   template<typename K, typename V>
   static Array<K> keys(const Map<K, V>& map) {
     Array<K> result;
-    for (const auto& pair : map.impl_) {
+    for (const auto& pair : map) {
       result.push(pair.first);
     }
     return result;
@@ -69,7 +69,7 @@ public:
   template<typename K, typename V>
   static Array<V> values(const Map<K, V>& map) {
     Array<V> result;
-    for (const auto& pair : map.impl_) {
+    for (const auto& pair : map) {
       result.push(pair.second);
     }
     return result;
@@ -81,7 +81,7 @@ public:
   template<typename K, typename V>
   static Array<std::pair<K, V>> entries(const Map<K, V>& map) {
     Array<std::pair<K, V>> result;
-    for (const auto& pair : map.impl_) {
+    for (const auto& pair : map) {
       result.push(pair);
     }
     return result;
@@ -96,29 +96,29 @@ public:
    */
   static Array<gs::String> keys(const LiteralObject& obj) {
     Array<gs::String> result;
-    for (const auto& pair : obj.impl_) {
+    for (const auto& pair : obj) {
       result.push(pair.first);
     }
     return result;
   }
 
   /**
-   * Object.values(literalObject) - Get array of property values
+   * Object.values(obj) - Get array of property values
    */
   static Array<Property> values(const LiteralObject& obj) {
     Array<Property> result;
-    for (const auto& pair : obj.impl_) {
+    for (const auto& pair : obj) {
       result.push(pair.second);
     }
     return result;
   }
 
   /**
-   * Object.entries(literalObject) - Get array of [key, value] pairs
+   * Object.entries(obj) - Get array of [key, value] pairs
    */
-  static Array<std::pair<gs::String, Property>> entries(const LiteralObject& obj) {
-    Array<std::pair<gs::String, Property>> result;
-    for (const auto& pair : obj.impl_) {
+  static Array<std::pair<String, Property>> entries(const LiteralObject& obj) {
+    Array<std::pair<String, Property>> result;
+    for (const auto& pair : obj) {
       result.push(pair);
     }
     return result;
@@ -134,7 +134,7 @@ public:
    */
   template<typename K, typename V>
   static Map<K, V>& assign(Map<K, V>& target, const Map<K, V>& source) {
-    for (const auto& pair : source.impl_) {
+    for (const auto& pair : source) {
       target.set(pair.first, pair.second);
     }
     return target;
@@ -154,7 +154,7 @@ public:
    * Object.assign(target, source) - Merge LiteralObject
    */
   static LiteralObject& assign(LiteralObject& target, const LiteralObject& source) {
-    for (const auto& pair : source.impl_) {
+    for (const auto& pair : source) {
       target.set(pair.first, pair.second);
     }
     return target;
