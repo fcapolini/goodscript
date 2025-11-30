@@ -106,6 +106,31 @@ export function extractNullCheck(expr: ts.Expression, escapeName: (name: string)
 }
 
 /**
+ * Find an identifier with the given name in an expression
+ * 
+ * @param expr Expression to search in
+ * @param name Name of the identifier to find
+ * @returns The identifier node if found, undefined otherwise
+ */
+export function findIdentifierInExpression(expr: ts.Expression, name: string): ts.Identifier | undefined {
+  let result: ts.Identifier | undefined;
+  
+  const visit = (node: ts.Node): void => {
+    if (result) return; // Already found
+    
+    if (ts.isIdentifier(node) && node.text === name) {
+      result = node;
+      return;
+    }
+    
+    ts.forEachChild(node, visit);
+  };
+  
+  visit(expr);
+  return result;
+}
+
+/**
  * Check if an expression is a call to Map.get() or similar methods that return pointers
  * 
  * @param node Expression to check

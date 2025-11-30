@@ -362,32 +362,6 @@ export class AstCodegen {
             }
           }
         }
-        
-        // For method calls, check TypeScript return type to infer C++ type
-        if (this.checker && ts.isCallExpression(decl.initializer)) {
-          const tsType = this.checker.getTypeAtLocation(decl.initializer);
-          
-          // Check if it's a nullable class type: T | null
-          if (tsType.isUnion && tsType.isUnion()) {
-            const types = tsType.types;
-            const hasNull = types.some(t => 
-              (t.flags & ts.TypeFlags.Null) !== 0 || 
-              (t.flags & ts.TypeFlags.Undefined) !== 0
-            );
-            const classType = types.find(t => 
-              (t.flags & ts.TypeFlags.Object) !== 0 &&
-              (t as any).symbol &&
-              !(t as any).symbol.getName().match(/Array|Map|Set|String|RegExp|Date|Promise/)
-            );
-            
-            if (hasNull && classType) {
-              // Nullable class type => std::shared_ptr<T>
-              const className = this.checker.typeToString(classType);
-              const cppClassName = this.mapTypeScriptTypeToCpp(className);
-              cppType = new ast.CppType(`std::shared_ptr<${cppClassName}>`);
-            }
-          }
-        }
       }
       
       // Track variable type for smart pointer detection (AFTER potentially updating cppType)
@@ -741,7 +715,31 @@ export class AstCodegen {
       const varType = this.variableTypes.get(unwrappedVar);
       const isActuallySmartPointer = varType && cppUtils.isSmartPointerType(varType);
       
-      if (isActuallySmartPointer &&
+      // Also check TypeScript type for nullable class patterns (T | null, not T | undefined)
+      // This handles auto variables from methods returning nullable classes
+      let isNullableClass = false;
+      if (!isActuallySmartPointer && varType && varType.toString() === 'auto' && this.checker) {
+        const varNode = tsUtils.findIdentifierInExpression(node.expression, unwrappedVar);
+        if (varNode) {
+          const tsType = this.checker.getTypeAtLocation(varNode);
+          if (tsType.isUnion && tsType.isUnion()) {
+            const types = tsType.types;
+            const hasNull = types.some(t => (t.flags & ts.TypeFlags.Null) !== 0);
+            const hasUndefined = types.some(t => (t.flags & ts.TypeFlags.Undefined) !== 0);
+            const classType = types.find(t => 
+              (t.flags & ts.TypeFlags.Object) !== 0 &&
+              (t as any).symbol &&
+              !(t as any).symbol.getName().match(/Array|Map|Set|String|RegExp|Date|Promise/)
+            );
+            // T | null (without undefined) indicates a nullable reference, not optional
+            if (hasNull && !hasUndefined && classType) {
+              isNullableClass = true;
+            }
+          }
+        }
+      }
+      
+      if ((isActuallySmartPointer || isNullableClass) &&
           condition instanceof ast.BinaryExpr && 
           (condition.right instanceof ast.Identifier && condition.right.name === 'nullptr' ||
            condition.left instanceof ast.Identifier && condition.left.name === 'nullptr')) {
@@ -1252,6 +1250,26 @@ export class AstCodegen {
                            typeStr.startsWith('std::unique_ptr<') ||
                            typeStr.startsWith('std::weak_ptr<');
         }
+        
+        // Also check TypeScript type for nullable class patterns (T | null, not T | undefined)
+        // This handles auto variables from methods returning nullable classes
+        if (!isLeftSharedPtr && varType && varType.toString() === 'auto') {
+          const tsType = this.checker.getTypeAtLocation(node.left);
+          if (tsType.isUnion && tsType.isUnion()) {
+            const types = tsType.types;
+            const hasNull = types.some(t => (t.flags & ts.TypeFlags.Null) !== 0);
+            const hasUndefined = types.some(t => (t.flags & ts.TypeFlags.Undefined) !== 0);
+            const classType = types.find(t => 
+              (t.flags & ts.TypeFlags.Object) !== 0 &&
+              (t as any).symbol &&
+              !(t as any).symbol.getName().match(/Array|Map|Set|String|RegExp|Date|Promise/)
+            );
+            // T | null (without undefined) indicates a nullable reference, not optional
+            if (hasNull && !hasUndefined && classType) {
+              isLeftSharedPtr = true;
+            }
+          }
+        }
       }
       
       // Check if right side has a C++ smart pointer type
@@ -1263,6 +1281,25 @@ export class AstCodegen {
           isRightSharedPtr = typeStr.startsWith('std::shared_ptr<') || 
                             typeStr.startsWith('std::unique_ptr<') ||
                             typeStr.startsWith('std::weak_ptr<');
+        }
+        
+        // Also check TypeScript type for nullable class patterns (T | null, not T | undefined)
+        if (!isRightSharedPtr && varType && varType.toString() === 'auto') {
+          const tsType = this.checker.getTypeAtLocation(node.right);
+          if (tsType.isUnion && tsType.isUnion()) {
+            const types = tsType.types;
+            const hasNull = types.some(t => (t.flags & ts.TypeFlags.Null) !== 0);
+            const hasUndefined = types.some(t => (t.flags & ts.TypeFlags.Undefined) !== 0);
+            const classType = types.find(t => 
+              (t.flags & ts.TypeFlags.Object) !== 0 &&
+              (t as any).symbol &&
+              !(t as any).symbol.getName().match(/Array|Map|Set|String|RegExp|Date|Promise/)
+            );
+            // T | null (without undefined) indicates a nullable reference, not optional
+            if (hasNull && !hasUndefined && classType) {
+              isRightSharedPtr = true;
+            }
+          }
         }
       }
     }
