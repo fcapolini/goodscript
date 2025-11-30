@@ -362,6 +362,32 @@ export class AstCodegen {
             }
           }
         }
+        
+        // For method calls, check TypeScript return type to infer C++ type
+        if (this.checker && ts.isCallExpression(decl.initializer)) {
+          const tsType = this.checker.getTypeAtLocation(decl.initializer);
+          
+          // Check if it's a nullable class type: T | null
+          if (tsType.isUnion && tsType.isUnion()) {
+            const types = tsType.types;
+            const hasNull = types.some(t => 
+              (t.flags & ts.TypeFlags.Null) !== 0 || 
+              (t.flags & ts.TypeFlags.Undefined) !== 0
+            );
+            const classType = types.find(t => 
+              (t.flags & ts.TypeFlags.Object) !== 0 &&
+              (t as any).symbol &&
+              !(t as any).symbol.getName().match(/Array|Map|Set|String|RegExp|Date|Promise/)
+            );
+            
+            if (hasNull && classType) {
+              // Nullable class type => std::shared_ptr<T>
+              const className = this.checker.typeToString(classType);
+              const cppClassName = this.mapTypeScriptTypeToCpp(className);
+              cppType = new ast.CppType(`std::shared_ptr<${cppClassName}>`);
+            }
+          }
+        }
       }
       
       // Track variable type for smart pointer detection (AFTER potentially updating cppType)
@@ -1268,7 +1294,7 @@ export class AstCodegen {
     let className = cppUtils.escapeName(node.expression.getText());
     
     // Get constructor arguments
-    const args = node.arguments ? node.arguments.map(arg => this.visitExpression(arg)) : [];
+    let args = node.arguments ? node.arguments.map(arg => this.visitExpression(arg)) : [];
     
     // For generic types like Map, Array, etc., try to get template parameters from type checker
     if (this.checker) {
@@ -1303,6 +1329,50 @@ export class AstCodegen {
             ).join(', ');
             className = `${baseName}<${cppTemplateArgs}>`;
           }
+        }
+      }
+      
+      // Check if constructor parameters need smart pointer wrapping
+      // For user-defined classes, constructor may expect share<T> for value type args
+      if (node.arguments && node.arguments.length > 0) {
+        const signature = this.checker.getResolvedSignature(node);
+        if (signature && signature.parameters.length > 0) {
+          args = args.map((arg, index) => {
+            if (index >= signature.parameters.length) return arg;
+            
+            const param = signature.parameters[index];
+            const paramDecl = param.valueDeclaration;
+            if (paramDecl && ts.isParameter(paramDecl) && paramDecl.type) {
+              const paramTypeText = paramDecl.type.getText();
+              
+              // If parameter is share<string>, check if argument needs wrapping
+              if (paramTypeText === 'share<string>') {
+                // Case 1: Direct gs::String constructor call
+                if (arg instanceof ast.CallExpr && 
+                    arg.callee instanceof ast.Identifier && 
+                    arg.callee.name === 'gs::String') {
+                  // Wrap in std::make_shared<gs::String>
+                  return cpp.call(cpp.id('std::make_shared<gs::String>'), arg.args);
+                }
+                
+                // Case 2: Identifier referring to a gs::String or auto (inferred String) variable
+                if (arg instanceof ast.Identifier && node.arguments![index]) {
+                  const argNode = node.arguments![index];
+                  if (ts.isIdentifier(argNode)) {
+                    const varName = cppUtils.escapeName(argNode.text);
+                    const varType = this.variableTypes.get(varName);
+                    // If variable type is gs::String or auto (string inference), wrap it
+                    if (varType && (varType.toString() === 'gs::String' || varType.toString() === 'auto')) {
+                      // Wrap the identifier in std::make_shared<gs::String>
+                      return cpp.call(cpp.id('std::make_shared<gs::String>'), [arg]);
+                    }
+                  }
+                }
+              }
+            }
+            
+            return arg;
+          });
         }
       }
     }
