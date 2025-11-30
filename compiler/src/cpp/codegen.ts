@@ -23,6 +23,7 @@ export class AstCodegen {
   private structuredBindingVariables = new Set<string>(); // Track variables from tuple destructuring (for-of with [key, value])
   private templateParameters = new Set<string>(); // Track template parameter names (T, K, V, etc.)
   private interfaceMethods = new Map<string, Set<string>>(); // Map interface name -> set of method names
+  private interfaceNames = new Set<string>(); // Track interface/abstract class names
   private ownershipChecker: OwnershipAwareTypeChecker;
   
   constructor(private checker?: ts.TypeChecker) {
@@ -36,6 +37,7 @@ export class AstCodegen {
     this.pointerVariables.clear(); // Reset for each file
     this.templateParameters.clear(); // Reset for each file
     this.interfaceMethods.clear(); // Reset for each file
+    this.interfaceNames.clear(); // Reset for each file
     const includes = [new ast.Include('gs_runtime.hpp', false)];
     const declarations: ast.Declaration[] = [];
     const mainStatements: ast.Statement[] = [];
@@ -203,7 +205,14 @@ export class AstCodegen {
         );
         
         // Build std::function<ReturnType(ParamType1, ParamType2, ...)>
-        const paramTypeStr = paramTypes.map(t => t.toString()).join(', ');
+        // Check if any parameter types are interfaces and add const& for them
+        const paramTypeStrs = paramTypes.map((t, idx) => {
+          const param = arrowFunc.parameters[idx];
+          const isInterface = param.type && ts.isTypeReferenceNode(param.type) && 
+                              this.interfaceNames.has(cppUtils.escapeName(param.type.typeName.getText()));
+          return isInterface ? `const ${t.toString()}&` : t.toString();
+        });
+        const paramTypeStr = paramTypeStrs.join(', ');
         cppType = new ast.CppType(`std::function<${returnType}(${paramTypeStr})>`);
       }
       
@@ -592,6 +601,9 @@ export class AstCodegen {
     
     // Cache interface method names for later use by implementing classes
     this.interfaceMethods.set(name, methodNames);
+    
+    // Track this as an interface name
+    this.interfaceNames.add(name);
     
     // Add virtual destructor
     const destructorBody = new ast.Block([]);
@@ -1720,7 +1732,13 @@ export class AstCodegen {
       const paramName = cppUtils.escapeName(param.name.getText());
       // For lambdas, use auto for parameter types unless explicitly typed
       const paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
-      params.push(new ast.Parameter(paramName, paramType));
+      
+      // Check if parameter type is an interface - interfaces must be passed by const reference
+      const isInterface = param.type && ts.isTypeReferenceNode(param.type) && 
+                          this.interfaceNames.has(cppUtils.escapeName(param.type.typeName.getText()));
+      const passByConstRef = isInterface || tsUtils.shouldPassByConstRef(param.type);
+      
+      params.push(new ast.Parameter(paramName, paramType, undefined, passByConstRef));
       
       // Track parameter type for smart pointer detection
       this.variableTypes.set(paramName, paramType);
@@ -2063,9 +2081,18 @@ export class AstCodegen {
           return innerType;
         }
         
-        // Also skip optional wrapping for user-defined classes
+        // Also skip optional wrapping for user-defined classes and interfaces
         // They're automatically wrapped in shared_ptr (see lines 1772-1779)
+        // Interfaces also need shared_ptr wrapping for polymorphism
         if (this.checker && ts.isTypeReferenceNode(nonNullableTypes[0])) {
+          const typeName = cppUtils.escapeName(nonNullableTypes[0].typeName.getText());
+          
+          // Check if it's an interface
+          if (this.interfaceNames.has(typeName)) {
+            // Interface: return std::shared_ptr<gs::InterfaceName> (already nullable)
+            return new ast.CppType(`std::shared_ptr<gs::${typeName}>`);
+          }
+          
           const type = this.checker.getTypeAtLocation(nonNullableTypes[0]);
           const symbol = type.getSymbol();
           if (symbol && (symbol.flags & ts.SymbolFlags.Class)) {
@@ -2101,9 +2128,20 @@ export class AstCodegen {
     }
     
     // Array types: number[] → gs::Array<double>
+    // If element type is an interface, wrap in shared_ptr
     if (ts.isArrayTypeNode(typeNode)) {
       const elementType = this.mapType(typeNode.elementType);
-      return new ast.CppType(`gs::Array<${elementType.toString()}>`);
+      const elementTypeStr = elementType.toString();
+      
+      // Check if element type is an interface (need to use shared_ptr for polymorphism)
+      const isInterface = ts.isTypeReferenceNode(typeNode.elementType) && 
+                          this.interfaceNames.has(cppUtils.escapeName(typeNode.elementType.typeName.getText()));
+      
+      if (isInterface) {
+        return new ast.CppType(`gs::Array<std::shared_ptr<${elementTypeStr}>>`);
+      }
+      
+      return new ast.CppType(`gs::Array<${elementTypeStr}>`);
     }
     
     // Generic types: Map<K, V> → gs::Map<K, V>
