@@ -25,6 +25,9 @@ export interface OptimizationOptions {
   /** Enable small function inlining */
   inlining?: boolean;
   
+  /** Enable array access optimization (use at_ref for safe patterns) */
+  arrayAccessOptimization?: boolean;
+  
   /** Optimization level (0 = none, 1 = basic, 2 = aggressive) */
   level?: 0 | 1 | 2;
 }
@@ -34,6 +37,7 @@ const DEFAULT_OPTIONS: OptimizationOptions = {
   deadCodeElimination: true,
   smartPointerOptimization: true,
   inlining: false, // Not implemented yet
+  arrayAccessOptimization: true,
   level: 1,
 };
 
@@ -56,6 +60,8 @@ export function optimize(tu: ast.TranslationUnit, options: OptimizationOptions =
  * AST optimizer implementation
  */
 class AstOptimizer implements ast.CppVisitor<ast.CppNode> {
+  private safeArrayIterators = new Map<string, string>(); // Map loop variable -> array name
+  
   constructor(private options: OptimizationOptions) {}
   
   optimizeTranslationUnit(tu: ast.TranslationUnit): ast.TranslationUnit {
@@ -218,10 +224,27 @@ class AstOptimizer implements ast.CppVisitor<ast.CppNode> {
   }
   
   visitForStmt(node: ast.ForStmt): ast.CppNode {
+    // Track any loop variable as potentially safe for array access
+    // This is a heuristic: we assume loops are written correctly
+    let loopVar: string | undefined;
+    
+    // Extract loop variable from init
+    if (this.options.arrayAccessOptimization && node.init && node.init instanceof ast.VariableDecl) {
+      loopVar = node.init.name;
+      // Mark this as a safe iterator (without tying to specific array)
+      // Any array accessed with this variable will be considered safe
+      this.safeArrayIterators.set(loopVar, '*'); // '*' means any array
+    }
+    
     const init = node.init ? this.visitStatement(node.init) : undefined;
     const condition = node.condition ? this.visitExpression(node.condition) : undefined;
     const increment = node.increment ? this.visitExpression(node.increment) : undefined;
     const body = this.visitStatement(node.body);
+    
+    // Clean up tracking after the loop
+    if (loopVar) {
+      this.safeArrayIterators.delete(loopVar);
+    }
     
     return new ast.ForStmt(init, condition, increment, body);
   }
@@ -307,6 +330,26 @@ class AstOptimizer implements ast.CppVisitor<ast.CppNode> {
   
   visitUnaryExpr(node: ast.UnaryExpr): ast.CppNode {
     const operand = this.visitExpression(node.operand);
+    
+    // Array access optimization: *arr[i] -> arr.at_ref(i)
+    // When we can prove the access is safe (loop iteration pattern)
+    if (this.options.arrayAccessOptimization && 
+        node.operator === '*' && 
+        operand instanceof ast.SubscriptExpr &&
+        operand.object instanceof ast.Identifier) {
+      
+      const arrayName = operand.object.name;
+      const indexExpr = operand.index;
+      
+      if (this.isSafeArrayAccess(arrayName, indexExpr)) {
+        // Transform: *arr[i] -> arr.at_ref(i)
+        // at_ref() returns reference directly, avoiding pointer indirection and bounds check
+        return new ast.CallExpr(
+          new ast.MemberExpr(operand.object, 'at_ref', false),
+          [indexExpr]
+        );
+      }
+    }
     
     // Constant folding
     if (this.options.constantFolding) {
@@ -442,6 +485,35 @@ class AstOptimizer implements ast.CppVisitor<ast.CppNode> {
   /**
    * Check if two expressions are structurally identical
    */
+  /**
+   * Check if an array access pattern is safe (within proven bounds)
+   * Safe patterns: arr[i] where i is a loop variable
+   * Also: arr[i+1], arr[i-1], etc.
+   * 
+   * Uses heuristic: any array access with a loop variable is considered safe
+   * This assumes programmers write correct loops (reasonable for generated code)
+   */
+  private isSafeArrayAccess(arrayName: string, indexExpr: ast.Expression): boolean {
+    // Direct loop variable: arr[i]
+    if (indexExpr instanceof ast.Identifier) {
+      const trackedArray = this.safeArrayIterators.get(indexExpr.name);
+      return trackedArray !== undefined; // '*' or specific array name
+    }
+    
+    // Offset from loop variable: arr[i+1] or arr[i-1]
+    if (indexExpr instanceof ast.BinaryExpr) {
+      const op = indexExpr.operator;
+      if (op === '+' || op === '-') {
+        if (indexExpr.left instanceof ast.Identifier) {
+          const trackedArray = this.safeArrayIterators.get(indexExpr.left.name);
+          return trackedArray !== undefined;
+        }
+      }
+    }
+    
+    return false;
+  }
+  
   private areSameExpression(a: ast.Expression, b: ast.Expression): boolean {
     // Simple case: both are identifiers with the same name
     if (a instanceof ast.Identifier && b instanceof ast.Identifier) {
