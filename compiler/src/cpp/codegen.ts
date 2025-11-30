@@ -1141,8 +1141,9 @@ export class AstCodegen {
     }
     
     if (ts.isParenthesizedExpression(node)) {
-      // Just visit the inner expression, parentheses will be added if needed
-      return this.visitExpression(node.expression);
+      // Preserve parentheses to maintain operator precedence
+      const inner = this.visitExpression(node.expression);
+      return new ast.ParenExpr(inner);
     }
     
     if (ts.isNewExpression(node)) {

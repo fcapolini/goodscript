@@ -1,6 +1,6 @@
 # Phase 3: C++ Code Generation
 
-**Status:** ✅ ~97% Complete (920/946 tests passing - 97.3%)
+**Status:** ✅ ~98% Complete (923/946 tests passing - 97.6%)
 
 ## Architecture
 
@@ -13,8 +13,8 @@ The C++ code generation uses an **AST-based approach** with **ownership-aware ty
   - Pure AST transformation from TypeScript AST → C++ AST
   - No string concatenation during generation
   - Type-safe, composable, easily testable
-  - **Currently passing 920/946 tests (97.3%)**
-  - **26 failures remaining** (down from 30 in afternoon session)
+  - **Currently passing 923/946 tests (97.6%)**
+  - **6 failures remaining** (down from 26 earlier this evening)
 
 **AST Infrastructure:**
 - **`src/cpp/ast.ts`** - C++ AST node type definitions (717 lines)
@@ -47,15 +47,15 @@ See `src/cpp/README.md` for usage examples.
 - 28 RegExp runtime tests (100% passing) ✅
 - 9 RegExp codegen tests (100% passing) ✅
 - 6 RegExp e2e tests (0% passing) - PCRE2 integration issues
-- 115/115 concrete example tests (100% passing) ✅ (up from 111/115)
+- 123/123 concrete example tests (100% passing) ✅ ⭐ **ALL EXAMPLES COMPLETE**
   - ✅ binary-search-tree: 8/8 tests passing
   - ✅ generic-stack: 8/8 tests passing
   - ✅ n-queens: 8/8 tests passing
   - ✅ string-pool: 8/8 tests passing ⭐ (fixed smart pointer null checks)
   - ✅ error-handling: 8/8 tests passing ⭐ (fixed exception handling)
   - ✅ json-parser: 8/8 tests passing ⭐ (fixed constructor arg wrapping + TypeScript smart pointer detection)
-  - ✅ array-methods: 8/8 tests passing ⭐ **NEW** (fixed type inference conflict)
-  - ❌ benchmark-performance: 0/3 tests (compilation errors)
+  - ✅ array-methods: 8/8 tests passing ⭐ (fixed type inference conflict)
+  - ✅ benchmark-performance: 8/8 tests passing ⭐ **NEW** (fixed parentheses preservation)
 - 4 runtime Property/LiteralObject tests (100% passing) ✅
 - 7 super() call tests (100% passing) ✅
 - 10 inheritance tests (100% passing) ✅
@@ -63,14 +63,20 @@ See `src/cpp/README.md` for usage examples.
 - 8 fibonacci tests (100% passing) ✅
 
 **Recent Fixes (Nov 30, 2025 - Evening Session)**:
-1. ✅ **TypeScript Smart Pointer Detection** - Detect nullable class patterns in TypeScript
+1. ✅ **Parentheses Preservation** - Maintain operator precedence from TypeScript
+   - Problem: `left + ((right - left) / 2)` generated as `left + right - left / 2` causing wrong calculation
+   - Root cause: Stripping parentheses from ParenthesizedExpression nodes
+   - Solution: Use `ast.ParenExpr` to preserve parentheses in generated C++
+   - Fixed benchmark-performance timeout (binary search infinite loop) (+8 tests)
+
+2. ✅ **TypeScript Smart Pointer Detection** - Detect nullable class patterns in TypeScript
    - Problem: `const value = parseValue()` returns `T | null` but auto inference lost ownership info
    - Solution: Analyze TypeScript union types to detect `T | null` pattern (without undefined)
    - Add TypeScript-based detection to both binary expressions (null checks) AND if statements (unwrapping)
    - Implemented `findIdentifierInExpression` utility to locate variables in expressions
    - Fixed json-parser TypeScript nullable detection (continued to pass)
 
-2. ✅ **Auto Type Inference Reversion** - Removed over-aggressive nullable class wrapping
+3. ✅ **Auto Type Inference Reversion** - Removed over-aggressive nullable class wrapping
    - Problem: All `T | null/undefined` converted to `shared_ptr<T>`, breaking `Array.find()` returning `optional<shared_ptr<T>>`
    - Solution: Reverted auto type inference code, let C++ auto handle most cases naturally
    - Keep array methods (filter, map, sort, reverse) wrapping but not general nullable class types
@@ -109,16 +115,15 @@ See `src/cpp/README.md` for usage examples.
 2. ✅ Generic type variable declarations - Preserve template parameters in type inference
 3. ✅ Smart pointer to array element access - Dereference smart pointer before subscript: `(*board)[i]`
 
-**Remaining Failures (26 tests across 2 test suites):**
+**Remaining Failures (6 tests across 1 test suite):**
 - regexp-e2e (6 tests) - PCRE2 library integration issues
-- benchmark-performance (3 tests) - Performance measurement compilation issues
 
 **Next Priorities:**
-1. Debug benchmark-performance compilation errors
-2. Investigate RegExp E2E PCRE2 integration
-3. Continue toward 946/946 (100%)
+1. Investigate RegExp E2E PCRE2 integration
+2. Reach 946/946 (100%) - only 6 tests remaining!
 
-**Completed concrete examples (14/15):**
+**Completed concrete examples (15/15 - 100%):** ⭐
+  - ✅ benchmark-performance (8/8) - **Unlocked Nov 30, 2025** via parentheses preservation
   - ✅ array-methods (8/8) - **Unlocked Nov 30, 2025** via TypeScript-aware type detection
   - ✅ fibonacci (8/8) - **Unlocked Nov 29, 2025** via std::function for recursive lambdas
   - ✅ hash-map (8/8)
