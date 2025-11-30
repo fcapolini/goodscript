@@ -12,6 +12,7 @@ import { cpp } from './builder';
 import * as tsUtils from './ts-utils';
 import * as cppUtils from './cpp-utils';
 import { OwnershipAwareTypeChecker } from './ownership-aware-type-checker';
+import { optimize, OptimizationOptions } from './optimizer';
 
 export class AstCodegen {
   private enumNames = new Set<string>(); // Track enum names for property access
@@ -19,6 +20,7 @@ export class AstCodegen {
   private unwrappedOptionals = new Set<string>(); // Track variables known to be non-null in current scope
   private smartPointerNullChecks = new Set<string>(); // Track smart pointer variables checked against nullptr
   private variableTypes = new Map<string, ast.CppType>(); // Track variable types for smart pointer detection
+  private optimizationOptions: OptimizationOptions; // Optimization options for C++ code generation
   private pointerVariables = new Set<string>(); // Track variables that are pointers (from Map.get(), etc.)
   private structuredBindingVariables = new Set<string>(); // Track variables from tuple destructuring (for-of with [key, value])
   private templateParameters = new Set<string>(); // Track template parameter names (T, K, V, etc.)
@@ -26,8 +28,9 @@ export class AstCodegen {
   private interfaceNames = new Set<string>(); // Track interface/abstract class names
   private ownershipChecker: OwnershipAwareTypeChecker;
   
-  constructor(private checker?: ts.TypeChecker) {
+  constructor(private checker?: ts.TypeChecker, optimizationOptions?: OptimizationOptions) {
     this.ownershipChecker = new OwnershipAwareTypeChecker(checker!);
+    this.optimizationOptions = optimizationOptions || { level: 0 }; // Default: no optimization
   }
   
   generate(sourceFile: ts.SourceFile): string {
@@ -98,7 +101,10 @@ export class AstCodegen {
       );
     }
     
-    const tu = new ast.TranslationUnit(includes, [ns], mainFunction);
+    let tu = new ast.TranslationUnit(includes, [ns], mainFunction);
+    
+    // Apply optimizations before rendering
+    tu = optimize(tu, this.optimizationOptions);
     
     return render(tu);
   }

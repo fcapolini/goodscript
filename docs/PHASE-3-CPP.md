@@ -1,25 +1,32 @@
 # Phase 3: C++ Code Generation
 
-**Status:** ✅ 100% Complete (945/945 tests passing - 100%) 🎉
+**Status:** ✅ 100% Complete (959/959 tests passing - 100%) 🎉
 
 ## Architecture
 
-The C++ code generation uses an **AST-based approach** with **ownership-aware type tracking**:
+The C++ code generation uses an **AST-based approach** with **ownership-aware type tracking** and **optional optimization**:
 
-### Current Implementation (Nov 30, 2025 - Evening)
+### Current Implementation (Nov 30, 2025 - Late Evening)
 
 **New AST-Based Codegen:**
-- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~2,100 lines)
+- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~2,589 lines)
   - Pure AST transformation from TypeScript AST → C++ AST
   - No string concatenation during generation
   - Type-safe, composable, easily testable
-  - **Currently passing 945/945 tests (100%)** ✅ 🎉
+  - **Currently passing 959/959 tests (100%)** ✅ 🎉
   - **ALL TESTS PASSING - Phase 3 Complete!**
+  - **NEW: Integrated optimizer support** (opt-in via constructor options)
 
 **AST Infrastructure:**
-- **`src/cpp/ast.ts`** - C++ AST node type definitions (717 lines)
+- **`src/cpp/ast.ts`** - C++ AST node type definitions (720 lines)
 - **`src/cpp/builder.ts`** - Fluent API for constructing AST (405 lines)
 - **`src/cpp/renderer.ts`** - AST to formatted C++ code converter (760 lines)
+- **`src/cpp/optimizer.ts`** - AST-based optimizer (~500 lines) ⭐ **NEW**
+  - Visitor-based AST transformation system
+  - Configurable optimization levels (0, 1, 2)
+  - Constant folding, dead code elimination, expression simplification
+  - Zero overhead when disabled (default: level 0)
+  - See `src/cpp/OPTIMIZER.md` for details
 - **`src/cpp/ownership-aware-type-checker.ts`** - Preserves ownership qualifiers (354 lines)
   - Wraps TypeScript's type checker to preserve `own<T>`, `share<T>`, `use<T>`
   - Reads types directly from AST since TypeChecker erases type aliases
@@ -46,7 +53,8 @@ See `src/cpp/README.md` for usage examples.
 - 28 runtime library tests (100% passing)
 - 28 RegExp runtime tests (100% passing) ✅
 - 9 RegExp codegen tests (100% passing) ✅
-- 6 RegExp e2e tests (100% passing) ✅ **NEW** (fixed missing header)
+- 6 RegExp e2e tests (100% passing) ✅
+- 14 optimizer tests (100% passing) ✅ ⭐ **NEW**
 - 123/123 concrete example tests (100% passing) ✅ ⭐ **ALL EXAMPLES COMPLETE**
   - ✅ binary-search-tree: 8/8 tests passing
   - ✅ generic-stack: 8/8 tests passing
@@ -62,6 +70,30 @@ See `src/cpp/README.md` for usage examples.
 - 10 inheritance tests (100% passing) ✅
 - 5 runtime-equivalence tests (100% passing) ✅
 - 8 fibonacci tests (100% passing) ✅
+
+**Recent Additions (Nov 30, 2025 - Late Evening Session)**:
+1. ✅ **AST-Based Optimizer** - Clean, composable optimization passes (+14 tests) 🎉
+   - **Architecture**: Visitor-based transformation on C++ AST before rendering
+   - **Optimization Levels**:
+     - Level 0 (default): No optimization - fast compilation, debug-friendly
+     - Level 1: Basic optimizations - constant folding, dead code elimination
+     - Level 2: Aggressive optimizations (future: inlining, loop unrolling)
+   - **Implemented Optimizations**:
+     - Constant folding: `2 + 3` → `5`, `3 < 5` → `true`, `!false` → `true`
+     - Dead code elimination: Remove code after return/break/continue
+     - Branch elimination: `if (false)` → remove, `if (true)` → inline then branch
+     - Expression simplification: Remove unnecessary parentheses
+   - **Benefits**:
+     - Type-safe transformations on structured AST (not strings)
+     - Composable - easy to add new passes
+     - Zero overhead when disabled (level 0 default)
+     - Each optimization independently testable
+   - **Usage**: `new AstCodegen(checker, { level: 1 })` for optimizations
+   - **Files**:
+     - `src/cpp/optimizer.ts` - Core optimizer implementation
+     - `src/cpp/OPTIMIZER.md` - Complete documentation
+     - `test/phase3/basic/optimizer.test.ts` - Comprehensive test suite
+   - **Future**: Smart pointer optimization, function inlining, loop unrolling
 
 **Recent Fixes (Nov 30, 2025 - Evening Session)**:
 1. ✅ **Interface Polymorphism Support** - Complete implementation of TypeScript interfaces (+8 tests) 🎉

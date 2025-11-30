@@ -10,7 +10,10 @@ The project implements GoodScript in four phases:
 - **Phase 2** (✅ Complete): Ownership analysis (DAG validation + derivation rules) (231 tests, 100% coverage) - [Details](../docs/DAG-ANALYSIS.md)
   - DAG cycle detection prevents reference-counted memory leaks
   - Derivation rules prevent ownership logic mistakes (GS303, GS304, GS305)
-- **Phase 3** (🚧 In Progress): C++ code generation - [Details](../docs/COMPILATION-TARGET.md)
+- **Phase 3** (✅ Complete): C++ code generation with AST-based optimizer (959 tests, 100% passing) - [Details](../docs/PHASE-3-CPP.md)
+  - AST-based code generation with ownership-aware type checking
+  - Optional optimizer with constant folding and dead code elimination
+  - Full interface polymorphism and smart pointer support
 - **Phase 4** (📋 Planned): Ecosystem integration - standard library and more - [Details](../docs/MINIMAL-STD-LIB.md)
 
 ## Installation
