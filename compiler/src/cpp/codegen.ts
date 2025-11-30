@@ -9,6 +9,9 @@ import * as ts from 'typescript';
 import * as ast from './ast';
 import { render } from './renderer';
 import { cpp } from './builder';
+import * as tsUtils from './ts-utils';
+import * as cppUtils from './cpp-utils';
+import { OwnershipAwareTypeChecker } from './ownership-aware-type-checker';
 
 export class AstCodegen {
   private enumNames = new Set<string>(); // Track enum names for property access
@@ -17,8 +20,11 @@ export class AstCodegen {
   private variableTypes = new Map<string, ast.CppType>(); // Track variable types for smart pointer detection
   private pointerVariables = new Set<string>(); // Track variables that are pointers (from Map.get(), etc.)
   private templateParameters = new Set<string>(); // Track template parameter names (T, K, V, etc.)
+  private ownershipChecker: OwnershipAwareTypeChecker;
   
-  constructor(private checker?: ts.TypeChecker) {}
+  constructor(private checker?: ts.TypeChecker) {
+    this.ownershipChecker = new OwnershipAwareTypeChecker(checker!);
+  }
   
   generate(sourceFile: ts.SourceFile): string {
     this.enumNames.clear(); // Reset for each file
@@ -39,7 +45,7 @@ export class AstCodegen {
           if (decl.initializer && ts.isArrowFunction(decl.initializer) && 
               decl.initializer.typeParameters && decl.initializer.typeParameters.length > 0) {
             // Generic arrow function - add to namespace declarations
-            const name = this.escapeName(decl.name.getText());
+            const name = cppUtils.escapeName(decl.name.getText());
             const func = this.visitGenericArrowFunction(name, decl.initializer);
             declarations.push(func);
             continue; // Skip adding to mainStatements
@@ -96,14 +102,45 @@ export class AstCodegen {
     const isConst = (node.declarationList.flags & ts.NodeFlags.Const) !== 0;
     
     for (const decl of node.declarationList.declarations) {
-      const name = this.escapeName(decl.name.getText());
+      const name = cppUtils.escapeName(decl.name.getText());
+      
+      // Register with ownership checker
+      if (ts.isVariableDeclaration(decl)) {
+        this.ownershipChecker.registerVariable(name, decl);
+      }
       
       // Get C++ type from explicit annotation if present
       let cppType: ast.CppType;
       if (decl.type) {
         cppType = this.mapType(decl.type);
+      } else if (decl.initializer && ts.isNewExpression(decl.initializer)) {
+        // Infer type from new expression - all class instances are smart pointers
+        const className = decl.initializer.expression.getText();
+        const ownershipType = this.getOwnershipTypeForNew(decl.initializer);
+        if (ownershipType === 'unique') {
+          cppType = new ast.CppType(`std::unique_ptr<gs::${className}>`);
+        } else {
+          cppType = new ast.CppType(`std::shared_ptr<gs::${className}>`);
+        }
+      } else if (decl.initializer && ts.isElementAccessExpression(decl.initializer) && this.checker) {
+        // Infer type from array subscript: arr[i] where arr is Array<T>
+        // Since array subscript returns T*, and we dereference it, variable holds T
+        const arrayExpr = decl.initializer.expression;
+        const arrayType = this.checker.getTypeAtLocation(arrayExpr);
+        const arrayTypeStr = this.checker.typeToString(arrayType);
+        
+        // Extract element type from Array<T> or T[]
+        const arrayMatch = arrayTypeStr.match(/(?:Array<)?(.+?)(?:\[\]|>)$/);
+        if (arrayMatch) {
+          const elementTypeStr = arrayMatch[1].trim();
+          // Map TypeScript element type to C++
+          const cppElementType = this.mapTypeScriptTypeToCpp(elementTypeStr);
+          cppType = new ast.CppType(cppElementType);
+        } else {
+          cppType = new ast.CppType('auto');
+        }
       } else {
-        // Use auto for inferred types - let C++ compiler figure it out
+        // Use auto for other inferred types - let C++ compiler figure it out
         cppType = new ast.CppType('auto');
       }
       
@@ -120,7 +157,7 @@ export class AstCodegen {
           returnType = this.mapType(arrowFunc.type);
         } else {
           // Infer return type: check if function body has return statements with values
-          const hasReturnValue = this.arrowFunctionHasReturnValue(arrowFunc);
+          const hasReturnValue = tsUtils.arrowFunctionHasReturnValue(arrowFunc);
           returnType = hasReturnValue ? new ast.CppType('double') : new ast.CppType('void');
         }
         const paramTypes = arrowFunc.parameters.map(p => 
@@ -133,19 +170,66 @@ export class AstCodegen {
       }
       
       // Check if initializer is Map.get() which returns a pointer, not optional
-      if (decl.initializer && this.isMapGetCall(decl.initializer)) {
-        // Map.get() returns V*, so if cppType is std::optional<T>, change to const T*
+      if (decl.initializer && tsUtils.isMapGetCall(decl.initializer)) {
+        // For smart pointer values, Map.get() should return the smart pointer directly (not a pointer to it)
+        // For other types, it returns V*
         const typeStr = cppType.toString();
+        
         if (typeStr.startsWith('std::optional<') && typeStr.endsWith('>')) {
           const innerType = typeStr.slice('std::optional<'.length, -1);
-          cppType = new ast.CppType(`const ${innerType}*`);
+          
+          // If inner type is a smart pointer, don't use optional at all
+          if (innerType.includes('std::shared_ptr') || 
+              innerType.includes('std::unique_ptr') ||
+              innerType.includes('std::weak_ptr')) {
+            // Map.get() returns the smart pointer directly (can be null)
+            cppType = new ast.CppType(innerType);
+          } else {
+            // Regular type - Map.get() returns V*
+            cppType = new ast.CppType(`${innerType}*`);
+            this.pointerVariables.add(name);
+          }
+        } else if (typeStr === 'auto' && this.checker && ts.isCallExpression(decl.initializer)) {
+          // For auto types from Map.get(), determine the actual type
+          const callExpr = decl.initializer;
+          if (ts.isPropertyAccessExpression(callExpr.expression) && 
+              callExpr.expression.name.text === 'get') {
+            const mapExpr = callExpr.expression.expression;
+            const mapType = this.checker.getTypeAtLocation(mapExpr);
+            const mapTypeStr = this.checker.typeToString(mapType);
+            
+            // Extract value type from Map<K,V>
+            const mapMatch = mapTypeStr.match(/Map<[^,]+,\s*(.+)>/);
+            if (mapMatch) {
+              const valueTypeStr = mapMatch[1].trim();
+              
+              // Check if value type is share<T> - return shared_ptr directly
+              const shareMatch = valueTypeStr.match(/share<(.+)>/);
+              if (shareMatch) {
+                const innerType = shareMatch[1].trim();
+                const cppInnerType = this.mapTypeScriptTypeToCpp(innerType);
+                // Return shared_ptr directly - it can be null
+                cppType = new ast.CppType(`std::shared_ptr<${cppInnerType}>`);
+              } else {
+                // Regular type - Map.get() returns V*
+                const cppValueType = this.mapTypeScriptTypeToCpp(valueTypeStr);
+                cppType = new ast.CppType(`${cppValueType}*`);
+                this.pointerVariables.add(name);
+              }
+            }
+          }
+        } else if (typeStr.includes('std::shared_ptr') || 
+                   typeStr.includes('std::unique_ptr') ||
+                   typeStr.includes('std::weak_ptr')) {
+          // Smart pointer type - Map.get() returns it directly
+          // Don't add to pointerVariables - it's not a raw pointer
+        } else {
+          // Regular type - Map.get() returns V*
+          this.pointerVariables.add(name);
         }
-        // Track this variable as a pointer
-        this.pointerVariables.add(name);
       }
       
       let init: ast.Expression | undefined;
-      let isShareArraySubscript = false;  // Track if we're initializing from share<T>[]
       
       if (decl.initializer) {
         // Special case: empty array literal with explicitly-typed variable
@@ -173,36 +257,47 @@ export class AstCodegen {
           init = this.visitExpression(decl.initializer);
         }
         
-        // If initializer is an array subscript from a share<T> array, track variable type
-        if (ts.isElementAccessExpression(decl.initializer) && this.checker) {
-          const arrayExpr = decl.initializer.expression;
-          const arrayType = this.checker.getTypeAtLocation(arrayExpr);
-          const arrayTypeStr = this.checker.typeToString(arrayType);
-          
-          // Check if array element type is share<T> (maps to std::shared_ptr<T>)
-          const shareMatch = arrayTypeStr.match(/(?:Array<)?share<([^>]+)>/);
-          
-          if (shareMatch) {
-            // This variable will hold a shared_ptr, update its type
-            const elementType = shareMatch[1];
-            cppType = new ast.CppType(`std::shared_ptr<gs::${elementType}>`);
-            isShareArraySubscript = true;  // Don't wrap again below
-          }
-        }
-        
-        // If the variable has share<T> type (std::shared_ptr), wrap the initializer
-        // BUT skip if we just got it from a share<T> array (already wrapped)
+        // ALL class instances are now created as smart pointers by visitNewExpression
+        // So NO wrapping needed except for Map.get() which returns V* that needs deref
         const typeStr = cppType.toString();
-        if (typeStr.startsWith('std::shared_ptr<') && typeStr.endsWith('>') && !isShareArraySubscript) {
-          const elementType = typeStr.slice('std::shared_ptr<'.length, -1);
-          // Wrap in make_shared
-          init = cpp.call(cpp.id(`std::make_shared<${elementType}>`), [init]);
+        const isMapGet = decl.initializer && tsUtils.isMapGetCall(decl.initializer);
+        
+        if (isMapGet && typeStr.includes('std::shared_ptr')) {
+          // Map.get() returns shared_ptr<T>* - safely dereference it
+          const tempExpr = init;
+          init = cpp.ternary(
+            cpp.binary(tempExpr, '!=', cpp.id('nullptr')),
+            cpp.unary('*', tempExpr),
+            cpp.id('nullptr')
+          );
         }
         
         // If initializing optional type with null, use std::nullopt instead of nullptr
         if (init instanceof ast.Identifier && init.name === 'nullptr' && 
             typeStr.startsWith('std::optional')) {
           init = cpp.id('std::nullopt');
+        }
+      }
+      
+      // IMPORTANT: Infer actual C++ type for auto variables
+      // For array methods like filter(), map(), the return type is the same array type
+      if (cppType.toString() === 'auto' && decl.initializer) {
+        if (ts.isCallExpression(decl.initializer) && 
+            ts.isPropertyAccessExpression(decl.initializer.expression)) {
+          const methodName = decl.initializer.expression.name.text;
+          const objExpr = decl.initializer.expression.expression;
+          
+          // Array methods that return the same array type
+          if (['filter', 'map', 'sort', 'reverse'].includes(methodName)) {
+            if (ts.isIdentifier(objExpr)) {
+              const objName = cppUtils.escapeName(objExpr.text);
+              const objType = this.variableTypes.get(objName);
+              if (objType) {
+                // Use the object's array type
+                cppType = objType;
+              }
+            }
+          }
         }
       }
       
@@ -213,7 +308,7 @@ export class AstCodegen {
       // 'const' just means the binding can't be reassigned.
       // - Primitives (number, bool) and strings: can be const
       // - Class instances: should NOT be const (objects are mutable)
-      const useConst = isConst && this.isConstableType(cppType, decl.initializer);
+      const useConst = isConst && cppUtils.isConstableType(cppType, decl.initializer);
       
       // VariableDecl constructor: (name, type, initializer, isConst)
       result.push(new ast.VariableDecl(name, cppType, init, useConst));
@@ -225,7 +320,7 @@ export class AstCodegen {
   private visitFunction(node: ts.FunctionDeclaration): ast.Function | undefined {
     if (!node.name) return undefined;
     
-    const name = this.escapeName(node.name.text);
+    const name = cppUtils.escapeName(node.name.text);
     const returnType = node.type ? this.mapType(node.type) : new ast.CppType('void');
     
     // Track return type for null handling in return statements
@@ -234,10 +329,14 @@ export class AstCodegen {
     
     const params: ast.Parameter[] = [];
     for (const param of node.parameters) {
-      const paramName = this.escapeName(param.name.getText());
+      const paramName = cppUtils.escapeName(param.name.getText());
       const paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
-      const passByConstRef = this.shouldPassByConstRef(param.type);
-      const passByMutableRef = this.shouldPassByMutableRef(param.type);
+      
+      // Register parameter with ownership checker
+      this.ownershipChecker.registerVariable(paramName, param);
+      
+      const passByConstRef = tsUtils.shouldPassByConstRef(param.type);
+      const passByMutableRef = tsUtils.shouldPassByMutableRef(param.type);
       params.push(new ast.Parameter(paramName, paramType, undefined, passByConstRef, passByMutableRef));
     }
     
@@ -252,7 +351,7 @@ export class AstCodegen {
   private visitClass(node: ts.ClassDeclaration): ast.Class | undefined {
     if (!node.name) return undefined;
     
-    const name = this.escapeName(node.name.text);
+    const name = cppUtils.escapeName(node.name.text);
     const fields: ast.Field[] = [];
     const constructors: ast.Constructor[] = [];
     const methods: ast.Method[] = [];
@@ -277,12 +376,12 @@ export class AstCodegen {
           // extends - single base class
           if (clause.types.length > 0) {
             // Get full type including template arguments
-            baseClass = this.escapeName(clause.types[0].getText());
+            baseClass = cppUtils.escapeName(clause.types[0].getText());
           }
         } else if (clause.token === ts.SyntaxKind.ImplementsKeyword) {
           // implements - multiple interfaces (treated as base classes in C++)
           for (const type of clause.types) {
-            baseClasses.push(this.escapeName(type.getText()));
+            baseClasses.push(cppUtils.escapeName(type.getText()));
           }
         }
       }
@@ -291,9 +390,13 @@ export class AstCodegen {
     // Collect fields
     for (const member of node.members) {
       if (ts.isPropertyDeclaration(member)) {
-        const fieldName = this.escapeName(member.name.getText());
+        const fieldName = cppUtils.escapeName(member.name.getText());
         const fieldType = member.type ? this.mapType(member.type) : new ast.CppType('auto');
         fields.push(new ast.Field(fieldName, fieldType));
+        
+        // Register property with ownership checker
+        this.ownershipChecker.registerProperty(name, fieldName, member);
+        
         // Track field types (prefixed with this. for class members)
         this.variableTypes.set(`this.${fieldName}`, fieldType);
       }
@@ -304,11 +407,11 @@ export class AstCodegen {
       if (ts.isConstructorDeclaration(member)) {
         const params: ast.Parameter[] = [];
         for (const param of member.parameters) {
-          const paramName = this.escapeName(param.name.getText());
+          const paramName = cppUtils.escapeName(param.name.getText());
           const paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
           // In constructors, arrays should be passed by const ref (they're just assigned to fields)
-          const passByConstRef = param.type && ts.isArrayTypeNode(param.type) ? true : this.shouldPassByConstRef(param.type);
-          const passByMutableRef = param.type && ts.isArrayTypeNode(param.type) ? false : this.shouldPassByMutableRef(param.type);
+          const passByConstRef = param.type && ts.isArrayTypeNode(param.type) ? true : tsUtils.shouldPassByConstRef(param.type);
+          const passByMutableRef = param.type && ts.isArrayTypeNode(param.type) ? false : tsUtils.shouldPassByMutableRef(param.type);
           params.push(new ast.Parameter(paramName, paramType, undefined, passByConstRef, passByMutableRef));
         }
         
@@ -322,7 +425,7 @@ export class AstCodegen {
     // Collect methods
     for (const member of node.members) {
       if (ts.isMethodDeclaration(member)) {
-        const methodName = this.escapeName(member.name.getText());
+        const methodName = cppUtils.escapeName(member.name.getText());
         const returnType = member.type ? this.mapType(member.type) : new ast.CppType('void');
         
         // Track return type for null handling in return statements
@@ -331,10 +434,10 @@ export class AstCodegen {
         
         const params: ast.Parameter[] = [];
         for (const param of member.parameters) {
-          const paramName = this.escapeName(param.name.getText());
+          const paramName = cppUtils.escapeName(param.name.getText());
           const paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
-          const passByConstRef = this.shouldPassByConstRef(param.type);
-          const passByMutableRef = this.shouldPassByMutableRef(param.type);
+          const passByConstRef = tsUtils.shouldPassByConstRef(param.type);
+          const passByMutableRef = tsUtils.shouldPassByMutableRef(param.type);
           params.push(new ast.Parameter(paramName, paramType, undefined, passByConstRef, passByMutableRef));
         }
         
@@ -344,7 +447,7 @@ export class AstCodegen {
         this.currentFunctionReturnType = previousReturnType;
         
         // Check if method should be const (doesn't modify 'this')
-        const isConst = this.shouldMethodBeConst(member);
+        const isConst = tsUtils.shouldMethodBeConst(member);
         
         methods.push(new ast.Method(methodName, returnType, params, body, ast.AccessSpecifier.Public, isConst));
       }
@@ -359,13 +462,13 @@ export class AstCodegen {
   }
   
   private visitInterface(node: ts.InterfaceDeclaration): ast.Class | undefined {
-    const name = this.escapeName(node.name.text);
+    const name = cppUtils.escapeName(node.name.text);
     const fields: ast.Field[] = [];
     
     // Convert interface properties to fields
     for (const member of node.members) {
       if (ts.isPropertySignature(member) && member.name) {
-        const fieldName = this.escapeName(member.name.getText());
+        const fieldName = cppUtils.escapeName(member.name.getText());
         const fieldType = member.type ? this.mapType(member.type) : new ast.CppType('auto');
         fields.push(new ast.Field(fieldName, fieldType));
       }
@@ -376,13 +479,13 @@ export class AstCodegen {
   }
   
   private visitEnum(node: ts.EnumDeclaration): ast.Enum | undefined {
-    const name = this.escapeName(node.name.text);
+    const name = cppUtils.escapeName(node.name.text);
     this.enumNames.add(name); // Track enum name
     const members: ast.EnumMember[] = [];
     
     let nextValue = 0;
     for (const member of node.members) {
-      const memberName = this.escapeName(member.name.getText());
+      const memberName = cppUtils.escapeName(member.name.getText());
       let value: number | undefined;
       
       if (member.initializer) {
@@ -419,6 +522,24 @@ export class AstCodegen {
   
   private visitStatement(node: ts.Statement): ast.Statement | undefined {
     if (ts.isReturnStatement(node)) {
+      // Check if returning a new expression with own<T> return type BEFORE visiting
+      if (node.expression && ts.isNewExpression(node.expression) &&
+          this.currentFunctionReturnType?.toString().startsWith('std::unique_ptr<')) {
+        // Extract the type from std::unique_ptr<T>
+        const returnTypeStr = this.currentFunctionReturnType.toString();
+        const match = returnTypeStr.match(/std::unique_ptr<(.+)>/);
+        if (match) {
+          const innerType = match[1];
+          // Visit arguments
+          const args = node.expression.arguments 
+            ? Array.from(node.expression.arguments).map(arg => this.visitExpression(arg))
+            : [];
+          // Create make_unique call
+          const expr = cpp.call(cpp.id(`std::make_unique<${innerType}>`), args);
+          return new ast.ReturnStmt(expr);
+        }
+      }
+      
       let expr = node.expression ? this.visitExpression(node.expression) : undefined;
       
       // If returning a ternary with pointer branches and function returns optional, convert
@@ -427,9 +548,9 @@ export class AstCodegen {
           node.expression && ts.isConditionalExpression(node.expression)) {
         // Check if this is a pattern like: result !== undefined ? result : null
         // where result is from Map.get() (pointer)
-        const isPointerTernary = this.isMapGetCall(node.expression.whenTrue) ||
+        const isPointerTernary = tsUtils.isMapGetCall(node.expression.whenTrue) ||
                                  (ts.isIdentifier(node.expression.whenTrue) && 
-                                  this.pointerVariables.has(this.escapeName(node.expression.whenTrue.text)));
+                                  this.pointerVariables.has(cppUtils.escapeName(node.expression.whenTrue.text)));
         
         if (isPointerTernary) {
           // Extract the inner type from std::optional<T>
@@ -449,7 +570,7 @@ export class AstCodegen {
       
       // If returning a pointer variable, dereference it
       if (expr instanceof ast.Identifier && ts.isIdentifier(node.expression!) && 
-          this.pointerVariables.has(this.escapeName(node.expression.text))) {
+          this.pointerVariables.has(cppUtils.escapeName(node.expression.text))) {
         expr = cpp.unary('*', expr);
       }
       
@@ -514,7 +635,7 @@ export class AstCodegen {
   
   private visitIfStatement(node: ts.IfStatement): ast.IfStmt {
     // Detect null checks BEFORE visiting condition
-    const unwrappedVar = this.extractNullCheck(node.expression);
+    const unwrappedVar = tsUtils.extractNullCheck(node.expression, (name) => cppUtils.escapeName(name));
     
     // Visit condition WITHOUT unwrapping (condition contains the null check itself)
     const condition = this.visitExpression(node.expression);
@@ -549,7 +670,7 @@ export class AstCodegen {
         const decls = node.initializer.declarations;
         if (decls.length > 0) {
           const decl = decls[0];
-          const name = this.escapeName(decl.name.getText());
+          const name = cppUtils.escapeName(decl.name.getText());
           
           // For loop iterators: use int instead of double for number types
           let type: ast.CppType;
@@ -600,7 +721,7 @@ export class AstCodegen {
     
     if (ts.isVariableDeclarationList(node.initializer)) {
       const decl = node.initializer.declarations[0];
-      varName = this.escapeName(decl.name.getText());
+      varName = cppUtils.escapeName(decl.name.getText());
       isConst = (node.initializer.flags & ts.NodeFlags.Const) !== 0;
     }
     
@@ -627,14 +748,14 @@ export class AstCodegen {
     
     if (node.catchClause) {
       if (node.catchClause.variableDeclaration) {
-        catchVar = this.escapeName(node.catchClause.variableDeclaration.name.getText());
+        catchVar = cppUtils.escapeName(node.catchClause.variableDeclaration.name.getText());
         // Try to determine the exception type from the catch clause type annotation
         if (node.catchClause.variableDeclaration.type) {
           const typeText = node.catchClause.variableDeclaration.type.getText();
           catchType = new ast.CppType(`const gs::${typeText}`, [], false, true);
         } else {
           // If no type annotation, scan catch block for instanceof checks
-          const instanceofType = this.findInstanceofTypeInCatch(node.catchClause.block, catchVar);
+          const instanceofType = tsUtils.findInstanceofTypeInCatch(node.catchClause.block, catchVar);
           if (instanceofType) {
             catchType = new ast.CppType(`const gs::${instanceofType}`, [], false, true);
           }
@@ -654,27 +775,6 @@ export class AstCodegen {
     return new ast.TryCatch(tryBlock, catchVar, catchType, catchBlock);
   }
   
-  /**
-   * Find instanceof checks in a catch block to determine the exception type
-   * e.g., if (e instanceof ValidationError) → ValidationError
-   */
-  private findInstanceofTypeInCatch(block: ts.Block, varName: string): string | undefined {
-    let foundType: string | undefined;
-    
-    const visit = (node: ts.Node): void => {
-      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword) {
-        // Check if left side is the catch variable
-        if (ts.isIdentifier(node.left) && node.left.text === varName) {
-          foundType = node.right.getText();
-        }
-      }
-      ts.forEachChild(node, visit);
-    };
-    
-    visit(block);
-    return foundType;
-  }
-  
   private visitExpression(node: ts.Expression): ast.Expression {
     if (ts.isNumericLiteral(node)) {
       // For numeric literals, create a raw identifier with the number value
@@ -684,7 +784,7 @@ export class AstCodegen {
     if (ts.isStringLiteral(node)) {
       // String literal already contains the text without quotes
       // We need to add quotes and escape
-      const escaped = this.escapeString(node.text);
+      const escaped = cppUtils.escapeString(node.text);
       return cpp.call(
         cpp.id('gs::String'),
         [cpp.id(`"${escaped}"`)] // Use id() not literal() to avoid double-quoting
@@ -748,16 +848,26 @@ export class AstCodegen {
         return cpp.id('gs::String');
       }
       
-      const escapedName = this.escapeName(varName);
+      const escapedName = cppUtils.escapeName(varName);
       
       // If this identifier is tracked as unwrapped
       if (this.unwrappedOptionals.has(escapedName)) {
-        // Use * for pointer variables, .value() for optionals
-        if (this.pointerVariables.has(escapedName)) {
-          return cpp.unary('*', cpp.id(escapedName));
-        } else {
-          return cpp.id(`${escapedName}.value()`);
+        // Check if it's a smart pointer type (shared_ptr, unique_ptr, weak_ptr)
+        const varType = this.variableTypes.get(escapedName);
+        if (varType && cppUtils.isSmartPointerType(varType)) {
+          // Smart pointers don't need unwrapping - they're already usable
+          // Just return the identifier (nullptr check passed, so it's safe to use)
+          return cpp.id(escapedName);
         }
+        
+        // For raw pointers (from Map.get() on non-smart-pointer values)
+        if (this.pointerVariables.has(escapedName)) {
+          // Dereference the pointer
+          return cpp.unary('*', cpp.id(escapedName));
+        }
+        
+        // For std::optional types
+        return cpp.id(`${escapedName}.value()`);
       }
       
       return cpp.id(escapedName);
@@ -802,8 +912,19 @@ export class AstCodegen {
       
       const subscript = cpp.subscript(obj, index);
       
+      // Check if array element type is shared_ptr using ownership-aware type checker
+      // This preserves share<T> annotations that TypeChecker erases
+      const hasSmartPtrElements = this.ownershipChecker.hasSmartPointerElements(node.expression);
+      
+      // For shared_ptr elements, always dereference once to get the shared_ptr
+      // operator[] returns shared_ptr<T>*, we want shared_ptr<T>
+      // Then property access will use -> on the shared_ptr to access T's members
+      if (hasSmartPtrElements) {
+        return cpp.unary('*', subscript);
+      }
+      
       if (isPartOfPropertyAccess) {
-        // Don't dereference - parent will use -> to access
+        // Don't dereference - parent will use -> to access the pointer
         return subscript;
       } else {
         // Dereference to get value
@@ -860,6 +981,19 @@ export class AstCodegen {
             elementType = this.mapTypeScriptTypeToCpp(argStr);
           }
         }
+        
+        // NEW: If elements are new expressions creating class instances,
+        // the element type should be the smart pointer type (unique_ptr or shared_ptr)
+        if (elements.length > 0 && node.elements[0] && ts.isNewExpression(node.elements[0])) {
+          const firstNew = node.elements[0];
+          const className = firstNew.expression.getText();
+          const ownershipType = this.getOwnershipTypeForNew(firstNew);
+          if (ownershipType === 'unique') {
+            elementType = `std::unique_ptr<gs::${className}>`;
+          } else {
+            elementType = `std::shared_ptr<gs::${className}>`;
+          }
+        }
       }
       
       // Generate gs::Array<T>({...}) with explicit template parameter if we know the type
@@ -896,46 +1030,6 @@ export class AstCodegen {
     }
     
     return cpp.id('/* UNSUPPORTED */');
-  }
-  
-  /**
-   * Extract variable name from null check expressions like:
-   * - x !== null
-   * - x !== null && otherCondition
-   * Returns the variable name if found, undefined otherwise
-   */
-  private extractNullCheck(expr: ts.Expression): string | undefined {
-    // Handle: x !== null or x !== undefined
-    if (ts.isBinaryExpression(expr)) {
-      const op = expr.operatorToken.kind;
-      if (op === ts.SyntaxKind.ExclamationEqualsEqualsToken || op === ts.SyntaxKind.ExclamationEqualsToken) {
-        // Check if comparing with null or undefined
-        const isLeftNull = expr.left.kind === ts.SyntaxKind.NullKeyword;
-        const isRightNull = expr.right.kind === ts.SyntaxKind.NullKeyword;
-        const isLeftUndefined = ts.isIdentifier(expr.left) && expr.left.text === 'undefined';
-        const isRightUndefined = ts.isIdentifier(expr.right) && expr.right.text === 'undefined';
-        
-        if ((isRightNull || isRightUndefined) && ts.isIdentifier(expr.left)) {
-          return this.escapeName(expr.left.text);
-        }
-        if ((isLeftNull || isLeftUndefined) && ts.isIdentifier(expr.right)) {
-          return this.escapeName(expr.right.text);
-        }
-      }
-      
-      // Handle: x !== null && otherCondition
-      if (op === ts.SyntaxKind.AmpersandAmpersandToken) {
-        // Check left side of &&
-        const leftCheck = this.extractNullCheck(expr.left);
-        if (leftCheck) return leftCheck;
-        
-        // Check right side of &&
-        const rightCheck = this.extractNullCheck(expr.right);
-        if (rightCheck) return rightCheck;
-      }
-    }
-    
-    return undefined;
   }
   
   private visitBinaryExpression(node: ts.BinaryExpression): ast.Expression {
@@ -995,21 +1089,43 @@ export class AstCodegen {
     const isRightUndefined = ts.isIdentifier(node.right) && node.right.text === 'undefined';
     
     // Check if either side is a Map.get() call which returns a pointer
-    const isLeftMapGet = this.isMapGetCall(node.left);
-    const isRightMapGet = this.isMapGetCall(node.right);
+    const isLeftMapGet = tsUtils.isMapGetCall(node.left);
+    const isRightMapGet = tsUtils.isMapGetCall(node.right);
     
     // Check if either side is an identifier that holds a pointer value
-    const isLeftPointer = ts.isIdentifier(node.left) && this.pointerVariables.has(this.escapeName(node.left.text));
-    const isRightPointer = ts.isIdentifier(node.right) && this.pointerVariables.has(this.escapeName(node.right.text));
+    const isLeftPointer = ts.isIdentifier(node.left) && this.pointerVariables.has(cppUtils.escapeName(node.left.text));
+    const isRightPointer = ts.isIdentifier(node.right) && this.pointerVariables.has(cppUtils.escapeName(node.right.text));
+    
+    // Check if either side is a shared_ptr type (share<T>)
+    let isLeftSharedPtr = false;
+    let isRightSharedPtr = false;
+    if (this.checker) {
+      // Check if left side is share<T> type
+      if (!isLeftNull && !isLeftUndefined) {
+        const leftType = this.checker.getTypeAtLocation(node.left);
+        const leftTypeStr = this.checker.typeToString(leftType);
+        isLeftSharedPtr = leftTypeStr.includes('share<') || 
+                          (ts.isIdentifier(node.left) && this.variableTypes.has(cppUtils.escapeName(node.left.text)) &&
+                           this.variableTypes.get(cppUtils.escapeName(node.left.text))!.toString().includes('std::shared_ptr'));
+      }
+      // Check if right side is share<T> type
+      if (!isRightNull && !isRightUndefined) {
+        const rightType = this.checker.getTypeAtLocation(node.right);
+        const rightTypeStr = this.checker.typeToString(rightType);
+        isRightSharedPtr = rightTypeStr.includes('share<') ||
+                           (ts.isIdentifier(node.right) && this.variableTypes.has(cppUtils.escapeName(node.right.text)) &&
+                            this.variableTypes.get(cppUtils.escapeName(node.right.text))!.toString().includes('std::shared_ptr'));
+      }
+    }
     
     // Now visit the expressions
     let left = this.visitExpression(node.left);
     let right = this.visitExpression(node.right);
     
-    // If comparing a pointer (Map.get() or pointer variable) with undefined/null, replace with nullptr
-    if ((isLeftMapGet || isLeftPointer) && (isRightNull || isRightUndefined)) {
+    // If comparing a pointer/shared_ptr with undefined/null, replace with nullptr
+    if ((isLeftMapGet || isLeftPointer || isLeftSharedPtr) && (isRightNull || isRightUndefined)) {
       right = cpp.id('nullptr');
-    } else if ((isRightMapGet || isRightPointer) && (isLeftNull || isLeftUndefined)) {
+    } else if ((isRightMapGet || isRightPointer || isRightSharedPtr) && (isLeftNull || isLeftUndefined)) {
       left = cpp.id('nullptr');
     } else {
       // For other optional comparisons, use std::nullopt for null (undefined already mapped)
@@ -1024,21 +1140,9 @@ export class AstCodegen {
     return cpp.binary(left, op, right);
   }
   
-  /**
-   * Check if an expression is a call to Map.get() or similar methods that return pointers
-   */
-  private isMapGetCall(node: ts.Expression): boolean {
-    if (!ts.isCallExpression(node)) return false;
-    if (!ts.isPropertyAccessExpression(node.expression)) return false;
-    
-    const methodName = node.expression.name.text;
-    // Map.get(), Array operator[], etc. return pointers
-    return methodName === 'get';
-  }
-  
   private visitNewExpression(node: ts.NewExpression): ast.Expression {
     // Get the class name
-    let className = this.escapeName(node.expression.getText());
+    let className = cppUtils.escapeName(node.expression.getText());
     
     // Get constructor arguments
     const args = node.arguments ? node.arguments.map(arg => this.visitExpression(arg)) : [];
@@ -1080,9 +1184,53 @@ export class AstCodegen {
       }
     }
     
-    // In C++, we create objects on the stack by default
-    // new ClassName(args) → gs::ClassName(args)
-    return cpp.call(cpp.id(`gs::${className}`), args);
+    // ALL class instances are heap-allocated via smart pointers
+    // Determine ownership type from parent context
+    const ownershipType = this.getOwnershipTypeForNew(node);
+    
+    if (ownershipType === 'unique') {
+      // Explicit unique ownership (own<T>)
+      return cpp.call(cpp.id(`std::make_unique<gs::${className}>`), args);
+    } else {
+      // Default to shared ownership (matches JavaScript reference semantics)
+      return cpp.call(cpp.id(`std::make_shared<gs::${className}>`), args);
+    }
+  }
+  
+  /**
+   * Determine if a new expression should create shared_ptr or unique_ptr
+   * based on the target variable type or context
+   */
+  private getOwnershipTypeForNew(node: ts.NewExpression): 'unique' | 'shared' {
+    if (!this.checker) return 'shared';  // Default to shared (matches JS semantics)
+    
+    // Check parent context
+    const parent = node.parent;
+    
+    // Variable declaration: const x: own<T> = new T() - explicit unique ownership
+    if (ts.isVariableDeclaration(parent) && parent.type) {
+      const typeText = parent.type.getText();
+      if (typeText.startsWith('own<')) return 'unique';
+      if (typeText.startsWith('share<')) return 'shared';
+    }
+    
+    // Return statement: return new T() where function returns own<T>
+    if (ts.isReturnStatement(parent) && this.currentFunctionReturnType) {
+      const returnTypeStr = this.currentFunctionReturnType.toString();
+      if (returnTypeStr.includes('std::unique_ptr')) return 'unique';
+      if (returnTypeStr.includes('std::shared_ptr')) return 'shared';
+    }
+    
+    // Assignment: x = new T() where x is own<T>
+    if (ts.isBinaryExpression(parent) && parent.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+      const leftType = this.checker.getTypeAtLocation(parent.left);
+      const leftTypeStr = this.checker.typeToString(leftType);
+      if (leftTypeStr.startsWith('own<')) return 'unique';
+      if (leftTypeStr.startsWith('share<')) return 'shared';
+    }
+    
+    // Default to shared ownership (matches JavaScript reference semantics)
+    return 'shared';
   }
   
   /**
@@ -1100,6 +1248,24 @@ export class AstCodegen {
         if (this.templateParameters.has(tsType)) {
           return tsType;
         }
+        
+        // Handle ownership types: own<T>, share<T>, use<T>
+        const ownMatch = tsType.match(/^own<(.+)>$/);
+        if (ownMatch) {
+          const innerType = this.mapTypeScriptTypeToCpp(ownMatch[1]);
+          return `std::unique_ptr<${innerType}>`;
+        }
+        const shareMatch = tsType.match(/^share<(.+)>$/);
+        if (shareMatch) {
+          const innerType = this.mapTypeScriptTypeToCpp(shareMatch[1]);
+          return `std::shared_ptr<${innerType}>`;
+        }
+        const useMatch = tsType.match(/^use<(.+)>$/);
+        if (useMatch) {
+          const innerType = this.mapTypeScriptTypeToCpp(useMatch[1]);
+          return `std::weak_ptr<${innerType}>`;
+        }
+        
         // For custom types, prefix with gs:: namespace
         return tsType.startsWith('gs::') ? tsType : `gs::${tsType}`;
     }
@@ -1111,10 +1277,13 @@ export class AstCodegen {
     
     const params: ast.Parameter[] = [];
     for (const param of node.parameters) {
-      const paramName = this.escapeName(param.name.getText());
+      const paramName = cppUtils.escapeName(param.name.getText());
       // For lambdas, use auto for parameter types unless explicitly typed
       const paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
       params.push(new ast.Parameter(paramName, paramType));
+      
+      // Track parameter type for smart pointer detection
+      this.variableTypes.set(paramName, paramType);
     }
     
     // Get return type if specified, otherwise undefined (C++ will infer)
@@ -1154,7 +1323,7 @@ export class AstCodegen {
     // Extract function parameters
     const params: ast.Parameter[] = [];
     for (const param of node.parameters) {
-      const paramName = this.escapeName(param.name.getText());
+      const paramName = cppUtils.escapeName(param.name.getText());
       const paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
       params.push(new ast.Parameter(paramName, paramType));
     }
@@ -1190,7 +1359,7 @@ export class AstCodegen {
     if (ts.isNoSubstitutionTemplateLiteral(node)) {
       // Simple template with no substitutions: `hello`
       const text = node.text;
-      const escaped = this.escapeString(text);
+      const escaped = cppUtils.escapeString(text);
       return cpp.call(cpp.id('gs::String'), [cpp.id(`"${escaped}"`)]);
     }
     
@@ -1199,7 +1368,7 @@ export class AstCodegen {
     
     // Add head text
     if (node.head.text) {
-      const escaped = this.escapeString(node.head.text);
+      const escaped = cppUtils.escapeString(node.head.text);
       parts.push(cpp.call(cpp.id('gs::String'), [cpp.id(`"${escaped}"`)]));
     }
     
@@ -1212,7 +1381,7 @@ export class AstCodegen {
       parts.push(wrappedExpr);
       
       if (span.literal.text) {
-        const escaped = this.escapeString(span.literal.text);
+        const escaped = cppUtils.escapeString(span.literal.text);
         parts.push(cpp.call(cpp.id('gs::String'), [cpp.id(`"${escaped}"`)]));
       }
     }
@@ -1236,7 +1405,7 @@ export class AstCodegen {
     let objNode: ts.Expression | undefined;
     
     if (ts.isPropertyAccessExpression(node.expression)) {
-      methodName = this.escapeName(node.expression.name.text);
+      methodName = cppUtils.escapeName(node.expression.name.text);
       objNode = node.expression.expression;
     }
     
@@ -1255,8 +1424,15 @@ export class AstCodegen {
         const shareArrayMatch = objTypeStr.match(/(?:Array<)?share<([^>]+)>/);
         if (shareArrayMatch) {
           const elementType = shareArrayMatch[1];
-          // Wrap in std::make_shared if the argument is a new expression or stack object
-          if (ts.isNewExpression(arg) || ts.isIdentifier(arg)) {
+          
+          // Check if the argument itself is already a share<T> type (variable or field)
+          // If so, don't wrap it; otherwise, wrap it
+          const argType = this.checker.getTypeAtLocation(arg);
+          const argTypeStr = this.checker.typeToString(argType);
+          const isAlreadyShared = argTypeStr.includes('share<');
+          
+          // Wrap in std::make_shared unless it's already a share<T>
+          if (!isAlreadyShared) {
             argExpr = cpp.call(cpp.id(`std::make_shared<gs::${elementType}>`), [argExpr]);
           }
         }
@@ -1307,7 +1483,14 @@ export class AstCodegen {
       const isArraySubscript = ts.isElementAccessExpression(objNode);
       const isPointer = isArraySubscript || this.isSmartPointerAccess(objNode);
       
-      return cpp.call(cpp.member(objExpr, methodName, isPointer), args);
+      // If objExpr is a unary expression (like *arr[i]) and we're using ->, wrap in parens
+      // Because *a->b is parsed as *(a->b), but we want (*a)->b
+      let memberObj: ast.Expression = objExpr;
+      if (objExpr instanceof ast.UnaryExpr && isPointer) {
+        memberObj = cpp.paren(objExpr);
+      }
+      
+      return cpp.call(cpp.member(memberObj, methodName, isPointer), args);
     }
     
     // Regular function call
@@ -1324,7 +1507,7 @@ export class AstCodegen {
       
       // Check if it's an enum access
       if (this.enumNames.has(objName)) {
-        return cpp.id(`gs::${objName}::${prop}`);
+        return cpp.id(`gs::${objName}::${cppUtils.escapeName(prop)}`);
       }
       
       if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON' || objName === 'Date' || objName === 'String') {
@@ -1337,7 +1520,7 @@ export class AstCodegen {
       // Check if the field is a smart pointer type
       const fieldName = `this.${prop}`;
       const fieldType = this.variableTypes.get(fieldName);
-      const isPointer = fieldType ? this.isSmartPointerType(fieldType) : false;
+      const isPointer = fieldType ? cppUtils.isSmartPointerType(fieldType) : false;
       
       // For consistency, wrap isPointer fields in another layer
       // this.input where input is share<String> → this->input (which is a shared_ptr)
@@ -1345,16 +1528,27 @@ export class AstCodegen {
       return cpp.member(cpp.id('this'), prop, true); // Always use -> for this
     }
     
-    const obj = this.visitExpression(node.expression);
+    let obj = this.visitExpression(node.expression);
     
     // Special case: array.length and map.size should be method calls
     if (this.checker) {
       if (prop === 'length') {
         const objType = this.checker.getTypeAtLocation(node.expression);
         const objTypeStr = this.checker.typeToString(objType);
-        // Check if this is an array type
-        if (objTypeStr.endsWith('[]') || objTypeStr.startsWith('Array<') || objTypeStr === 'string') {
+        // Check if this is an array type or string
+        if (objTypeStr.endsWith('[]') || objTypeStr.startsWith('Array<') || 
+            objTypeStr === 'string' || objTypeStr === 'String') {
           return cpp.call(cpp.member(obj, 'length'), []);
+        }
+        // Check if accessing .length on a this.field where field is a String smart pointer
+        if (ts.isPropertyAccessExpression(node.expression) && 
+            node.expression.expression.kind === ts.SyntaxKind.ThisKeyword) {
+          const fieldName = `this.${node.expression.name.text}`;
+          const fieldType = this.variableTypes.get(fieldName);
+          if (fieldType && fieldType.toString().includes('gs::String')) {
+            // Field is shared_ptr<gs::String>, use -> for member access
+            return cpp.call(cpp.member(obj, 'length', true), []);
+          }
         }
       }
       if (prop === 'size') {
@@ -1368,10 +1562,19 @@ export class AstCodegen {
     }
     
     // Check if object is an array subscript (arr[i]) - these return pointers, so use ->
+    // BUT: if it's a share<T>[] array, we dereferenced to get the shared_ptr, so use ->
+    // for smart pointer access, not raw pointer access
     const isArraySubscript = ts.isElementAccessExpression(node.expression);
     
     // Check if the object is a smart pointer type (needs -> instead of .)
-    const isPointer = isArraySubscript || this.isSmartPointerAccess(node.expression);
+    const isPointer = this.isSmartPointerAccess(node.expression) || 
+                      (isArraySubscript && !this.isSmartPointerAccess(node.expression));
+    
+    // If object is a unary expression (like *arr[i]) and we're using ->, wrap in parens
+    // Because *a->b is parsed as *(a->b), but we want (*a)->b
+    if (obj instanceof ast.UnaryExpr && isPointer) {
+      obj = cpp.paren(obj);
+    }
     
     return cpp.member(obj, prop, isPointer);
   }
@@ -1397,7 +1600,18 @@ export class AstCodegen {
       
       if (nonNullableTypes.length === 1) {
         // T | null → std::optional<T>
+        // BUT: If T is a smart pointer (shared_ptr, unique_ptr, weak_ptr), don't wrap in optional
+        // because smart pointers can already be null
         const innerType = this.mapType(nonNullableTypes[0]);
+        const innerTypeStr = innerType.toString();
+        
+        // Skip optional wrapping for smart pointers - they're already nullable
+        if (innerTypeStr.includes('std::shared_ptr') || 
+            innerTypeStr.includes('std::unique_ptr') ||
+            innerTypeStr.includes('std::weak_ptr')) {
+          return innerType;
+        }
+        
         return new ast.CppType('std::optional', [innerType]);
       }
       
@@ -1461,62 +1675,38 @@ export class AstCodegen {
       if (this.templateParameters.has(text)) {
         return new ast.CppType(text);
       }
+      
+      // If the type reference has NO type arguments (plain class name),
+      // and it's a class, wrap in shared_ptr (default ownership)
+      // BUT: don't do this if we're being called recursively from ownership type processing
+      // We can detect this by checking if the parent is own<T>/share<T>/use<T>
+      const parent = typeNode.parent;
+      const shouldAutoWrap = !typeNode.typeArguments && 
+                             !(parent && ts.isTypeReferenceNode(parent) && 
+                               ['own', 'share', 'use'].includes(parent.typeName.getText()));
+      
+      if (shouldAutoWrap && this.checker) {
+        const type = this.checker.getTypeAtLocation(typeNode);
+        const symbol = type.getSymbol();
+        // Check if it's a class (not a primitive or built-in type)
+        if (symbol && (symbol.flags & ts.SymbolFlags.Class)) {
+          return new ast.CppType(`std::shared_ptr<gs::${text}>`);
+        }
+      }
+      
       return new ast.CppType(`gs::${text}`);
     }
     
     return new ast.CppType(text);
   }
   
-  private shouldPassByConstRef(typeNode: ts.TypeNode | undefined): boolean {
-    if (!typeNode) return false;
-    
-    const typeText = typeNode.getText();
-    
-    // String should be passed by const ref
-    if (typeText === 'string') return true;
-    
-    // Arrays are passed by mutable ref, not const ref (unless in constructor)
-    if (ts.isArrayTypeNode(typeNode)) return false;
-    
-    // Class/interface types should be passed by const ref
-    // Primitives (number, boolean) should be passed by value
-    if (typeText === 'number' || typeText === 'boolean') return false;
-    
-    // If it's a type reference (custom type name), pass by const ref
-    if (ts.isTypeReferenceNode(typeNode)) return true;
-    
-    return false;
-  }
-  
-  private shouldPassByMutableRef(typeNode: ts.TypeNode | undefined): boolean {
-    if (!typeNode) return false;
-    
-    // Arrays should be passed by mutable reference
-    if (ts.isArrayTypeNode(typeNode)) return true;
-    
-    return false;
-  }
-  
-  private escapeName(name: string): string {
-    // C++ keywords and common macros that conflict
-    const keywords = new Set(['class', 'namespace', 'template', 'EOF', 'delete', 'char']);
-    let result = keywords.has(name) ? name + '_' : name;
-    
-    // Sanitize Unicode characters to hex codes for portability
-    // Convert non-ASCII characters to _uXXXX_ format
-    result = result.replace(/[^\x00-\x7F]/g, (char) => {
-      const code = char.charCodeAt(0);
-      return `_u${code.toString(16)}_`;
-    });
-    
-    return result;
-  }
-  
-  private escapeString(str: string): string {
+  /**
     return str
-      .replace(/\\/g, '\\\\')
-      .replace(/"/g, '\\"')
-      .replace(/\n/g, '\\n');
+      .replace(/\\/g, '\\\\')  // Backslash must be first
+      .replace(/"/g, '\\"')     // Double quotes
+      .replace(/\n/g, '\\n')    // Newline
+      .replace(/\r/g, '\\r')    // Carriage return
+      .replace(/\t/g, '\\t');   // Tab
   }
   
   /**
@@ -1573,10 +1763,33 @@ export class AstCodegen {
   private isSmartPointerAccess(expr: ts.Expression): boolean {
     // Check if it's an identifier and look up its type
     if (ts.isIdentifier(expr)) {
-      const varName = this.escapeName(expr.text);
+      const varName = cppUtils.escapeName(expr.text);
       const varType = this.variableTypes.get(varName);
+      
+      // If we have the type tracked, use it
       if (varType) {
-        return this.isSmartPointerType(varType);
+        // Check if it's a direct smart pointer
+        if (cppUtils.isSmartPointerType(varType)) {
+          return true;
+        }
+        
+        // Check if it's an unwrapped optional<smart_ptr<T>>
+        if (this.unwrappedOptionals.has(varName)) {
+          const typeStr = varType.toString();
+          // Check if the optional contains a smart pointer
+          if (typeStr.startsWith('std::optional<') && 
+              (typeStr.includes('std::shared_ptr') || typeStr.includes('std::unique_ptr'))) {
+            return true;
+          }
+        }
+      }
+      
+      // Fallback: use ownership checker to infer type from AST
+      if (this.unwrappedOptionals.has(varName)) {
+        const ownershipType = this.ownershipChecker.getTypeOfExpression(expr);
+        if (ownershipType?.isNullable && ownershipType.ownership) {
+          return true;
+        }
       }
     }
     
@@ -1586,84 +1799,24 @@ export class AstCodegen {
         const fieldName = `this.${expr.name.text}`;
         const fieldType = this.variableTypes.get(fieldName);
         if (fieldType) {
-          return this.isSmartPointerType(fieldType);
+          return cppUtils.isSmartPointerType(fieldType);
         }
       }
+    }
+    
+    // Check if it's an array subscript with share<T> elements
+    // arr[i] where arr is Array<share<Person>> returns shared_ptr<Person>
+    if (ts.isElementAccessExpression(expr)) {
+      return this.ownershipChecker.hasSmartPointerElements(expr.expression);
+    }
+    
+    // Check if it's a call expression that returns a smart pointer
+    // e.g., bob.value() where bob is optional<shared_ptr<Person>>
+    if (ts.isCallExpression(expr)) {
+      return this.ownershipChecker.isSmartPointer(expr);
     }
     
     return false;
-  }
-  
-  /**
-   * Check if a C++ type is a smart pointer (std::unique_ptr, std::shared_ptr, std::weak_ptr)
-   */
-  private isSmartPointerType(type: ast.CppType): boolean {
-    const name = type.name;
-    return name.startsWith('std::unique_ptr<') || 
-           name.startsWith('std::shared_ptr<') || 
-           name.startsWith('std::weak_ptr<');
-  }
-  
-  /**
-   * Determine if a method should be marked as const.
-   * Methods that don't modify member variables should be const.
-   */
-  private shouldMethodBeConst(method: ts.MethodDeclaration): boolean {
-    // Check if method body has any mutations to 'this' or its properties
-    if (!method.body) {
-      return true; // Abstract methods can be const
-    }
-    
-    let hasMutation = false;
-    const visit = (node: ts.Node): void => {
-      // Check for direct assignments to this.field
-      if (ts.isBinaryExpression(node) && 
-          node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
-        if (ts.isPropertyAccessExpression(node.left) &&
-            node.left.expression.kind === ts.SyntaxKind.ThisKeyword) {
-          hasMutation = true;
-        }
-        // Also check for assignments to this.field.property (e.g., this.items.length = n)
-        // which becomes this.items.resize(n) in C++
-        if (ts.isPropertyAccessExpression(node.left) &&
-            ts.isPropertyAccessExpression(node.left.expression) &&
-            node.left.expression.expression.kind === ts.SyntaxKind.ThisKeyword) {
-          hasMutation = true;
-        }
-      }
-      
-      // Check for method calls on this that might mutate
-      // e.g., this.divide() where divide is non-const
-      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
-        if (node.expression.expression.kind === ts.SyntaxKind.ThisKeyword) {
-          // Calling a method on this - conservatively assume it might mutate
-          // (We could check if the called method is const, but that requires tracking)
-          hasMutation = true;
-        }
-      }
-      
-      // Check for method calls on this.field that mutate state
-      // e.g., this.map.set(), this.array.push(), this.array.resize()
-      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
-        const methodName = node.expression.name.text;
-        const mutatingMethods = ['set', 'push', 'pop', 'shift', 'unshift', 'splice', 'delete_', 'clear', 'resize'];
-        
-        if (mutatingMethods.includes(methodName)) {
-          // Check if this is called on a this.field
-          const obj = node.expression.expression;
-          if (ts.isPropertyAccessExpression(obj) && 
-              obj.expression.kind === ts.SyntaxKind.ThisKeyword) {
-            hasMutation = true;
-          }
-        }
-      }
-      
-      ts.forEachChild(node, visit);
-    };
-    
-    visit(method.body);
-    
-    return !hasMutation;
   }
   
   /**
@@ -1759,30 +1912,5 @@ export class AstCodegen {
       initList,
       body: new ast.Block(remainingStatements)
     };
-  }
-  
-  /**
-   * Check if an arrow function returns a value (vs void)
-   */
-  private arrowFunctionHasReturnValue(node: ts.ArrowFunction): boolean {
-    // If body is an expression (not a block), it always returns a value
-    if (!ts.isBlock(node.body)) {
-      return true;
-    }
-    
-    // Check if any return statement has a value
-    let hasReturnValue = false;
-    const visit = (n: ts.Node): void => {
-      if (ts.isReturnStatement(n) && n.expression) {
-        hasReturnValue = true;
-      }
-      // Don't recurse into nested functions
-      if (!ts.isFunctionLike(n) || n === node) {
-        ts.forEachChild(n, visit);
-      }
-    };
-    visit(node.body);
-    
-    return hasReturnValue;
   }
 }

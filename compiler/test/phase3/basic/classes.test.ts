@@ -78,7 +78,7 @@ describe('Phase 3: Classes', () => {
     const cpp = compileToCpp(source);
     
     expect(cpp).toContain('void increment() {');
-    expect(cpp).toContain('double getValue() {');
+    expect(cpp).toContain('double getValue() const {');
   });
   
   it('should escape class names that are keywords', () => {

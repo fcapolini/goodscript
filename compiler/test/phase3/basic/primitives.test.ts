@@ -147,7 +147,7 @@ describe('Phase 3: Functions', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('void remove() {');
+    expect(cpp).toContain('void remove() const {');
   });
 });
 

@@ -4,9 +4,9 @@
 
 ## Architecture
 
-The C++ code generation uses an **AST-based approach**:
+The C++ code generation uses an **AST-based approach** with **ownership-aware type tracking**:
 
-### Current Implementation (Nov 29, 2025 - Late Evening)
+### Current Implementation (Nov 30, 2025 - Early Morning)
 
 **New AST-Based Codegen:**
 - **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~1,450 lines)
@@ -20,6 +20,11 @@ The C++ code generation uses an **AST-based approach**:
 - **`src/cpp/ast.ts`** - C++ AST node type definitions (717 lines)
 - **`src/cpp/builder.ts`** - Fluent API for constructing AST (405 lines)
 - **`src/cpp/renderer.ts`** - AST to formatted C++ code converter (760 lines)
+- **`src/cpp/ownership-aware-type-checker.ts`** - Preserves ownership qualifiers (354 lines)
+  - Wraps TypeScript's type checker to preserve `own<T>`, `share<T>`, `use<T>`
+  - Reads types directly from AST since TypeChecker erases type aliases
+  - Tracks types through method chaining, optional unwrapping, array operations
+  - Enables correct smart pointer detection for C++ code generation
 
 **Legacy Implementation:**
 - **`src/cpp-codegen.ts`** - String-based codegen (deprecated)
@@ -32,6 +37,7 @@ The C++ code generation uses an **AST-based approach**:
 - **Maintainability:** Each feature is 10-30 lines of code
 - **Incremental development:** Add features one at a time, test immediately
 - **No formatting bugs:** Renderer handles all indentation, braces, semicolons
+- **Ownership preservation:** OwnershipAwareTypeChecker tracks ownership through all expressions
 
 See `src/cpp/README.md` for usage examples.
 
@@ -396,11 +402,13 @@ See `docs/ZIG-TOOLCHAIN.md` for detailed information on Zig integration.
 - [x] **Null Comparisons** - Smart pointers compare to `nullptr`, optionals to `std::nullopt`
 - [x] **Member Access** - Context-aware use of `->` for smart pointers, `.` for values/vectors
 - [x] **Type Inference** - Handles variables initialized from smart pointer arrays
+- [x] **Ownership Type Tracking** - OwnershipAwareTypeChecker preserves `own<T>`, `share<T>`, `use<T>` through all expressions
+- [x] **Array Element Access** - `Array<share<T>>[i].method()` generates `(*arr[i])->method()`
+- [x] **Optional Unwrapping** - Automatic `.value()` insertion with smart pointer detection
+- [x] **Method Chaining** - Preserves ownership through `.filter().sort()` etc.
 - [ ] **Construction** - `std::make_unique()`, `std::make_shared()` wrapping (partial)
-- [ ] **Optional Unwrapping** - Automatic dereferencing of `optional<shared_ptr<T>>`
 - [ ] **State Tracking** - Avoid double-wrapping already-wrapped pointers (partial)
 - [ ] **Move Semantics** - Use `std::move()` for efficiency (partial)
-- [ ] **Method Chaining** - Handle fluent interfaces with smart pointers
 
 #### Advanced Features
 - [ ] **Async/Await** - Map to C++20 coroutines (`co_await`, `co_return`)
