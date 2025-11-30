@@ -17,6 +17,7 @@ export class AstCodegen {
   private enumNames = new Set<string>(); // Track enum names for property access
   private currentFunctionReturnType?: ast.CppType; // Track current function return type for null handling
   private unwrappedOptionals = new Set<string>(); // Track variables known to be non-null in current scope
+  private smartPointerNullChecks = new Set<string>(); // Track smart pointer variables checked against nullptr
   private variableTypes = new Map<string, ast.CppType>(); // Track variable types for smart pointer detection
   private pointerVariables = new Set<string>(); // Track variables that are pointers (from Map.get(), etc.)
   private templateParameters = new Set<string>(); // Track template parameter names (T, K, V, etc.)
@@ -139,11 +140,22 @@ export class AstCodegen {
           }
         }
         
-        const ownershipType = this.getOwnershipTypeForNew(decl.initializer);
-        if (ownershipType === 'unique') {
-          cppType = new ast.CppType(`std::unique_ptr<gs::${className}>`);
+        // Check if it's a built-in value type (Map, Array, Set, etc.)
+        // These are NOT wrapped in smart pointers
+        const builtInValueTypes = ['Map', 'Array', 'Set', 'String', 'RegExp', 'Date', 'Promise'];
+        const baseClassName = className.split('<')[0];
+        
+        if (builtInValueTypes.includes(baseClassName)) {
+          // Value types: direct type
+          cppType = new ast.CppType(`gs::${className}`);
         } else {
-          cppType = new ast.CppType(`std::shared_ptr<gs::${className}>`);
+          // User-defined classes: smart pointers
+          const ownershipType = this.getOwnershipTypeForNew(decl.initializer);
+          if (ownershipType === 'unique') {
+            cppType = new ast.CppType(`std::unique_ptr<gs::${className}>`);
+          } else {
+            cppType = new ast.CppType(`std::shared_ptr<gs::${className}>`);
+          }
         }
       } else if (decl.initializer && ts.isElementAccessExpression(decl.initializer) && this.checker) {
         // Infer type from array subscript: arr[i] where arr is Array<T>
@@ -281,22 +293,29 @@ export class AstCodegen {
           
           // Check if we need to wrap the initializer in a smart pointer
           // Case: const shared: share<T> = plainValue;
-          if (decl.type) {
+          // But NOT: const shared: share<T> = new T(); (already creates smart ptr)
+          if (decl.type && !ts.isNewExpression(decl.initializer)) {
             const varTypeText = decl.type.getText();
-            const varOwnership = this.ownershipChecker.getTypeOfExpression(decl.name as ts.Expression);
-            const initOwnership = this.ownershipChecker.getTypeOfExpression(decl.initializer);
             
-            // If variable is share<T> but initializer is plain T, wrap it
-            if (varOwnership?.ownership === 'share' && !initOwnership?.ownership) {
-              const innerType = varOwnership.baseType;
-              const cppInnerType = this.mapTypeScriptTypeToCpp(innerType);
-              init = cpp.call(cpp.id(`std::make_shared<${cppInnerType}>`), [init]);
-            }
-            // If variable is own<T> but initializer is plain T, wrap it
-            else if (varOwnership?.ownership === 'own' && !initOwnership?.ownership) {
-              const innerType = varOwnership.baseType;
-              const cppInnerType = this.mapTypeScriptTypeToCpp(innerType);
-              init = cpp.call(cpp.id(`std::make_unique<${cppInnerType}>`), [init]);
+            // Parse the variable type to get ownership
+            const varTypeMatch = varTypeText.match(/^(own|share|use)<(.+)>$/);
+            if (varTypeMatch) {
+              const ownership = varTypeMatch[1] as 'own' | 'share' | 'use';
+              const innerType = varTypeMatch[2];
+              
+              // Check if initializer already has ownership
+              const initOwnership = this.ownershipChecker.getTypeOfExpression(decl.initializer);
+              
+              // If variable is share<T> but initializer is plain T, wrap it
+              if (ownership === 'share' && !initOwnership?.ownership) {
+                const cppInnerType = this.mapTypeScriptTypeToCpp(innerType);
+                init = cpp.call(cpp.id(`std::make_shared<${cppInnerType}>`), [init]);
+              }
+              // If variable is own<T> but initializer is plain T, wrap it
+              else if (ownership === 'own' && !initOwnership?.ownership) {
+                const cppInnerType = this.mapTypeScriptTypeToCpp(innerType);
+                init = cpp.call(cpp.id(`std::make_unique<${cppInnerType}>`), [init]);
+              }
             }
           }
         }
@@ -490,10 +509,12 @@ export class AstCodegen {
         // Restore previous return type
         this.currentFunctionReturnType = previousReturnType;
         
-        // Check if method should be const (doesn't modify 'this')
-        const isConst = tsUtils.shouldMethodBeConst(member);
+        // Check if method should be const (doesn't modify 'this') and if it's static
+        // Static methods cannot be const in C++
+        const isStatic = member.modifiers?.some(mod => mod.kind === ts.SyntaxKind.StaticKeyword) ?? false;
+        const isConst = !isStatic && tsUtils.shouldMethodBeConst(member);
         
-        methods.push(new ast.Method(methodName, returnType, params, body, ast.AccessSpecifier.Public, isConst));
+        methods.push(new ast.Method(methodName, returnType, params, body, ast.AccessSpecifier.Public, isConst, isStatic));
       }
     }
     
@@ -687,6 +708,14 @@ export class AstCodegen {
     // Process then block WITH unwrapped variable in scope
     if (unwrappedVar) {
       this.unwrappedOptionals.add(unwrappedVar);
+      
+      // Check if this is a smart pointer null check (comparing with nullptr, not std::nullopt)
+      // This happens when the variable type is a user-defined class or share<T>
+      if (condition instanceof ast.BinaryExpr && 
+          (condition.right instanceof ast.Identifier && condition.right.name === 'nullptr' ||
+           condition.left instanceof ast.Identifier && condition.left.name === 'nullptr')) {
+        this.smartPointerNullChecks.add(unwrappedVar);
+      }
     }
     
     const thenBlock = ts.isBlock(node.thenStatement) 
@@ -696,6 +725,7 @@ export class AstCodegen {
     // Remove from unwrapped set after then block
     if (unwrappedVar) {
       this.unwrappedOptionals.delete(unwrappedVar);
+      this.smartPointerNullChecks.delete(unwrappedVar);
     }
     
     const elseBlock = node.elseStatement 
@@ -896,6 +926,12 @@ export class AstCodegen {
       
       // If this identifier is tracked as unwrapped
       if (this.unwrappedOptionals.has(escapedName)) {
+        // Check if it's a smart pointer null check (compared with nullptr)
+        // Smart pointers don't need unwrapping - they're already usable
+        if (this.smartPointerNullChecks.has(escapedName)) {
+          return cpp.id(escapedName);
+        }
+        
         // Check if it's a smart pointer type (shared_ptr, unique_ptr, weak_ptr)
         const varType = this.variableTypes.get(escapedName);
         if (varType && cppUtils.isSmartPointerType(varType)) {
@@ -1155,19 +1191,52 @@ export class AstCodegen {
     let isLeftSharedPtr = false;
     let isRightSharedPtr = false;
     if (this.checker) {
-      // Check if left side is share<T> type
+      // Check if left side is share<T> type or a user-defined class (which becomes shared_ptr)
       if (!isLeftNull && !isLeftUndefined) {
         const leftType = this.checker.getTypeAtLocation(node.left);
         const leftTypeStr = this.checker.typeToString(leftType);
+        
+        // For union types like "JsonValue | null", check if the non-null type is a class
+        let symbol = leftType.getSymbol();
+        if (!symbol && leftType.isUnion()) {
+          // Get the first non-null/undefined type from the union
+          const nonNullTypes = leftType.types.filter(t => {
+            const flags = t.flags;
+            return !(flags & ts.TypeFlags.Null) && !(flags & ts.TypeFlags.Undefined);
+          });
+          if (nonNullTypes.length > 0) {
+            symbol = nonNullTypes[0].getSymbol();
+          }
+        }
+        
+        const isUserClass = symbol && (symbol.flags & ts.SymbolFlags.Class);
+        
         isLeftSharedPtr = leftTypeStr.includes('share<') || 
+                          !!isUserClass ||  // User-defined classes → shared_ptr in C++
                           (ts.isIdentifier(node.left) && this.variableTypes.has(cppUtils.escapeName(node.left.text)) &&
                            this.variableTypes.get(cppUtils.escapeName(node.left.text))!.toString().includes('std::shared_ptr'));
       }
-      // Check if right side is share<T> type
+      // Check if right side is share<T> type or a user-defined class
       if (!isRightNull && !isRightUndefined) {
         const rightType = this.checker.getTypeAtLocation(node.right);
         const rightTypeStr = this.checker.typeToString(rightType);
+        
+        // For union types, check if the non-null type is a class
+        let symbol = rightType.getSymbol();
+        if (!symbol && rightType.isUnion()) {
+          const nonNullTypes = rightType.types.filter(t => {
+            const flags = t.flags;
+            return !(flags & ts.TypeFlags.Null) && !(flags & ts.TypeFlags.Undefined);
+          });
+          if (nonNullTypes.length > 0) {
+            symbol = nonNullTypes[0].getSymbol();
+          }
+        }
+        
+        const isUserClass = symbol && (symbol.flags & ts.SymbolFlags.Class);
+        
         isRightSharedPtr = rightTypeStr.includes('share<') ||
+                           !!isUserClass ||  // User-defined classes → shared_ptr in C++
                            (ts.isIdentifier(node.right) && this.variableTypes.has(cppUtils.escapeName(node.right.text)) &&
                             this.variableTypes.get(cppUtils.escapeName(node.right.text))!.toString().includes('std::shared_ptr'));
       }
@@ -1239,7 +1308,17 @@ export class AstCodegen {
       }
     }
     
-    // ALL class instances are heap-allocated via smart pointers
+    // Built-in value types (Map, Array, Set, etc.) are NOT heap-allocated
+    // Only user-defined classes and explicit ownership types need smart pointers
+    const builtInValueTypes = ['Map', 'Array', 'Set', 'String', 'RegExp', 'Date', 'Promise'];
+    const baseClassName = className.split('<')[0]; // Remove template args for check
+    
+    if (builtInValueTypes.includes(baseClassName)) {
+      // Value types: direct construction (no smart pointer)
+      return cpp.call(cpp.id(`gs::${className}`), args);
+    }
+    
+    // User-defined class instances are heap-allocated via smart pointers
     // Determine ownership type from parent context
     const ownershipType = this.getOwnershipTypeForNew(node);
     
@@ -1503,6 +1582,16 @@ export class AstCodegen {
         if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON' || objName === 'Date' || objName === 'String') {
           return cpp.call(cpp.id(`gs::${objName}::${methodName}`), args);
         }
+        
+        // Check if this is a static method call on a user-defined class
+        // e.g., JsonValue.fromString(value)
+        if (this.checker) {
+          const symbol = this.checker.getSymbolAtLocation(objNode);
+          if (symbol && symbol.flags & ts.SymbolFlags.Class) {
+            // This is a class, so it's a static method call
+            return cpp.call(cpp.id(`gs::${objName}::${methodName}`), args);
+          }
+        }
       }
       
       // Special case: number instance methods (toFixed, toExponential, toPrecision, toString)
@@ -1656,6 +1745,7 @@ export class AstCodegen {
         // T | null → std::optional<T>
         // BUT: If T is a smart pointer (shared_ptr, unique_ptr, weak_ptr), don't wrap in optional
         // because smart pointers can already be null
+        // ALSO: If T is a user-defined class, it will be mapped to shared_ptr, so don't wrap
         const innerType = this.mapType(nonNullableTypes[0]);
         const innerTypeStr = innerType.toString();
         
@@ -1665,6 +1755,18 @@ export class AstCodegen {
             innerTypeStr.startsWith('std::unique_ptr<') ||
             innerTypeStr.startsWith('std::weak_ptr<')) {
           return innerType;
+        }
+        
+        // Also skip optional wrapping for user-defined classes
+        // They're automatically wrapped in shared_ptr (see lines 1772-1779)
+        if (this.checker && ts.isTypeReferenceNode(nonNullableTypes[0])) {
+          const type = this.checker.getTypeAtLocation(nonNullableTypes[0]);
+          const symbol = type.getSymbol();
+          if (symbol && (symbol.flags & ts.SymbolFlags.Class)) {
+            // It's a class, so mapType will return std::shared_ptr<gs::T>
+            // Return it unwrapped (already nullable)
+            return innerType;
+          }
         }
         
         return new ast.CppType('std::optional', [innerType]);
@@ -1735,8 +1837,11 @@ export class AstCodegen {
       // and it's a class, wrap in shared_ptr (default ownership)
       // BUT: don't do this if we're being called recursively from ownership type processing
       // We can detect this by checking if the parent is own<T>/share<T>/use<T>
+      // ALSO: Don't wrap built-in value types (Array, Map, Set, String, etc.)
+      const builtInValueTypes = ['Array', 'Map', 'Set', 'String', 'RegExp', 'Date', 'Promise'];
       const parent = typeNode.parent;
       const shouldAutoWrap = !typeNode.typeArguments && 
+                             !builtInValueTypes.includes(text) &&  // Don't wrap value types
                              !(parent && ts.isTypeReferenceNode(parent) && 
                                ['own', 'share', 'use'].includes(parent.typeName.getText()));
       
@@ -1836,6 +1941,28 @@ export class AstCodegen {
               (typeStr.includes('std::shared_ptr') || typeStr.includes('std::unique_ptr'))) {
             return true;
           }
+        }
+      }
+      
+      // For variables with auto type, check if the TypeScript type is a user-defined class
+      // which becomes a smart pointer in C++
+      if (this.checker && varType && varType.toString() === 'auto') {
+        const tsType = this.checker.getTypeAtLocation(expr);
+        const symbol = tsType.getSymbol();
+        // Handle union types (e.g., JsonValue | null)
+        if (!symbol && tsType.isUnion()) {
+          const nonNullTypes = tsType.types.filter(t => {
+            const flags = t.flags;
+            return !(flags & ts.TypeFlags.Null) && !(flags & ts.TypeFlags.Undefined);
+          });
+          if (nonNullTypes.length > 0) {
+            const nonNullSymbol = nonNullTypes[0].getSymbol();
+            if (nonNullSymbol && (nonNullSymbol.flags & ts.SymbolFlags.Class)) {
+              return true;
+            }
+          }
+        } else if (symbol && (symbol.flags & ts.SymbolFlags.Class)) {
+          return true;
         }
       }
       
