@@ -358,8 +358,22 @@ export class OwnershipAwareTypeChecker {
   /**
    * Check if an array has smart pointer elements
    */
-  hasSmartPointerElements(expr: ts.Expression): boolean {
+  hasSmartPointerElements(expr: ts.Expression, interfaceNames: Set<string>): boolean {
     const type = this.getTypeOfExpression(expr);
-    return !!type?.isArray && !!type.elementType?.ownership;
+    if (!type?.isArray || !type.elementType) {
+      return false;
+    }
+    
+    // Check if element type has ownership qualifier (own<T>, share<T>, use<T>)
+    if (type.elementType.ownership) {
+      return true;
+    }
+    
+    // Check if element type is an interface (which we wrap in shared_ptr)
+    if (interfaceNames.has(type.elementType.baseType)) {
+      return true;
+    }
+    
+    return false;
   }
 }

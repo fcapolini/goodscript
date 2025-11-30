@@ -174,8 +174,35 @@ export class AstCodegen {
         if (arrayMatch) {
           const elementTypeStr = arrayMatch[1].trim();
           // Map TypeScript element type to C++
-          const cppElementType = this.mapTypeScriptTypeToCpp(elementTypeStr);
-          cppType = new ast.CppType(cppElementType);
+          let cppElementType = this.mapTypeScriptTypeToCpp(elementTypeStr);
+          
+          // If element type is an interface, we wrap it in shared_ptr
+          // So the variable type should be the shared_ptr, not auto
+          if (this.interfaceNames.has(elementTypeStr)) {
+            cppType = new ast.CppType(`std::shared_ptr<gs::${elementTypeStr}>`);
+          } else {
+            cppType = new ast.CppType(cppElementType);
+          }
+        } else {
+          cppType = new ast.CppType('auto');
+        }
+      } else if (decl.initializer && ts.isCallExpression(decl.initializer) && this.checker) {
+        // Infer type from function call return type
+        // Check if the call returns a nullable interface (Interface | null)
+        const returnType = this.checker.getTypeAtLocation(decl.initializer);
+        const returnTypeStr = this.checker.typeToString(returnType);
+        
+        // Check for union type with null
+        if (returnTypeStr.includes(' | null')) {
+          // Extract the non-null type
+          const baseType = returnTypeStr.replace(' | null', '').trim();
+          // Check if it's an interface
+          if (this.interfaceNames.has(baseType)) {
+            // Map to shared_ptr<Interface> (which can be null)
+            cppType = new ast.CppType(`std::shared_ptr<gs::${baseType}>`);
+          } else {
+            cppType = new ast.CppType('auto');
+          }
         } else {
           cppType = new ast.CppType('auto');
         }
@@ -281,27 +308,59 @@ export class AstCodegen {
       if (decl.initializer) {
         // Special case: empty array literal with explicitly-typed variable
         // Use the variable's type to determine the array element type
-        if (ts.isArrayLiteralExpression(decl.initializer) && 
-            decl.initializer.elements.length === 0 &&
-            decl.type) {
+        // This handles both empty arrays and arrays with explicit interface types
+        if (ts.isArrayLiteralExpression(decl.initializer) && decl.type) {
           const varTypeStr = decl.type.getText();
           // Extract element type from "number[]" or "Array<number>"
           let elementType: string | undefined;
+          let tsElementType: string | undefined;
+          
           if (varTypeStr.endsWith('[]')) {
-            elementType = this.mapTypeScriptTypeToCpp(varTypeStr.slice(0, -2));
+            tsElementType = varTypeStr.slice(0, -2);
+            elementType = this.mapTypeScriptTypeToCpp(tsElementType);
           } else {
             const match = varTypeStr.match(/Array<(.+)>/);
             if (match) {
-              elementType = this.mapTypeScriptTypeToCpp(match[1]);
+              tsElementType = match[1];
+              elementType = this.mapTypeScriptTypeToCpp(tsElementType);
             }
           }
-          if (elementType) {
-            init = cpp.call(cpp.id(`gs::Array<${elementType}>`), [cpp.initList([])]);
+          
+          // If element type is an interface, wrap elements in shared_ptr
+          if (tsElementType && this.interfaceNames.has(tsElementType)) {
+            // Process array elements - wrap new expressions in shared_ptr
+            const elements = decl.initializer.elements.map(el => {
+              let expr = this.visitExpression(el);
+              // If element is a new expression, it already creates a shared_ptr
+              // Otherwise, wrap it
+              if (!ts.isNewExpression(el)) {
+                expr = cpp.call(cpp.id(`std::make_shared<gs::${tsElementType}>`), [expr]);
+              }
+              return expr;
+            });
+            
+            const arrayElementType = `std::shared_ptr<gs::${tsElementType}>`;
+            init = cpp.call(cpp.id(`gs::Array<${arrayElementType}>`), [cpp.initList(elements)]);
+          } else if (elementType) {
+            // Non-interface type with explicit annotation
+            if (decl.initializer.elements.length === 0) {
+              init = cpp.call(cpp.id(`gs::Array<${elementType}>`), [cpp.initList([])]);
+            } else {
+              init = this.visitExpression(decl.initializer);
+            }
           } else {
             init = this.visitExpression(decl.initializer);
           }
         } else {
           init = this.visitExpression(decl.initializer);
+          
+          // Fix: If using auto and initializer is numeric literal 0, make it 0.0
+          // This prevents auto from inferring int when we need double
+          if (cppType.toString() === 'auto' && 
+              ts.isNumericLiteral(decl.initializer) && 
+              decl.initializer.text === '0') {
+            init = cpp.id('0.0');
+          }
           
           // Check if we need to wrap the initializer in a smart pointer
           // Case: const shared: share<T> = plainValue;
@@ -1202,7 +1261,8 @@ export class AstCodegen {
       
       // Check if array element type is shared_ptr using ownership-aware type checker
       // This preserves share<T> annotations that TypeChecker erases
-      const hasSmartPtrElements = this.ownershipChecker.hasSmartPointerElements(node.expression);
+      // Also checks if element type is an interface (which we wrap in shared_ptr)
+      const hasSmartPtrElements = this.ownershipChecker.hasSmartPointerElements(node.expression, this.interfaceNames);
       
       // For shared_ptr elements, always dereference once to get the shared_ptr
       // operator[] returns shared_ptr<T>*, we want shared_ptr<T>
@@ -1211,6 +1271,8 @@ export class AstCodegen {
         return cpp.unary('*', subscript);
       }
       
+      // For non-smart-pointer arrays, gs::Array<T>::operator[] returns T*
+      // Check if this subscript is part of a property/method access chain
       if (isPartOfPropertyAccess) {
         // Don't dereference - parent will use -> to access the pointer
         return subscript;
@@ -1742,6 +1804,9 @@ export class AstCodegen {
       
       // Track parameter type for smart pointer detection
       this.variableTypes.set(paramName, paramType);
+      
+      // Register parameter with ownership checker for type lookups
+      this.ownershipChecker.registerVariable(paramName, param);
     }
     
     // Get return type if specified, otherwise undefined (C++ will infer)
@@ -1875,7 +1940,7 @@ export class AstCodegen {
       // If pushing to an array of shared_ptrs, wrap the argument
       if (methodName === 'push' && index === 0 && objNode && this.checker) {
         // Use OwnershipAwareTypeChecker to check if array has smart pointer elements
-        const arrayHasSharedElements = this.ownershipChecker.hasSmartPointerElements(objNode);
+        const arrayHasSharedElements = this.ownershipChecker.hasSmartPointerElements(objNode, this.interfaceNames);
         
         if (arrayHasSharedElements) {
           // Get the element type from the array type
@@ -1962,7 +2027,43 @@ export class AstCodegen {
     
     // Regular function call
     const func = this.visitExpression(node.expression);
-    return cpp.call(func, args);
+    
+    // For interface parameters, automatically dereference smart pointers
+    // If function expects const InterfaceName& and we're passing shared_ptr<ConcreteClass>,
+    // we need to dereference: func(*arg) instead of func(arg)
+    const processedArgs = args.map((arg, index) => {
+      const argNode = node.arguments[index];
+      
+      // Check if argument is an identifier (variable)
+      if (ts.isIdentifier(argNode)) {
+        const varName = cppUtils.escapeName(argNode.text);
+        const varType = this.variableTypes.get(varName);
+        
+        // Check if it's a shared_ptr to a class that might implement an interface
+        if (varType && varType.toString().startsWith('std::shared_ptr<gs::')) {
+          // Extract the class name from std::shared_ptr<gs::ClassName>
+          const match = varType.toString().match(/std::shared_ptr<gs::(.+)>/);
+          if (match) {
+            // Dereference the smart pointer to get the object reference
+            return cpp.unary('*', arg);
+          }
+        }
+      }
+      
+      // Check if argument is an element access (arr[i]) that returns a smart pointer
+      if (ts.isElementAccessExpression(argNode)) {
+        // Check if the array has smart pointer elements (interface or ownership types)
+        if (this.ownershipChecker.hasSmartPointerElements(argNode.expression, this.interfaceNames)) {
+          // visitExpression already dereferenced once to get the shared_ptr
+          // Now we need to dereference again to pass the object reference
+          return cpp.unary('*', arg);
+        }
+      }
+      
+      return arg;
+    });
+    
+    return cpp.call(func, processedArgs);
   }
   
   private visitPropertyAccess(node: ts.PropertyAccessExpression): ast.Expression {
@@ -2350,8 +2451,25 @@ export class AstCodegen {
     
     // Check if it's an array subscript with share<T> elements
     // arr[i] where arr is Array<share<Person>> returns shared_ptr<Person>
+    // ALSO: arr[i] where arr is Shape[] (interface array) returns shared_ptr<Shape>
     if (ts.isElementAccessExpression(expr)) {
-      return this.ownershipChecker.hasSmartPointerElements(expr.expression);
+      if (this.ownershipChecker.hasSmartPointerElements(expr.expression, this.interfaceNames)) {
+        return true;
+      }
+      
+      // Check if array element type is an interface (which we wrap in shared_ptr)
+      if (this.checker && ts.isIdentifier(expr.expression)) {
+        const varType = this.variableTypes.get(cppUtils.escapeName(expr.expression.text));
+        if (varType) {
+          const varTypeStr = varType.toString();
+          // Check if it's Array<shared_ptr<InterfaceName>>
+          if (varTypeStr.startsWith('gs::Array<std::shared_ptr<')) {
+            return true;
+          }
+        }
+      }
+      
+      return false;
     }
     
     // Check if it's a call expression that returns a smart pointer
