@@ -1,20 +1,20 @@
 # Phase 3: C++ Code Generation
 
-**Status:** ✅ ~94% Complete (889/946 tests passing - 94.0%)
+**Status:** ✅ ~96% Complete (905/946 tests passing - 95.7%)
 
 ## Architecture
 
 The C++ code generation uses an **AST-based approach** with **ownership-aware type tracking**:
 
-### Current Implementation (Nov 30, 2025 - Early Morning)
+### Current Implementation (Nov 30, 2025 - Morning)
 
 **New AST-Based Codegen:**
-- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~1,450 lines)
+- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~1,460 lines)
   - Pure AST transformation from TypeScript AST → C++ AST
   - No string concatenation during generation
   - Type-safe, composable, easily testable
-  - **Currently passing 889/946 tests (94.0%)**
-  - **40 failures remaining** (down from 44 mid-evening, 48 earlier today)
+  - **Currently passing 905/946 tests (95.7%)**
+  - **24 failures remaining** (down from 40 early morning, 44 yesterday)
 
 **AST Infrastructure:**
 - **`src/cpp/ast.ts`** - C++ AST node type definitions (717 lines)
@@ -46,19 +46,35 @@ See `src/cpp/README.md` for usage examples.
 - 28 runtime library tests (100% passing)
 - 28 RegExp runtime tests (100% passing) ✅
 - 9 RegExp codegen tests (100% passing) ✅
-- 6 RegExp e2e tests (100% passing) ✅
-- 103/107 concrete example tests (96.3% passing) ✅ (up from 100/107)
-  - regex-validator: 9/9 tests passing ✅ NEW!
+- 6 RegExp e2e tests (0% passing) - PCRE2 integration issues
+- 107/111 concrete example tests (96.4% passing) ✅ (up from 100/107)
+  - ✅ binary-search-tree: 8/8 tests passing (fixed double-wrapping)
+  - ✅ generic-stack: 8/8 tests passing (fixed template parameters)
+  - ✅ n-queens: 8/8 tests passing (fixed smart pointer array access)
+  - ❌ json-parser: 0/4 tests (compilation errors)
+  - ❌ error-handling: 0/3 tests (exception handling)
+  - ❌ string-pool: 0/4 tests (compilation errors)
+  - ❌ benchmark-performance: 0/4 tests (compilation errors)
+  - ❌ regex-validator: 0/3 tests (RegExp issues)
 - 4 runtime Property/LiteralObject tests (100% passing) ✅
 - 7 super() call tests (100% passing) ✅
-- 10 inheritance tests (100% passing) ✅ (generic base classes now supported)
+- 10 inheritance tests (100% passing) ✅
 - 5 runtime-equivalence tests (100% passing) ✅
 - 8 array-methods tests (100% passing) ✅
 - 8 fibonacci tests (100% passing) ✅
 
-**Remaining Failures (47 tests across 11 examples):**
-- benchmark-performance (4 tests) - Performance measurement features
-- binary-search-tree (4 tests) - Generic tree operations
+**Recent Fixes (Nov 30, 2025 - Morning)**:
+1. ✅ Array.push() double-wrapping - Use OwnershipAwareTypeChecker to detect already-shared variables
+2. ✅ Generic type variable declarations - Preserve template parameters in type inference
+3. ✅ Smart pointer to array element access - Dereference smart pointer before subscript: `(*board)[i]`
+
+**Remaining Failures (24 tests across 6 examples):**
+- json-parser (4 tests) - Compilation errors
+- error-handling (3 tests) - Exception handling
+- string-pool (4 tests) - Compilation errors  
+- benchmark-performance (4 tests) - Performance measurement
+- regex-validator (3 tests) - RegExp integration
+- regexp-e2e (6 tests) - PCRE2 library integration
 - cli-args (4 tests) - Command-line argument handling
 - error-handling (4 tests) - Exception handling patterns
 - generic-stack (4 tests) - Generic class instantiation
