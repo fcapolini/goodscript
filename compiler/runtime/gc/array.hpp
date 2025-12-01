@@ -4,6 +4,7 @@
 #include "string.hpp"
 #include <stdexcept>
 #include <algorithm>
+#include <optional>
 
 namespace gs {
 
@@ -185,6 +186,109 @@ public:
             result += String::from(data_[i]);
         }
         return result;
+    }
+
+    // Higher-order array methods
+
+    template<typename F>
+    auto map(F func) const -> Array<decltype(func(data_[0]))> {
+        using R = decltype(func(data_[0]));
+        Array<R> result(length_);
+        for (size_t i = 0; i < length_; ++i) {
+            result.push(func(data_[i]));
+        }
+        return result;
+    }
+
+    template<typename F>
+    Array<T> filter(F predicate) const {
+        Array<T> result;
+        for (size_t i = 0; i < length_; ++i) {
+            if (predicate(data_[i])) {
+                result.push(data_[i]);
+            }
+        }
+        return result;
+    }
+
+    template<typename R, typename F>
+    R reduce(F func, R initial) const {
+        R accumulator = initial;
+        for (size_t i = 0; i < length_; ++i) {
+            accumulator = func(accumulator, data_[i]);
+        }
+        return accumulator;
+    }
+
+    template<typename F>
+    std::optional<T> find(F predicate) const {
+        for (size_t i = 0; i < length_; ++i) {
+            if (predicate(data_[i])) {
+                return data_[i];
+            }
+        }
+        return std::nullopt;
+    }
+
+    template<typename F>
+    int64_t findIndex(F predicate) const {
+        for (size_t i = 0; i < length_; ++i) {
+            if (predicate(data_[i])) {
+                return static_cast<int64_t>(i);
+            }
+        }
+        return -1;
+    }
+
+    template<typename F>
+    bool some(F predicate) const {
+        for (size_t i = 0; i < length_; ++i) {
+            if (predicate(data_[i])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    template<typename F>
+    bool every(F predicate) const {
+        for (size_t i = 0; i < length_; ++i) {
+            if (!predicate(data_[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    template<typename F>
+    void forEach(F func) const {
+        for (size_t i = 0; i < length_; ++i) {
+            func(data_[i]);
+        }
+    }
+
+    Array<T> slice(int64_t start = 0, int64_t end = -1) const {
+        if (start < 0) start = std::max(int64_t(0), int64_t(length_) + start);
+        if (end < 0) end = length_;
+        if (end > int64_t(length_)) end = length_;
+        if (start >= end) return Array<T>();
+
+        Array<T> result;
+        for (int64_t i = start; i < end; ++i) {
+            result.push(data_[i]);
+        }
+        return result;
+    }
+
+    template<typename F>
+    Array<T> sort(F comparator) {
+        std::sort(data_, data_ + length_, comparator);
+        return *this;
+    }
+
+    Array<T> reverse() {
+        std::reverse(data_, data_ + length_);
+        return *this;
     }
 
     // Iterators for range-based for loops

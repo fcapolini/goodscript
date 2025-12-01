@@ -15,6 +15,7 @@
 #include "gc/array.hpp"
 #include "gc/map.hpp"
 #include "gc/set.hpp"
+#include "gc/number.hpp"
 
 #include <iostream>
 #include <sstream>

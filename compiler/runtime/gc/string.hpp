@@ -220,6 +220,18 @@ public:
         return String(buf);
     }
 
+    static String from(long long value) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%lld", value);
+        return String(buf);
+    }
+
+    static String from(size_t value) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%zu", value);
+        return String(buf);
+    }
+
     static String from(bool value) {
         return String(value ? "true" : "false");
     }
