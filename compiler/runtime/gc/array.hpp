@@ -282,7 +282,12 @@ public:
 
     template<typename F>
     Array<T> sort(F comparator) {
-        std::sort(data_, data_ + length_, comparator);
+        // JavaScript comparators return number (negative/zero/positive)
+        // C++ std::sort expects bool comparator
+        std::sort(data_, data_ + length_, [&](const T& a, const T& b) {
+            auto result = comparator(a, b);
+            return result < 0;
+        });
         return *this;
     }
 

@@ -2137,6 +2137,31 @@ export class AstCodegen {
         }
       }
       
+      // Special handling for .reduce() initial value
+      // If the initial value is a numeric literal (like 0) but the lambda expects double,
+      // ensure we emit 0.0 not 0 for correct C++ template deduction
+      if (methodName === 'reduce' && index === 1 && ts.isNumericLiteral(arg) && this.checker) {
+        // Check if the first argument (lambda) has a number (double) accumulator
+        const lambdaArg = node.arguments[0];
+        if (ts.isArrowFunction(lambdaArg) || ts.isFunctionExpression(lambdaArg)) {
+          const params = lambdaArg.parameters;
+          if (params.length > 0) {
+            const accParam = params[0];
+            if (accParam.type) {
+              const accTypeStr = accParam.type.getText();
+              // If accumulator is 'number' (which maps to double in C++), ensure .0 suffix
+              if (accTypeStr === 'number') {
+                const numText = arg.text;
+                // If it's an integer literal (no decimal point), add .0
+                if (!numText.includes('.')) {
+                  argExpr = cpp.id(numText + '.0');
+                }
+              }
+            }
+          }
+        }
+      }
+      
       return argExpr;
     });
     
