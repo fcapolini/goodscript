@@ -2171,7 +2171,18 @@ export class AstCodegen {
       if (ts.isIdentifier(objNode)) {
         const objName = objNode.text;
         if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON' || objName === 'Date' || objName === 'String') {
-          return cpp.call(cpp.id(`gs::${objName}::${methodName}`), args);
+          // For console.log specifically, dereference pointers from Map.get() calls
+          const processedArgs = (objName === 'console' && methodName === 'log') ? 
+            args.map((arg, index) => {
+              const argNode = node.arguments[index];
+              // If argument is map.get() which returns V*, dereference it
+              if (tsUtils.isMapGetCall(argNode)) {
+                return cpp.unary('*', arg);
+              }
+              return arg;
+            }) : args;
+          
+          return cpp.call(cpp.id(`gs::${objName}::${methodName}`), processedArgs);
         }
         
         // Check if this is a static method call on a user-defined class
