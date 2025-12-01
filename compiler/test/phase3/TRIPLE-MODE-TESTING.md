@@ -8,13 +8,17 @@ This document outlines how to extend triple-mode testing to all Phase 3 tests.
 
 ## Current Status
 
-**Test Breakdown** (1025 total tests):
+**Test Breakdown** (1089 total tests):
 - **Phase 1** (Validator): 315 tests - mode-independent
 - **Phase 2** (Ownership Analysis): 237 tests - ownership-mode specific  
-- **Phase 3** (C++ Codegen): 394 tests
-  - **Basic tests**: 141 tests - code generation only, no execution
+- **Phase 3** (C++ Codegen): 537 tests
+  - **Basic tests**: 141 tests - original code generation tests
+  - **Triple-mode tests**: 64 tests - **full triple-mode testing** ✅ (primitives, arrays, classes, control flow, strings)
   - **Runtime tests**: 67 tests - ownership mode execution only
   - **Concrete Examples**: 186 tests - **full triple-mode testing** ✅
+  - **Other**: 79 tests - various specialized tests
+
+**Triple-Mode Coverage**: 250/1089 tests (23%) have full triple-mode validation
 
 ## New Infrastructure
 
@@ -189,9 +193,9 @@ npm test -- test/phase3/basic/primitives-triple-mode.test.ts --reporter=verbose
 
 ## Expected Impact
 
-**Current**: 186/1025 tests (18%) are triple-mode  
-**After Phase 1**: ~300/1025 tests (29%) triple-mode  
-**After Full Migration**: ~600/1025 tests (58%) triple-mode  
+**Current**: 250/1089 tests (23%) are triple-mode (186 concrete examples + 64 basic tests)  
+**After More Conversions**: ~350/1089 tests (32%) triple-mode  
+**After Full Migration**: ~650/1089 tests (60%) triple-mode  
 
 (Phase 1 and Phase 2 tests remain mode-independent/ownership-specific)
 
@@ -258,14 +262,18 @@ const gcCodegen = new GcCodegen(checker);
 
 **High Priority** (simple, high value):
 - [x] Boolean console.log formatting fix ✅
-- [x] primitives.test.ts conversion ✅
-- [x] arrays.test.ts conversion ✅
+- [x] primitives.test.ts conversion ✅ (10 tests)
+- [x] arrays.test.ts conversion ✅ (16 tests)
+- [x] classes.test.ts conversion ✅ (6 tests - basic OOP)
+- [x] control-flow.test.ts conversion ✅ (17 tests - conditionals, loops, logic)
+- [x] strings.test.ts conversion ✅ (15 tests - string operations)
 - [ ] js-cpp-semantics.test.ts conversion
 
 **Medium Priority**:
-- [ ] classes.test.ts (partial - simple classes)
 - [ ] array-bounds.test.ts
 - [ ] functions.test.ts
+- [ ] maps.test.ts
+- [ ] sets.test.ts
 
 **Low Priority** (complex, ownership-specific):
 - [ ] ownership-types.test.ts (keep ownership-only)
@@ -277,10 +285,19 @@ const gcCodegen = new GcCodegen(checker);
 ✅ Example test demonstrating pattern (primitives-triple-mode.test.ts)  
 ✅ Boolean formatting fixed (gs_console.hpp, gs_gc_runtime.hpp)  
 ✅ TypeChecker integration fixed (triple-mode-helpers.ts)  
-✅ Array tests converted and passing (arrays-triple-mode.test.ts)  
-🔄 At least 5 basic tests converted  
-⏳ 50%+ of suitable basic tests converted  
+✅ Array tests converted and passing (arrays-triple-mode.test.ts - 16 tests)  
+✅ Classes tests converted and passing (classes-triple-mode.test.ts - 6 tests)
+✅ Control flow tests converted and passing (control-flow-triple-mode.test.ts - 17 tests)
+✅ Strings tests converted and passing (strings-triple-mode.test.ts - 15 tests)
+✅ 64 basic tests converted (10 primitives + 16 arrays + 6 classes + 17 control flow + 15 strings)
+⏳ 100+ basic tests converted  
 ⏳ 50%+ of suitable basic tests converted
+
+**Codegen Gaps Identified** (for future work):
+- Method chaining (`return this`) requires `shared_from_this()` in ownership mode
+- Function hoisting requires forward declarations in C++
+- Property access (`.length`) vs method calls (`.length()`) inconsistency
+- Missing string methods: `slice`, `replace`, `startsWith`, `endsWith`
 
 ---
 

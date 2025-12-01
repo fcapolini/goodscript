@@ -1,6 +1,6 @@
 # Introducing GoodScript: TypeScript with Deterministic Memory Safety
 
-> **🚧 Alpha State:** GoodScript is currently in active development. The compiler is 100% complete (1051/1051 tests passing) with all core features working. Phase 3 (C++ code generation) is complete! See [Current Status](#7-current-status-december-2025) for details.
+> **🚧 Alpha State:** GoodScript is currently in active development. The compiler is 100% complete (1089/1089 tests passing) with all core features working. Phase 3 (C++ code generation) is complete! See [Current Status](#7-current-status-december-2025) for details.
 
 **Audience:** TypeScript developers interested in writing memory-safe systems code
 
@@ -282,7 +282,7 @@ async function demo(node: share<Node>) {
 ### Completed
 - ✅ **Phase 1**: TypeScript "Good Parts" validation (315/315 tests passing)
 - ✅ **Phase 2**: Ownership analysis and DAG enforcement (237/237 tests passing)
-- ✅ **Phase 3**: C++ code generation (100% complete - 1051/1051 tests passing) 🎉
+- ✅ **Phase 3**: C++ code generation (100% complete - 1089/1089 tests passing) 🎉
   - ✅ **Complete AST traversal and code emission system**
   - ✅ **Type mappings**: primitives, arrays, maps, sets, ownership types
   - ✅ **Statement generation**: variables, functions, classes, control flow
