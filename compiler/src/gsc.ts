@@ -19,6 +19,7 @@ interface CliOptions {
   files: string[];
   outDir?: string;
   target?: 'typescript' | 'native';
+  mode?: 'ownership' | 'gc';
   emit?: 'js' | 'ts' | 'both';
   skipOwnershipChecks?: boolean;
   verbose?: boolean;
@@ -74,6 +75,14 @@ function parseArgs(args: string[]): CliOptions {
       options.compileBinary = true;
     } else if (arg === '--arch' || arg === '-a') {
       options.arch = args[++i];
+    } else if (arg === '--mode' || arg === '-m') {
+      const modeValue = args[++i];
+      if (modeValue === 'ownership' || modeValue === 'gc') {
+        options.mode = modeValue;
+      } else {
+        console.error(`Error: Invalid mode '${modeValue}'. Use 'ownership' or 'gc'`);
+        process.exit(1);
+      }
     } else if (arg === '--verbose' || arg === '-v') {
       options.verbose = true;
     } else if (!arg.startsWith('-')) {
@@ -103,6 +112,7 @@ Options:
   -o, --out-dir <dir>         Output directory for compiled files
   -p, --project <file>        Path to tsconfig.json (auto-detected from input files if not specified)
   -t, --target <target>       Target language: 'typescript' (default) or 'native'
+  -m, --mode <mode>           Memory management: 'ownership' (default) or 'gc' (use with -t native)
   -e, --emit <format>         Output format: 'js' (default), 'ts', or 'both'
   -b, --compile-binary        Compile C++ to native binary (requires Zig, use with -t native)
   -a, --arch <architecture>   Target architecture for cross-compilation (e.g., x86_64-linux, aarch64-macos, wasm32-wasi)
@@ -125,7 +135,8 @@ Examples:
   gsc -e ts -o dist main.gs.ts        Compile to TypeScript only
   gsc -e both -o dist main.gs.ts        Emit both .ts and .js files
   gsc --no-ownership-checks -o dist main.gs.ts   Skip ownership checks
-  gsc -t native -o dist main.gs.ts    Compile to C++ source
+  gsc -t native -o dist main.gs.ts    Compile to C++ source (ownership mode)
+  gsc -t native -m gc -o dist main.gs.ts   Compile with garbage collection
   gsc -t native -b -o dist main.gs.ts Compile to native binary (requires Zig)
   gsc -t native -b -a x86_64-linux -o dist main.gs.ts   Cross-compile for Linux x64
   gsc -t native -b -a aarch64-macos -o dist main.gs.ts  Cross-compile for macOS ARM64
@@ -201,6 +212,7 @@ function main(): void {
     files: options.files,
     outDir: options.outDir,
     target: options.target,
+    mode: options.mode,
     emit: options.emit,
     skipOwnershipChecks: options.skipOwnershipChecks,
     project: options.project,

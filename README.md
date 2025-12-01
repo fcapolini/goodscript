@@ -96,7 +96,7 @@ declare type use<T> = T | null | undefined;
 
 ## 2. Dual-Mode Workflow
 
-GoodScript supports **two modes of execution**:
+GoodScript supports **two modes of execution** and **two memory management strategies**:
 
 ### **2.1 TypeScript Runtime Mode**
 
@@ -116,12 +116,33 @@ async function example(sharedNode: share<Node>) {
 
 ### **2.2 Native Mode (Transpilation)**
 
+GoodScript offers two compilation modes for native C++ targets:
+
+#### **Ownership Mode** (default - deterministic memory management)
+
 * Transpile `.gs.ts` to **C++20** with smart pointer-based ownership.
 * Ownership qualifiers map to optimized C++ smart pointers:
 
   * `own<T>` → `std::unique_ptr<T>`
   * `share<T>` → `gs::shared_ptr<T>` (lightweight non-atomic refcounting, ~3x faster)
   * `use<T>` → `gs::weak_ptr<T>` (lightweight non-atomic weak references, ~3x faster)
+* Requires explicit ownership annotations for complex data structures
+
+#### **GC Mode** (new - automatic memory management)
+
+* Compiles **Phase 1 code without ownership annotations**
+* Uses automatic garbage collection (MPS-based, coming soon; malloc MVP currently)
+* Lower barrier to entry - start coding immediately
+* Gradual migration path to ownership mode for production
+* See [GC Mode documentation](docs/GC-MODE.md) for details
+
+```bash
+# GC mode (no ownership annotations required)
+gsc -t native -m gc -o dist src/main.gs.ts
+
+# Ownership mode (requires ownership annotations)
+gsc -t native -m ownership -o dist src/main.gs.ts  # or just -t native
+```
 * **Runtime Library**: TypeScript-compatible wrapper classes (`gs::String`, `gs::Array<T>`, `gs::Map<K,V>`, etc.)
   - Header-only, zero-overhead wrappers around C++ STL
   - Methods match TypeScript/JavaScript naming exactly

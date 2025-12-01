@@ -13,12 +13,14 @@ import { Validator } from './validator';
 import { NullCheckAnalyzer } from './null-check-analyzer';
 import { TypeScriptCodegen } from './ts-codegen';
 import { AstCodegen } from './cpp/codegen'; // AST-based codegen with optional unwrapping
+import { GcCodegen } from './cpp/gc-codegen'; // GC-mode codegen
 import { Diagnostic, SourceLocation } from './types';
 
 export interface CompileOptions {
   files: string[];
   outDir?: string;
   target?: 'typescript' | 'native';  // Default: typescript
+  mode?: 'ownership' | 'gc';  // Memory management mode (native target only). Default: ownership
   emit?: 'js' | 'ts' | 'both';  // Default: js (ts+js, emit both intermediate .ts and final .js)
   skipOwnershipChecks?: boolean;  // Skip ownership analysis ("Clean TypeScript" mode)
   project?: string;  // Path to tsconfig.json
@@ -205,7 +207,7 @@ export class Compiler {
         allDiagnostics.push(...tsDiagnostics);
       } else if (target === 'native') {
         try {
-          this.emitCpp(program, options.outDir, options.compileBinary, options.arch);
+          this.emitCpp(program, options.outDir, options.mode || 'ownership', options.compileBinary, options.arch);
         } catch (error: any) {
           allDiagnostics.push({
             severity: 'error',
@@ -497,7 +499,7 @@ export class Compiler {
   /**
    * Emit C++ code from GoodScript source files
    */
-  private emitCpp(program: ts.Program, outDir: string, compileBinary: boolean = false, arch?: string): void {
+  private emitCpp(program: ts.Program, outDir: string, mode: 'ownership' | 'gc' = 'ownership', compileBinary: boolean = false, arch?: string): void {
     // Create output directory if it doesn't exist
     if (!fs.existsSync(outDir)) {
       fs.mkdirSync(outDir, { recursive: true });
@@ -507,8 +509,10 @@ export class Compiler {
     const rootDir = compilerOptions.rootDir || this.getCommonSourceDirectory(program);
     const checker = program.getTypeChecker();
 
-    // Create C++ codegen with TypeChecker for better type inference
-    const cppCodegen = new AstCodegen(checker);
+    // Create C++ codegen based on mode
+    const cppCodegen = mode === 'gc' 
+      ? new GcCodegen(checker)
+      : new AstCodegen(checker);
 
     // Process each GoodScript source file
     for (const sourceFile of program.getSourceFiles()) {
