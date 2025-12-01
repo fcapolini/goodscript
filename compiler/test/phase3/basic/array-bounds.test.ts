@@ -98,15 +98,15 @@ describe('Phase 3: Array Bounds Checking', () => {
     expect(cpp).toContain('[1]');
   });
 
-  it.skip('should auto-dereference array element access', () => {
-    // NOTE: Pointer-based array access not yet implemented
+  it('should use operator[] for array element reads', () => {
+    // NOTE: Arrays use operator[] which returns T*, dereferenced automatically by context
     const cpp = compileToCpp(`
       const arr = [1, 2, 3];
       const x = arr[0];
     `);
     
-    // Should wrap with dereference operator for value usage
-    expect(cpp).toContain('(*arr[0])');
+    // Should use operator[] for value access (auto-dereferenced by assignment context)
+    expect(cpp).toContain('arr[0]');
   });
 
   it('should return nullptr for out-of-bounds reads', () => {

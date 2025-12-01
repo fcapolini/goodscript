@@ -564,7 +564,16 @@ export class AstCodegen {
     for (const member of node.members) {
       if (ts.isPropertyDeclaration(member)) {
         const fieldName = cppUtils.escapeName(member.name.getText());
-        const fieldType = member.type ? this.mapType(member.type) : new ast.CppType('auto');
+        let fieldType = member.type ? this.mapType(member.type) : new ast.CppType('auto');
+        
+        // Check if field is optional (has questionToken: field?: Type)
+        const isOptional = member.questionToken !== undefined;
+        if (isOptional) {
+          // Wrap type in std::optional<T>
+          const innerType = fieldType.toString();
+          fieldType = new ast.CppType(`std::optional<${innerType}>`);
+        }
+        
         fields.push(new ast.Field(fieldName, fieldType));
         
         // Register property with ownership checker

@@ -133,8 +133,8 @@ describe('Phase 3: JS/C++ Semantic Equivalence', () => {
     // but the class fields themselves are not optional types
   });
 
-  it.skip('should demonstrate optional vs required field access', () => {
-    // NOTE: Optional class fields (name?: string) not yet implemented in AST-based codegen
+  it('should demonstrate optional vs required field access', () => {
+    // NOTE: Optional class fields (name?: string) now implemented in AST-based codegen
     // In JavaScript:
     // const obj = { required: 42 };
     // obj.required  // 42
