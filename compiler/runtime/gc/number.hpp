@@ -4,6 +4,7 @@
 #include <sstream>
 #include <iomanip>
 #include <cmath>
+#include <limits>
 
 namespace gs {
 
@@ -13,6 +14,20 @@ namespace gs {
  */
 class Number {
 public:
+    // Constants
+    static constexpr double NaN = std::numeric_limits<double>::quiet_NaN();
+    static constexpr double POSITIVE_INFINITY = std::numeric_limits<double>::infinity();
+    static constexpr double NEGATIVE_INFINITY = -std::numeric_limits<double>::infinity();
+
+    // Type checking
+    static bool isNaN(double value) {
+        return std::isnan(value);
+    }
+
+    static bool isFinite(double value) {
+        return std::isfinite(value);
+    }
+
     static String toString(double value) {
         return String::from(value);
     }

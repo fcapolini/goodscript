@@ -92,6 +92,10 @@ export class GcCodegen {
     // std::move(x) → x
     code = code.replace(/std::move\(([^)]+)\)/g, '$1');
 
+    // Replace std::dynamic_pointer_cast with dynamic_cast for raw pointers
+    // std::dynamic_pointer_cast<T>(ptr) → dynamic_cast<T*>(ptr)
+    code = code.replace(/std::dynamic_pointer_cast<([^>]+)>\(([^)]+)\)/g, 'dynamic_cast<$1*>($2)');
+
     // Fix const pointer declarations
     // In GC mode, `const T* ptr` should be `T* const ptr` to make the pointer const, not the pointed-to object
     // This handles: variable declarations, function parameters, and return types
