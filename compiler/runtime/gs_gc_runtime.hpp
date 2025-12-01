@@ -32,6 +32,10 @@ namespace console {
     std::cout << str.c_str() << std::endl;
   }
   
+  inline void log(bool value) {
+    std::cout << (value ? "true" : "false") << std::endl;
+  }
+  
   template<typename T>
   void log(const T& value) {
     std::cout << value << std::endl;

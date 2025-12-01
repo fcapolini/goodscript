@@ -42,6 +42,25 @@ export function testTripleMode(source: string): TripleModeResult {
     true
   );
   
+  // Create a TypeScript program with checker for proper type inference
+  const compilerOptions: ts.CompilerOptions = {
+    target: ts.ScriptTarget.ES2020,
+    module: ts.ModuleKind.ESNext,
+    strict: true,
+  };
+  
+  const host = ts.createCompilerHost(compilerOptions);
+  const originalGetSourceFile = host.getSourceFile;
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+    if (fileName === 'test.ts') {
+      return sourceFile;
+    }
+    return originalGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+  };
+  
+  const program = ts.createProgram(['test.ts'], compilerOptions, host);
+  const checker = program.getTypeChecker();
+  
   // Compile to JavaScript (TypeScript)
   const jsResult = ts.transpileModule(source, {
     compilerOptions: {
@@ -51,12 +70,12 @@ export function testTripleMode(source: string): TripleModeResult {
   });
   const jsCode = jsResult.outputText;
   
-  // Compile to Ownership C++
-  const ownershipCodegen = new AstCodegen();
+  // Compile to Ownership C++ (with checker for type inference)
+  const ownershipCodegen = new AstCodegen(checker);
   const ownershipCppCode = ownershipCodegen.generate(sourceFile);
   
-  // Compile to GC C++
-  const gcCodegen = new GcCodegen();
+  // Compile to GC C++ (with checker for type inference)
+  const gcCodegen = new GcCodegen(checker);
   const gcCppCode = gcCodegen.generate(sourceFile);
   
   // Execute in all three modes
@@ -136,6 +155,25 @@ export function expectTripleModeCompilation(source: string): {
     true
   );
   
+  // Create a TypeScript program with checker for proper type inference
+  const compilerOptions: ts.CompilerOptions = {
+    target: ts.ScriptTarget.ES2020,
+    module: ts.ModuleKind.ESNext,
+    strict: true,
+  };
+  
+  const host = ts.createCompilerHost(compilerOptions);
+  const originalGetSourceFile = host.getSourceFile;
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+    if (fileName === 'test.ts') {
+      return sourceFile;
+    }
+    return originalGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+  };
+  
+  const program = ts.createProgram(['test.ts'], compilerOptions, host);
+  const checker = program.getTypeChecker();
+  
   const jsResult = ts.transpileModule(source, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -143,8 +181,8 @@ export function expectTripleModeCompilation(source: string): {
     }
   });
   
-  const ownershipCodegen = new AstCodegen();
-  const gcCodegen = new GcCodegen();
+  const ownershipCodegen = new AstCodegen(checker);
+  const gcCodegen = new GcCodegen(checker);
   
   return {
     jsCode: jsResult.outputText,

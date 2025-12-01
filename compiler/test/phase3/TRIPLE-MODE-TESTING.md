@@ -63,29 +63,16 @@ describe('Phase 3: Primitive Types (Triple-Mode)', () => {
 
 ## Known Limitations
 
-### 1. Boolean Output Formatting
+### 1. ~~Boolean Output Formatting~~ ✅ FIXED (Dec 2025)
 
-**Issue**: JavaScript outputs `true`/`false`, C++ outputs `1`/`0`
+**Status**: ✅ **RESOLVED**
 
-```typescript
-// JavaScript
-console.log(true);  // "true"
+Both `runtime/gs_console.hpp` (ownership mode) and `runtime/gs_gc_runtime.hpp` (GC mode) now have `bool` overloads that output `"true"`/`"false"` matching JavaScript behavior.
 
-// C++ (both modes)
-gs::console::log(true);  // "1"
-```
-
-**Workaround**: Use string conversion:
-```typescript
-console.log(String(myBool));  // "true" in all modes
-```
-
-**Long-term Fix**: Update `gs::console::log()` to handle bool specially:
 ```cpp
-namespace console {
-  inline void log(bool value) {
-    std::cout << (value ? "true" : "false") << std::endl;
-  }
+// Both modes now include:
+inline void log(bool value) {
+  std::cout << (value ? "true" : "false") << std::endl;
 }
 ```
 
@@ -208,6 +195,47 @@ npm test -- test/phase3/basic/primitives-triple-mode.test.ts --reporter=verbose
 
 (Phase 1 and Phase 2 tests remain mode-independent/ownership-specific)
 
+## Technical Details
+
+### TypeChecker Integration (Critical Fix - Dec 2025)
+
+The triple-mode helpers **must** pass a TypeChecker to the codegen constructors for proper type inference.
+
+**Problem**: Without a TypeChecker, array literals like `[1, 2, 3]` would be inferred as `Array<int>` instead of `Array<double>`, breaking JavaScript semantics where all numbers are doubles.
+
+**Solution** in `triple-mode-helpers.ts`:
+```typescript
+// Create a TypeScript program with checker
+const compilerOptions: ts.CompilerOptions = {
+  target: ts.ScriptTarget.ES2020,
+  module: ts.ModuleKind.ESNext,
+  strict: true,
+};
+
+const host = ts.createCompilerHost(compilerOptions);
+host.getSourceFile = (fileName, languageVersion) => {
+  if (fileName === 'test.ts') {
+    return sourceFile;
+  }
+  return originalGetSourceFile(fileName, languageVersion);
+};
+
+const program = ts.createProgram(['test.ts'], compilerOptions, host);
+const checker = program.getTypeChecker();
+
+// Pass checker to codegens ✅
+const ownershipCodegen = new AstCodegen(checker);
+const gcCodegen = new GcCodegen(checker);
+```
+
+**Impact**: Without the checker, the codegen can't properly resolve:
+- Array element types (`number[]` → `Array<double>` not `Array<int>`)
+- Generic type arguments
+- Return types of methods
+- Smart pointer types for ownership
+
+**Result**: Ensures C++ code maintains JavaScript's numeric semantics (all numbers are IEEE 754 doubles).
+
 ## Benefits
 
 1. **Early GC Bug Detection**: Catch GC mode issues during basic feature development
@@ -217,23 +245,27 @@ npm test -- test/phase3/basic/primitives-triple-mode.test.ts --reporter=verbose
 
 ## Next Steps
 
-1. **Fix console.log boolean formatting** (5 min fix in runtime headers)
-2. **Convert primitives.test.ts** to demonstrate pattern
-3. **Convert 3-5 more basic tests** as examples
-4. **Document patterns** for common test scenarios
-5. **Create PR template** requiring triple-mode tests for new features
+1. ✅ **Fix console.log boolean formatting** - Done (both modes)
+2. ✅ **Fix TypeChecker integration** - Done (triple-mode-helpers.ts)  
+3. ✅ **Convert primitives.test.ts** - Done (10 tests passing)
+4. ✅ **Convert arrays.test.ts** - Done (16 tests passing)
+5. **Convert functions.test.ts** - Next target
+6. **Convert classes.test.ts** (partial) - Simple classes only
+7. **Document patterns** for common test scenarios
+8. **Create PR template** requiring triple-mode tests for new features
 
 ## Implementation Priority
 
 **High Priority** (simple, high value):
-- [ ] Boolean console.log formatting fix
-- [ ] primitives.test.ts conversion
+- [x] Boolean console.log formatting fix ✅
+- [x] primitives.test.ts conversion ✅
+- [x] arrays.test.ts conversion ✅
 - [ ] js-cpp-semantics.test.ts conversion
 
 **Medium Priority**:
 - [ ] classes.test.ts (partial - simple classes)
 - [ ] array-bounds.test.ts
-- [ ] array-resize.test.ts
+- [ ] functions.test.ts
 
 **Low Priority** (complex, ownership-specific):
 - [ ] ownership-types.test.ts (keep ownership-only)
@@ -242,10 +274,12 @@ npm test -- test/phase3/basic/primitives-triple-mode.test.ts --reporter=verbose
 ## Success Criteria
 
 ✅ Triple-mode helpers working  
-✅ Example test demonstrating pattern  
-🔄 Boolean formatting fixed  
-🔄 At least 3 basic tests converted  
-🔄 Documentation complete  
+✅ Example test demonstrating pattern (primitives-triple-mode.test.ts)  
+✅ Boolean formatting fixed (gs_console.hpp, gs_gc_runtime.hpp)  
+✅ TypeChecker integration fixed (triple-mode-helpers.ts)  
+✅ Array tests converted and passing (arrays-triple-mode.test.ts)  
+🔄 At least 5 basic tests converted  
+⏳ 50%+ of suitable basic tests converted  
 ⏳ 50%+ of suitable basic tests converted
 
 ---
