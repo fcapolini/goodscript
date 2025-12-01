@@ -18,6 +18,7 @@ import { execSync } from "child_process";
 import {
   executeJS,
   executeCpp,
+  executeGcCpp,
   compareOutputs,
 } from "./runtime-helpers.js";
 
@@ -26,12 +27,16 @@ const __dirname = dirname(__filename);
 export const EXAMPLES_DIR = join(__dirname, "concrete-examples");
 export const RUNTIME_DIR = join(__dirname, "../../runtime");
 
+// Re-export helpers from runtime-helpers
+export { compareOutputs } from "./runtime-helpers.js";
+
 export interface CompilationResult {
   exampleName: string;
   srcFile: string;
   outDir: string;
   jsCode: string;
   cppCode: string;
+  gcCppCode: string;
 }
 
 export interface ExecutionResult extends CompilationResult {
@@ -39,6 +44,10 @@ export interface ExecutionResult extends CompilationResult {
   jsStderr: string;
   jsSuccess: boolean;
   jsError?: string;
+  gcOutput: string;
+  gcStderr: string;
+  gcSuccess: boolean;
+  gcError?: string;
 }
 
 export interface NativeResult extends ExecutionResult {
@@ -50,6 +59,8 @@ export interface NativeResult extends ExecutionResult {
   cppSuccess: boolean;
   cppError?: string;
   outputMatches: boolean;
+  gcOutputMatches: boolean;
+  allOutputsMatch: boolean;
 }
 
 export function createTmpDir(): string {
@@ -140,11 +151,12 @@ export function compileExample(
     });
   }
 
-  // Compile to C++
+  // Compile to C++ (ownership mode)
   const cppResult = compiler.compile({
     files: [srcFile],
     outDir,
     target: "native",
+    mode: "ownership",
     project: tsconfigPath,
   });
 
@@ -175,22 +187,58 @@ export function compileExample(
     }
   }
 
+  // Compile to C++ (GC mode)
+  const gcOutDir = join(outDir, "gc");
+  mkdirSync(gcOutDir, { recursive: true });
+  
+  const gcCppResult = compiler.compile({
+    files: [srcFile],
+    outDir: gcOutDir,
+    target: "native",
+    mode: "gc",
+    project: tsconfigPath,
+  });
+
+  const gcCppFile = join(gcOutDir, "main.cpp");
+  let gcCppCode = existsSync(gcCppFile) ? readFileSync(gcCppFile, "utf-8") : "";
+  
+  // Debug compilation result
+  console.error(`[${exampleName}] GC C++: success=${gcCppResult.success}, diagnostics=${gcCppResult.diagnostics.length}, file exists: ${existsSync(gcCppFile)}`);
+  if (gcCppResult.diagnostics.length > 0) {
+    gcCppResult.diagnostics.slice(0, 3).forEach(d => {
+      console.error(`  - [${d.severity}] [${d.code}] ${d.message.substring(0, 80)}`);
+    });
+  }
+  
+  // Check subdirectory for GC C++
+  if (!gcCppCode) {
+    const altGcCppFile = join(gcOutDir, "src", "main.cpp");
+    if (existsSync(altGcCppFile)) {
+      gcCppCode = readFileSync(altGcCppFile, "utf-8");
+      console.error(`[${exampleName}] Found GC C++ at gc/src/main.cpp (${gcCppCode.length} bytes)`);
+    }
+  }
+
   return {
     exampleName,
     srcFile,
     outDir,
     jsCode,
     cppCode,
+    gcCppCode,
   };
 }
 
 /**
- * Execute JavaScript
+ * Execute JavaScript and GC C++
  */
 export function executeExample(
   compilation: CompilationResult
 ): ExecutionResult {
   const jsResult = executeJS(compilation.jsCode);
+
+  // Execute GC C++ too
+  const gcResult = executeGcCpp(compilation.gcCppCode, compilation.outDir);
 
   return {
     ...compilation,
@@ -198,6 +246,10 @@ export function executeExample(
     jsStderr: jsResult.stderr,
     jsSuccess: jsResult.success,
     jsError: jsResult.error,
+    gcOutput: gcResult.stdout,
+    gcStderr: gcResult.stderr,
+    gcSuccess: gcResult.success,
+    gcError: gcResult.error,
   };
 }
 
@@ -308,6 +360,29 @@ export function compileAndExecuteNative(
         )
       : false;
 
+  // Check if GC output matches JS output
+  const gcOutputMatches = execution.gcSuccess
+    ? compareOutputs(
+        {
+          stdout: execution.jsOutput,
+          stderr: execution.jsStderr,
+          success: execution.jsSuccess,
+          error: execution.jsError,
+          exitCode: 0,
+        },
+        {
+          stdout: execution.gcOutput,
+          stderr: execution.gcStderr,
+          success: execution.gcSuccess,
+          error: execution.gcError,
+          exitCode: 0,
+        }
+      )
+    : false;
+
+  // All three outputs must match
+  const allOutputsMatch = outputMatches && gcOutputMatches && execution.gcSuccess;
+
   return {
     ...execution,
     cppCompileSuccess,
@@ -318,5 +393,7 @@ export function compileAndExecuteNative(
     cppSuccess,
     cppError,
     outputMatches,
+    gcOutputMatches,
+    allOutputsMatch,
   };
 }

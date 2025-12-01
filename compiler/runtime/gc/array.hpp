@@ -1,6 +1,7 @@
 #pragma once
 
 #include "allocator-simple.hpp"
+#include "string.hpp"
 #include <stdexcept>
 #include <algorithm>
 
@@ -50,6 +51,21 @@ public:
             data_ = gc::Allocator::alloc_array<T>(capacity_);
             for (size_t i = 0; i < length_; ++i) {
                 data_[i] = other.data_[i];
+            }
+        } else {
+            data_ = nullptr;
+        }
+    }
+
+    // Initializer list constructor
+    Array(std::initializer_list<T> init) {
+        length_ = init.size();
+        capacity_ = length_;
+        if (capacity_ > 0) {
+            data_ = gc::Allocator::alloc_array<T>(capacity_);
+            size_t i = 0;
+            for (const T& elem : init) {
+                data_[i++] = elem;
             }
         } else {
             data_ = nullptr;
@@ -155,6 +171,20 @@ public:
             }
         }
         return -1;
+    }
+
+    // Join array elements into a string
+    String join(const String& separator = String(",")) const {
+        if (length_ == 0) {
+            return String("");
+        }
+        
+        String result = String::from(data_[0]);
+        for (size_t i = 1; i < length_; ++i) {
+            result += separator;
+            result += String::from(data_[i]);
+        }
+        return result;
     }
 
     // Iterators for range-based for loops

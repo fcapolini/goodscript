@@ -9,6 +9,26 @@ GoodScript now supports **two compilation modes** for native (C++) targets:
 
 This dual-mode approach significantly improves language adoptability by offering a gradual migration path.
 
+## Test Coverage
+
+**Status**: 146/186 tests passing (78.5%) ✅
+
+GC mode has comprehensive triple-mode testing across all 15 concrete examples:
+- **JavaScript execution** - Reference behavior
+- **Ownership C++ compilation** - Smart pointer based
+- **GC C++ compilation** - Raw pointer based
+
+**Fully Validated Examples** (5/15 - all modes produce identical output):
+- ✅ benchmark-performance (8 tests)
+- ✅ fibonacci (13 tests)
+- ✅ linked-list (13 tests)
+- ✅ binary-search-tree (13 tests)
+- ✅ regex-validator (9 tests)
+
+**Partial Validation** (10/15 - some GC tests failing):
+- ⚠️ lru-cache, n-queens, json-parser, string-pool, array-methods
+- ⚠️ generic-stack, hash-map, interface-shapes, cli-args, error-handling
+
 ## Why GC Mode?
 
 ### Strategic Benefits

@@ -4,6 +4,7 @@
 #include <cstring>
 #include <string>
 #include <stdexcept>
+#include <optional>
 
 namespace gs {
 
@@ -184,6 +185,61 @@ public:
     }
 
     // Static methods
+    static String from(const String& s) {
+        return s;
+    }
+
+    static String from(const char* s) {
+        return String(s);
+    }
+
+    static String from(const std::string& s) {
+        return String(s);
+    }
+
+    static String from(double value) {
+        char buf[64];
+        // Check if integer
+        if (value == static_cast<long>(value)) {
+            snprintf(buf, sizeof(buf), "%ld", static_cast<long>(value));
+        } else {
+            snprintf(buf, sizeof(buf), "%.16g", value);
+        }
+        return String(buf);
+    }
+
+    static String from(int value) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%d", value);
+        return String(buf);
+    }
+
+    static String from(long value) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%ld", value);
+        return String(buf);
+    }
+
+    static String from(bool value) {
+        return String(value ? "true" : "false");
+    }
+
+    static String from(const std::optional<double>& opt) {
+        return opt ? from(*opt) : String("null");
+    }
+
+    static String from(const std::optional<int>& opt) {
+        return opt ? from(*opt) : String("null");
+    }
+
+    static String from(const std::optional<bool>& opt) {
+        return opt ? from(*opt) : String("null");
+    }
+
+    static String from(const std::optional<String>& opt) {
+        return opt ? *opt : String("null");
+    }
+
     static String fromCharCode(int code) {
         char buf[2] = {static_cast<char>(code), '\0'};
         return String(buf);

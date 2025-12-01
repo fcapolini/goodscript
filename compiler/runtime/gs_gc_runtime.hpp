@@ -13,10 +13,9 @@
 // GC runtime types
 #include "gc/string.hpp"
 #include "gc/array.hpp"
+#include "gc/map.hpp"
+#include "gc/set.hpp"
 
-// Standard library equivalents (Map, Set will be added later)
-#include <unordered_map>
-#include <unordered_set>
 #include <iostream>
 #include <sstream>
 #include <optional>
@@ -25,14 +24,6 @@
 #include <limits>
 
 namespace gs {
-
-// Map: GC-allocated keys/values
-template<typename K, typename V>
-using Map = std::unordered_map<K, V>;
-
-// Set: GC-allocated elements
-template<typename T>
-using Set = std::unordered_set<T>;
 
 // Console namespace for logging
 namespace console {
@@ -57,10 +48,34 @@ namespace console {
 
 // JSON namespace (simplified)
 namespace JSON {
-  inline String stringify(const auto& value) {
+  // Forward declarations for template specializations
+  template<typename T>
+  String stringify(const Array<T>& arr);
+  
+  template<typename T>
+  String stringify(const T& value) {
     std::ostringstream oss;
     oss << value;
     return String(oss.str());
+  }
+  
+  // Specialization for String
+  inline String stringify(const String& str) {
+    return String("\"") + str + String("\"");
+  }
+  
+  // Specialization for Array
+  template<typename T>
+  String stringify(const Array<T>& arr) {
+    String result = String("[");
+    for (size_t i = 0; i < arr.length(); ++i) {
+      if (i > 0) {
+        result += String(",");
+      }
+      result += stringify(arr[i]);
+    }
+    result += String("]");
+    return result;
   }
 }
 

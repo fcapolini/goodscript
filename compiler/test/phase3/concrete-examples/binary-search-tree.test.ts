@@ -9,6 +9,7 @@ import {
   type ExecutionResult,
   type NativeResult,
 } from "../concrete-examples-helpers.js";
+import { compareOutputs } from "../runtime-helpers.js";
 
 const EXAMPLE_NAME = "binary-search-tree";
 
@@ -101,6 +102,86 @@ describe(`Concrete Example: ${EXAMPLE_NAME}`, () => {
       expect(nativeResult.cppCompileSuccess).toBe(true);
       expect(nativeResult.cppSuccess).toBe(true);
       expect(nativeResult.jsOutput).toBe(nativeResult.cppOutput);
+    });
+  });
+
+  describe("GC Mode Compilation and Execution", () => {
+    let compilation: CompilationResult;
+    let execution: ExecutionResult;
+
+    beforeEach(() => {
+      compilation = compileExample(EXAMPLE_NAME, tmpDir);
+      execution = executeExample(compilation);
+    });
+
+    it("should compile GC C++ successfully", () => {
+      expect(compilation.gcCppCode).toBeTruthy();
+      expect(compilation.gcCppCode.length).toBeGreaterThan(0);
+    });
+
+    it("should execute GC C++ successfully", () => {
+      expect(execution.gcSuccess).toBe(true);
+      if (!execution.gcSuccess) {
+        console.error("GC Error:", execution.gcError);
+        console.error("GC Stderr:", execution.gcStderr);
+      }
+    });
+
+    it("should produce matching JavaScript and GC C++ output", () => {
+      expect(execution.jsSuccess).toBe(true);
+      expect(execution.gcSuccess).toBe(true);
+      
+      const gcMatches = compareOutputs(
+        {
+          stdout: execution.jsOutput,
+          stderr: execution.jsStderr,
+          success: execution.jsSuccess,
+          error: execution.jsError,
+          exitCode: 0,
+        },
+        {
+          stdout: execution.gcOutput,
+          stderr: execution.gcStderr,
+          success: execution.gcSuccess,
+          error: execution.gcError,
+          exitCode: 0,
+        }
+      );
+      
+      expect(gcMatches).toBe(true);
+      if (!gcMatches) {
+        console.error("JS Output:", execution.jsOutput);
+        console.error("GC Output:", execution.gcOutput);
+      }
+    });
+
+    it("should produce identical JavaScript and GC C++ output", () => {
+      expect(execution.jsSuccess).toBe(true);
+      expect(execution.gcSuccess).toBe(true);
+      expect(execution.jsOutput).toBe(execution.gcOutput);
+    });
+  });
+
+  describe("All Modes Equivalence", () => {
+    let nativeResult: NativeResult;
+
+    beforeEach(() => {
+      const compilation = compileExample(EXAMPLE_NAME, tmpDir);
+      const execution = executeExample(compilation);
+      nativeResult = compileAndExecuteNative(execution);
+    });
+
+    it("should have all three modes produce identical output", () => {
+      expect(nativeResult.cppCompileSuccess).toBe(true);
+      expect(nativeResult.cppSuccess).toBe(true);
+      expect(nativeResult.gcSuccess).toBe(true);
+      expect(nativeResult.allOutputsMatch).toBe(true);
+      
+      if (!nativeResult.allOutputsMatch) {
+        console.error("JS Output:", nativeResult.jsOutput);
+        console.error("C++ (ownership) Output:", nativeResult.cppOutput);
+        console.error("C++ (GC) Output:", nativeResult.gcOutput);
+      }
     });
   });
 });

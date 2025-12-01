@@ -9,6 +9,7 @@ import {
   compileAndExecuteNative,
   createTmpDir,
   cleanupTmpDir,
+  compareOutputs,
   type CompilationResult,
   type ExecutionResult,
   type NativeResult,

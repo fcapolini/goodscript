@@ -108,6 +108,54 @@ export const executeCpp = (cppCode: string, outDir: string): ExecutionResult => 
 };
 
 /**
+ * Execute GC mode C++ code by compiling and running it
+ */
+export const executeGcCpp = (gcCppCode: string, outDir: string): ExecutionResult => {
+  const tmpDir = join(tmpdir(), 'gc-cpp-exec-' + Date.now() + '-' + Math.random().toString(36).substring(7));
+  mkdirSync(tmpDir, { recursive: true });
+  
+  const cppFile = join(tmpDir, 'test.cpp');
+  const binFile = join(tmpDir, 'test');
+  
+  writeFileSync(cppFile, gcCppCode, 'utf-8');
+  
+  try {
+    // Compile the GC C++ code using Zig's C++ compiler (C++20 for runtime library features)
+    const compileOutput = execSync(
+      `zig c++ -std=c++20 -I${RUNTIME_DIR} ${cppFile} -o ${binFile}`,
+      { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] }
+    );
+    
+    // Run the compiled binary
+    const output = execSync(
+      binFile,
+      { encoding: 'utf-8', timeout: 5000 }
+    );
+    
+    // Clean up
+    rmSync(tmpDir, { recursive: true, force: true });
+    
+    return {
+      success: true,
+      stdout: output,
+      stderr: '',
+      exitCode: 0,
+    };
+  } catch (error: any) {
+    // Clean up
+    rmSync(tmpDir, { recursive: true, force: true });
+    
+    return {
+      success: false,
+      stdout: error.stdout?.toString() || '',
+      stderr: error.stderr?.toString() || '',
+      exitCode: error.status || 1,
+      error: error.message,
+    };
+  }
+};
+
+/**
  * Normalize output for comparison (trim whitespace, normalize line endings)
  */
 export const normalizeOutput = (output: string): string => {

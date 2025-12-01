@@ -77,6 +77,13 @@ export class GcCodegen {
     // std::make_shared<T>(args) → gs::gc::Allocator::alloc<T>(args)
     code = code.replace(/std::make_shared<([^>]+)>\(([^)]*)\)/g, 'gs::gc::Allocator::alloc<$1>($2)');
 
+    // Remove * dereference when accessing array/vector elements
+    // In GC mode, Array::operator[] returns T& instead of T*
+    // Pattern: *array[index] should become array[index]
+    // This includes: *this->array[i], *array[i], *values[i], etc.
+    code = code.replace(/\*([a-zA-Z_][a-zA-Z0-9_]*(?:->[a-zA-Z_][a-zA-Z0-9_]*)?)\[/g, '$1[');
+    code = code.replace(/\*this->([a-zA-Z_][a-zA-Z0-9_]*)\[/g, 'this->$1[');
+
     // Remove .get() calls (pointers are already raw)
     // But be careful - only remove when it's clearly a method call
     code = code.replace(/(\w+)\.get\(\)/g, '$1');
@@ -85,8 +92,13 @@ export class GcCodegen {
     // std::move(x) → x
     code = code.replace(/std::move\(([^)]+)\)/g, '$1');
 
-    // Remove String::from() wrapper (not needed in GC mode)
-    code = code.replace(/gs::String::from\(([^)]+)\)/g, '$1');
+    // Fix const pointer declarations
+    // In GC mode, `const T* ptr` should be `T* const ptr` to make the pointer const, not the pointed-to object
+    // This handles: variable declarations, function parameters, and return types
+    // For references: const T*& becomes T* const&
+    // For values: const T* becomes T* const
+    code = code.replace(/\bconst\s+(gs::\w+)\*\s*&(\s+\w+)/g, '$1* const&$2');
+    code = code.replace(/\bconst\s+(gs::\w+)\*(\s+\w+)/g, '$1* const$2');
 
     // Add GC runtime initialization at start of main()
     code = code.replace(
