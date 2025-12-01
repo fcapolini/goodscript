@@ -118,6 +118,21 @@ public:
         return cmp < 0;
     }
 
+    bool operator<=(const String& other) const {
+        int cmp = std::strcmp(data_ ? data_ : "", other.data_ ? other.data_ : "");
+        return cmp <= 0;
+    }
+
+    bool operator>(const String& other) const {
+        int cmp = std::strcmp(data_ ? data_ : "", other.data_ ? other.data_ : "");
+        return cmp > 0;
+    }
+
+    bool operator>=(const String& other) const {
+        int cmp = std::strcmp(data_ ? data_ : "", other.data_ ? other.data_ : "");
+        return cmp >= 0;
+    }
+
     // Properties
     size_t length() const { return length_; }
     

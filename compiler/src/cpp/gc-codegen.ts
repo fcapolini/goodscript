@@ -61,14 +61,15 @@ export class GcCodegen {
     );
 
     // Replace smart pointer types with raw pointers
+    // Must handle nested templates like Stack<String>
     // std::unique_ptr<T> → T*
-    code = code.replace(/std::unique_ptr<([^>]+)>/g, '$1*');
+    code = this.replaceSmartPointerTypes(code, 'unique_ptr');
     
     // std::shared_ptr<T> → T*
-    code = code.replace(/std::shared_ptr<([^>]+)>/g, '$1*');
+    code = this.replaceSmartPointerTypes(code, 'shared_ptr');
     
     // std::weak_ptr<T> → T*
-    code = code.replace(/std::weak_ptr<([^>]+)>/g, '$1*');
+    code = this.replaceSmartPointerTypes(code, 'weak_ptr');
 
     // Replace allocation calls
     // std::make_unique<T>(args) → gs::gc::Allocator::alloc<T>(args)
@@ -76,6 +77,14 @@ export class GcCodegen {
     // Note: Must handle nested templates like Stack<String>
     code = this.replaceSmartPointerAllocations(code, 'make_unique');
     code = this.replaceSmartPointerAllocations(code, 'make_shared');
+
+    // Handle std::make_shared calls that might have been missed
+    // Pattern: std::make_shared<Type>(value) where value is already a pointer or value
+    // In many cases, if we're passing a value type to make_shared, we just need to allocate it
+    // Example: std::make_shared<String>(str) → just use &str if str is a value
+    //          or gs::gc::Allocator::alloc<String>(str) if we need a new allocation
+    code = code.replace(/std::make_shared<([^>]+)>\(/g, 'gs::gc::Allocator::alloc<$1>(');
+    code = code.replace(/std::make_unique<([^>]+)>\(/g, 'gs::gc::Allocator::alloc<$1>(');
 
     // Remove * dereference when accessing array/vector elements
     // In GC mode, Array::operator[] returns T& instead of T*
@@ -95,6 +104,12 @@ export class GcCodegen {
     // This is a heuristic: if the array subscript result uses ->, change to .
     // Match: identifier[...] followed by ->
     code = code.replace(/(\w+\[(?:[^\[\]]+)\])->(\w+)/g, '$1.$2');
+
+    // Fix optional comparisons after null checks
+    // Pattern: if (x != std::nullopt && (x <op> value))
+    // The comparisons after the null check need to unwrap the optional
+    // We need to replace x with x.value() in the comparison part
+    code = this.unwrapOptionalsInComparisons(code);
 
     // Remove .get() calls (pointers are already raw)
     // But be careful - only remove when it's clearly a method call
@@ -133,6 +148,59 @@ export class GcCodegen {
     );
 
     return code;
+  }
+
+  /**
+   * Replace smart pointer types handling nested templates.
+   * std::unique_ptr<T> → T*
+   * std::shared_ptr<T> → T*
+   * std::weak_ptr<T> → T*
+   * 
+   * Must properly handle nested templates like Stack<String>.
+   */
+  private replaceSmartPointerTypes(code: string, ptrType: 'unique_ptr' | 'shared_ptr' | 'weak_ptr'): string {
+    const pattern = `std::${ptrType}<`;
+    let result = '';
+    let pos = 0;
+
+    while (true) {
+      const start = code.indexOf(pattern, pos);
+      if (start === -1) {
+        result += code.substring(pos);
+        break;
+      }
+
+      // Copy everything before the match
+      result += code.substring(pos, start);
+
+      // Find matching closing >
+      let depth = 0;
+      let i = start + pattern.length;
+      while (i < code.length) {
+        if (code[i] === '<') depth++;
+        else if (code[i] === '>') {
+          if (depth === 0) break;
+          depth--;
+        }
+        i++;
+      }
+
+      if (i >= code.length) {
+        // Malformed, just copy and continue
+        result += code.substring(start, start + pattern.length);
+        pos = start + pattern.length;
+        continue;
+      }
+
+      // Extract the type
+      const type = code.substring(start + pattern.length, i);
+      
+      // Replace std::ptrType<T> with T*
+      result += `${type}*`;
+      pos = i + 1;
+    }
+
+    return result;
   }
 
   /**
@@ -202,6 +270,82 @@ export class GcCodegen {
       replacements++;
     }
 
+    return result;
+  }
+
+  /**
+   * Unwrap optionals in comparisons that come after null checks.
+   * 
+   * Pattern: if (x != std::nullopt && (...comparisons with x...))
+   * After the null check, we know x has a value, so comparisons need x.value()
+   * 
+   * Example:
+   *   if (ch != std::nullopt && (ch >= gs::String("0") && ch <= gs::String("9")))
+   * Should become:
+   *   if (ch != std::nullopt && (ch.value() >= gs::String("0") && ch.value() <= gs::String("9")))
+   */
+  private unwrapOptionalsInComparisons(code: string): string {
+    // Strategy: Find patterns like "varname != std::nullopt &&"
+    // Then in the rest of that condition (until the closing paren), replace varname with varname.value()
+    
+    // Use a more flexible approach: find the pattern, then manually parse to find the end
+    let result = '';
+    let pos = 0;
+    
+    const nullCheckPattern = /(\w+)\s*!=\s*std::nullopt\s*&&\s*/g;
+    let match;
+    
+    while ((match = nullCheckPattern.exec(code)) !== null) {
+      const varname = match[1];
+      const matchEnd = match.index + match[0].length;
+      
+      // Copy everything before this match
+      result += code.substring(pos, matchEnd);
+      
+      // Now find the closing paren for this condition
+      // We need to find the matching ) for the if (
+      // Start from matchEnd and count parentheses
+      let parenDepth = 0;
+      let i = matchEnd;
+      
+      // Go backwards to find the opening ( of the if statement
+      let j = match.index - 1;
+      while (j >= 0 && code[j].trim() === '') j--;
+      if (j >= 0 && code[j] === '(') {
+        parenDepth = 1;
+      }
+      
+      // Now find where this condition ends
+      let conditionEnd = matchEnd;
+      while (i < code.length && parenDepth > 0) {
+        if (code[i] === '(') parenDepth++;
+        else if (code[i] === ')') {
+          parenDepth--;
+          if (parenDepth === 0) {
+            conditionEnd = i;
+            break;
+          }
+        }
+        i++;
+      }
+      
+      // Extract the condition part after the null check
+      const conditionPart = code.substring(matchEnd, conditionEnd);
+      
+      // Replace varname with varname.value() in this part
+      // But avoid replacing if it's already varname.value() or varname.method()
+      const unwrapped = conditionPart.replace(
+        new RegExp(`\\b${varname}\\b(?!\\.value\\(\\))(?!\\.\\w+)`, 'g'),
+        `${varname}.value()`
+      );
+      
+      result += unwrapped;
+      pos = conditionEnd;
+    }
+    
+    // Add the rest
+    result += code.substring(pos);
+    
     return result;
   }
 }
