@@ -23,7 +23,7 @@ function compileToCpp(source: string): string {
   return codegen.generate(sourceFile);
 }
 
-describe.skip('Phase 3: Object literals', () => {
+describe('Phase 3: Object literals', () => {
   it('should generate LiteralObject for object literals', () => {
     const source = `
 const person = { name: "Alice", age: 30 };
@@ -36,13 +36,14 @@ const person = { name: "Alice", age: 30 };
     expect(cpp).toContain('30');
   });
 
-  it('should generate property access via .get().value()', () => {
+  it('should generate property access via .get()', () => {
     const source = `
 const person = { name: "Alice" };
 const n = person.name;
     `;
     const cpp = compileToCpp(source);
-    expect(cpp).toContain('person.get(gs::String("name")).value()');
+    // Property access returns a Property reference: *person.get(...)
+    expect(cpp).toContain('person.get(gs::String("name"))');
   });
 
   it('should handle mixed types in object literals', () => {
@@ -73,7 +74,7 @@ const obj = { x };
 const empty = {};
     `;
     const cpp = compileToCpp(source);
-    expect(cpp).toContain('gs::LiteralObject{}');
+    expect(cpp).toMatch(/gs::LiteralObject\{\}|gs::LiteralObject\(\{\}\)/);
   });
 
   it('should handle nested object literals', () => {

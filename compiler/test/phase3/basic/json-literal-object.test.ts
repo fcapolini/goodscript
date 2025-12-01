@@ -22,7 +22,7 @@ function compileToCpp(source: string): string {
   return codegen.generate(sourceFile);
 }
 
-describe.skip('Phase 3: JSON.stringify with LiteralObject', () => {
+describe('Phase 3: JSON.stringify with LiteralObject', () => {
   it('should stringify object literals with primitive values', () => {
     const source = `
 const obj = { name: "Alice", age: 30, active: true };

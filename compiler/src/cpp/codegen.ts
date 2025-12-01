@@ -226,6 +226,9 @@ export class AstCodegen {
         } else {
           cppType = new ast.CppType('auto');
         }
+      } else if (decl.initializer && ts.isObjectLiteralExpression(decl.initializer)) {
+        // Object literal expression → gs::LiteralObject
+        cppType = new ast.CppType('gs::LiteralObject');
       } else {
         // Use auto for other inferred types - let C++ compiler figure it out
         cppType = new ast.CppType('auto');
@@ -1351,6 +1354,45 @@ export class AstCodegen {
       return cpp.unary(op, operand);
     }
     
+    if (ts.isObjectLiteralExpression(node)) {
+      // Object literal: { key: value, ... } → gs::LiteralObject
+      const properties: [ast.Expression, ast.Expression][] = [];
+      
+      for (const prop of node.properties) {
+        if (ts.isPropertyAssignment(prop)) {
+          // Regular property: key: value
+          const keyStr = prop.name.getText();
+          const key = cpp.literal(keyStr);
+          const value = this.visitExpression(prop.initializer);
+          // Wrap value in gs::Property
+          const propertyValue = cpp.call(cpp.id('gs::Property'), [value]);
+          properties.push([key, propertyValue]);
+        } else if (ts.isShorthandPropertyAssignment(prop)) {
+          // Shorthand property: { x } → { "x": x }
+          const keyStr = prop.name.getText();
+          const key = cpp.literal(keyStr);
+          const value = this.visitExpression(prop.name);
+          // Wrap value in gs::Property
+          const propertyValue = cpp.call(cpp.id('gs::Property'), [value]);
+          properties.push([key, propertyValue]);
+        }
+        // Note: Method declarations, getters, setters not supported yet
+      }
+      
+      // Generate gs::LiteralObject{ {"key1", Property(val1)}, {"key2", Property(val2)}, ... }
+      if (properties.length === 0) {
+        // Empty object literal → gs::LiteralObject{}
+        return cpp.id('gs::LiteralObject{}');
+      }
+      
+      // Create nested initializer list for each property
+      const propInits = properties.map(([key, value]) => 
+        cpp.initList([key, value])
+      );
+      
+      return cpp.call(cpp.id('gs::LiteralObject'), [cpp.initList(propInits)]);
+    }
+    
     if (ts.isArrayLiteralExpression(node)) {
       const elements = node.elements.map(el => this.visitExpression(el));
       
@@ -2206,6 +2248,20 @@ export class AstCodegen {
       
       if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON' || objName === 'Date' || objName === 'String') {
         return cpp.id(`gs::${objName}::${prop}`);
+      }
+      
+      // Check if this is property access on a LiteralObject
+      const varType = this.variableTypes.get(objName);
+      if (varType && varType.toString().includes('gs::LiteralObject')) {
+        // person.name → person.get(gs::String("name"))->value()
+        // get() returns Property*, ->value() extracts the variant value
+        const obj = cpp.id(objName);
+        const getCall = cpp.call(
+          cpp.member(obj, 'get'),
+          [cpp.call(cpp.id('gs::String'), [cpp.literal(prop)])]
+        );
+        // Call ->value() on the Property* to get variant value
+        return cpp.call(cpp.member(getCall, 'value', true), []);
       }
     }
     
