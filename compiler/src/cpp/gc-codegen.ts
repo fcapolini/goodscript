@@ -100,6 +100,16 @@ export class GcCodegen {
     code = code.replace(/\bconst\s+(gs::\w+)\*\s*&(\s+\w+)/g, '$1* const&$2');
     code = code.replace(/\bconst\s+(gs::\w+)\*(\s+\w+)/g, '$1* const$2');
 
+    // Fix Map.get() dereference patterns
+    // Pattern: (map.get(key) != nullptr ? *map.get(key) : nullptr)
+    // Should be: map.get(key)
+    // This regex handles the ternary pattern that the ownership codegen generates
+    code = code.replace(/\(([^?]+\.get\([^)]+\))\s*!=\s*nullptr\s*\?\s*\*\1\s*:\s*nullptr\)/g, '$1');
+
+    // Also fix double nullptr checks like: if (x != nullptr && x != nullptr)
+    // Should be: if (x != nullptr)
+    code = code.replace(/(\w+\s*!=\s*nullptr)\s*&&\s*\1/g, '$1');
+
     // Add GC runtime initialization at start of main()
     code = code.replace(
       /int main\(\) \{/,

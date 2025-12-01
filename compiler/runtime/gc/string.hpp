@@ -264,3 +264,20 @@ inline std::ostream& operator<<(std::ostream& os, const String& str) {
 }
 
 } // namespace gs
+
+// Hash function for gs::String (required for std::unordered_map)
+namespace std {
+    template<>
+    struct hash<gs::String> {
+        size_t operator()(const gs::String& str) const noexcept {
+            // Use FNV-1a hash
+            const char* data = str.c_str();
+            size_t hash = 2166136261u;
+            while (*data) {
+                hash ^= static_cast<size_t>(*data++);
+                hash *= 16777619u;
+            }
+            return hash;
+        }
+    };
+}

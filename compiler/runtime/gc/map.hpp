@@ -3,6 +3,7 @@
 #include "allocator-simple.hpp"
 #include <unordered_map>
 #include <optional>
+#include <type_traits>
 
 namespace gs {
 
@@ -18,19 +19,25 @@ private:
 public:
     Map() = default;
 
-    // Get value by key (returns pointer for API consistency with ownership mode)
-    V* get(const K& key) {
+    // Get value by key
+    // When V is a pointer type (T*), returns T* directly (not T**)
+    // When V is a value type, returns V*
+    auto get(const K& key) -> V {
+        static_assert(std::is_pointer<V>::value, 
+            "Map value type must be a pointer in GC mode");
         auto it = impl_.find(key);
         if (it != impl_.end()) {
-            return &it->second;
+            return it->second;  // Return the pointer directly
         }
         return nullptr;
     }
 
-    const V* get(const K& key) const {
+    auto get(const K& key) const -> V {
+        static_assert(std::is_pointer<V>::value,
+            "Map value type must be a pointer in GC mode");
         auto it = impl_.find(key);
         if (it != impl_.end()) {
-            return &it->second;
+            return it->second;  // Return the pointer directly
         }
         return nullptr;
     }
