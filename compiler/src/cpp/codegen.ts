@@ -1453,6 +1453,71 @@ export class AstCodegen {
   }
   
   private visitBinaryExpression(node: ts.BinaryExpression): ast.Expression {
+    // Special case: arr[idx] = value → IIFE with resize for out-of-bounds writes
+    if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+        ts.isElementAccessExpression(node.left)) {
+      const arrayExpr = node.left.expression;
+      const indexExpr = node.left.argumentExpression;
+      const valueExpr = node.right;
+      
+      if (indexExpr) {
+        // Generate IIFE: [&]() { auto __arr = &arr; auto __idx = idx; if (__idx >= __arr->size()) __arr->resize(__idx + 1); return (*__arr)[__idx] = value; }()
+        const arr = this.visitExpression(arrayExpr);
+        const idx = this.visitExpression(indexExpr);
+        const value = this.visitExpression(valueExpr);
+        
+        // Create lambda body statements
+        const statements: ast.Statement[] = [
+          // auto __arr = &arr;
+          new ast.VariableDecl(
+            '__arr',
+            new ast.CppType('auto'),
+            cpp.unary('&', arr)
+          ),
+          // auto __idx = static_cast<size_t>(idx);
+          new ast.VariableDecl(
+            '__idx',
+            new ast.CppType('auto'),
+            cpp.cast(new ast.CppType('size_t'), idx)
+          ),
+          // if (__idx >= __arr->size()) __arr->resize(__idx + 1);
+          new ast.IfStmt(
+            cpp.binary(
+              cpp.id('__idx'),
+              '>=',
+              cpp.call(cpp.member(cpp.id('__arr'), 'size', true), [])
+            ),
+            new ast.Block([
+              new ast.ExpressionStmt(
+                cpp.call(
+                  cpp.member(cpp.id('__arr'), 'resize', true),
+                  [cpp.binary(cpp.id('__idx'), '+', cpp.literal(1))]
+                )
+              )
+            ])
+          ),
+          // return *(*__arr)[__idx] = value;
+          new ast.ReturnStmt(
+            cpp.binary(
+              cpp.unary('*', cpp.subscript(cpp.paren(cpp.unary('*', cpp.id('__arr'))), cpp.id('__idx'))),
+              '=',
+              value
+            )
+          )
+        ];
+        
+        // Create lambda and immediately invoke it
+        const lambda = new ast.Lambda(
+          [], // no params
+          new ast.Block(statements),
+          undefined, // no explicit return type
+          '[&]' // capture by reference
+        );
+        
+        return cpp.call(lambda, []);
+      }
+    }
+    
     // Special case: array.length = n → array.resize(n)
     if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
         ts.isPropertyAccessExpression(node.left) &&

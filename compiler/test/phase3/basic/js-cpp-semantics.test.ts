@@ -39,8 +39,7 @@ describe('Phase 3: JS/C++ Semantic Equivalence', () => {
     // GoodScript prioritizes performance over runtime safety for array access.
   });
 
-  it.skip('should handle array writes', () => {
-    // NOTE: Array auto-resize not yet implemented in AST-based codegen
+  it('should handle array writes', () => {
     const source = `
       const arr: number[] = [];
       arr[10] = 42;

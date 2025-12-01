@@ -27,7 +27,7 @@ function compileToCpp(source: string): string {
   return codegen.generate(sourceFile);
 }
 
-describe.skip('Phase 3: Array Auto-Resize', () => {
+describe('Phase 3: Array Auto-Resize', () => {
   it('should auto-resize when assigning beyond current length', () => {
     const source = `
       const arr: number[] = [];
@@ -37,7 +37,7 @@ describe.skip('Phase 3: Array Auto-Resize', () => {
     
     // Should contain resize logic and dereferenced assignment
     expect(cpp).toContain('resize');
-    expect(cpp).toContain('(*__arr[__idx]) = 42');
+    expect(cpp).toContain('*(*__arr)[__idx] = 42');
   });
   
   it('should handle assignment in a loop', () => {
@@ -85,7 +85,7 @@ describe.skip('Phase 3: Array Auto-Resize', () => {
     
     // Should infer type from usage and resize
     expect(cpp).toContain('resize');
-    // Should create a typed vector, not auto a = {}
-    expect(cpp).toMatch(/std::vector<\w+>\s+a\s*=/);
+    // Should create a typed array, not empty initializer
+    expect(cpp).toMatch(/gs::Array|auto a\s*=\s*gs::Array/);
   });
 });

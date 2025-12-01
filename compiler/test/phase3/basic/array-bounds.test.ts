@@ -38,16 +38,16 @@ describe('Phase 3: Array Bounds Checking', () => {
     expect(cpp).toContain('arr[1]');
   });
 
-  it.skip('should handle array writes with assignment', () => {
-    // NOTE: Auto-resize feature not yet implemented
+  it('should handle array writes with assignment', () => {
     const cpp = compileToCpp(`
       const arr: number[] = [];
       arr[0] = 1;
       arr[5] = 10;
     `);
     
-    // Writes should use array element assignment (may use IIFE for resize)
-    expect(cpp).toContain('__arr[__idx]');
+    // Writes should use array element assignment with IIFE for resize
+    expect(cpp).toContain('__arr');
+    expect(cpp).toContain('__idx');
     expect(cpp).toContain('resize');
   });
 

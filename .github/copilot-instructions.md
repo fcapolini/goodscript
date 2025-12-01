@@ -509,7 +509,7 @@ When implementing new features or fixing bugs:
 
 - **Phase 1**: ✅ 100% complete (244/244 tests)
 - **Phase 2**: ✅ 100% complete (425/425 tests)  
-- **Phase 3**: ✅ 98% complete (941/960 tests passing)
+- **Phase 3**: ✅ 98.75% complete (948/960 tests passing)
   - ✅ AST traversal and code emission
   - ✅ Type mappings (primitives, ownership types, collections)
   - ✅ Statement generation (variables, functions, classes, control flow)
@@ -525,15 +525,16 @@ When implementing new features or fixing bugs:
   - ✅ Class inheritance with proper keyword escaping
   - ✅ Property accessor detection (array.length(), RegExp.global())
   - ✅ Parameter type tracking in methods
-  - ⏳ Array auto-resize (5 tests skipped)
+  - ✅ Array auto-resize (IIFE pattern for out-of-bounds writes)
   - ⏳ LiteralObject feature (10 tests skipped)
-  - ⏳ Optional field access (4 tests skipped)
+  - ⏳ Auto-dereference array reads (1 test skipped)
+  - ⏳ Optional field syntax (1 test skipped)
 - **Phase 4**: 📋 Planned
 
 **Next priorities**:
-1. Implement array auto-resize feature
-2. Add LiteralObject support for JSON.stringify
-3. Add optional field access (field?: type)
+1. Implement LiteralObject support for JSON.stringify scenarios (10 tests)
+2. Add auto-dereference for array element reads (1 test)
+3. Add optional field syntax `field?: type` (1 test)
 4. Add async/await coroutine support
 
 ---
