@@ -72,10 +72,10 @@ export class GcCodegen {
 
     // Replace allocation calls
     // std::make_unique<T>(args) → gs::gc::Allocator::alloc<T>(args)
-    code = code.replace(/std::make_unique<([^>]+)>\(([^)]*)\)/g, 'gs::gc::Allocator::alloc<$1>($2)');
-    
     // std::make_shared<T>(args) → gs::gc::Allocator::alloc<T>(args)
-    code = code.replace(/std::make_shared<([^>]+)>\(([^)]*)\)/g, 'gs::gc::Allocator::alloc<$1>($2)');
+    // Note: Must handle nested templates like Stack<String>
+    code = this.replaceSmartPointerAllocations(code, 'make_unique');
+    code = this.replaceSmartPointerAllocations(code, 'make_shared');
 
     // Remove * dereference when accessing array/vector elements
     // In GC mode, Array::operator[] returns T& instead of T*
@@ -121,5 +121,75 @@ export class GcCodegen {
     );
 
     return code;
+  }
+
+  /**
+   * Replace smart pointer allocations handling nested templates.
+   * Regex can't handle nested <> properly, so we parse manually.
+   */
+  private replaceSmartPointerAllocations(code: string, funcName: 'make_unique' | 'make_shared'): string {
+    const pattern = `std::${funcName}<`;
+    let result = '';
+    let pos = 0;
+    let replacements = 0;
+
+    while (true) {
+      const start = code.indexOf(pattern, pos);
+      if (start === -1) {
+        result += code.substring(pos);
+        break;
+      }
+
+      // Copy everything before the match
+      result += code.substring(pos, start);
+
+      // Find matching closing >
+      let depth = 0;
+      let i = start + pattern.length;
+      while (i < code.length) {
+        if (code[i] === '<') depth++;
+        else if (code[i] === '>') {
+          if (depth === 0) break;
+          depth--;
+        }
+        i++;
+      }
+
+      if (i >= code.length) {
+        // Malformed, just copy and continue
+        result += code.substring(start, start + pattern.length);
+        pos = start + pattern.length;
+        continue;
+      }
+
+      // Extract the type
+      const type = code.substring(start + pattern.length, i);
+
+      // Find the argument list
+      if (i + 1 >= code.length || code[i + 1] !== '(') {
+        result += code.substring(start, i + 1);
+        pos = i + 1;
+        continue;
+      }
+
+      // Find matching closing )
+      let parenDepth = 0;
+      let j = i + 2; // Start after the '('
+      while (j < code.length) {
+        if (code[j] === '(') parenDepth++;
+        else if (code[j] === ')') {
+          if (parenDepth === 0) break;
+          parenDepth--;
+        }
+        j++;
+      }
+
+      const args = code.substring(i + 2, j);
+      result += `gs::gc::Allocator::alloc<${type}>(${args})`;
+      pos = j + 1;
+      replacements++;
+    }
+
+    return result;
   }
 }

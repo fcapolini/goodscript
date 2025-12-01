@@ -119,6 +119,12 @@ public:
     size_t length() const { return length_; }
     
     // Methods
+    String charAt(size_t index) const {
+        if (index >= length_) return String();
+        char buf[2] = { data_[index], '\0' };
+        return String(buf);
+    }
+
     int64_t indexOf(const String& search, size_t start = 0) const {
         if (!data_ || !search.data_) return -1;
         if (start >= length_) return -1;
