@@ -165,6 +165,21 @@ public:
         return result;
     }
 
+    // Resize array to new size
+    void resize(size_t new_size) {
+        if (new_size > capacity_) {
+            resize_capacity(new_size);
+        }
+        // If shrinking, elements beyond new_size are abandoned
+        // If growing, new elements are default-initialized
+        if (new_size > length_) {
+            for (size_t i = length_; i < new_size; ++i) {
+                data_[i] = T();  // Default-initialize new elements
+            }
+        }
+        length_ = new_size;
+    }
+
     int64_t indexOf(const T& value) const {
         for (size_t i = 0; i < length_; ++i) {
             if (data_[i] == value) {
@@ -302,5 +317,40 @@ public:
     const T* begin() const { return data_; }
     const T* end() const { return data_ + length_; }
 };
+
+// String::split() implementation (must be after Array is defined)
+inline Array<String> String::split(const String& separator) const {
+    Array<String> result;
+    
+    if (!data_ || length_ == 0) {
+        return result;
+    }
+    
+    if (separator.length_ == 0) {
+        // Split into individual characters
+        for (size_t i = 0; i < length_; ++i) {
+            result.push(charAt(i));
+        }
+        return result;
+    }
+    
+    size_t start = 0;
+    while (start < length_) {
+        // Find next occurrence of separator
+        int64_t pos = indexOf(separator, start);
+        
+        if (pos == -1) {
+            // No more separators, add rest of string
+            result.push(substring(start));
+            break;
+        }
+        
+        // Add substring before separator
+        result.push(substring(start, static_cast<size_t>(pos)));
+        start = static_cast<size_t>(pos) + separator.length_;
+    }
+    
+    return result;
+}
 
 } // namespace gs

@@ -11,23 +11,31 @@ This dual-mode approach significantly improves language adoptability by offering
 
 ## Test Coverage
 
-**Status**: 146/186 tests passing (78.5%) ✅
+**Status**: 166/186 tests passing (89.2%) ✅
 
 GC mode has comprehensive triple-mode testing across all 15 concrete examples:
 - **JavaScript execution** - Reference behavior
 - **Ownership C++ compilation** - Smart pointer based
 - **GC C++ compilation** - Raw pointer based
 
-**Fully Validated Examples** (5/15 - all modes produce identical output):
+**Fully Validated Examples** (10/15 - all modes produce identical output):
 - ✅ benchmark-performance (8 tests)
 - ✅ fibonacci (13 tests)
 - ✅ linked-list (13 tests)
+- ✅ array-methods (13 tests)
+- ✅ lru-cache (13 tests)
+- ✅ cli-args (13 tests)
 - ✅ binary-search-tree (13 tests)
 - ✅ regex-validator (9 tests)
+- ✅ error-handling (13 tests)
+- ✅ interface-shapes (13 tests)
 
-**Partial Validation** (10/15 - some GC tests failing):
-- ⚠️ lru-cache, n-queens, json-parser, string-pool, array-methods
-- ⚠️ generic-stack, hash-map, interface-shapes, cli-args, error-handling
+**Partial Validation** (5/15 - some GC tests failing):
+- ⚠️ generic-stack (type mapping issues with generics)
+- ⚠️ hash-map
+- ⚠️ json-parser
+- ⚠️ n-queens
+- ⚠️ string-pool
 
 ## Why GC Mode?
 

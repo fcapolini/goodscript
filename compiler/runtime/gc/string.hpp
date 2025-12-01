@@ -8,6 +8,9 @@
 
 namespace gs {
 
+// Forward declaration
+template<typename T> class Array;
+
 /**
  * GC-allocated String implementation.
  * Similar to ownership version but uses MPS allocation instead of std::string.
@@ -184,6 +187,9 @@ public:
         
         return substring(start, end);
     }
+
+    // Split string by separator (defined after Array is available)
+    Array<String> split(const String& separator) const;
 
     // Conversion
     const char* c_str() const {

@@ -84,6 +84,18 @@ export class GcCodegen {
     code = code.replace(/\*([a-zA-Z_][a-zA-Z0-9_]*(?:->[a-zA-Z_][a-zA-Z0-9_]*)?)\[/g, '$1[');
     code = code.replace(/\*this->([a-zA-Z_][a-zA-Z0-9_]*)\[/g, 'this->$1[');
 
+    // Fix array assignment pattern from auto-resize IIFE
+    // Pattern: return *(*__arr)[__idx] = value;
+    // In GC mode should be: return (*__arr)[__idx] = value;
+    code = code.replace(/return \*\(\*__arr\)\[__idx\]/g, 'return (*__arr)[__idx]');
+
+    // Fix array element access with ->
+    // Pattern: array[index]->method() where array contains value types (not pointers)
+    // Should be: array[index].method()
+    // This is a heuristic: if the array subscript result uses ->, change to .
+    // Match: identifier[...] followed by ->
+    code = code.replace(/(\w+\[(?:[^\[\]]+)\])->(\w+)/g, '$1.$2');
+
     // Remove .get() calls (pointers are already raw)
     // But be careful - only remove when it's clearly a method call
     code = code.replace(/(\w+)\.get\(\)/g, '$1');
