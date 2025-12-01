@@ -127,6 +127,10 @@ public:
         return found ? (found - data_) : -1;
     }
 
+    String substring(size_t start) const {
+        return substring(start, length_);
+    }
+    
     String substring(size_t start, size_t end) const {
         if (start >= length_) return String();
         if (end > length_) end = length_;

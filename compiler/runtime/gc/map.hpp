@@ -20,26 +20,31 @@ public:
     Map() = default;
 
     // Get value by key
-    // When V is a pointer type (T*), returns T* directly (not T**)
-    // When V is a value type, returns V*
-    auto get(const K& key) -> V {
-        static_assert(std::is_pointer<V>::value, 
-            "Map value type must be a pointer in GC mode");
-        auto it = impl_.find(key);
-        if (it != impl_.end()) {
-            return it->second;  // Return the pointer directly
+    // For pointer types: returns V (pointer) or nullptr
+    // For value types: returns V* (pointer to value) or nullptr
+    auto get(const K& key) {
+        if constexpr (std::is_pointer<V>::value) {
+            // V is already a pointer (e.g., gs::Person*)
+            auto it = impl_.find(key);
+            return (it != impl_.end()) ? it->second : nullptr;
+        } else {
+            // V is a value type (e.g., bool, gs::String)
+            // Return pointer to value or nullptr
+            auto it = impl_.find(key);
+            return (it != impl_.end()) ? &it->second : static_cast<V*>(nullptr);
         }
-        return nullptr;
     }
 
-    auto get(const K& key) const -> V {
-        static_assert(std::is_pointer<V>::value,
-            "Map value type must be a pointer in GC mode");
-        auto it = impl_.find(key);
-        if (it != impl_.end()) {
-            return it->second;  // Return the pointer directly
+    auto get(const K& key) const {
+        if constexpr (std::is_pointer<V>::value) {
+            auto it = impl_.find(key);
+            return (it != impl_.end()) ? it->second : nullptr;
+        } else {
+            auto it = impl_.find(key);
+            // Cast away const for value types - needed for compatibility
+            // The pointer is only used temporarily for dereference
+            return (it != impl_.end()) ? const_cast<V*>(&it->second) : static_cast<V*>(nullptr);
         }
-        return nullptr;
     }
 
     // Set key-value pair
