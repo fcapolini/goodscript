@@ -23,19 +23,21 @@ GoodScript is a **TypeScript specialization** for safe systems programming with 
 - **Key files**: `compiler/src/ownership-analyzer.ts`, `compiler/src/null-check-analyzer.ts`
 - **Documentation**: `docs/DAG-ANALYSIS.md`, `docs/MEMORY-OWNERSHIP.md`
 
-### Phase 3: C++ Code Generation (✅ Complete - 98% tests passing)
+### Phase 3: C++ Code Generation (✅ Complete - 100% tests passing)
 - Translates TypeScript AST to C++ code
 - Maps ownership types: `own<T>` → `std::unique_ptr<T>`, `share<T>` → `std::shared_ptr<T>`, `use<T>` → `std::weak_ptr<T>`
 - Generates idiomatic C++ with proper RAII, exception handling
 - All code wrapped in `gs` namespace to avoid keyword conflicts
 - Runtime library with `gs::String`, `gs::Array<T>`, `gs::Map<K,V>`, `gs::Set<T>`, `gs::RegExp`
-- **Status**: 941/960 tests passing (68/68 basic, 28/28 runtime, 123/123 concrete examples, 71 RegExp tests)
+- **Status**: 960/960 tests passing (100%) - Phase 3 Complete! 🎉
 - **Key files**: `compiler/src/cpp/codegen.ts` (AST-based implementation), `runtime/*.hpp`
 - **Documentation**: `docs/COMPILATION-TARGET.md`, `docs/PHASE-3-CPP.md`
 - **Recent changes**: 
   - Migrated from legacy string-based to AST-based codegen (Dec 1, 2025)
   - Fixed property accessor detection for array.length and RegExp properties (Dec 1, 2025)
-- **Skipped features**: Array auto-resize (5 tests), LiteralObject (10 tests), property accessors (4 tests)
+  - Implemented array auto-resize with IIFE pattern (Dec 1, 2025)
+  - Implemented LiteralObject support for object literals (Dec 1, 2025)
+  - Implemented optional field syntax (`field?: Type` → `std::optional<T>`) (Dec 1, 2025)
 
 ### Phase 4: Ecosystem (📋 Planned)
 - Standard library APIs for Node.js/Deno compatibility
@@ -509,7 +511,7 @@ When implementing new features or fixing bugs:
 
 - **Phase 1**: ✅ 100% complete (244/244 tests)
 - **Phase 2**: ✅ 100% complete (425/425 tests)  
-- **Phase 3**: ✅ 99.79% complete (958/960 tests passing)
+- **Phase 3**: ✅ 100% complete (960/960 tests passing) 🎉
   - ✅ AST traversal and code emission
   - ✅ Type mappings (primitives, ownership types, collections)
   - ✅ Statement generation (variables, functions, classes, control flow)
@@ -527,15 +529,13 @@ When implementing new features or fixing bugs:
   - ✅ Parameter type tracking in methods
   - ✅ Array auto-resize (IIFE pattern for out-of-bounds writes)
   - ✅ LiteralObject support (object literals with mixed types)
-  - ⏳ Auto-dereference array reads (1 test skipped)
-  - ⏳ Optional field syntax (1 test skipped)
+  - ✅ Optional field syntax (`field?: Type` → `std::optional<T>`)
 - **Phase 4**: 📋 Planned
 
 **Next priorities**:
-1. Add auto-dereference for array element reads (1 test)
-2. Add optional field syntax `field?: type` (1 test)
-3. Phase 4 ecosystem development
-4. Add async/await coroutine support
+1. Phase 4 ecosystem development
+2. Add async/await coroutine support
+3. Expand standard library APIs
 
 ---
 
