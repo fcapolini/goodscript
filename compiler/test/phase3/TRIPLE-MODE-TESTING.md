@@ -8,17 +8,17 @@ This document outlines how to extend triple-mode testing to all Phase 3 tests.
 
 ## Current Status
 
-**Test Breakdown** (1089 total tests):
+**Test Breakdown** (1169 total tests):
 - **Phase 1** (Validator): 315 tests - mode-independent
 - **Phase 2** (Ownership Analysis): 237 tests - ownership-mode specific  
-- **Phase 3** (C++ Codegen): 537 tests
+- **Phase 3** (C++ Codegen): 617 tests
   - **Basic tests**: 141 tests - original code generation tests
-  - **Triple-mode tests**: 64 tests - **full triple-mode testing** ✅ (primitives, arrays, classes, control flow, strings)
+  - **Triple-mode tests**: 144 tests - **full triple-mode testing** ✅ (10 primitives + 16 arrays + 6 classes + 17 control flow + 15 strings + 30 operators + 23 numbers + 27 booleans)
   - **Runtime tests**: 67 tests - ownership mode execution only
   - **Concrete Examples**: 186 tests - **full triple-mode testing** ✅
   - **Other**: 79 tests - various specialized tests
 
-**Triple-Mode Coverage**: 250/1089 tests (23%) have full triple-mode validation
+**Triple-Mode Coverage**: 330/1169 tests (28%) have full triple-mode validation
 
 ## New Infrastructure
 
@@ -193,9 +193,9 @@ npm test -- test/phase3/basic/primitives-triple-mode.test.ts --reporter=verbose
 
 ## Expected Impact
 
-**Current**: 250/1089 tests (23%) are triple-mode (186 concrete examples + 64 basic tests)  
-**After More Conversions**: ~350/1089 tests (32%) triple-mode  
-**After Full Migration**: ~650/1089 tests (60%) triple-mode  
+**Current**: 330/1169 tests (28%) are triple-mode (186 concrete examples + 144 basic tests)  
+**After More Conversions**: ~430/1169 tests (37%) triple-mode  
+**After Full Migration**: ~730/1169 tests (62%) triple-mode  
 
 (Phase 1 and Phase 2 tests remain mode-independent/ownership-specific)
 
@@ -267,6 +267,9 @@ const gcCodegen = new GcCodegen(checker);
 - [x] classes.test.ts conversion ✅ (6 tests - basic OOP)
 - [x] control-flow.test.ts conversion ✅ (17 tests - conditionals, loops, logic)
 - [x] strings.test.ts conversion ✅ (15 tests - string operations)
+- [x] operators.test.ts conversion ✅ (30 tests - all operators)
+- [x] numbers.test.ts conversion ✅ (23 tests - number operations)
+- [x] booleans.test.ts conversion ✅ (27 tests - boolean operations)
 - [ ] js-cpp-semantics.test.ts conversion
 
 **Medium Priority**:
@@ -289,8 +292,11 @@ const gcCodegen = new GcCodegen(checker);
 ✅ Classes tests converted and passing (classes-triple-mode.test.ts - 6 tests)
 ✅ Control flow tests converted and passing (control-flow-triple-mode.test.ts - 17 tests)
 ✅ Strings tests converted and passing (strings-triple-mode.test.ts - 15 tests)
-✅ 64 basic tests converted (10 primitives + 16 arrays + 6 classes + 17 control flow + 15 strings)
-⏳ 100+ basic tests converted  
+✅ Operators tests converted and passing (operators-triple-mode.test.ts - 30 tests)
+✅ Numbers tests converted and passing (numbers-triple-mode.test.ts - 23 tests)
+✅ Booleans tests converted and passing (booleans-triple-mode.test.ts - 27 tests)
+✅ 144 basic tests converted (10+16+6+17+15+30+23+27)
+⏳ 200+ basic tests converted  
 ⏳ 50%+ of suitable basic tests converted
 
 **Codegen Gaps Identified** (for future work):
