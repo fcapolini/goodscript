@@ -2,23 +2,23 @@
  * Tests for ownership derivation rules (GS305)
  * 
  * Rules:
- * 1. From Unique<T> can only derive Weak<T> (no Shared<T>)
- * 2. From Shared<T> can derive Shared<T> or Weak<T>
- * 3. From Weak<T> can only derive Weak<T> (no promotion to owning references)
+ * 1. From own<T> can only derive use<T> (no share<T>)
+ * 2. From share<T> can derive share<T> or use<T>
+ * 3. From use<T> can only derive use<T> (no promotion to owning references)
  */
 
 import { describe, it, expect } from 'vitest';
 import { compileSource, getErrors } from '../phase1/test-helpers';
 
 describe('Ownership Derivation Rules (GS305)', () => {
-  describe('Rule 1: Unique<T> can only derive Weak<T>', () => {
-    it('should reject Unique<T> → Shared<T>', () => {
+  describe('Rule 1: own<T> can only derive use<T>', () => {
+    it('should reject own<T> → share<T>', () => {
       const source = `
         class Data { value: number = 0; }
         
         class Container {
-          unique: Unique<Data> = null!;
-          shared: Shared<Data> = null!;
+          unique: own<Data> = null!;
+          shared: share<Data> = null!;
           
           test(): void {
             this.shared = this.unique;  // Error: cannot convert Unique to Shared
@@ -29,17 +29,17 @@ describe('Ownership Derivation Rules (GS305)', () => {
       const result = compileSource(source, 'dag');
       const errors = getErrors(result.diagnostics, 'GS305');
       expect(errors.length).toBeGreaterThan(0);
-      expect(errors[0].message).toContain('Unique');
-      expect(errors[0].message).toContain('Shared');
+      expect(errors[0].message).toContain('own');
+      expect(errors[0].message).toContain('share');
     });
 
-    it('should allow Unique<T> → Weak<T>', () => {
+    it('should allow own<T> → use<T>', () => {
       const source = `
         class Data { value: number = 0; }
         
         class Container {
-          unique: Unique<Data> = null!;
-          weak: Weak<Data> = null;
+          unique: own<Data> = null!;
+          weak: use<Data> = null;
           
           test(): void {
             this.weak = this.unique;  // OK: Unique can derive Weak
@@ -52,15 +52,15 @@ describe('Ownership Derivation Rules (GS305)', () => {
       expect(errors.length).toBe(0);
     });
 
-    it('should reject new T() → Shared<T>', () => {
+    it('should reject new T() → share<T>', () => {
       const source = `
         class Data { value: number = 0; }
         
         class Container {
-          shared: Shared<Data> = null!;
+          shared: share<Data> = null!;
           
           test(): void {
-            this.shared = new Data();  // Error: new T() is Unique<T>
+            this.shared = new Data();  // Error: new T() is own<T>
           }
         }
       `;
@@ -69,18 +69,18 @@ describe('Ownership Derivation Rules (GS305)', () => {
       const errors = getErrors(result.diagnostics, 'GS305');
       expect(errors.length).toBeGreaterThan(0);
       expect(errors[0].message).toContain('new Data()');
-      expect(errors[0].message).toContain('Unique');
+      expect(errors[0].message).toContain('own');
     });
 
-    it('should reject new T() → Weak<T>', () => {
+    it('should reject new T() → use<T>', () => {
       const source = `
         class Data { value: number = 0; }
         
         class Container {
-          weak: Weak<Data> = null;
+          weak: use<Data> = null;
           
           test(): void {
-            this.weak = new Data();  // Error: new T() is Unique<T>
+            this.weak = new Data();  // Error: new T() is own<T>
           }
         }
       `;
@@ -90,15 +90,15 @@ describe('Ownership Derivation Rules (GS305)', () => {
       expect(errors.length).toBeGreaterThan(0);
     });
 
-    it('should allow new T() → Unique<T>', () => {
+    it('should allow new T() → own<T>', () => {
       const source = `
         class Data { value: number = 0; }
         
         class Container {
-          unique: Unique<Data> = null!;
+          unique: own<Data> = null!;
           
           test(): void {
-            this.unique = new Data();  // OK: new T() creates Unique<T>
+            this.unique = new Data();  // OK: new T() creates own<T>
           }
         }
       `;
@@ -109,14 +109,14 @@ describe('Ownership Derivation Rules (GS305)', () => {
     });
   });
 
-  describe('Rule 2: Shared<T> can derive Shared<T> or Weak<T>', () => {
-    it('should allow Shared<T> → Shared<T>', () => {
+  describe('Rule 2: share<T> can derive share<T> or use<T>', () => {
+    it('should allow share<T> → share<T>', () => {
       const source = `
         class Data { value: number = 0; }
         
         class Container {
-          shared1: Shared<Data> = null!;
-          shared2: Shared<Data> = null!;
+          shared1: share<Data> = null!;
+          shared2: share<Data> = null!;
           
           test(): void {
             this.shared2 = this.shared1;  // OK: Shared can clone
@@ -129,13 +129,13 @@ describe('Ownership Derivation Rules (GS305)', () => {
       expect(errors.length).toBe(0);
     });
 
-    it('should allow Shared<T> → Weak<T>', () => {
+    it('should allow share<T> → use<T>', () => {
       const source = `
         class Data { value: number = 0; }
         
         class Container {
-          shared: Shared<Data> = null!;
-          weak: Weak<Data> = null;
+          shared: share<Data> = null!;
+          weak: use<Data> = null;
           
           test(): void {
             this.weak = this.shared;  // OK: Shared can derive Weak
@@ -148,13 +148,13 @@ describe('Ownership Derivation Rules (GS305)', () => {
       expect(errors.length).toBe(0);
     });
 
-    it('should reject Shared<T> → Unique<T>', () => {
+    it('should reject share<T> → own<T>', () => {
       const source = `
         class Data { value: number = 0; }
         
         class Container {
-          shared: Shared<Data> = null!;
-          unique: Unique<Data> = null!;
+          shared: share<Data> = null!;
+          unique: own<Data> = null!;
           
           test(): void {
             this.unique = this.shared;  // Error: cannot convert Shared to Unique
@@ -165,19 +165,19 @@ describe('Ownership Derivation Rules (GS305)', () => {
       const result = compileSource(source, 'dag');
       const errors = getErrors(result.diagnostics, 'GS305');
       expect(errors.length).toBeGreaterThan(0);
-      expect(errors[0].message).toContain('Shared');
-      expect(errors[0].message).toContain('Unique');
+      expect(errors[0].message).toContain('share');
+      expect(errors[0].message).toContain('own');
     });
   });
 
-  describe('Rule 3: Weak<T> can only derive Weak<T>', () => {
-    it('should allow Weak<T> → Weak<T>', () => {
+  describe('Rule 3: use<T> can only derive use<T>', () => {
+    it('should allow use<T> → use<T>', () => {
       const source = `
         class Data { value: number = 0; }
         
         class Container {
-          weak1: Weak<Data> = null;
-          weak2: Weak<Data> = null;
+          weak1: use<Data> = null;
+          weak2: use<Data> = null;
           
           test(): void {
             this.weak2 = this.weak1;  // OK: Weak can copy
@@ -190,13 +190,13 @@ describe('Ownership Derivation Rules (GS305)', () => {
       expect(errors.length).toBe(0);
     });
 
-    it('should reject Weak<T> → Unique<T>', () => {
+    it('should reject use<T> → own<T>', () => {
       const source = `
         class Data { value: number = 0; }
         
         class Container {
-          weak: Weak<Data> = null;
-          unique: Unique<Data> = null!;
+          weak: use<Data> = null;
+          unique: own<Data> = null!;
           
           test(): void {
             this.unique = this.weak;  // Error: cannot promote Weak to Unique
@@ -207,17 +207,17 @@ describe('Ownership Derivation Rules (GS305)', () => {
       const result = compileSource(source, 'dag');
       const errors = getErrors(result.diagnostics, 'GS305');
       expect(errors.length).toBeGreaterThan(0);
-      expect(errors[0].message).toContain('Weak');
+      expect(errors[0].message).toContain('use');
       expect(errors[0].message).toContain('cannot be promoted');
     });
 
-    it('should reject Weak<T> → Shared<T>', () => {
+    it('should reject use<T> → share<T>', () => {
       const source = `
         class Data { value: number = 0; }
         
         class Container {
-          weak: Weak<Data> = null;
-          shared: Shared<Data> = null!;
+          weak: use<Data> = null;
+          shared: share<Data> = null!;
           
           test(): void {
             this.shared = this.weak;  // Error: cannot promote Weak to Shared
@@ -228,7 +228,7 @@ describe('Ownership Derivation Rules (GS305)', () => {
       const result = compileSource(source, 'dag');
       const errors = getErrors(result.diagnostics, 'GS305');
       expect(errors.length).toBeGreaterThan(0);
-      expect(errors[0].message).toContain('Weak');
+      expect(errors[0].message).toContain('use');
       expect(errors[0].message).toContain('cannot be promoted');
     });
   });
@@ -239,9 +239,9 @@ describe('Ownership Derivation Rules (GS305)', () => {
         class Data { value: number = 0; }
         
         class Container {
-          unique: Unique<Data> = null!;
-          shared: Shared<Data> = null!;
-          weak: Weak<Data> = null;
+          unique: own<Data> = null!;
+          shared: share<Data> = null!;
+          weak: use<Data> = null;
           
           clear(): void {
             this.unique = null!;
@@ -263,8 +263,8 @@ describe('Ownership Derivation Rules (GS305)', () => {
         class Node { value: number = 0; }
         
         class Arena {
-          unique: Unique<Node> = null!;
-          shared: Shared<Node> = null!;
+          unique: own<Node> = null!;
+          shared: share<Node> = null!;
           
           add(): void {
             // Error: cannot assign Unique to Shared field
@@ -283,9 +283,9 @@ describe('Ownership Derivation Rules (GS305)', () => {
         class Subject { state: number = 0; }
         
         class Observer {
-          subject: Weak<Subject> = null;  // Observer doesn't own subject
+          subject: use<Subject> = null;  // Observer doesn't own subject
           
-          setSubject(s: Unique<Subject>): void {
+          setSubject(s: own<Subject>): void {
             this.subject = s;  // OK: Unique can derive Weak
           }
         }
@@ -298,14 +298,14 @@ describe('Ownership Derivation Rules (GS305)', () => {
   });
 
   describe('Function call arguments', () => {
-    it('should reject Unique<T> → Shared<T> in function call', () => {
+    it('should reject own<T> → share<T> in function call', () => {
       const source = `
         class Data { value: number = 0; }
         
-        const takeShared = (data: Shared<Data>): void => { };
+        const takeShared = (data: share<Data>): void => { };
         
         class Container {
-          unique: Unique<Data> = null!;
+          unique: own<Data> = null!;
           
           test(): void {
             takeShared(this.unique);  // Error: cannot pass Unique to Shared param
@@ -316,18 +316,18 @@ describe('Ownership Derivation Rules (GS305)', () => {
       const result = compileSource(source, 'dag');
       const errors = getErrors(result.diagnostics, 'GS305');
       expect(errors.length).toBeGreaterThan(0);
-      expect(errors[0].message).toContain('Unique');
-      expect(errors[0].message).toContain('Shared');
+      expect(errors[0].message).toContain('own');
+      expect(errors[0].message).toContain('share');
     });
 
-    it('should allow Unique<T> → Weak<T> in function call', () => {
+    it('should allow own<T> → use<T> in function call', () => {
       const source = `
         class Data { value: number = 0; }
         
-        const takeWeak = (data: Weak<Data>): void => { };
+        const takeWeak = (data: use<Data>): void => { };
         
         class Container {
-          unique: Unique<Data> = null!;
+          unique: own<Data> = null!;
           
           test(): void {
             takeWeak(this.unique);  // OK: Unique can derive Weak
@@ -340,14 +340,14 @@ describe('Ownership Derivation Rules (GS305)', () => {
       expect(errors.length).toBe(0);
     });
 
-    it('should reject new T() → Shared<T> in function call', () => {
+    it('should reject new T() → share<T> in function call', () => {
       const source = `
         class Data { value: number = 0; }
         
-        const takeShared = (data: Shared<Data>): void => { };
+        const takeShared = (data: share<Data>): void => { };
         
         const test = (): void => {
-          takeShared(new Data());  // Error: new T() is Unique<T>
+          takeShared(new Data());  // Error: new T() is own<T>
         };
       `;
       
@@ -356,14 +356,14 @@ describe('Ownership Derivation Rules (GS305)', () => {
       expect(errors.length).toBeGreaterThan(0);
     });
 
-    it('should reject Weak<T> → Unique<T> in function call', () => {
+    it('should reject use<T> → own<T> in function call', () => {
       const source = `
         class Data { value: number = 0; }
         
-        const takeUnique = (data: Unique<Data>): void => { };
+        const takeUnique = (data: own<Data>): void => { };
         
         class Container {
-          weak: Weak<Data> = null;
+          weak: use<Data> = null;
           
           test(): void {
             if (this.weak !== null && this.weak !== undefined) {
@@ -376,7 +376,7 @@ describe('Ownership Derivation Rules (GS305)', () => {
       const result = compileSource(source, 'dag');
       const errors = getErrors(result.diagnostics, 'GS305');
       expect(errors.length).toBeGreaterThan(0);
-      expect(errors[0].message).toContain('Weak');
+      expect(errors[0].message).toContain('use');
       expect(errors[0].message).toContain('cannot be promoted');
     });
 
@@ -385,14 +385,14 @@ describe('Ownership Derivation Rules (GS305)', () => {
         class Node { value: number = 0; }
         
         class Arena {
-          nodes: Shared<Node>[] = [];
+          nodes: share<Node>[] = [];
           
-          add(node: Shared<Node>): void {
+          add(node: share<Node>): void {
             this.nodes.push(node);  // OK: Shared→Shared
           }
           
           addWrong(): void {
-            const unique: Unique<Node> = null!;
+            const unique: own<Node> = null!;
             this.add(unique);  // Error: Unique→Shared in method call
           }
         }
@@ -408,9 +408,9 @@ describe('Ownership Derivation Rules (GS305)', () => {
         class Node { value: number = 0; }
         
         class Cache {
-          cache: Map<string, Shared<Node>> = new Map();
-          unique: Unique<Node> = null!;
-          shared: Shared<Node> = null!;
+          cache: Map<string, share<Node>> = new Map();
+          unique: own<Node> = null!;
+          shared: share<Node> = null!;
           
           addShared(): void {
             this.set("key", this.shared);  // OK: Shared→Shared
@@ -420,7 +420,7 @@ describe('Ownership Derivation Rules (GS305)', () => {
             this.set("key", this.unique);  // Error: Unique→Shared
           }
           
-          set(key: string, value: Shared<Node>): void {
+          set(key: string, value: share<Node>): void {
             this.cache.set(key, value);
           }
         }
@@ -431,14 +431,14 @@ describe('Ownership Derivation Rules (GS305)', () => {
       expect(errors.length).toBeGreaterThan(0);
     });
 
-    it('should allow Shared<T> → Shared<T> in method call', () => {
+    it('should allow share<T> → share<T> in method call', () => {
       const source = `
         class Data { value: number = 0; }
         
         class Container {
-          shared: Shared<Data> = null!;
+          shared: share<Data> = null!;
           
-          process(data: Shared<Data>): void { }
+          process(data: share<Data>): void { }
           
           test(): void {
             this.process(this.shared);  // OK: Shared→Shared

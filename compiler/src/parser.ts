@@ -123,22 +123,25 @@ export class Parser {
  */
 
 /**
- * Exclusive Ownership type - indicates a variable exclusively owns a value
+ * Exclusive ownership qualifier - indicates a variable exclusively owns a value
+ * Maps to std::unique_ptr<T> in C++
  */
-declare type Unique<T> = T;
+declare type own<T> = T;
 
 /**
- * Shared Ownership type - indicates a variable potentially shares a value
+ * Shared ownership qualifier - indicates a variable shares a value with others
  * This contributes to reference counting
+ * Maps to std::shared_ptr<T> in C++
  */
-declare type Shared<T> = T;
+declare type share<T> = T;
 
 /**
- * Weak Reference type - indicates a variable uses a value it doesn't own
- * Weak references are implicitly nullable (can be null or undefined)
+ * Non-owning reference qualifier - indicates a variable uses a value it doesn't own
+ * use references are implicitly nullable (can be null or undefined)
  * GoodScript treats null and undefined as synonyms
+ * Maps to std::weak_ptr<T> in C++
  */
-declare type Weak<T> = T | null | undefined;
+declare type use<T> = T | null | undefined;
 `;
     
     compilerHost.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {

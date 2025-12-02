@@ -4,7 +4,7 @@ import * as ts from 'typescript';
  * TypeScript Code Generator
  * 
  * Transforms GoodScript AST to plain TypeScript by removing ownership annotations.
- * Strategy: Remove Unique<T>, Shared<T>, Weak<T> wrappers while preserving all other TypeScript syntax.
+ * Strategy: Remove own<T>, share<T>, use<T> wrappers while preserving all other TypeScript syntax.
  */
 export class TypeScriptCodegen {
   /**
@@ -72,7 +72,7 @@ declare type use<T> = T | null | undefined;
     const transformer = <T extends ts.Node>(context: ts.TransformationContext) => {
       return (rootNode: T): T => {
         const visit = (node: ts.Node): ts.Node => {
-          // Transform type nodes to remove Unique<T>, Shared<T>, Weak<T>
+          // Transform type nodes to remove own<T>, share<T>, use<T>
           if (ts.isTypeReferenceNode(node)) {
             return this.transformTypeReference(node, visit);
           }
@@ -102,7 +102,7 @@ declare type use<T> = T | null | undefined;
   }
 
   /**
-   * Transform type reference nodes, removing ownership wrappers (Unique<T>, Shared<T>, Weak<T>)
+   * Transform type reference nodes, removing ownership wrappers (own<T>, share<T>, use<T>)
    */
   private transformTypeReference(
     node: ts.TypeReferenceNode,
@@ -110,7 +110,7 @@ declare type use<T> = T | null | undefined;
   ): ts.TypeNode {
     const typeName = node.typeName.getText();
 
-    // If this is Unique<T> or Shared<T>, extract T and return it
+    // If this is own<T> or share<T>, extract T and return it
     if ((typeName === 'unique' || typeName === 'shared') && 
         node.typeArguments && node.typeArguments.length === 1) {
       const innerType = node.typeArguments[0];
@@ -118,7 +118,7 @@ declare type use<T> = T | null | undefined;
       return visit(innerType) as ts.TypeNode;
     }
 
-    // If this is Weak<T>, extract T and make it nullable (T | null | undefined)
+    // If this is use<T>, extract T and make it nullable (T | null | undefined)
     // This allows GoodScript to treat null and undefined as synonyms
     if (typeName === 'weak' && node.typeArguments && node.typeArguments.length === 1) {
       const innerType = visit(node.typeArguments[0]) as ts.TypeNode;

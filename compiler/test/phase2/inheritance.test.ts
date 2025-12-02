@@ -11,10 +11,10 @@ describe('Phase 2: Inheritance with Ownership', () => {
   
   describe('Basic inheritance', () => {
     
-    it('should detect cycles through inherited Shared<T> fields', () => {
+    it('should detect cycles through inherited share<T> fields', () => {
       const source = `
         class Base {
-          item: Shared<Item> | null = null;
+          item: share<Item> | null = null;
         }
         
         class Container extends Base {
@@ -22,7 +22,7 @@ describe('Phase 2: Inheritance with Ownership', () => {
         }
         
         class Item {
-          container: Shared<Container> | null = null;
+          container: share<Container> | null = null;
         }
       `;
       
@@ -30,10 +30,10 @@ describe('Phase 2: Inheritance with Ownership', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(true);
     });
     
-    it('should allow inherited Weak<T> fields', () => {
+    it('should allow inherited use<T> fields', () => {
       const source = `
         class Base {
-          item: Weak<Item> = null;
+          item: use<Item> = null;
         }
         
         class Container extends Base {
@@ -41,7 +41,7 @@ describe('Phase 2: Inheritance with Ownership', () => {
         }
         
         class Item {
-          container: Shared<Container> | null = null;  // No cycle
+          container: share<Container> | null = null;  // No cycle
         }
       `;
       
@@ -49,10 +49,10 @@ describe('Phase 2: Inheritance with Ownership', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(false);
     });
     
-    it('should allow inherited Unique<T> fields', () => {
+    it('should allow inherited own<T> fields', () => {
       const source = `
         class Base {
-          item: Unique<Item> | null = null;
+          item: own<Item> | null = null;
         }
         
         class Container extends Base {
@@ -60,7 +60,7 @@ describe('Phase 2: Inheritance with Ownership', () => {
         }
         
         class Item {
-          container: Shared<Container> | null = null;  // No cycle
+          container: share<Container> | null = null;  // No cycle
         }
       `;
       
@@ -74,7 +74,7 @@ describe('Phase 2: Inheritance with Ownership', () => {
     it('should track ownership through multiple inheritance levels', () => {
       const source = `
         class GrandParent {
-          root: Shared<Root> | null = null;
+          root: share<Root> | null = null;
         }
         
         class Parent extends GrandParent {
@@ -86,7 +86,7 @@ describe('Phase 2: Inheritance with Ownership', () => {
         }
         
         class Root {
-          child: Shared<Child> | null = null;  // Cycle through inheritance
+          child: share<Child> | null = null;  // Cycle through inheritance
         }
       `;
       
@@ -97,16 +97,16 @@ describe('Phase 2: Inheritance with Ownership', () => {
     it('should handle mixed ownership types in hierarchy', () => {
       const source = `
         class Base {
-          shared: Shared<Item> | null = null;
+          shared: share<Item> | null = null;
         }
         
         class Derived extends Base {
-          weak: Weak<Item> = null;
-          unique: Unique<Item> | null = null;
+          weak: use<Item> = null;
+          unique: own<Item> | null = null;
         }
         
         class Item {
-          derived: Shared<Derived> | null = null;  // Cycle through shared
+          derived: share<Derived> | null = null;  // Cycle through shared
         }
       `;
       
@@ -120,15 +120,15 @@ describe('Phase 2: Inheritance with Ownership', () => {
     it('should handle abstract base classes', () => {
       const source = `
         abstract class Base {
-          abstract item: Shared<Item> | null;
+          abstract item: share<Item> | null;
         }
         
         class Container extends Base {
-          item: Shared<Item> | null = null;
+          item: share<Item> | null = null;
         }
         
         class Item {
-          container: Shared<Container> | null = null;
+          container: share<Container> | null = null;
         }
       `;
       
@@ -139,13 +139,13 @@ describe('Phase 2: Inheritance with Ownership', () => {
     it('should handle abstract methods with ownership types', () => {
       const source = `
         abstract class Base {
-          abstract getItem(): Weak<Item>;
+          abstract getItem(): use<Item>;
         }
         
         class Container extends Base {
-          item: Weak<Item> = null;
+          item: use<Item> = null;
           
-          getItem(): Weak<Item> {
+          getItem(): use<Item> {
             return this.item;
           }
         }
@@ -165,13 +165,13 @@ describe('Phase 2: Inheritance with Ownership', () => {
     it('should allow ownership type covariance in return types', () => {
       const source = `
         class Base {
-          getItem(): Weak<Item> {
+          getItem(): use<Item> {
             return null;
           }
         }
         
         class Derived extends Base {
-          override getItem(): Weak<Item> {
+          override getItem(): use<Item> {
             return null;
           }
         }
@@ -191,15 +191,15 @@ describe('Phase 2: Inheritance with Ownership', () => {
     it('should detect cycles through interface implementation', () => {
       const source = `
         interface IContainer {
-          item: Shared<Item> | null;
+          item: share<Item> | null;
         }
         
         class Container implements IContainer {
-          item: Shared<Item> | null = null;
+          item: share<Item> | null = null;
         }
         
         class Item {
-          container: Shared<Container> | null = null;
+          container: share<Container> | null = null;
         }
       `;
       
@@ -207,18 +207,18 @@ describe('Phase 2: Inheritance with Ownership', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(true);
     });
     
-    it('should allow Weak<T> through interface', () => {
+    it('should allow use<T> through interface', () => {
       const source = `
         interface IContainer {
-          item: Weak<Item>;
+          item: use<Item>;
         }
         
         class Container implements IContainer {
-          item: Weak<Item> = null;
+          item: use<Item> = null;
         }
         
         class Item {
-          container: Shared<Container> | null = null;  // No cycle
+          container: share<Container> | null = null;  // No cycle
         }
       `;
       
@@ -229,7 +229,7 @@ describe('Phase 2: Inheritance with Ownership', () => {
     it('should handle multiple interface implementation', () => {
       const source = `
         interface IHasItem {
-          item: Shared<Item> | null;
+          item: share<Item> | null;
         }
         
         interface IHasValue {
@@ -237,12 +237,12 @@ describe('Phase 2: Inheritance with Ownership', () => {
         }
         
         class Container implements IHasItem, IHasValue {
-          item: Shared<Item> | null = null;
+          item: share<Item> | null = null;
           value: number = 0;
         }
         
         class Item {
-          container: Shared<Container> | null = null;
+          container: share<Container> | null = null;
         }
       `;
       
@@ -253,10 +253,10 @@ describe('Phase 2: Inheritance with Ownership', () => {
   
   describe('Null-check enforcement with inheritance', () => {
     
-    it('should require null-checks on inherited Weak<T> fields', () => {
+    it('should require null-checks on inherited use<T> fields', () => {
       const source = `
         class Base {
-          item: Weak<Item> = null;
+          item: use<Item> = null;
         }
         
         class Derived extends Base {
@@ -274,10 +274,10 @@ describe('Phase 2: Inheritance with Ownership', () => {
       expect(hasError(result.diagnostics, 'GS302')).toBe(true);
     });
     
-    it('should accept checked inherited Weak<T> fields', () => {
+    it('should accept checked inherited use<T> fields', () => {
       const source = `
         class Base {
-          item: Weak<Item> = null;
+          item: use<Item> = null;
         }
         
         class Derived extends Base {
@@ -302,7 +302,7 @@ describe('Phase 2: Inheritance with Ownership', () => {
     it('should handle diamond inheritance pattern', () => {
       const source = `
         interface IBase {
-          item: Shared<Item> | null;
+          item: share<Item> | null;
         }
         
         interface ILeft extends IBase {
@@ -314,13 +314,13 @@ describe('Phase 2: Inheritance with Ownership', () => {
         }
         
         class Container implements ILeft, IRight {
-          item: Shared<Item> | null = null;
+          item: share<Item> | null = null;
           left: number = 0;
           right: number = 0;
         }
         
         class Item {
-          container: Shared<Container> | null = null;
+          container: share<Container> | null = null;
         }
       `;
       
@@ -335,15 +335,15 @@ describe('Phase 2: Inheritance with Ownership', () => {
         }
         
         interface IHasItem {
-          item: Weak<Item>;
+          item: use<Item>;
         }
         
         class Container extends Base implements IHasItem {
-          item: Weak<Item> = null;
+          item: use<Item> = null;
         }
         
         class Item {
-          container: Shared<Container> | null = null;  // No cycle
+          container: share<Container> | null = null;  // No cycle
         }
       `;
       

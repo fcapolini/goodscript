@@ -11,16 +11,16 @@ describe('Phase 2: Type Aliases with Ownership', () => {
   
   describe('Basic type aliases', () => {
     
-    it('should recognize Shared<T> through type alias', () => {
+    it('should recognize share<T> through type alias', () => {
       const source = `
-        type ItemRef = Shared<Item>;
+        type ItemRef = share<Item>;
         
         class Container {
           ref: ItemRef | null = null;
         }
         
         class Item {
-          back: Shared<Container> | null = null;  // Creates cycle
+          back: share<Container> | null = null;  // Creates cycle
         }
       `;
       
@@ -28,16 +28,16 @@ describe('Phase 2: Type Aliases with Ownership', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(true);
     });
     
-    it('should recognize Weak<T> through type alias', () => {
+    it('should recognize use<T> through type alias', () => {
       const source = `
-        type MaybeItem = Weak<Item>;
+        type MaybeItem = use<Item>;
         
         class Container {
           item: MaybeItem = null;  // Weak, not an edge
         }
         
         class Item {
-          container: Shared<Container> | null = null;  // No cycle
+          container: share<Container> | null = null;  // No cycle
         }
       `;
       
@@ -45,16 +45,16 @@ describe('Phase 2: Type Aliases with Ownership', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(false);
     });
     
-    it('should recognize Unique<T> through type alias', () => {
+    it('should recognize own<T> through type alias', () => {
       const source = `
-        type OwnedItem = Unique<Item>;
+        type OwnedItem = own<Item>;
         
         class Container {
           item: OwnedItem | null = null;  // Unique, not an edge
         }
         
         class Item {
-          container: Shared<Container> | null = null;  // No cycle
+          container: share<Container> | null = null;  // No cycle
         }
       `;
       
@@ -62,9 +62,9 @@ describe('Phase 2: Type Aliases with Ownership', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(false);
     });
     
-    it('should enforce null-checks on Weak<T> aliases', () => {
+    it('should enforce null-checks on use<T> aliases', () => {
       const source = `
-        type MaybeItem = Weak<Item>;
+        type MaybeItem = use<Item>;
         
         class Container {
           item: MaybeItem = null;
@@ -83,9 +83,9 @@ describe('Phase 2: Type Aliases with Ownership', () => {
       expect(hasError(result.diagnostics, 'GS302')).toBe(true);
     });
     
-    it('should accept null-checked Weak<T> alias', () => {
+    it('should accept null-checked use<T> alias', () => {
       const source = `
-        type MaybeItem = Weak<Item>;
+        type MaybeItem = use<Item>;
         
         class Container {
           item: MaybeItem = null;
@@ -110,7 +110,7 @@ describe('Phase 2: Type Aliases with Ownership', () => {
     
     it('should handle alias of alias', () => {
       const source = `
-        type ItemRef = Shared<Item>;
+        type ItemRef = share<Item>;
         type ItemPtr = ItemRef;
         
         class Container {
@@ -118,7 +118,7 @@ describe('Phase 2: Type Aliases with Ownership', () => {
         }
         
         class Item {
-          container: Shared<Container> | null = null;  // Cycle
+          container: share<Container> | null = null;  // Cycle
         }
       `;
       
@@ -128,14 +128,14 @@ describe('Phase 2: Type Aliases with Ownership', () => {
     
     it('should handle union type aliases', () => {
       const source = `
-        type ItemOrNull = Shared<Item> | null;
+        type ItemOrNull = share<Item> | null;
         
         class Container {
           item: ItemOrNull = null;
         }
         
         class Item {
-          container: Shared<Container> | null = null;  // Cycle
+          container: share<Container> | null = null;  // Cycle
         }
       `;
       
@@ -152,11 +152,11 @@ describe('Phase 2: Type Aliases with Ownership', () => {
         type NamedItem = Item & Named;
         
         class Container {
-          item: Shared<NamedItem> | null = null;
+          item: share<NamedItem> | null = null;
         }
         
         class Item {
-          container: Shared<Container> | null = null;  // Cycle
+          container: share<Container> | null = null;  // Cycle
         }
       `;
       
@@ -167,9 +167,9 @@ describe('Phase 2: Type Aliases with Ownership', () => {
   
   describe('Generic type aliases', () => {
     
-    it('should handle generic alias with Shared<T>', () => {
+    it('should handle generic alias with share<T>', () => {
       const source = `
-        type Ref<T> = Shared<T>;
+        type Ref<T> = share<T>;
         
         class Container {
           item: Ref<Item> | null = null;
@@ -184,16 +184,16 @@ describe('Phase 2: Type Aliases with Ownership', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(true);
     });
     
-    it('should handle generic alias with Weak<T>', () => {
+    it('should handle generic alias with use<T>', () => {
       const source = `
-        type Maybe<T> = Weak<T>;
+        type Maybe<T> = use<T>;
         
         class Container {
           item: Maybe<Item> = null;
         }
         
         class Item {
-          container: Shared<Container> | null = null;  // No cycle
+          container: share<Container> | null = null;  // No cycle
         }
       `;
       
@@ -201,16 +201,16 @@ describe('Phase 2: Type Aliases with Ownership', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(false);
     });
     
-    it('should handle generic alias with Unique<T>', () => {
+    it('should handle generic alias with own<T>', () => {
       const source = `
-        type Owned<T> = Unique<T>;
+        type Owned<T> = own<T>;
         
         class Container {
           item: Owned<Item> | null = null;
         }
         
         class Item {
-          container: Shared<Container> | null = null;  // No cycle
+          container: share<Container> | null = null;  // No cycle
         }
       `;
       
@@ -218,9 +218,9 @@ describe('Phase 2: Type Aliases with Ownership', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(false);
     });
     
-    it('should enforce null-checks on generic Weak<T> alias', () => {
+    it('should enforce null-checks on generic use<T> alias', () => {
       const source = `
-        type Maybe<T> = Weak<T>;
+        type Maybe<T> = use<T>;
         
         class Container {
           item: Maybe<Item> = null;
@@ -244,16 +244,16 @@ describe('Phase 2: Type Aliases with Ownership', () => {
   
   describe('Container type aliases', () => {
     
-    it('should recognize Shared<T> in aliased array', () => {
+    it('should recognize share<T> in aliased array', () => {
       const source = `
-        type ItemList = Array<Shared<Item>>;
+        type ItemList = Array<share<Item>>;
         
         class Container {
           items: ItemList = [];
         }
         
         class Item {
-          container: Shared<Container> | null = null;  // Cycle
+          container: share<Container> | null = null;  // Cycle
         }
       `;
       
@@ -261,16 +261,16 @@ describe('Phase 2: Type Aliases with Ownership', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(true);
     });
     
-    it('should recognize Weak<T> in aliased array', () => {
+    it('should recognize use<T> in aliased array', () => {
       const source = `
-        type ItemList = Array<Weak<Item>>;
+        type ItemList = Array<use<Item>>;
         
         class Container {
           items: ItemList = [];  // Weak, not edges
         }
         
         class Item {
-          container: Shared<Container> | null = null;  // No cycle
+          container: share<Container> | null = null;  // No cycle
         }
       `;
       
@@ -280,8 +280,8 @@ describe('Phase 2: Type Aliases with Ownership', () => {
     
     it('should handle Pool Pattern with type alias', () => {
       const source = `
-        type NodePool = Unique<Node>[];
-        type NodeRef = Weak<Node>;
+        type NodePool = own<Node>[];
+        type NodeRef = use<Node>;
         
         class Graph {
           nodes: NodePool = [];
@@ -301,9 +301,9 @@ describe('Phase 2: Type Aliases with Ownership', () => {
     
     it('should handle multiple aliases in same class', () => {
       const source = `
-        type ItemRef = Shared<Item>;
-        type ItemWeak = Weak<Item>;
-        type ItemOwned = Unique<Item>;
+        type ItemRef = share<Item>;
+        type ItemWeak = use<Item>;
+        type ItemOwned = own<Item>;
         
         class Container {
           shared: ItemRef | null = null;
@@ -322,7 +322,7 @@ describe('Phase 2: Type Aliases with Ownership', () => {
     
     it('should handle conditional types with ownership', () => {
       const source = `
-        type RefType<T extends boolean> = T extends true ? Shared<Item> : Weak<Item>;
+        type RefType<T extends boolean> = T extends true ? share<Item> : use<Item>;
         
         class Container {
           strongRef: RefType<true> | null = null;
@@ -330,7 +330,7 @@ describe('Phase 2: Type Aliases with Ownership', () => {
         }
         
         class Item {
-          container: Shared<Container> | null = null;
+          container: share<Container> | null = null;
         }
       `;
       
@@ -343,7 +343,7 @@ describe('Phase 2: Type Aliases with Ownership', () => {
     it('should preserve ownership through mapped types', () => {
       const source = `
         type SharedFields<T> = {
-          [K in keyof T]: Shared<T[K]>;
+          [K in keyof T]: share<T[K]>;
         };
         
         interface ItemData {

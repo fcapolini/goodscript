@@ -7,19 +7,19 @@
  * 3. Assignment compatibility validation
  * 
  * DAG Rules (prevents reference cycles):
- * - Rule 1.1: Direct Shared<T> field creates edge (A -> B)
- * - Rule 1.2: Container transitivity (Array<Shared<B>>, Map<K, Shared<D>>)
+ * - Rule 1.1: Direct share<T> field creates edge (A -> B)
+ * - Rule 1.2: Container transitivity (Array<share<B>>, Map<K, share<D>>)
  * - Rule 1.3: Intermediate wrapper transitivity (transitive ownership)
  * - Rule 2.1: Self-ownership prohibition (no cycles allowed)
- * - Rule 3.1: Weak<T> is NOT an edge (breaks cycles)
- * - Rule 3.2: Unique<T> is NOT an edge (orthogonal graph)
+ * - Rule 3.1: use<T> is NOT an edge (breaks cycles)
+ * - Rule 3.2: own<T> is NOT an edge (orthogonal graph)
  * - Rule 4.1: Pool Pattern enforcement (reject potentially cyclic structures)
  * 
  * Ownership Derivation Rules (prevents logic mistakes):
- * - From Unique<T> → only Weak<T> (no aliasing of exclusive ownership)
- * - From Shared<T> → Shared<T> or Weak<T> (can share or downgrade)
- * - From Weak<T> → only Weak<T> (cannot upgrade to ownership)
- * - new T() → implicitly Unique<T> (can only assign to Unique<T> fields)
+ * - From own<T> → only use<T> (no aliasing of exclusive ownership)
+ * - From share<T> → share<T> or use<T> (can share or downgrade)
+ * - From use<T> → only use<T> (cannot upgrade to ownership)
+ * - new T() → implicitly own<T> (can only assign to own<T> fields)
  * 
  * Enforced via:
  * - GS303: Missing ownership annotation on class-type fields
@@ -40,7 +40,7 @@ interface TypeNode {
 }
 
 /**
- * Represents an ownership edge in the graph (A owns B via Shared<T>)
+ * Represents an ownership edge in the graph (A owns B via share<T>)
  */
 interface OwnershipEdge {
   from: string;              // Source type name
@@ -54,7 +54,7 @@ interface OwnershipEdge {
  */
 interface OwnershipGraph {
   nodes: Map<string, TypeNode>;      // Type name -> node info
-  edges: OwnershipEdge[];            // All Shared<T> ownership edges
+  edges: OwnershipEdge[];            // All share<T> ownership edges
   adjacencyList: Map<string, Set<string>>;  // Type name -> set of owned types
 }
 
@@ -89,7 +89,7 @@ export class OwnershipAnalyzer {
 
   /**
    * Analyze a source file for ownership relationships
-   * Builds the ownership graph by extracting Shared<T> edges
+   * Builds the ownership graph by extracting share<T> edges
    */
   analyze(sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
     this.sourceFiles.push(sourceFile);
@@ -160,7 +160,7 @@ export class OwnershipAnalyzer {
   }
 
   /**
-   * Collect ownership edges by analyzing Shared<T> fields
+   * Collect ownership edges by analyzing share<T> fields
    * Implements Rules 1.1, 1.2, and 1.3 from DAG-DETECTION.md
    * Also tracks inherited fields from base classes/interfaces
    * Additionally validates assignment compatibility for ownership types
@@ -291,7 +291,7 @@ export class OwnershipAnalyzer {
   }
 
   /**
-   * Analyze a property declaration/signature for Shared<T> ownership
+   * Analyze a property declaration/signature for share<T> ownership
    * Also validates that class-type fields use ownership annotations
    */
   private analyzePropertyForOwnership(
@@ -314,7 +314,7 @@ export class OwnershipAnalyzer {
     // Check for naked class references (class types without ownership wrappers)
     this.checkForNakedClassReference(node.type, fieldName, location, sourceFile, checker);
 
-    // Extract all Shared<T> ownership relationships from the field type
+    // Extract all share<T> ownership relationships from the field type
     const ownedTypes = this.extractSharedOwnership(node.type, sourceFile, checker);
     
     // Create edges for each owned type
@@ -345,7 +345,7 @@ export class OwnershipAnalyzer {
       const typeNameText = ts.isIdentifier(typeNode.typeName) 
         ? typeNode.typeName.text 
         : typeNode.typeName.getText();
-      if (typeNameText === 'Shared' || typeNameText === 'Weak' || typeNameText === 'Unique') {
+      if (typeNameText === 'share' || typeNameText === 'use' || typeNameText === 'own') {
         return typeNode;
       }
       
@@ -356,7 +356,7 @@ export class OwnershipAnalyzer {
         if (ts.isTypeAliasDeclaration(declaration)) {
           const resolvedType = declaration.type;
           
-          // Handle generic type aliases: Ref<Item> where Ref<T> = Shared<T>
+          // Handle generic type aliases: Ref<Item> where Ref<T> = share<T>
           // If the original has type arguments and the resolved type is a type reference with type parameters,
           // we need to substitute
           if (typeNode.typeArguments && 
@@ -370,7 +370,7 @@ export class OwnershipAnalyzer {
             
             if (allTypeParams) {
               // Create a new type reference with substituted arguments
-              // For example: Ref<Item> where Ref<T> = Shared<T> becomes Shared<Item>
+              // For example: Ref<Item> where Ref<T> = share<T> becomes share<Item>
               return ts.factory.createTypeReferenceNode(
                 resolvedType.typeName,
                 typeNode.typeArguments
@@ -387,14 +387,14 @@ export class OwnershipAnalyzer {
   }
 
   /**
-   * Extract Shared<T> ownership from a type annotation
+   * Extract share<T> ownership from a type annotation
    * Handles:
-   * - Direct Shared<T>: Rule 1.1
-   * - Array<Shared<T>>, Shared<T>[]: Rule 1.2
-   * - Map<K, Shared<T>>, Set<Shared<T>>: Rule 1.2
+   * - Direct share<T>: Rule 1.1
+   * - Array<share<T>>, share<T>[]: Rule 1.2
+   * - Map<K, share<T>>, Set<share<T>>: Rule 1.2
    * - Nested types: Rule 1.3
    * 
-   * Returns the set of type names that are owned via Shared<T>
+   * Returns the set of type names that are owned via share<T>
    */
   private extractSharedOwnership(
     typeNode: ts.TypeNode,
@@ -430,16 +430,16 @@ export class OwnershipAnalyzer {
       return this.extractSharedOwnership(resolvedType, sourceFile, checker);
     }
 
-    // Rule 3.1 & 3.2: Weak<T> and Unique<T> do NOT create edges
+    // Rule 3.1 & 3.2: use<T> and own<T> do NOT create edges
     if (ts.isTypeReferenceNode(resolvedType)) {
       const typeName = resolvedType.typeName.getText(sourceFile);
       
-      if (typeName === 'Weak' || typeName === 'Unique') {
+      if (typeName === 'use' || typeName === 'own') {
         return ownedTypes; // Empty set - these don't create ownership edges
       }
       
-      // Rule 1.1: Direct Shared<T> field
-      if (typeName === 'Shared' && resolvedType.typeArguments && resolvedType.typeArguments.length > 0) {
+      // Rule 1.1: Direct share<T> field
+      if (typeName === 'share' && resolvedType.typeArguments && resolvedType.typeArguments.length > 0) {
         const targetType = this.getTypeNameFromTypeNode(resolvedType.typeArguments[0], sourceFile, checker);
         if (targetType) {
           ownedTypes.add(targetType);
@@ -448,15 +448,15 @@ export class OwnershipAnalyzer {
       }
       
       // Rule 1.2: Container transitivity
-      // Array<Shared<T>> or Set<Shared<T>>
+      // Array<share<T>> or Set<share<T>>
       if ((typeName === 'Array' || typeName === 'Set') && 
           resolvedType.typeArguments && resolvedType.typeArguments.length > 0) {
         const elementType = resolvedType.typeArguments[0];
-        // Check if element is Shared<T> (recursively resolve)
+        // Check if element is share<T> (recursively resolve)
         const resolvedElement = this.resolveTypeAlias(elementType, checker);
         if (ts.isTypeReferenceNode(resolvedElement)) {
           const elementTypeName = resolvedElement.typeName.getText(sourceFile);
-          if (elementTypeName === 'Shared' && 
+          if (elementTypeName === 'share' && 
               resolvedElement.typeArguments && resolvedElement.typeArguments.length > 0) {
             const targetType = this.getTypeNameFromTypeNode(resolvedElement.typeArguments[0], sourceFile, checker);
             if (targetType) {
@@ -467,14 +467,14 @@ export class OwnershipAnalyzer {
         return ownedTypes;
       }
       
-      // Rule 1.2: Map<K, Shared<V>>
+      // Rule 1.2: Map<K, share<V>>
       if (typeName === 'Map' && resolvedType.typeArguments && resolvedType.typeArguments.length === 2) {
         const valueType = resolvedType.typeArguments[1];
-        // Check if value is Shared<T> (recursively resolve)
+        // Check if value is share<T> (recursively resolve)
         const resolvedValue = this.resolveTypeAlias(valueType, checker);
         if (ts.isTypeReferenceNode(resolvedValue)) {
           const valueTypeName = resolvedValue.typeName.getText(sourceFile);
-          if (valueTypeName === 'Shared' && 
+          if (valueTypeName === 'share' && 
               resolvedValue.typeArguments && resolvedValue.typeArguments.length > 0) {
             const targetType = this.getTypeNameFromTypeNode(resolvedValue.typeArguments[0], sourceFile, checker);
             if (targetType) {
@@ -507,12 +507,12 @@ export class OwnershipAnalyzer {
       }
     }
 
-    // Rule 1.2: Array type syntax (Shared<T>[])
+    // Rule 1.2: Array type syntax (share<T>[])
     if (ts.isArrayTypeNode(typeNode)) {
       const elementType = typeNode.elementType;
       if (ts.isTypeReferenceNode(elementType)) {
         const elementTypeName = elementType.typeName.getText(sourceFile);
-        if (elementTypeName === 'Shared' && 
+        if (elementTypeName === 'share' && 
             elementType.typeArguments && elementType.typeArguments.length > 0) {
           const targetType = this.getTypeNameFromTypeNode(elementType.typeArguments[0], sourceFile, checker);
           if (targetType) {
@@ -528,7 +528,7 @@ export class OwnershipAnalyzer {
 
   /**
    * Extract ownership from a generic class instantiation
-   * For example, when we have Box<Node> and Box<T> contains Shared<T>,
+   * For example, when we have Box<Node> and Box<T> contains share<T>,
    * we substitute Node for T and find that it owns Node
    */
   private extractOwnershipFromGenericClass(
@@ -570,7 +570,7 @@ export class OwnershipAnalyzer {
   }
 
   /**
-   * Extract Shared<T> ownership with type parameter substitution
+   * Extract share<T> ownership with type parameter substitution
    * This is like extractSharedOwnership but applies generic type parameter substitution
    */
   private extractSharedOwnershipWithSubstitution(
@@ -606,12 +606,12 @@ export class OwnershipAnalyzer {
         : typeNode.typeName.getText();
       
       // Weak and Unique don't create edges
-      if (typeNameText === 'Weak' || typeNameText === 'Unique') {
+      if (typeNameText === 'use' || typeNameText === 'own') {
         return ownedTypes;
       }
       
-      // Shared<T> - check if T is a type parameter that needs substitution
-      if (typeNameText === 'Shared' && typeNode.typeArguments && typeNode.typeArguments.length > 0) {
+      // share<T> - check if T is a type parameter that needs substitution
+      if (typeNameText === 'share' && typeNode.typeArguments && typeNode.typeArguments.length > 0) {
         const targetTypeNode = typeNode.typeArguments[0];
         
         // Check if it's a type parameter reference (e.g., T)
@@ -827,21 +827,21 @@ export class OwnershipAnalyzer {
       // Direct cycle (self-reference)
       cycleType = 'Direct Cycle';
       message = `Ownership cycle detected: ${cycleDescription}. ` +
-                `Type '${cycleNode}' cannot own itself via Shared<T>. ` +
-                `Use the Pool Pattern: create a container type that owns all instances with Unique<T>[], ` +
-                `and use Weak<T>[] for references within '${cycleNode}'.`;
+                `Type '${cycleNode}' cannot own itself via share<T>. ` +
+                `Use the Pool Pattern: create a container type that owns all instances with own<T>[], ` +
+                `and use use<T>[] for references within '${cycleNode}'.`;
     } else if (cycleLength === 2) {
       // Mutual cycle
       cycleType = 'Mutual Cycle';
       message = `Ownership cycle detected: ${cycleDescription}. ` +
-                `Types '${cyclePath[0]}' and '${cyclePath[1]}' cannot own each other via Shared<T>. ` +
-                `Use Weak<T> for at least one direction to break the cycle.`;
+                `Types '${cyclePath[0]}' and '${cyclePath[1]}' cannot own each other via share<T>. ` +
+                `Use use<T> for at least one direction to break the cycle.`;
     } else {
       // Longer cycle
       cycleType = `Cycle (length ${cycleLength})`;
       message = `Ownership cycle detected: ${cycleDescription}. ` +
-                `No type can transitively own itself via Shared<T>. ` +
-                `Break the cycle by changing at least one field to Weak<T>.`;
+                `No type can transitively own itself via share<T>. ` +
+                `Break the cycle by changing at least one field to use<T>.`;
     }
 
     this.diagnostics.push({
@@ -877,7 +877,7 @@ export class OwnershipAnalyzer {
 
     // Check if it's an ownership qualifier
     if (typeName === 'own' || typeName === 'share' || typeName === 'use' ||
-        typeName === 'Unique' || typeName === 'Shared' || typeName === 'Weak') {
+        typeName === 'own' || typeName === 'share' || typeName === 'use') {
       // Check if the inner type is a primitive (only number and boolean, NOT string)
       if (typeNode.typeArguments && typeNode.typeArguments.length === 1) {
         const innerType = typeNode.typeArguments[0];
@@ -954,7 +954,7 @@ export class OwnershipAnalyzer {
 
     // If it's already wrapped in ownership type, it's fine
     // Support both old (Unique/Shared/Weak) and new (own/share/use) naming
-    if (typeName === 'Unique' || typeName === 'Shared' || typeName === 'Weak' ||
+    if (typeName === 'own' || typeName === 'share' || typeName === 'use' ||
         typeName === 'own' || typeName === 'share' || typeName === 'use') {
       return;
     }
@@ -1010,7 +1010,7 @@ export class OwnershipAnalyzer {
       severity: 'error',
       code: 'GS303',
       message: `${formattedFieldName} has heap-allocated type '${typeName}' without ownership annotation. ` +
-               `Use Unique<${typeName}>, Shared<${typeName}>, or Weak<${typeName}> to specify ownership semantics.`,
+               `Use own<${typeName}>, share<${typeName}>, or use<${typeName}> to specify ownership semantics.`,
       location,
     });
   }
@@ -1021,16 +1021,16 @@ export class OwnershipAnalyzer {
    * GS305: Invalid ownership derivation
    * 
    * Rules:
-   * - Unique<T> field: source must be Unique<T>, new T(), or null
-   * - Shared<T> field: source must be Shared<T> or null (NOT from Unique<T> or new T())
-   * - Weak<T> field: source must be Weak<T> or null (can derive from Unique/Shared via conversion API)
+   * - own<T> field: source must be own<T>, new T(), or null
+   * - share<T> field: source must be share<T> or null (NOT from own<T> or new T())
+   * - use<T> field: source must be use<T> or null (can derive from Unique/Shared via conversion API)
    * 
    * Derivation rules (explicit conversion APIs required):
-   * 1. From Unique<T> can only create Weak<T> (no Shared<T>)
-   * 2. From Shared<T> can create Shared<T> or Weak<T>
-   * 3. From Weak<T> can only create Weak<T> (no promotion to owning references)
+   * 1. From own<T> can only create use<T> (no share<T>)
+   * 2. From share<T> can create share<T> or use<T>
+   * 3. From use<T> can only create use<T> (no promotion to owning references)
    * 
-   * Note: new T() implicitly creates Unique<T>, can only assign to Unique<T> fields
+   * Note: new T() implicitly creates own<T>, can only assign to own<T> fields
    */
   private checkOwnershipAssignment(
     assignment: ts.BinaryExpression,
@@ -1058,7 +1058,7 @@ export class OwnershipAnalyzer {
     const leftTypeText = decl.type.getText(sourceFile);
 
     // Check if it's an ownership-typed field
-    const ownershipMatch = leftTypeText.match(/^(Unique|Shared|Weak)<(.+)>$/);
+    const ownershipMatch = leftTypeText.match(/^(own|share|use)<(.+)>$/);
     if (!ownershipMatch) {
       return; // Not an ownership type, no validation needed
     }
@@ -1072,15 +1072,15 @@ export class OwnershipAnalyzer {
       return;
     }
 
-    // Allow new expressions (new T() creates Unique<T> by default)
+    // Allow new expressions (new T() creates own<T> by default)
     if (ts.isNewExpression(rightNode)) {
-      // new T() is Unique<T>, can assign to Unique<T> fields only
-      if (targetOwnership === 'Shared' || targetOwnership === 'Weak') {
+      // new T() is own<T>, can assign to own<T> fields only
+      if (targetOwnership === 'share' || targetOwnership === 'use') {
         this.diagnostics.push({
           severity: 'error',
           code: 'GS305',
-          message: `Cannot assign 'new ${innerType}()' (implicitly Unique<${innerType}>) to ${targetOwnership}<${innerType}>. ` +
-                   `From Unique<T> can only derive Weak<T>. Use explicit conversion API (future feature).`,
+          message: `Cannot assign 'new ${innerType}()' (implicitly own<${innerType}>) to ${targetOwnership}<${innerType}>. ` +
+                   `From own<T> can only derive use<T>. Use explicit conversion API (future feature).`,
           location: Parser.getLocation(assignment, sourceFile),
         });
       }
@@ -1158,25 +1158,25 @@ export class OwnershipAnalyzer {
     }
 
     // Check if right side is wrapped in ownership type
-    const rightOwnershipMatch = rightTypeText.match(/^(Unique|Shared|Weak)<(.+)>$/);
+    const rightOwnershipMatch = rightTypeText.match(/^((own|share|use))<(.+)>$/);
     
     if (rightOwnershipMatch) {
       const [, sourceOwnership] = rightOwnershipMatch;
       
       // Check ownership derivation rules
-      if (sourceOwnership === 'Unique') {
-        // From Unique<T> can only derive Weak<T>
-        if (targetOwnership === 'Shared') {
+      if (sourceOwnership === 'own') {
+        // From own<T> can only derive use<T>
+        if (targetOwnership === 'share') {
           this.diagnostics.push({
             severity: 'error',
             code: 'GS305',
-            message: `Cannot assign Unique<${innerType}> to Shared<${innerType}>. ` +
-                     `From Unique<T> can only derive Weak<T>. Use explicit conversion API (future feature).`,
+            message: `Cannot assign own<${innerType}> to share<${innerType}>. ` +
+                     `From own<T> can only derive use<T>. Use explicit conversion API (future feature).`,
             location: Parser.getLocation(assignment, sourceFile),
           });
           return;
         }
-        if (targetOwnership === 'Unique') {
+        if (targetOwnership === 'own') {
           // Unique→Unique is a move, which we don't support yet
           // For now, allow it but this will need refinement
           return;
@@ -1185,16 +1185,16 @@ export class OwnershipAnalyzer {
         return;
       }
       
-      if (sourceOwnership === 'Shared') {
-        // From Shared<T> can derive Shared<T> or Weak<T>
-        if (targetOwnership === 'Shared' || targetOwnership === 'Weak') {
+      if (sourceOwnership === 'share') {
+        // From share<T> can derive share<T> or use<T>
+        if (targetOwnership === 'share' || targetOwnership === 'use') {
           return; // OK
         }
-        if (targetOwnership === 'Unique') {
+        if (targetOwnership === 'own') {
           this.diagnostics.push({
             severity: 'error',
             code: 'GS305',
-            message: `Cannot assign Shared<${innerType}> to Unique<${innerType}>. ` +
+            message: `Cannot assign share<${innerType}> to own<${innerType}>. ` +
                      `Shared ownership cannot be converted to unique ownership.`,
             location: Parser.getLocation(assignment, sourceFile),
           });
@@ -1202,15 +1202,15 @@ export class OwnershipAnalyzer {
         }
       }
       
-      if (sourceOwnership === 'Weak') {
-        // Weak<T> can only assign to Weak<T>
-        if (targetOwnership === 'Weak') {
+      if (sourceOwnership === 'use') {
+        // use<T> can only assign to use<T>
+        if (targetOwnership === 'use') {
           return; // OK
         }
         this.diagnostics.push({
           severity: 'error',
           code: 'GS305',
-          message: `Cannot assign Weak<${innerType}> to ${targetOwnership}<${innerType}>. ` +
+          message: `Cannot assign use<${innerType}> to ${targetOwnership}<${innerType}>. ` +
                    `Weak references cannot be promoted to owning references.`,
           location: Parser.getLocation(assignment, sourceFile),
         });
@@ -1249,9 +1249,9 @@ export class OwnershipAnalyzer {
    * GS305: Invalid ownership derivation in argument passing
    * 
    * Same rules as assignment:
-   * 1. From Unique<T> can only pass to Weak<T> parameters
-   * 2. From Shared<T> can pass to Shared<T> or Weak<T> parameters
-   * 3. From Weak<T> can only pass to Weak<T> parameters
+   * 1. From own<T> can only pass to use<T> parameters
+   * 2. From share<T> can pass to share<T> or use<T> parameters
+   * 3. From use<T> can only pass to use<T> parameters
    */
   private checkCallArguments(
     callExpr: ts.CallExpression,
@@ -1282,7 +1282,7 @@ export class OwnershipAnalyzer {
       const paramTypeText = paramDecl.type.getText(paramDecl.getSourceFile());
 
       // Check if parameter has ownership type
-      const paramOwnershipMatch = paramTypeText.match(/^(Unique|Shared|Weak)<(.+)>$/);
+      const paramOwnershipMatch = paramTypeText.match(/^((own|share|use))<(.+)>$/);
       if (!paramOwnershipMatch) continue; // Not an ownership-typed parameter
 
       const [, targetOwnership, innerType] = paramOwnershipMatch;
@@ -1295,13 +1295,13 @@ export class OwnershipAnalyzer {
 
       // Check new expressions
       if (ts.isNewExpression(arg)) {
-        // new T() is implicitly Unique<T>
-        if (targetOwnership === 'Shared' || targetOwnership === 'Weak') {
+        // new T() is implicitly own<T>
+        if (targetOwnership === 'share' || targetOwnership === 'use') {
           this.diagnostics.push({
             severity: 'error',
             code: 'GS305',
-            message: `Cannot pass 'new ${innerType}()' (implicitly Unique<${innerType}>) to ${targetOwnership}<${innerType}> parameter. ` +
-                     `From Unique<T> can only derive Weak<T>. Use explicit conversion API (future feature).`,
+            message: `Cannot pass 'new ${innerType}()' (implicitly own<${innerType}>) to ${targetOwnership}<${innerType}> parameter. ` +
+                     `From own<T> can only derive use<T>. Use explicit conversion API (future feature).`,
             location: Parser.getLocation(arg, sourceFile),
           });
         }
@@ -1346,7 +1346,7 @@ export class OwnershipAnalyzer {
       }
 
       // Check if argument has ownership type
-      const argOwnershipMatch = argTypeText.match(/^(Unique|Shared|Weak)<(.+)>$/);
+      const argOwnershipMatch = argTypeText.match(/^((own|share|use))<(.+)>$/);
       if (!argOwnershipMatch) {
         // Argument is not ownership-typed - might need error
         continue;
@@ -1355,36 +1355,36 @@ export class OwnershipAnalyzer {
       const [, sourceOwnership] = argOwnershipMatch;
 
       // Check ownership derivation rules (same as assignment)
-      if (sourceOwnership === 'Unique') {
-        if (targetOwnership === 'Shared') {
+      if (sourceOwnership === 'own') {
+        if (targetOwnership === 'share') {
           this.diagnostics.push({
             severity: 'error',
             code: 'GS305',
-            message: `Cannot pass Unique<${innerType}> to Shared<${innerType}> parameter. ` +
-                     `From Unique<T> can only derive Weak<T>. Use explicit conversion API (future feature).`,
+            message: `Cannot pass own<${innerType}> to share<${innerType}> parameter. ` +
+                     `From own<T> can only derive use<T>. Use explicit conversion API (future feature).`,
             location: Parser.getLocation(arg, sourceFile),
           });
         }
         // Unique→Unique is OK (would be a move)
         // Unique→Weak is OK
-      } else if (sourceOwnership === 'Shared') {
-        if (targetOwnership === 'Unique') {
+      } else if (sourceOwnership === 'share') {
+        if (targetOwnership === 'own') {
           this.diagnostics.push({
             severity: 'error',
             code: 'GS305',
-            message: `Cannot pass Shared<${innerType}> to Unique<${innerType}> parameter. ` +
+            message: `Cannot pass share<${innerType}> to own<${innerType}> parameter. ` +
                      `Shared ownership cannot be converted to unique ownership.`,
             location: Parser.getLocation(arg, sourceFile),
           });
         }
         // Shared→Shared is OK
         // Shared→Weak is OK
-      } else if (sourceOwnership === 'Weak') {
-        if (targetOwnership !== 'Weak') {
+      } else if (sourceOwnership === 'use') {
+        if (targetOwnership !== 'use') {
           this.diagnostics.push({
             severity: 'error',
             code: 'GS305',
-            message: `Cannot pass Weak<${innerType}> to ${targetOwnership}<${innerType}> parameter. ` +
+            message: `Cannot pass use<${innerType}> to ${targetOwnership}<${innerType}> parameter. ` +
                      `Weak references cannot be promoted to owning references.`,
             location: Parser.getLocation(arg, sourceFile),
           });
@@ -1450,7 +1450,7 @@ export class OwnershipAnalyzer {
     if (ts.isTypeReferenceNode(typeNode)) {
       const typeName = typeNode.typeName.getText(sourceFile);
       if (typeName === 'own' || typeName === 'share' || typeName === 'use' ||
-          typeName === 'Unique' || typeName === 'Shared' || typeName === 'Weak') {
+          typeName === 'own' || typeName === 'share' || typeName === 'use') {
         return false;
       }
       

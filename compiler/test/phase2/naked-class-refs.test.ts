@@ -25,7 +25,7 @@ describe('Phase 2: Naked Class Reference Detection', () => {
       const errors = getErrors(result.diagnostics, 'GS303');
       expect(errors.length).toBe(1);
       expect(errors[0].message).toContain('Field \'next\'');
-      expect(errors[0].message).toContain('Use Unique<Node>, Shared<Node>, or Weak<Node>');
+      expect(errors[0].message).toContain('Use own<Node>, share<Node>, or use<Node>');
     });
     
     it('should reject multiple naked class references', () => {
@@ -60,7 +60,7 @@ describe('Phase 2: Naked Class Reference Detection', () => {
       const errors = getErrors(result.diagnostics, 'GS303');
       expect(errors.length).toBe(1);
       expect(errors[0].message).toContain('Field \'item\'');
-      expect(errors[0].message).toContain('Use Unique<Item>, Shared<Item>, or Weak<Item>');
+      expect(errors[0].message).toContain('Use own<Item>, share<Item>, or use<Item>');
     });
     
     it('should reject naked class reference in array', () => {
@@ -77,16 +77,16 @@ describe('Phase 2: Naked Class Reference Detection', () => {
       const result = compileWithOwnership(source);
       // Note: This currently won't error because Item[] is an array type reference,
       // not a direct class reference. We may want to enhance this in the future.
-      // For now, users should use Unique<Item>[] or Weak<Item>[] explicitly.
+      // For now, users should use own<Item>[] or use<Item>[] explicitly.
     });
   });
   
   describe('Valid ownership annotations', () => {
     
-    it('should accept Unique<T> annotation', () => {
+    it('should accept own<T> annotation', () => {
       const source = `
         class Container {
-          item: Unique<Item> | null = null;
+          item: own<Item> | null = null;
         }
         
         class Item {
@@ -98,10 +98,10 @@ describe('Phase 2: Naked Class Reference Detection', () => {
       expect(hasError(result.diagnostics, 'GS303')).toBe(false);
     });
     
-    it('should accept Shared<T> annotation', () => {
+    it('should accept share<T> annotation', () => {
       const source = `
         class TreeNode {
-          children: Shared<TreeNode>[] = [];
+          children: share<TreeNode>[] = [];
         }
       `;
       
@@ -112,11 +112,11 @@ describe('Phase 2: Naked Class Reference Detection', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(true);
     });
     
-    it('should accept Weak<T> annotation', () => {
+    it('should accept use<T> annotation', () => {
       const source = `
         class TreeNode {
-          parent: Weak<TreeNode> = null;
-          children: Weak<TreeNode>[] = [];
+          parent: use<TreeNode> = null;
+          children: use<TreeNode>[] = [];
         }
       `;
       
@@ -128,12 +128,12 @@ describe('Phase 2: Naked Class Reference Detection', () => {
     it('should accept Pool Pattern with Weak references', () => {
       const source = `
         class NodePool {
-          nodes: Unique<Node>[] = [];
+          nodes: own<Node>[] = [];
         }
         
         class Node {
-          next: Weak<Node> = null;
-          prev: Weak<Node> = null;
+          next: use<Node> = null;
+          prev: use<Node> = null;
         }
       `;
       
@@ -221,7 +221,7 @@ describe('Phase 2: Naked Class Reference Detection', () => {
       expect(hasError(result.diagnostics, 'GS303')).toBe(true);
       
       const errors = getErrors(result.diagnostics, 'GS303');
-      expect(errors[0].message).toContain('Use Unique<Item>, Shared<Item>, or Weak<Item>');
+      expect(errors[0].message).toContain('Use own<Item>, share<Item>, or use<Item>');
     });
     
     it('should detect in nested union types', () => {

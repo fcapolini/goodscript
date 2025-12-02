@@ -1,12 +1,12 @@
 /**
  * Null-Check Analyzer
  * 
- * Enforces null-safety for Weak<T> references based on DAG-DETECTION.md principles.
+ * Enforces null-safety for use<T> references based on DAG-DETECTION.md principles.
  * 
  * Key Concepts:
- * 1. Weak<T> is implicitly nullable (equivalent to T | null | undefined)
+ * 1. use<T> is implicitly nullable (equivalent to T | null | undefined)
  * 2. Both null and undefined are treated as synonyms in GoodScript
- * 3. Weak<T> references must be checked before dereferencing
+ * 3. use<T> references must be checked before dereferencing
  * 4. Flow-sensitive analysis tracks null checks through control flow
  * 
  * Checking Patterns:
@@ -33,7 +33,7 @@ export class NullCheckAnalyzer {
   private diagnostics: Diagnostic[] = [];
 
   /**
-   * Analyze a source file for Weak<T> null-safety violations
+   * Analyze a source file for use<T> null-safety violations
    */
   analyze(sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
     this.diagnostics = [];
@@ -66,7 +66,7 @@ export class NullCheckAnalyzer {
   }
 
   /**
-   * Check if a type is Weak<T> (implicitly nullable)
+   * Check if a type is use<T> (implicitly nullable)
    */
   private isWeakType(node: ts.Node, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
     // First, try to get the symbol and check its declaration
@@ -90,7 +90,7 @@ export class NullCheckAnalyzer {
   }
 
   /**
-   * Check if a declaration has Weak<T> type
+   * Check if a declaration has use<T> type
    */
   private hasWeakTypeInDeclaration(decl: ts.Declaration, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
     if (ts.isPropertyDeclaration(decl) || ts.isPropertySignature(decl)) {
@@ -113,7 +113,7 @@ export class NullCheckAnalyzer {
     }
     if (ts.isParameter(decl)) {
       if (decl.type) {
-        // Only treat explicitly Weak<T> annotated parameters as nullable
+        // Only treat explicitly use<T> annotated parameters as nullable
         // Unqualified parameters are treated as borrowed (non-owning but non-null)
         return this.hasWeakAnnotation(decl.type, sourceFile, checker);
       }
@@ -122,10 +122,10 @@ export class NullCheckAnalyzer {
   }
 
   /**
-   * Check if a type node has Weak<T> annotation
+   * Check if a type node has use<T> annotation
    */
   private hasWeakAnnotation(typeNode: ts.TypeNode, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
-    // Union type containing Weak<T>
+    // Union type containing use<T>
     if (ts.isUnionTypeNode(typeNode)) {
       for (const member of typeNode.types) {
         if (this.hasWeakAnnotation(member, sourceFile, checker)) {
@@ -137,13 +137,13 @@ export class NullCheckAnalyzer {
     // Resolve type aliases (but not Weak/Shared/Unique themselves)
     const resolvedType = this.resolveTypeAlias(typeNode, checker);
     
-    // Direct Weak<T> reference
+    // Direct use<T> reference
     if (ts.isTypeReferenceNode(resolvedType)) {
       // Use .text property for identifiers to avoid source file issues
       const typeName = ts.isIdentifier(resolvedType.typeName)
         ? resolvedType.typeName.text
         : (resolvedType.typeName.pos >= 0 ? resolvedType.typeName.getText(sourceFile) : '');
-      if (typeName === 'Weak') {
+      if (typeName === 'use') {
         return true;
       }
     }
@@ -172,7 +172,7 @@ export class NullCheckAnalyzer {
       const typeNameText = ts.isIdentifier(typeNode.typeName) 
         ? typeNode.typeName.text 
         : (typeNode.typeName.pos >= 0 ? typeNode.typeName.getText() : '');
-      if (typeNameText === 'Shared' || typeNameText === 'Weak' || typeNameText === 'Unique') {
+      if (typeNameText === 'share' || typeNameText === 'use' || typeNameText === 'own') {
         return typeNode;
       }
       
@@ -235,12 +235,12 @@ export class NullCheckAnalyzer {
       return;
     }
 
-    // Handle variable declarations with Weak<T> type
+    // Handle variable declarations with use<T> type
     if (ts.isVariableDeclaration(node)) {
       this.checkWeakVariableDeclaration(node, sourceFile, checker);
     }
 
-    // Handle parameter declarations with Weak<T> type
+    // Handle parameter declarations with use<T> type
     if (ts.isParameter(node)) {
       // Parameters are checked at usage sites
     }
@@ -263,7 +263,7 @@ export class NullCheckAnalyzer {
       }
     }
 
-    // Handle call expression arguments - check for Weak<T> passed to non-nullable params
+    // Handle call expression arguments - check for use<T> passed to non-nullable params
     if (ts.isCallExpression(node)) {
       this.checkCallArguments(node, sourceFile, checker, checkedVars);
     }
@@ -575,20 +575,20 @@ export class NullCheckAnalyzer {
   }
 
   /**
-   * Check Weak<T> variable declaration
+   * Check use<T> variable declaration
    */
   private checkWeakVariableDeclaration(
     node: ts.VariableDeclaration,
     sourceFile: ts.SourceFile,
     checker: ts.TypeChecker
   ): void {
-    // Check if the variable has Weak<T> type annotation
+    // Check if the variable has use<T> type annotation
     if (!node.type || !ts.isTypeReferenceNode(node.type)) return;
     
     const typeName = node.type.typeName.getText(sourceFile);
     if (typeName !== 'weak') return;
 
-    // Weak<T> variables should either:
+    // use<T> variables should either:
     // 1. Be initialized with null/undefined
     // 2. Be initialized with a value (which we'll track for null checks)
     // 3. Have no initializer (default to undefined)
@@ -596,7 +596,7 @@ export class NullCheckAnalyzer {
   }
 
   /**
-   * Check if a property access results in a Weak<T> type
+   * Check if a property access results in a use<T> type
    */
   private isPropertyAccessWeak(
     node: ts.PropertyAccessExpression,
@@ -611,7 +611,7 @@ export class NullCheckAnalyzer {
   }
 
   /**
-   * Check property access for Weak<T> null-safety
+   * Check property access for use<T> null-safety
    */
   private checkPropertyAccess(
     node: ts.PropertyAccessExpression,
@@ -648,7 +648,7 @@ export class NullCheckAnalyzer {
   }
 
   /**
-   * Check element access for Weak<T> null-safety
+   * Check element access for use<T> null-safety
    */
   private checkElementAccess(
     node: ts.ElementAccessExpression,
@@ -662,14 +662,14 @@ export class NullCheckAnalyzer {
     // Skip if already checked
     if (checkedVars.has(baseText)) return;
 
-    // Check if base expression has Weak<T> type
+    // Check if base expression has use<T> type
     if (this.isWeakType(baseExpr, sourceFile, checker)) {
       this.reportNullCheckRequired(node, baseText, sourceFile);
     }
   }
 
   /**
-   * Check call expression arguments for Weak<T> values passed to non-nullable parameters
+   * Check call expression arguments for use<T> values passed to non-nullable parameters
    */
   private checkCallArguments(
     node: ts.CallExpression,

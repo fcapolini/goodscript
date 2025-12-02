@@ -12,13 +12,8 @@ import { compileWithOwnership } from './test-helpers';
 import { Diagnostic } from '../../src/types';
 
 describe('Ownership qualifiers on value-type primitives', () => {
-  // Helper to add GoodScript type declarations
-  const withTypes = (source: string) => `
-    declare type own<T> = T;
-    declare type share<T> = T;
-    declare type use<T> = T | null | undefined;
-    ${source}
-  `;
+  // Ownership type declarations are automatically injected by the compiler
+  const withTypes = (source: string) => source;
 
   it('should reject own<number>', () => {
     const source = withTypes(`

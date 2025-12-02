@@ -7,14 +7,14 @@ import { compileWithOwnership } from './test-helpers';
 import { Diagnostic } from '../../src/types';
 
 describe('Ownership Parameter Validation', () => {
-  it('should allow unqualified class parameters (implicitly Shared<T>)', () => {
+  it('should allow unqualified class parameters (implicitly share<T>)', () => {
     const source = `
       class Data {
         value: number = 0;
       }
       
       class Handler {
-        process(d: Data): void {  // OK: implicitly Shared<Data>
+        process(d: Data): void {  // OK: implicitly share<Data>
           console.log(d.value);
         }
       }
@@ -23,18 +23,18 @@ describe('Ownership Parameter Validation', () => {
     const result = compileWithOwnership(source);
     const errors = result.diagnostics.filter((d: Diagnostic) => d.code === 'GS303');
     
-    // Unqualified parameters are implicitly Shared<T> (shared ownership)
+    // Unqualified parameters are implicitly share<T> (shared ownership)
     expect(errors.length).toBe(0);
   });
 
-  it('should accept Unique<T> parameters', () => {
+  it('should accept own<T> parameters', () => {
     const source = `
       class Data {
         value: number = 0;
       }
       
       class Handler {
-        process(d: Unique<Data>): void {
+        process(d: own<Data>): void {
           console.log(d.value);
         }
       }
@@ -46,14 +46,14 @@ describe('Ownership Parameter Validation', () => {
     expect(gs303Errors).toHaveLength(0);
   });
 
-  it('should accept Shared<T> parameters', () => {
+  it('should accept share<T> parameters', () => {
     const source = `
       class Data {
         value: number = 0;
       }
       
       class Handler {
-        process(d: Shared<Data>): void {
+        process(d: share<Data>): void {
           console.log(d.value);
         }
       }
@@ -65,14 +65,14 @@ describe('Ownership Parameter Validation', () => {
     expect(gs303Errors).toHaveLength(0);
   });
 
-  it('should accept Weak<T> parameters', () => {
+  it('should accept use<T> parameters', () => {
     const source = `
       class Data {
         value: number = 0;
       }
       
       class Handler {
-        process(d: Weak<Data>): void {
+        process(d: use<Data>): void {
           if (d !== null) {
             console.log(d.value);
           }

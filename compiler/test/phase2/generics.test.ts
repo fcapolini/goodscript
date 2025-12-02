@@ -9,12 +9,12 @@ import { compileWithOwnership, hasError } from './test-helpers';
 
 describe('Phase 2: Generics with Ownership', () => {
   
-  describe('Generic classes with Shared<T>', () => {
+  describe('Generic classes with share<T>', () => {
     
-    it('should detect cycles through generic Shared<T>', () => {
+    it('should detect cycles through generic share<T>', () => {
       const source = `
         class Box<T> {
-          item: Shared<T> | null = null;
+          item: share<T> | null = null;
         }
         
         class Node {
@@ -23,18 +23,18 @@ describe('Phase 2: Generics with Ownership', () => {
       `;
       
       const result = compileWithOwnership(source);
-      // Box<Node> contains Shared<Node>, should create self-reference
+      // Box<Node> contains share<Node>, should create self-reference
       expect(hasError(result.diagnostics, 'GS301')).toBe(true);
     });
     
-    it('should allow generic Weak<T>', () => {
+    it('should allow generic use<T>', () => {
       const source = `
         class Box<T> {
-          item: Weak<T> = null;
+          item: use<T> = null;
         }
         
         class Node {
-          next: Box<Node> | null = null;  // No edge - Weak<T>
+          next: Box<Node> | null = null;  // No edge - use<T>
         }
       `;
       
@@ -42,14 +42,14 @@ describe('Phase 2: Generics with Ownership', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(false);
     });
     
-    it('should allow generic Unique<T>', () => {
+    it('should allow generic own<T>', () => {
       const source = `
         class Box<T> {
-          item: Unique<T> | null = null;
+          item: own<T> | null = null;
         }
         
         class Node {
-          next: Box<Node> | null = null;  // No edge - Unique<T>
+          next: Box<Node> | null = null;  // No edge - own<T>
         }
       `;
       
@@ -60,8 +60,8 @@ describe('Phase 2: Generics with Ownership', () => {
     it('should handle multiple type parameters', () => {
       const source = `
         class Pair<T, U> {
-          first: Shared<T> | null = null;
-          second: Shared<U> | null = null;
+          first: share<T> | null = null;
+          second: share<U> | null = null;
         }
         
         class A {
@@ -69,7 +69,7 @@ describe('Phase 2: Generics with Ownership', () => {
         }
         
         class B {
-          back: Shared<A> | null = null;  // Cycle through first
+          back: share<A> | null = null;  // Cycle through first
         }
         
         class C {
@@ -87,9 +87,9 @@ describe('Phase 2: Generics with Ownership', () => {
     it('should handle generic method parameters', () => {
       const source = `
         class Container<T> {
-          item: Shared<T> | null = null;
+          item: share<T> | null = null;
           
-          set<U>(value: Shared<U> | null): void {
+          set<U>(value: share<U> | null): void {
             // Generic method parameter
           }
         }
@@ -106,9 +106,9 @@ describe('Phase 2: Generics with Ownership', () => {
     it('should handle generic return types', () => {
       const source = `
         class Container<T> {
-          item: Weak<T> = null;
+          item: use<T> = null;
           
-          get(): Weak<T> {
+          get(): use<T> {
             return this.item;
           }
         }
@@ -132,7 +132,7 @@ describe('Phase 2: Generics with Ownership', () => {
         }
         
         class Box<T extends Named> {
-          item: Shared<T> | null = null;
+          item: share<T> | null = null;
         }
         
         class Item implements Named {
@@ -156,13 +156,13 @@ describe('Phase 2: Generics with Ownership', () => {
         }
         
         class Box<T extends Named & Valued> {
-          item: Weak<T> = null;
+          item: use<T> = null;
         }
         
         class Item implements Named, Valued {
           name: string = '';
           value: number = 0;
-          box: Box<Item> | null = null;  // No cycle - Weak<T>
+          box: Box<Item> | null = null;  // No cycle - use<T>
         }
       `;
       
@@ -176,11 +176,11 @@ describe('Phase 2: Generics with Ownership', () => {
     it('should handle Array<T> with ownership', () => {
       const source = `
         class Container {
-          items: Array<Shared<Item>> = [];
+          items: Array<share<Item>> = [];
         }
         
         class Item {
-          container: Shared<Container> | null = null;
+          container: share<Container> | null = null;
         }
       `;
       
@@ -191,11 +191,11 @@ describe('Phase 2: Generics with Ownership', () => {
     it('should handle Map<K, V> with ownership', () => {
       const source = `
         class Container {
-          items: Map<string, Shared<Item>> = new Map();
+          items: Map<string, share<Item>> = new Map();
         }
         
         class Item {
-          container: Shared<Container> | null = null;
+          container: share<Container> | null = null;
         }
       `;
       
@@ -206,11 +206,11 @@ describe('Phase 2: Generics with Ownership', () => {
     it('should handle Set<T> with ownership', () => {
       const source = `
         class Container {
-          items: Set<Shared<Item>> = new Set();
+          items: Set<share<Item>> = new Set();
         }
         
         class Item {
-          container: Shared<Container> | null = null;
+          container: share<Container> | null = null;
         }
       `;
       
@@ -225,7 +225,7 @@ describe('Phase 2: Generics with Ownership', () => {
         }
         
         class Item {
-          container: Shared<Container> | null = null;  // No cycle through Promise
+          container: share<Container> | null = null;  // No cycle through Promise
         }
       `;
       
@@ -236,10 +236,10 @@ describe('Phase 2: Generics with Ownership', () => {
   
   describe('Generic null-check enforcement', () => {
     
-    it('should enforce null-checks on generic Weak<T>', () => {
+    it('should enforce null-checks on generic use<T>', () => {
       const source = `
         class Box<T> {
-          item: Weak<T> = null;
+          item: use<T> = null;
           
           getValue(getter: (item: T) => number): number {
             return getter(this.item);  // Error: missing null check
@@ -255,10 +255,10 @@ describe('Phase 2: Generics with Ownership', () => {
       expect(hasError(result.diagnostics, 'GS302')).toBe(true);
     });
     
-    it('should accept checked generic Weak<T>', () => {
+    it('should accept checked generic use<T>', () => {
       const source = `
         class Box<T> {
-          item: Weak<T> = null;
+          item: use<T> = null;
           
           getValue(getter: (item: T) => number): number {
             if (this.item === null) return -1;
@@ -285,7 +285,7 @@ describe('Phase 2: Generics with Ownership', () => {
         }
         
         class Inner<U> {
-          item: Shared<U> | null = null;
+          item: share<U> | null = null;
         }
         
         class Node {
@@ -315,12 +315,12 @@ describe('Phase 2: Generics with Ownership', () => {
     it('should handle generic with Pool Pattern', () => {
       const source = `
         class Pool<T> {
-          items: Unique<T>[] = [];
+          items: own<T>[] = [];
         }
         
         class Node {
-          pool: Pool<Node> | null = null;  // No cycle - Unique<T>[]
-          next: Weak<Node> = null;
+          pool: Pool<Node> | null = null;  // No cycle - own<T>[]
+          next: use<Node> = null;
         }
       `;
       
@@ -331,7 +331,7 @@ describe('Phase 2: Generics with Ownership', () => {
     it('should handle conditional types with generics', () => {
       const source = `
         class Box<T> {
-          item: T extends object ? Shared<T> : T = null as any;
+          item: T extends object ? share<T> : T = null as any;
         }
         
         class Node {

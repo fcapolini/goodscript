@@ -2,11 +2,11 @@
  * Phase 2 Tests: Ownership Cycle Detection
  * 
  * Tests for DAG-DETECTION.md rules:
- * - Rule 1.1: Direct Shared<T> field creates edge
+ * - Rule 1.1: Direct share<T> field creates edge
  * - Rule 1.2: Container transitivity
  * - Rule 1.3: Intermediate wrapper transitivity
  * - Rule 2.1: Self-ownership prohibition
- * - Rule 3.1/3.2: Weak<T> and Unique<T> do NOT create edges
+ * - Rule 3.1/3.2: use<T> and own<T> do NOT create edges
  * - Rule 4.1: Pool Pattern enforcement
  */
 
@@ -15,12 +15,12 @@ import { compileWithOwnership, compileMultipleWithOwnership, hasError, getErrors
 
 describe('Phase 2: Ownership Cycle Detection', () => {
   
-  describe('Rule 1.1: Direct Shared<T> field creates edge', () => {
+  describe('Rule 1.1: Direct share<T> field creates edge', () => {
     
     it('should detect direct self-reference cycle (A → A)', () => {
       const source = `
         class Node {
-          next: Shared<Node> | null = null;
+          next: share<Node> | null = null;
         }
       `;
       
@@ -35,10 +35,10 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     it('should detect mutual cycle (A → B → A)', () => {
       const source = `
         class A {
-          b: Shared<B> | null = null;
+          b: share<B> | null = null;
         }
         class B {
-          a: Shared<A> | null = null;
+          a: share<A> | null = null;
         }
       `;
       
@@ -52,13 +52,13 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     it('should detect longer cycle (A → B → C → A)', () => {
       const source = `
         class A {
-          b: Shared<B> | null = null;
+          b: share<B> | null = null;
         }
         class B {
-          c: Shared<C> | null = null;
+          c: share<C> | null = null;
         }
         class C {
-          a: Shared<A> | null = null;
+          a: share<A> | null = null;
         }
       `;
       
@@ -69,7 +69,7 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     it('should allow acyclic ownership', () => {
       const source = `
         class Parent {
-          child: Shared<Child> | null = null;
+          child: share<Child> | null = null;
         }
         class Child {
           value: number = 0;
@@ -83,10 +83,10 @@ describe('Phase 2: Ownership Cycle Detection', () => {
   
   describe('Rule 1.2: Container transitivity', () => {
     
-    it('should detect cycle through Array<Shared<T>>', () => {
+    it('should detect cycle through Array<share<T>>', () => {
       const source = `
         class Node {
-          children: Array<Shared<Node>> = [];
+          children: Array<share<Node>> = [];
         }
       `;
       
@@ -95,10 +95,10 @@ describe('Phase 2: Ownership Cycle Detection', () => {
       expect(getErrors(result.diagnostics, 'GS301')[0].message).toContain('Node → Node');
     });
     
-    it('should detect cycle through Shared<T>[] syntax', () => {
+    it('should detect cycle through share<T>[] syntax', () => {
       const source = `
         class Node {
-          children: Shared<Node>[] = [];
+          children: share<Node>[] = [];
         }
       `;
       
@@ -106,10 +106,10 @@ describe('Phase 2: Ownership Cycle Detection', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(true);
     });
     
-    it('should detect cycle through Set<Shared<T>>', () => {
+    it('should detect cycle through Set<share<T>>', () => {
       const source = `
         class Node {
-          connections: Set<Shared<Node>> = new Set();
+          connections: Set<share<Node>> = new Set();
         }
       `;
       
@@ -117,10 +117,10 @@ describe('Phase 2: Ownership Cycle Detection', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(true);
     });
     
-    it('should detect cycle through Map<K, Shared<V>>', () => {
+    it('should detect cycle through Map<K, share<V>>', () => {
       const source = `
         class Node {
-          children: Map<string, Shared<Node>> = new Map();
+          children: Map<string, share<Node>> = new Map();
         }
       `;
       
@@ -147,13 +147,13 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     it('should detect transitive cycle (A → B → C → A)', () => {
       const source = `
         class A {
-          wrapper: Shared<Wrapper> | null = null;
+          wrapper: share<Wrapper> | null = null;
         }
         class Wrapper {
-          b: Shared<B> | null = null;
+          b: share<B> | null = null;
         }
         class B {
-          a: Shared<A> | null = null;
+          a: share<A> | null = null;
         }
       `;
       
@@ -164,16 +164,16 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     it('should track ownership through deep nesting', () => {
       const source = `
         class Root {
-          level1: Shared<Level1> | null = null;
+          level1: share<Level1> | null = null;
         }
         class Level1 {
-          level2: Shared<Level2> | null = null;
+          level2: share<Level2> | null = null;
         }
         class Level2 {
-          level3: Shared<Level3> | null = null;
+          level3: share<Level3> | null = null;
         }
         class Level3 {
-          root: Shared<Root> | null = null;
+          root: share<Root> | null = null;
         }
       `;
       
@@ -184,10 +184,10 @@ describe('Phase 2: Ownership Cycle Detection', () => {
   
   describe('Rule 2.1: Self-ownership prohibition', () => {
     
-    it('should reject self-referential linked list with Shared<T>', () => {
+    it('should reject self-referential linked list with share<T>', () => {
       const source = `
         class ListNode {
-          next: Shared<ListNode> | null = null;
+          next: share<ListNode> | null = null;
           value: number = 0;
         }
       `;
@@ -197,11 +197,11 @@ describe('Phase 2: Ownership Cycle Detection', () => {
       expect(getErrors(result.diagnostics, 'GS301')[0].message).toContain('Pool Pattern');
     });
     
-    it('should reject tree with Shared<T> children', () => {
+    it('should reject tree with share<T> children', () => {
       const source = `
         class TreeNode {
-          left: Shared<TreeNode> | null = null;
-          right: Shared<TreeNode> | null = null;
+          left: share<TreeNode> | null = null;
+          right: share<TreeNode> | null = null;
           value: number = 0;
         }
       `;
@@ -210,10 +210,10 @@ describe('Phase 2: Ownership Cycle Detection', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(true);
     });
     
-    it('should reject graph with Shared<T> edges', () => {
+    it('should reject graph with share<T> edges', () => {
       const source = `
         class GraphNode {
-          edges: Shared<GraphNode>[] = [];
+          edges: share<GraphNode>[] = [];
           value: string = '';
         }
       `;
@@ -223,13 +223,13 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     });
   });
   
-  describe('Rule 3.1: Weak<T> does NOT create edges', () => {
+  describe('Rule 3.1: use<T> does NOT create edges', () => {
     
-    it('should allow self-reference with Weak<T>', () => {
+    it('should allow self-reference with use<T>', () => {
       const source = `
         class Node {
-          next: Weak<Node> = null;
-          prev: Weak<Node> = null;
+          next: use<Node> = null;
+          prev: use<Node> = null;
         }
       `;
       
@@ -237,13 +237,13 @@ describe('Phase 2: Ownership Cycle Detection', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(false);
     });
     
-    it('should allow bidirectional reference with Weak<T>', () => {
+    it('should allow bidirectional reference with use<T>', () => {
       const source = `
         class Parent {
-          child: Shared<Child> | null = null;
+          child: share<Child> | null = null;
         }
         class Child {
-          parent: Weak<Parent> = null;
+          parent: use<Parent> = null;
         }
       `;
       
@@ -251,11 +251,11 @@ describe('Phase 2: Ownership Cycle Detection', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(false);
     });
     
-    it('should allow Weak<T>[] arrays', () => {
+    it('should allow use<T>[] arrays', () => {
       const source = `
         class TreeNode {
-          children: Weak<TreeNode>[] = [];
-          parent: Weak<TreeNode> = null;
+          children: use<TreeNode>[] = [];
+          parent: use<TreeNode> = null;
         }
       `;
       
@@ -266,9 +266,9 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     it('should allow complex weak references', () => {
       const source = `
         class GraphNode {
-          neighbors: Weak<GraphNode>[] = [];
-          backEdges: Set<Weak<GraphNode>> = new Set();
-          metadata: Map<string, Weak<GraphNode>> = new Map();
+          neighbors: use<GraphNode>[] = [];
+          backEdges: Set<use<GraphNode>> = new Set();
+          metadata: Map<string, use<GraphNode>> = new Map();
         }
       `;
       
@@ -277,12 +277,12 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     });
   });
   
-  describe('Rule 3.2: Unique<T> does NOT create edges', () => {
+  describe('Rule 3.2: own<T> does NOT create edges', () => {
     
-    it('should allow Unique<T> ownership without cycles', () => {
+    it('should allow own<T> ownership without cycles', () => {
       const source = `
         class Container {
-          item: Unique<Item> | null = null;
+          item: own<Item> | null = null;
         }
         class Item {
           value: number = 0;
@@ -293,10 +293,10 @@ describe('Phase 2: Ownership Cycle Detection', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(false);
     });
     
-    it('should allow Unique<T>[] arrays', () => {
+    it('should allow own<T>[] arrays', () => {
       const source = `
         class Pool {
-          items: Unique<Item>[] = [];
+          items: own<Item>[] = [];
         }
         class Item {
           id: number = 0;
@@ -313,13 +313,13 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     it('should accept Pool Pattern for tree structure', () => {
       const source = `
         class Tree {
-          nodes: Unique<TreeNode>[] = [];
-          root: Weak<TreeNode> = null;
+          nodes: own<TreeNode>[] = [];
+          root: use<TreeNode> = null;
         }
         
         class TreeNode {
-          children: Weak<TreeNode>[] = [];
-          parent: Weak<TreeNode> = null;
+          children: use<TreeNode>[] = [];
+          parent: use<TreeNode> = null;
           value: number = 0;
         }
       `;
@@ -331,13 +331,13 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     it('should accept Pool Pattern for linked list', () => {
       const source = `
         class LinkedList {
-          nodes: Unique<ListNode>[] = [];
-          head: Weak<ListNode> = null;
+          nodes: own<ListNode>[] = [];
+          head: use<ListNode> = null;
         }
         
         class ListNode {
-          next: Weak<ListNode> = null;
-          prev: Weak<ListNode> = null;
+          next: use<ListNode> = null;
+          prev: use<ListNode> = null;
           value: number = 0;
         }
       `;
@@ -349,11 +349,11 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     it('should accept Pool Pattern for graph', () => {
       const source = `
         class Graph {
-          nodes: Unique<GraphNode>[] = [];
+          nodes: own<GraphNode>[] = [];
         }
         
         class GraphNode {
-          edges: Weak<GraphNode>[] = [];
+          edges: use<GraphNode>[] = [];
           value: string = '';
         }
       `;
@@ -372,7 +372,7 @@ describe('Phase 2: Ownership Cycle Detection', () => {
           source: `
             import { B } from './b';
             export class A {
-              b: Shared<B> | null = null;
+              b: share<B> | null = null;
             }
           `
         },
@@ -381,7 +381,7 @@ describe('Phase 2: Ownership Cycle Detection', () => {
           source: `
             import { A } from './a';
             export class B {
-              a: Shared<A> | null = null;
+              a: share<A> | null = null;
             }
           `
         }
@@ -396,11 +396,11 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     it('should allow diamond dependency without cycles', () => {
       const source = `
         class Root {
-          left: Shared<Branch> | null = null;
-          right: Shared<Branch> | null = null;
+          left: share<Branch> | null = null;
+          right: share<Branch> | null = null;
         }
         class Branch {
-          leaf: Shared<Leaf> | null = null;
+          leaf: share<Leaf> | null = null;
         }
         class Leaf {
           value: number = 0;
@@ -414,14 +414,14 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     it('should detect cycle in diamond with back edge', () => {
       const source = `
         class Root {
-          left: Shared<Branch> | null = null;
-          right: Shared<Branch> | null = null;
+          left: share<Branch> | null = null;
+          right: share<Branch> | null = null;
         }
         class Branch {
-          leaf: Shared<Leaf> | null = null;
+          leaf: share<Leaf> | null = null;
         }
         class Leaf {
-          root: Shared<Root> | null = null;
+          root: share<Root> | null = null;
         }
       `;
       
@@ -432,9 +432,9 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     it('should allow mixed ownership types', () => {
       const source = `
         class Manager {
-          ownedItems: Unique<Item>[] = [];
-          sharedResource: Shared<Resource> | null = null;
-          weakRef: Weak<Item> = null;
+          ownedItems: own<Item>[] = [];
+          sharedResource: share<Resource> | null = null;
+          weakRef: use<Item> = null;
         }
         class Item {
           id: number = 0;
@@ -454,11 +454,11 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     it('should detect cycles through interfaces', () => {
       const source = `
         interface INode {
-          next: Shared<INode> | null;
+          next: share<INode> | null;
         }
         
         class Node implements INode {
-          next: Shared<INode> | null = null;
+          next: share<INode> | null = null;
         }
       `;
       
@@ -469,7 +469,7 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     it('should allow acyclic interface relationships', () => {
       const source = `
         interface IParent {
-          child: Shared<IChild> | null;
+          child: share<IChild> | null;
         }
         
         interface IChild {
@@ -477,7 +477,7 @@ describe('Phase 2: Ownership Cycle Detection', () => {
         }
         
         class Parent implements IParent {
-          child: Shared<IChild> | null = null;
+          child: share<IChild> | null = null;
         }
       `;
       

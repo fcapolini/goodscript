@@ -9,13 +9,13 @@ import { compileWithOwnership, hasError, getErrors } from './test-helpers';
 
 describe('Phase 2: Wrong Ownership Choices', () => {
   
-  describe('Choosing Shared<T> for circular references', () => {
+  describe('Choosing share<T> for circular references', () => {
     
-    it('should error with GS301 for doubly-linked list using Shared<T>', () => {
+    it('should error with GS301 for doubly-linked list using share<T>', () => {
       const source = `
         class Node {
-          prev: Shared<Node> | null = null;
-          next: Shared<Node> | null = null;
+          prev: share<Node> | null = null;
+          next: share<Node> | null = null;
         }
       `;
       
@@ -32,14 +32,14 @@ describe('Phase 2: Wrong Ownership Choices', () => {
       expect(errors[0].message).toContain('Pool Pattern');
     });
     
-    it('should error with GS301 for parent-child using Shared<T> both ways', () => {
+    it('should error with GS301 for parent-child using share<T> both ways', () => {
       const source = `
         class Parent {
-          child: Shared<Child> | null = null;
+          child: share<Child> | null = null;
         }
         
         class Child {
-          parent: Shared<Parent> | null = null;  // Wrong! Should be Weak
+          parent: share<Parent> | null = null;  // Wrong! Should be Weak
         }
       `;
       
@@ -48,17 +48,17 @@ describe('Phase 2: Wrong Ownership Choices', () => {
       
       const errors = getErrors(result.diagnostics, 'GS301');
       expect(errors[0].message).toContain('cannot own each other');
-      expect(errors[0].message).toContain('Use Weak<T>');
+      expect(errors[0].message).toContain('Use use<T>');
     });
   });
   
-  describe('Choosing Unique<T> for shared references', () => {
+  describe('Choosing own<T> for shared references', () => {
     
     it('should compile but lose sharing semantics', () => {
       // This compiles but may not behave as expected in practice
       const source = `
         class Cache {
-          data: Unique<Data> | null = null;  // Can't share!
+          data: own<Data> | null = null;  // Can't share!
         }
         
         class Data {
@@ -77,13 +77,13 @@ describe('Phase 2: Wrong Ownership Choices', () => {
     });
   });
   
-  describe('Forgetting Weak<T> for back-references', () => {
+  describe('Forgetting use<T> for back-references', () => {
     
-    it('should error when tree parent uses Shared<T> instead of Weak<T>', () => {
+    it('should error when tree parent uses share<T> instead of use<T>', () => {
       const source = `
         class TreeNode {
-          children: Shared<TreeNode>[] = [];
-          parent: Shared<TreeNode> | null = null;  // Wrong! Creates cycle
+          children: share<TreeNode>[] = [];
+          parent: share<TreeNode> | null = null;  // Wrong! Creates cycle
         }
       `;
       
@@ -94,11 +94,11 @@ describe('Phase 2: Wrong Ownership Choices', () => {
       expect(errors[0].message).toContain('Ownership cycle');
     });
     
-    it('should succeed when using Weak<T> for parent', () => {
+    it('should succeed when using use<T> for parent', () => {
       const source = `
         class TreeNode {
-          children: Shared<TreeNode>[] = [];
-          parent: Weak<TreeNode> = null;  // Correct! Breaks cycle
+          children: share<TreeNode>[] = [];
+          parent: use<TreeNode> = null;  // Correct! Breaks cycle
         }
       `;
       
@@ -110,12 +110,12 @@ describe('Phase 2: Wrong Ownership Choices', () => {
     it('should succeed with proper tree structure', () => {
       const source = `
         class Tree {
-          root: Unique<TreeNode> | null = null;  // Tree owns root
+          root: own<TreeNode> | null = null;  // Tree owns root
         }
         
         class TreeNode {
-          children: Unique<TreeNode>[] = [];  // Parent owns children
-          parent: Weak<TreeNode> = null;      // Child doesn't own parent
+          children: own<TreeNode>[] = [];  // Parent owns children
+          parent: use<TreeNode> = null;      // Child doesn't own parent
         }
       `;
       
@@ -129,15 +129,15 @@ describe('Phase 2: Wrong Ownership Choices', () => {
     
     it('should work when using Pool Pattern correctly', () => {
       const source = `
-        // The pool owns all nodes with Unique<T>
+        // The pool owns all nodes with own<T>
         class NodePool {
-          nodes: Unique<Node>[] = [];
+          nodes: own<Node>[] = [];
         }
         
-        // Nodes reference each other with Weak<T>
+        // Nodes reference each other with use<T>
         class Node {
-          prev: Weak<Node> = null;
-          next: Weak<Node> = null;
+          prev: use<Node> = null;
+          next: use<Node> = null;
         }
       `;
       
@@ -150,17 +150,17 @@ describe('Phase 2: Wrong Ownership Choices', () => {
   
   describe('Real consequences in generated code', () => {
     
-    it('demonstrates the issue: Shared<T> cycle would leak in native target', () => {
+    it('demonstrates the issue: share<T> cycle would leak in native target', () => {
       // This is what developers might try:
       const source = `
         class LRUCache {
-          head: Shared<Node> | null = null;
-          tail: Shared<Node> | null = null;
+          head: share<Node> | null = null;
+          tail: share<Node> | null = null;
         }
         
         class Node {
-          prev: Shared<Node> | null = null;  // Creates reference cycle
-          next: Shared<Node> | null = null;  // These Rc references form a cycle
+          prev: share<Node> | null = null;  // Creates reference cycle
+          next: share<Node> | null = null;  // These Rc references form a cycle
           value: number = 0;
         }
       `;
@@ -182,14 +182,14 @@ describe('Phase 2: Wrong Ownership Choices', () => {
     it('shows the correct solution using Pool Pattern', () => {
       const source = `
         class LRUCache {
-          nodes: Unique<Node>[] = [];      // Arena owns all nodes
-          head: Weak<Node> = null;          // Just a reference
-          tail: Weak<Node> = null;          // Just a reference
+          nodes: own<Node>[] = [];      // Arena owns all nodes
+          head: use<Node> = null;          // Just a reference
+          tail: use<Node> = null;          // Just a reference
         }
         
         class Node {
-          prev: Weak<Node> = null;          // Non-owning references
-          next: Weak<Node> = null;          // Can't form reference cycle
+          prev: use<Node> = null;          // Non-owning references
+          next: use<Node> = null;          // Can't form reference cycle
           value: number = 0;
         }
       `;

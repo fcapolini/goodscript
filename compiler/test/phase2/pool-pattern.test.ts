@@ -4,7 +4,7 @@
  * Tests for the Pool Pattern - a fundamental pattern in GoodScript that allows
  * self-referential data structures while maintaining DAG ownership properties.
  * 
- * Pattern: Central ownership (Unique<T>[]) + Weak references for structure
+ * Pattern: Central ownership (own<T>[]) + Weak references for structure
  * 
  * See: POOL-PATTERN.md for detailed documentation
  */
@@ -19,12 +19,12 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept simple Pool Pattern for linked list', () => {
       const source = `
         class NodePool {
-          nodes: Unique<Node>[] = [];
-          head: Weak<Node> = null;
+          nodes: own<Node>[] = [];
+          head: use<Node> = null;
         }
         
         class Node {
-          next: Weak<Node> = null;
+          next: use<Node> = null;
           value: number = 0;
         }
       `;
@@ -36,14 +36,14 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept doubly-linked list with Pool Pattern', () => {
       const source = `
         class DoublyLinkedList {
-          nodes: Unique<ListNode>[] = [];
-          head: Weak<ListNode> = null;
-          tail: Weak<ListNode> = null;
+          nodes: own<ListNode>[] = [];
+          head: use<ListNode> = null;
+          tail: use<ListNode> = null;
         }
         
         class ListNode {
-          next: Weak<ListNode> = null;
-          prev: Weak<ListNode> = null;
+          next: use<ListNode> = null;
+          prev: use<ListNode> = null;
           data: string = '';
         }
       `;
@@ -55,14 +55,14 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept binary tree with Pool Pattern', () => {
       const source = `
         class BinaryTree {
-          nodes: Unique<TreeNode>[] = [];
-          root: Weak<TreeNode> = null;
+          nodes: own<TreeNode>[] = [];
+          root: use<TreeNode> = null;
         }
         
         class TreeNode {
-          left: Weak<TreeNode> = null;
-          right: Weak<TreeNode> = null;
-          parent: Weak<TreeNode> = null;
+          left: use<TreeNode> = null;
+          right: use<TreeNode> = null;
+          parent: use<TreeNode> = null;
           value: number = 0;
         }
       `;
@@ -74,13 +74,13 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept general tree with children array', () => {
       const source = `
         class Tree {
-          nodes: Unique<TreeNode>[] = [];
-          root: Weak<TreeNode> = null;
+          nodes: own<TreeNode>[] = [];
+          root: use<TreeNode> = null;
         }
         
         class TreeNode {
-          children: Weak<TreeNode>[] = [];
-          parent: Weak<TreeNode> = null;
+          children: use<TreeNode>[] = [];
+          parent: use<TreeNode> = null;
           value: string = '';
         }
       `;
@@ -92,11 +92,11 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept graph with Pool Pattern', () => {
       const source = `
         class Graph {
-          nodes: Unique<GraphNode>[] = [];
+          nodes: own<GraphNode>[] = [];
         }
         
         class GraphNode {
-          edges: Weak<GraphNode>[] = [];
+          edges: use<GraphNode>[] = [];
           id: string = '';
         }
       `;
@@ -111,12 +111,12 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept skip list with multiple levels', () => {
       const source = `
         class SkipList {
-          nodes: Unique<SkipNode>[] = [];
-          head: Weak<SkipNode> = null;
+          nodes: own<SkipNode>[] = [];
+          head: use<SkipNode> = null;
         }
         
         class SkipNode {
-          next: Weak<SkipNode>[] = [];
+          next: use<SkipNode>[] = [];
           value: number = 0;
         }
       `;
@@ -128,12 +128,12 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept adjacency list graph with Map', () => {
       const source = `
         class Graph {
-          nodes: Unique<GraphNode>[] = [];
-          adjacency: Map<string, Weak<GraphNode>[]> = new Map();
+          nodes: own<GraphNode>[] = [];
+          adjacency: Map<string, use<GraphNode>[]> = new Map();
         }
         
         class GraphNode {
-          neighbors: Set<Weak<GraphNode>> = new Set();
+          neighbors: Set<use<GraphNode>> = new Set();
           id: string = '';
         }
       `;
@@ -145,16 +145,16 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept tree with metadata and weak back-references', () => {
       const source = `
         class DocumentTree {
-          nodes: Unique<DocumentNode>[] = [];
-          root: Weak<DocumentNode> = null;
-          index: Map<string, Weak<DocumentNode>> = new Map();
+          nodes: own<DocumentNode>[] = [];
+          root: use<DocumentNode> = null;
+          index: Map<string, use<DocumentNode>> = new Map();
         }
         
         class DocumentNode {
-          children: Weak<DocumentNode>[] = [];
-          parent: Weak<DocumentNode> = null;
-          nextSibling: Weak<DocumentNode> = null;
-          prevSibling: Weak<DocumentNode> = null;
+          children: use<DocumentNode>[] = [];
+          parent: use<DocumentNode> = null;
+          nextSibling: use<DocumentNode> = null;
+          prevSibling: use<DocumentNode> = null;
           id: string = '';
           content: string = '';
         }
@@ -167,14 +167,14 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept scene graph with transformations', () => {
       const source = `
         class SceneGraph {
-          nodes: Unique<SceneNode>[] = [];
-          root: Weak<SceneNode> = null;
+          nodes: own<SceneNode>[] = [];
+          root: use<SceneNode> = null;
         }
         
         class SceneNode {
-          children: Weak<SceneNode>[] = [];
-          parent: Weak<SceneNode> = null;
-          transform: Unique<Transform> = new Transform();
+          children: use<SceneNode>[] = [];
+          parent: use<SceneNode> = null;
+          transform: own<Transform> = new Transform();
         }
         
         class Transform {
@@ -194,7 +194,7 @@ describe('Phase 2: Pool Pattern', () => {
     it('should reject self-referential structure without pool', () => {
       const source = `
         class Node {
-          next: Shared<Node> | null = null;
+          next: share<Node> | null = null;
           value: number = 0;
         }
       `;
@@ -206,8 +206,8 @@ describe('Phase 2: Pool Pattern', () => {
     it('should reject tree without pool (Shared ownership)', () => {
       const source = `
         class TreeNode {
-          left: Shared<TreeNode> | null = null;
-          right: Shared<TreeNode> | null = null;
+          left: share<TreeNode> | null = null;
+          right: share<TreeNode> | null = null;
           value: number = 0;
         }
       `;
@@ -219,7 +219,7 @@ describe('Phase 2: Pool Pattern', () => {
     it('should reject graph without pool (Shared ownership)', () => {
       const source = `
         class GraphNode {
-          edges: Shared<GraphNode>[] = [];
+          edges: share<GraphNode>[] = [];
           id: string = '';
         }
       `;
@@ -234,18 +234,18 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept multiple independent pools', () => {
       const source = `
         class Application {
-          treePool: Unique<TreeNode>[] = [];
-          listPool: Unique<ListNode>[] = [];
+          treePool: own<TreeNode>[] = [];
+          listPool: own<ListNode>[] = [];
         }
         
         class TreeNode {
-          children: Weak<TreeNode>[] = [];
-          parent: Weak<TreeNode> = null;
+          children: use<TreeNode>[] = [];
+          parent: use<TreeNode> = null;
         }
         
         class ListNode {
-          next: Weak<ListNode> = null;
-          prev: Weak<ListNode> = null;
+          next: use<ListNode> = null;
+          prev: use<ListNode> = null;
         }
       `;
       
@@ -256,13 +256,13 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept pool with Shared cross-references to other types', () => {
       const source = `
         class DocumentManager {
-          nodes: Unique<DocumentNode>[] = [];
-          metadata: Shared<Metadata> | null = null;
+          nodes: own<DocumentNode>[] = [];
+          metadata: share<Metadata> | null = null;
         }
         
         class DocumentNode {
-          children: Weak<DocumentNode>[] = [];
-          parent: Weak<DocumentNode> = null;
+          children: use<DocumentNode>[] = [];
+          parent: use<DocumentNode> = null;
         }
         
         class Metadata {
@@ -278,21 +278,21 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept nested pools (pool of pools)', () => {
       const source = `
         class Application {
-          forests: Unique<Forest>[] = [];
+          forests: own<Forest>[] = [];
         }
         
         class Forest {
-          trees: Unique<Tree>[] = [];
+          trees: own<Tree>[] = [];
         }
         
         class Tree {
-          nodes: Unique<TreeNode>[] = [];
-          root: Weak<TreeNode> = null;
+          nodes: own<TreeNode>[] = [];
+          root: use<TreeNode> = null;
         }
         
         class TreeNode {
-          children: Weak<TreeNode>[] = [];
-          parent: Weak<TreeNode> = null;
+          children: use<TreeNode>[] = [];
+          parent: use<TreeNode> = null;
         }
       `;
       
@@ -306,11 +306,11 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept generic pool pattern', () => {
       const source = `
         class Pool<T> {
-          items: Unique<T>[] = [];
+          items: own<T>[] = [];
         }
         
         class Node {
-          next: Weak<Node> = null;
+          next: use<Node> = null;
           value: number = 0;
         }
         
@@ -324,13 +324,13 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept generic tree pool', () => {
       const source = `
         class TreePool<T> {
-          nodes: Unique<TreeNode<T>>[] = [];
-          root: Weak<TreeNode<T>> = null;
+          nodes: own<TreeNode<T>>[] = [];
+          root: use<TreeNode<T>> = null;
         }
         
         class TreeNode<T> {
-          children: Weak<TreeNode<T>>[] = [];
-          parent: Weak<TreeNode<T>> = null;
+          children: use<TreeNode<T>>[] = [];
+          parent: use<TreeNode<T>> = null;
           data: T | null = null;
         }
       `;
@@ -345,7 +345,7 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept arena pattern for temporary allocations', () => {
       const source = `
         class Arena {
-          nodes: Unique<Node>[] = [];
+          nodes: own<Node>[] = [];
           
           clear(): void {
             this.nodes = [];
@@ -353,7 +353,7 @@ describe('Phase 2: Pool Pattern', () => {
         }
         
         class Node {
-          next: Weak<Node> = null;
+          next: use<Node> = null;
           data: number = 0;
         }
       `;
@@ -365,8 +365,8 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept arena with multiple node types', () => {
       const source = `
         class RenderArena {
-          vertices: Unique<Vertex>[] = [];
-          edges: Unique<Edge>[] = [];
+          vertices: own<Vertex>[] = [];
+          edges: own<Edge>[] = [];
           
           clear(): void {
             this.vertices = [];
@@ -375,13 +375,13 @@ describe('Phase 2: Pool Pattern', () => {
         }
         
         class Vertex {
-          edges: Weak<Edge>[] = [];
+          edges: use<Edge>[] = [];
           position: number[] = [];
         }
         
         class Edge {
-          from: Weak<Vertex> = null;
-          to: Weak<Vertex> = null;
+          from: use<Vertex> = null;
+          to: use<Vertex> = null;
         }
       `;
       
@@ -395,17 +395,17 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept DOM-like tree structure', () => {
       const source = `
         class Document {
-          nodes: Unique<Element>[] = [];
-          root: Weak<Element> = null;
+          nodes: own<Element>[] = [];
+          root: use<Element> = null;
           
-          getElementById(id: string): Weak<Element> {
+          getElementById(id: string): use<Element> {
             return null;
           }
         }
         
         class Element {
-          children: Weak<Element>[] = [];
-          parent: Weak<Element> = null;
+          children: use<Element>[] = [];
+          parent: use<Element> = null;
           tagName: string = '';
           id: string = '';
         }
@@ -418,17 +418,17 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept entity-component system', () => {
       const source = `
         class EntityManager {
-          entities: Unique<Entity>[] = [];
-          components: Unique<Component>[] = [];
+          entities: own<Entity>[] = [];
+          components: own<Component>[] = [];
         }
         
         class Entity {
-          components: Weak<Component>[] = [];
+          components: use<Component>[] = [];
           id: string = '';
         }
         
         class Component {
-          owner: Weak<Entity> = null;
+          owner: use<Entity> = null;
           type: string = '';
         }
       `;
@@ -440,14 +440,14 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept AST with symbol table', () => {
       const source = `
         class AST {
-          nodes: Unique<ASTNode>[] = [];
-          symbols: Map<string, Weak<ASTNode>> = new Map();
-          root: Weak<ASTNode> = null;
+          nodes: own<ASTNode>[] = [];
+          symbols: Map<string, use<ASTNode>> = new Map();
+          root: use<ASTNode> = null;
         }
         
         class ASTNode {
-          children: Weak<ASTNode>[] = [];
-          parent: Weak<ASTNode> = null;
+          children: use<ASTNode>[] = [];
+          parent: use<ASTNode> = null;
           type: string = '';
         }
       `;
@@ -459,14 +459,14 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept file system tree', () => {
       const source = `
         class FileSystem {
-          nodes: Unique<FileNode>[] = [];
-          root: Weak<FileNode> = null;
-          index: Map<string, Weak<FileNode>> = new Map();
+          nodes: own<FileNode>[] = [];
+          root: use<FileNode> = null;
+          index: Map<string, use<FileNode>> = new Map();
         }
         
         class FileNode {
-          children: Weak<FileNode>[] = [];
-          parent: Weak<FileNode> = null;
+          children: use<FileNode>[] = [];
+          parent: use<FileNode> = null;
           name: string = '';
           isDirectory: boolean = false;
         }
@@ -482,12 +482,12 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept pool with optional weak references', () => {
       const source = `
         class Pool {
-          nodes: Unique<Node>[] = [];
+          nodes: own<Node>[] = [];
         }
         
         class Node {
-          next: Weak<Node> = null;
-          prev: Weak<Node> = null;
+          next: use<Node> = null;
+          prev: use<Node> = null;
         }
       `;
       
@@ -498,11 +498,11 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept pool with Set of weak references', () => {
       const source = `
         class Pool {
-          nodes: Unique<Node>[] = [];
+          nodes: own<Node>[] = [];
         }
         
         class Node {
-          connections: Set<Weak<Node>> = new Set();
+          connections: Set<use<Node>> = new Set();
         }
       `;
       
@@ -513,11 +513,11 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept pool with Map of weak references', () => {
       const source = `
         class Pool {
-          nodes: Unique<Node>[] = [];
+          nodes: own<Node>[] = [];
         }
         
         class Node {
-          neighbors: Map<string, Weak<Node>> = new Map();
+          neighbors: Map<string, use<Node>> = new Map();
         }
       `;
       
@@ -528,7 +528,7 @@ describe('Phase 2: Pool Pattern', () => {
     it('should accept empty pool (no weak references needed)', () => {
       const source = `
         class Pool {
-          items: Unique<Item>[] = [];
+          items: own<Item>[] = [];
         }
         
         class Item {

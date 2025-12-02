@@ -23,7 +23,7 @@ describe('Phase 2: Ownership Analysis Overview', () => {
   it('should skip ownership checks with level="clean"', () => {
     const source = `
       class Node {
-        next: Shared<Node> | null = null;  // Would be error in dag mode
+        next: share<Node> | null = null;  // Would be error in dag mode
       }
     `;
     
@@ -34,9 +34,9 @@ describe('Phase 2: Ownership Analysis Overview', () => {
   it('should validate ownership types are recognized', () => {
     const source = `
       class Container {
-        unique_item: Unique<Item> | null = null;
-        shared_item: Shared<Item> | null = null;
-        weak_item: Weak<Item> = null;
+        unique_item: own<Item> | null = null;
+        shared_item: share<Item> | null = null;
+        weak_item: use<Item> = null;
       }
       
       class Item {
@@ -53,10 +53,10 @@ describe('Phase 2: Ownership Analysis Overview', () => {
     it('should report GS301 for ownership cycles', () => {
       const source = `
         class A {
-          b: Shared<B> | null = null;
+          b: share<B> | null = null;
         }
         class B {
-          a: Shared<A> | null = null;
+          a: share<A> | null = null;
         }
       `;
       
@@ -67,7 +67,7 @@ describe('Phase 2: Ownership Analysis Overview', () => {
     it('should report GS302 for missing null checks', () => {
       const source = `
         class Container {
-          item: Weak<Item> = null;
+          item: use<Item> = null;
           
           getValue(): number {
             return this.item.value;
@@ -90,13 +90,13 @@ describe('Phase 2: Ownership Analysis Overview', () => {
       const source = `
         // Pool Pattern: centralized ownership
         class TreeNode {
-          next: Weak<TreeNode> = null;
-          prev: Weak<TreeNode> = null;
+          next: use<TreeNode> = null;
+          prev: use<TreeNode> = null;
           value: number = 0;
         }
         
         class NodePool {
-          nodes: Unique<TreeNode>[] = [];
+          nodes: own<TreeNode>[] = [];
         }
       `;
       
@@ -114,11 +114,11 @@ describe('Phase 2: Ownership Analysis Overview', () => {
     it('should accept parent-child with weak back-reference', () => {
       const source = `
         class Parent {
-          children: Shared<Child>[] = [];
+          children: share<Child>[] = [];
         }
         
         class Child {
-          parent: Weak<Parent> = null;
+          parent: use<Parent> = null;
           value: string = '';
         }
       `;
@@ -130,7 +130,7 @@ describe('Phase 2: Ownership Analysis Overview', () => {
     it('should accept observer pattern with weak references', () => {
       const source = `
         class Subject {
-          observers: Weak<Observer>[] = [];
+          observers: use<Observer>[] = [];
           
           notify(): void {
             for (const obs of this.observers) {
@@ -154,7 +154,7 @@ describe('Phase 2: Ownership Analysis Overview', () => {
     it('should enforce ownership rules only in dag/native level', () => {
       const source = `
         class Node {
-          next: Shared<Node> | null = null;
+          next: share<Node> | null = null;
         }
       `;
       
