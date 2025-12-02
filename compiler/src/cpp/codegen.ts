@@ -658,7 +658,37 @@ export class AstCodegen {
     for (const member of node.members) {
       if (ts.isMethodDeclaration(member)) {
         const methodName = cppUtils.escapeName(member.name.getText());
-        const returnType = member.type ? this.mapType(member.type) : new ast.CppType('void');
+        
+        // Get return type: use explicit annotation if present, otherwise infer from TypeChecker
+        let returnType: ast.CppType;
+        if (member.type) {
+          returnType = this.mapType(member.type);
+        } else if (this.checker) {
+          // Use TypeChecker to infer return type
+          const signature = this.checker.getSignatureFromDeclaration(member);
+          if (signature) {
+            const tsReturnType = signature.getReturnType();
+            const returnTypeStr = this.checker.typeToString(tsReturnType);
+            
+            // Map TypeScript type string to C++ type
+            if (returnTypeStr === 'number') {
+              returnType = new ast.CppType('double');
+            } else if (returnTypeStr === 'string') {
+              returnType = new ast.CppType('gs::String');
+            } else if (returnTypeStr === 'boolean') {
+              returnType = new ast.CppType('bool');
+            } else if (returnTypeStr === 'void') {
+              returnType = new ast.CppType('void');
+            } else {
+              // For complex types, use auto for now
+              returnType = new ast.CppType('auto');
+            }
+          } else {
+            returnType = new ast.CppType('void');
+          }
+        } else {
+          returnType = new ast.CppType('void');
+        }
         
         // Track return type for null handling in return statements
         const previousReturnType = this.currentFunctionReturnType;

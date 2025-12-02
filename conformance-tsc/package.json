@@ -1,0 +1,39 @@
+{
+  "name": "@goodscript/conformance-tsc",
+  "version": "0.1.0",
+  "description": "TypeScript compiler conformance tests for GoodScript",
+  "type": "module",
+  "scripts": {
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "test:classes": "vitest --run classes.test",
+    "test:classes:batch1": "vitest --run -t 'Batch 1'",
+    "test:classes:batch2": "vitest --run -t 'Batch 2'",
+    "test:classes:batch3": "vitest --run -t 'Batch 3'",
+    "test:classes:batch4": "vitest --run -t 'Batch 4'",
+    "test:classes:batch5": "vitest --run -t 'Batch 5'",
+    "test:classes:batch6": "vitest --run -t 'Batch 6'",
+    "test:classes:summary": "vitest --run -t 'Summary'",
+    "test:native": "TEST_NATIVE=1 vitest",
+    "test:native:batch1": "TEST_NATIVE=1 vitest --run -t 'Batch 1'",
+    "test:native:summary": "TEST_NATIVE=1 vitest --run -t 'Summary'",
+    "test:controlFlow": "vitest --run controlFlow.test",
+    "test:es6": "vitest --run es6.test"
+  },
+  "keywords": [
+    "goodscript",
+    "typescript",
+    "conformance",
+    "testing"
+  ],
+  "author": "GoodScript Contributors",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.4"
+  },
+  "dependencies": {
+    "goodscript": "file:../compiler"
+  }
+}

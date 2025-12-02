@@ -1,0 +1,109 @@
+/**
+ * Test filters for TypeScript conformance tests
+ * 
+ * Determines which tests should run based on GoodScript feature support
+ */
+
+import { TscTest } from '../utils/baseline';
+
+export interface FilterResult {
+  shouldRun: boolean;
+  reason?: string;
+}
+
+/**
+ * Determine if a test should run based on its content
+ */
+export function shouldRunTest(test: TscTest): FilterResult {
+  const { source, name } = test;
+  
+  // Skip .d.ts declaration files (type-only, no runtime code)
+  if (name.endsWith('.d')) {
+    return {
+      shouldRun: false,
+      reason: 'Test is a .d.ts declaration file (type-only)'
+    };
+  }
+  
+  // Skip tests using var keyword (GS105)
+  if (source.includes('var ')) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses var keyword (GS105)'
+    };
+  }
+  
+  // Skip tests using == or != operators (GS106)
+  if (source.includes(' == ') || source.includes(' != ')) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses == or != operators (GS106)'
+    };
+  }
+  
+  // Skip tests using eval (GS102)
+  if (source.includes('eval(')) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses eval (GS102)'
+    };
+  }
+  
+  // Skip tests using with statement (GS101)
+  if (source.includes('with (') || source.includes('with(')) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses with statement (GS101)'
+    };
+  }
+  
+  // Skip tests using 'any' type (GoodScript restriction)
+  if (source.match(/:\s*any\b/) || source.match(/<any>/)) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses any type (GoodScript restriction)'
+    };
+  }
+  
+  // Skip decorator tests (future feature)
+  if (source.includes('@') && source.match(/@\w+/)) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses decorators (future feature)'
+    };
+  }
+  
+  // Skip dynamic import tests (Phase 4)
+  if (source.includes('import(')) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses dynamic imports (Phase 4)'
+    };
+  }
+  
+  // Skip tests with module/namespace exports (Phase 4)
+  if (source.includes('export ') || source.includes('module ')) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses modules/exports (Phase 4)'
+    };
+  }
+  
+  // Skip tests using arguments object (not supported)
+  if (source.match(/\barguments\b/)) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses arguments object (not supported)'
+    };
+  }
+  
+  // Skip tests manipulating prototype
+  if (source.includes('.prototype')) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses prototype manipulation (not supported)'
+    };
+  }
+  
+  return { shouldRun: true };
+}
