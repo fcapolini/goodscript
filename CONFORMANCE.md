@@ -22,8 +22,10 @@ npm test
 ## What This Tests
 
 - **Language Semantics**: GoodScript's TypeScript subset behaves like JavaScript
-- **Type System**: Ownership types compile correctly to C++
-- **Runtime Equivalence**: JS and C++ outputs match
+- **Type System**: Type checking and compilation correctness
+- **Runtime Equivalence**: JS and C++ GC mode outputs match
+
+**Note**: Uses GC mode (`-DGS_GC_MODE`) for C++ compilation to provide simpler memory management closer to JavaScript's garbage collection semantics.
 
 See [conformance/README.md](conformance/README.md) for detailed documentation.
 

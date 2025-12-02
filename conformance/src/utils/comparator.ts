@@ -154,10 +154,11 @@ async function executeCpp(
     // Write C++ code
     await fs.writeFile(srcFile, code);
 
-    // Compile with g++ or clang++
+    // Compile with g++ or clang++ using GC mode (simpler, closer to JavaScript semantics)
     const compiler = process.env.CXX || 'g++';
+    const runtimePath = path.join(process.cwd(), '../compiler/runtime');
     await execAsync(
-      `${compiler} -std=c++20 -I${path.join(process.cwd(), '../compiler/runtime')} -o ${binFile} ${srcFile}`,
+      `${compiler} -std=c++20 -DGS_GC_MODE -I${runtimePath} -I${runtimePath}/gc -o ${binFile} ${srcFile}`,
       { timeout: timeout * 2 }
     );
 

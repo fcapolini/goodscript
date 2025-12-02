@@ -120,9 +120,11 @@ The test harness (`src/harness/`) adapts Test262 tests for GoodScript:
 
 1. **Filter**: Select tests matching GoodScript's feature set
 2. **Parse**: Extract test metadata (frontmatter, expected errors, features)
-3. **Compile**: Run GoodScript compiler (validate + codegen)
-4. **Execute**: Run both TypeScript (Node.js) and C++ versions
+3. **Compile**: Run GoodScript compiler (validate + codegen with GC mode)
+4. **Execute**: Run both TypeScript (Node.js) and C++ GC versions
 5. **Compare**: Verify identical behavior (output, errors, exceptions)
+
+**Note**: Conformance tests use GoodScript's **GC mode** for C++ compilation (`-DGS_GC_MODE`). This provides simpler memory management that's closer to JavaScript semantics, making it ideal for validating language behavior without the complexity of ownership types.
 
 ### Test262 Metadata
 

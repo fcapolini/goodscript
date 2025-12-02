@@ -71,10 +71,10 @@ Test262 Test (JavaScript)
           ↓
     Feature Filtering ───→ Skip if unsupported
           ↓
-    GoodScript Compile
+    GoodScript Compile (GC Mode)
       /           \
      /             \
-JavaScript      C++ Binary
+JavaScript      C++ GC Binary
 Execution       Execution
      \             /
       \           /
@@ -82,6 +82,8 @@ Execution       Execution
           ↓
     ✓ Pass / ✗ Fail
 ```
+
+**Note**: Uses GC mode (`-DGS_GC_MODE`) for simpler semantics closer to JavaScript.
 
 ## Feature Support
 

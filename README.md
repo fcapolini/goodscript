@@ -351,6 +351,8 @@ npm test:coverage   # Generate coverage report
 
 See [CONFORMANCE.md](CONFORMANCE.md) and [conformance/README.md](conformance/README.md) for details.
 
+**Note**: Conformance tests use **GC mode** for C++ compilation to provide memory management semantics closer to JavaScript's garbage collection.
+
 **Target:** 95%+ pass rate for GoodScript-supported features.
 
 ---

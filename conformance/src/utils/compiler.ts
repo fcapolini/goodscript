@@ -1,5 +1,8 @@
 /**
  * GoodScript compiler wrapper for conformance testing
+ * 
+ * Uses GC mode for C++ compilation to provide simpler memory management
+ * that's closer to JavaScript semantics, making conformance testing more reliable.
  */
 
 import * as ts from 'typescript';
@@ -10,6 +13,7 @@ import { CppCodegen } from 'goodscript/dist/cpp/codegen';
 export interface CompileOptions {
   strict?: boolean;
   generateCpp?: boolean;
+  useGcMode?: boolean;  // Default true for conformance testing
 }
 
 export interface CompileResult {
@@ -92,7 +96,9 @@ export async function compileGoodScript(
     let cppCode: string | undefined;
     if (options.generateCpp) {
       const codegen = new CppCodegen(program, checker);
-      cppCode = codegen.generate(sourceFile);
+      // Use GC mode by default for conformance testing (simpler, closer to JS semantics)
+      const useGc = options.useGcMode !== false;
+      cppCode = codegen.generate(sourceFile, useGc);
     }
 
     return {

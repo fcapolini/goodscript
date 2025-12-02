@@ -70,11 +70,17 @@ Each test runs in **two modes** to validate equivalence:
 - Execute code in Node.js runtime
 - Capture stdout, stderr, exit code
 
-**C++ Mode:**
-- Generate C++ code (Phase 3)
-- Compile with g++/clang++ (std=c++20)
-- Execute native binary
+**C++ Mode (GC):**
+- Generate C++ code (Phase 3) with GC mode enabled
+- Compile with g++/clang++ (std=c++20 -DGS_GC_MODE)
+- Execute native binary with garbage collection
 - Capture stdout, stderr, exit code
+
+**Why GC Mode?** Conformance testing uses GoodScript's GC mode instead of ownership mode because:
+- Simpler memory model closer to JavaScript's garbage collection
+- Avoids smart pointer complexity in generated code
+- Focuses on language semantics rather than memory management
+- More reliable for detecting behavioral differences
 
 **Comparison:**
 - Outputs must match exactly (after normalization)
