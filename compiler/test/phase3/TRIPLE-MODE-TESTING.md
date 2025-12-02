@@ -8,17 +8,17 @@ This document outlines how to extend triple-mode testing to all Phase 3 tests.
 
 ## Current Status
 
-**Test Breakdown** (1169 total tests):
+**Test Breakdown** (1206 total tests):
 - **Phase 1** (Validator): 315 tests - mode-independent
 - **Phase 2** (Ownership Analysis): 237 tests - ownership-mode specific  
-- **Phase 3** (C++ Codegen): 617 tests
+- **Phase 3** (C++ Codegen): 654 tests
   - **Basic tests**: 141 tests - original code generation tests
-  - **Triple-mode tests**: 144 tests - **full triple-mode testing** ✅ (10 primitives + 16 arrays + 6 classes + 17 control flow + 15 strings + 30 operators + 23 numbers + 27 booleans)
+  - **Triple-mode tests**: 181 tests - **full triple-mode testing** ✅ (10 primitives + 16 arrays + 6 classes + 17 control flow + 15 strings + 30 operators + 23 numbers + 27 booleans + 20 maps + 17 sets)
   - **Runtime tests**: 67 tests - ownership mode execution only
   - **Concrete Examples**: 186 tests - **full triple-mode testing** ✅
   - **Other**: 79 tests - various specialized tests
 
-**Triple-Mode Coverage**: 330/1169 tests (28%) have full triple-mode validation
+**Triple-Mode Coverage**: 367/1206 tests (30%) have full triple-mode validation
 
 ## New Infrastructure
 
@@ -193,9 +193,9 @@ npm test -- test/phase3/basic/primitives-triple-mode.test.ts --reporter=verbose
 
 ## Expected Impact
 
-**Current**: 330/1169 tests (28%) are triple-mode (186 concrete examples + 144 basic tests)  
-**After More Conversions**: ~430/1169 tests (37%) triple-mode  
-**After Full Migration**: ~730/1169 tests (62%) triple-mode  
+**Current**: 367/1206 tests (30%) are triple-mode (186 concrete examples + 181 basic tests)  
+**After More Conversions**: ~470/1206 tests (39%) triple-mode  
+**After Full Migration**: ~770/1206 tests (64%) triple-mode  
 
 (Phase 1 and Phase 2 tests remain mode-independent/ownership-specific)
 
@@ -270,13 +270,13 @@ const gcCodegen = new GcCodegen(checker);
 - [x] operators.test.ts conversion ✅ (30 tests - all operators)
 - [x] numbers.test.ts conversion ✅ (23 tests - number operations)
 - [x] booleans.test.ts conversion ✅ (27 tests - boolean operations)
+- [x] maps.test.ts conversion ✅ (20 tests - Map with iteration support)
+- [x] sets.test.ts conversion ✅ (17 tests - Set with iteration support)
 - [ ] js-cpp-semantics.test.ts conversion
 
 **Medium Priority**:
 - [ ] array-bounds.test.ts
 - [ ] functions.test.ts
-- [ ] maps.test.ts
-- [ ] sets.test.ts
 
 **Low Priority** (complex, ownership-specific):
 - [ ] ownership-types.test.ts (keep ownership-only)
@@ -295,9 +295,22 @@ const gcCodegen = new GcCodegen(checker);
 ✅ Operators tests converted and passing (operators-triple-mode.test.ts - 30 tests)
 ✅ Numbers tests converted and passing (numbers-triple-mode.test.ts - 23 tests)
 ✅ Booleans tests converted and passing (booleans-triple-mode.test.ts - 27 tests)
-✅ 144 basic tests converted (10+16+6+17+15+30+23+27)
+✅ Maps tests converted and passing (maps-basic-triple-mode.test.ts - 20 tests)
+✅ Sets tests converted and passing (sets-basic-triple-mode.test.ts - 17 tests)
+✅ 181 basic tests converted (10+16+6+17+15+30+23+27+20+17)
 ⏳ 200+ basic tests converted  
 ⏳ 50%+ of suitable basic tests converted
+
+**Collections Fully Tested** (Dec 2, 2025):
+- ✅ Map: set, get, has, delete, clear, size, keys(), values()
+  - Fixed map.get() pointer dereferencing in console.log
+  - Fixed Map.size() to exclude tombstones  
+  - Added type inference for map.keys() and map.values()
+  - Implemented Array.from() handling as no-op in C++
+- ✅ Set: add, has, delete, clear, size, values()
+  - Added Set::values() to GC runtime
+  - Added Array::includes() for order-independent testing
+  - Type inference for set.values()
 
 **Codegen Gaps Identified** (for future work):
 - Method chaining (`return this`) requires `shared_from_this()` in ownership mode
