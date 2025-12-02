@@ -409,6 +409,54 @@ export class OwnershipAnalyzer {
         this.addEdge(typeName, ownedType, 'alias', location);
       }
     }
+    // Handle mapped types: type Node = { [K in 'next' | 'prev']: share<Node> }
+    else if (ts.isMappedTypeNode(node.type)) {
+      const location = Parser.getLocation(node, sourceFile);
+      
+      // Extract ownership from the mapped type's value type
+      const ownedTypes = this.extractSharedOwnership(node.type, sourceFile, checker);
+      
+      // Create edges for each owned type
+      for (const ownedType of ownedTypes) {
+        this.addEdge(typeName, ownedType, '[mapped]', location);
+      }
+    }
+    // Handle conditional types: type Node<T> = T extends string ? { next: share<Node> } : { value: T }
+    else if (ts.isConditionalTypeNode(node.type)) {
+      const location = Parser.getLocation(node, sourceFile);
+      
+      // Extract from both branches - they might be type literals with share<T> fields
+      const extractFromBranch = (branch: ts.TypeNode): Set<string> => {
+        const owned = new Set<string>();
+        
+        // If branch is a type literal, extract from its properties
+        if (ts.isTypeLiteralNode(branch)) {
+          for (const member of branch.members) {
+            if (ts.isPropertySignature(member) && member.type) {
+              const memberOwned = this.extractSharedOwnership(member.type, sourceFile, checker);
+              memberOwned.forEach(t => owned.add(t));
+            }
+          }
+        } else {
+          // Otherwise use standard extraction
+          const branchOwned = this.extractSharedOwnership(branch, sourceFile, checker);
+          branchOwned.forEach(t => owned.add(t));
+        }
+        
+        return owned;
+      };
+      
+      const ownedTypes = new Set<string>();
+      const trueOwned = extractFromBranch(node.type.trueType);
+      const falseOwned = extractFromBranch(node.type.falseType);
+      trueOwned.forEach(t => ownedTypes.add(t));
+      falseOwned.forEach(t => ownedTypes.add(t));
+      
+      // Create edges for each owned type
+      for (const ownedType of ownedTypes) {
+        this.addEdge(typeName, ownedType, 'conditional', location);
+      }
+    }
   }
 
   /**
@@ -662,6 +710,25 @@ export class OwnershipAnalyzer {
       return ownedTypes;
     }
 
+    // Mapped types: { [K in 'next' | 'prev']: share<Node> }
+    if (ts.isMappedTypeNode(typeNode)) {
+      if (typeNode.type) {
+        const mappedOwned = this.extractSharedOwnership(typeNode.type, sourceFile, checker);
+        mappedOwned.forEach(t => ownedTypes.add(t));
+      }
+      return ownedTypes;
+    }
+
+    // Conditional types: T extends string ? { next: share<Node> } : { value: T }
+    if (ts.isConditionalTypeNode(typeNode)) {
+      // Analyze both the true and false branches
+      const trueOwned = this.extractSharedOwnership(typeNode.trueType, sourceFile, checker);
+      const falseOwned = this.extractSharedOwnership(typeNode.falseType, sourceFile, checker);
+      trueOwned.forEach(t => ownedTypes.add(t));
+      falseOwned.forEach(t => ownedTypes.add(t));
+      return ownedTypes;
+    }
+
     return ownedTypes;
   }
 
@@ -746,6 +813,25 @@ export class OwnershipAnalyzer {
         const memberOwned = this.extractSharedOwnershipWithSubstitution(member, sourceFile, checker, substitutionMap);
         memberOwned.forEach(t => ownedTypes.add(t));
       }
+      return ownedTypes;
+    }
+    
+    // Handle mapped types: { [K in 'next' | 'prev']: share<T> }
+    if (ts.isMappedTypeNode(typeNode)) {
+      if (typeNode.type) {
+        const mappedOwned = this.extractSharedOwnershipWithSubstitution(typeNode.type, sourceFile, checker, substitutionMap);
+        mappedOwned.forEach(t => ownedTypes.add(t));
+      }
+      return ownedTypes;
+    }
+    
+    // Handle conditional types: T extends string ? { next: share<U> } : { value: T }
+    if (ts.isConditionalTypeNode(typeNode)) {
+      // Analyze both branches
+      const trueOwned = this.extractSharedOwnershipWithSubstitution(typeNode.trueType, sourceFile, checker, substitutionMap);
+      const falseOwned = this.extractSharedOwnershipWithSubstitution(typeNode.falseType, sourceFile, checker, substitutionMap);
+      trueOwned.forEach(t => ownedTypes.add(t));
+      falseOwned.forEach(t => ownedTypes.add(t));
       return ownedTypes;
     }
     

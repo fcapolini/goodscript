@@ -104,20 +104,15 @@ describe('DAG Analysis Edge Cases', () => {
   });
 
   describe('Conditional types (if supported)', () => {
-    it('should handle conditional types with cycles', () => {
+    it('should detect cycle in conditional type with self-reference', () => {
       const code = `
-        type Node<T> = T extends string 
-          ? { next: share<Node<number>> } 
-          : { value: T };
-        
-        type StringNode = Node<string>;
+        type Node = number extends string
+          ? { value: number }
+          : { next: share<Node> };
       `;
       const result = compileWithOwnership(code);
-      // Conditional types are advanced TypeScript - might not be supported
-      if (!hasError(result.diagnostics, 'GS301')) {
-        console.log('ℹ️  Conditional types not analyzed (may be by design)');
-      }
-      expect(result.diagnostics.length).toBeGreaterThanOrEqual(0);
+      // Should detect the cycle in the false branch (which is always taken)
+      expect(hasError(result.diagnostics, 'GS301')).toBe(true);
     });
   });
 
@@ -129,10 +124,7 @@ describe('DAG Analysis Edge Cases', () => {
         };
       `;
       const result = compileWithOwnership(code);
-      if (!hasError(result.diagnostics, 'GS301')) {
-        console.log('⚠️  Mapped type cycle NOT detected - potential gap');
-      }
-      expect(result.diagnostics.length).toBeGreaterThanOrEqual(0);
+      expect(hasError(result.diagnostics, 'GS301')).toBe(true);
     });
   });
 
