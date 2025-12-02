@@ -163,15 +163,7 @@ export function shouldRunTest(test: Test262Test): FilterResult {
     };
   }
 
-  // GoodScript doesn't support function expressions/declarations (use arrow functions instead)
-  if (/function\s+\w+\s*\(/.test(test.code) || /:\s*function\s*\(/.test(test.code)) {
-    return {
-      shouldRun: false,
-      reason: 'Test uses function expressions/declarations (GS108)'
-    };
-  }
-
-  // Skip tests that expect ReferenceError from undeclared variables
+  // Skip tests using primitive wrapper constructors (new Boolean, new Number, new String)
   // (TypeScript/GoodScript catches these at compile time)
   if (test.negative?.type === 'ReferenceError' && 
       (test.negative.phase === 'parse' || test.negative.phase === 'runtime') &&
@@ -242,23 +234,6 @@ export function shouldRunTest(test: Test262Test): FilterResult {
     return {
       shouldRun: false,
       reason: 'Test uses primitive wrapper constructors (GS restriction)'
-    };
-  }
-
-  // Skip tests that explicitly test implicit truthy/falsy behavior
-  // GoodScript requires explicit boolean expressions (GS110)
-  if ((test.description || test.info || '').match(/evaluated to (true|false)|truthy|falsy|implicit.*boolean|ToBoolean/i)) {
-    return {
-      shouldRun: false,
-      reason: 'Test requires implicit truthy/falsy behavior (GS110)'
-    };
-  }
-  
-  // Also check if test contains if statements with non-boolean literals (common pattern)
-  if (/if\s*\(\s*(0|null|undefined|""|NaN|Infinity)\s*\)/.test(test.code)) {
-    return {
-      shouldRun: false,
-      reason: 'Test uses implicit truthy/falsy in if conditions (GS110)'
     };
   }
 

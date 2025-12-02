@@ -7,13 +7,23 @@ import * as ts from 'typescript';
 import { Diagnostic, SourceLocation, ValidationResult } from './types';
 import { Parser } from './parser';
 
+export interface ValidatorOptions {
+  /**
+   * Permissive mode for Test262 conformance testing
+   * Allows function expressions/declarations and implicit truthiness
+   */
+  permissive?: boolean;
+}
+
 export class Validator {
   private diagnostics: Diagnostic[] = [];
+  private options: ValidatorOptions = {};
 
   /**
    * Validate a source file against GoodScript rules
    */
-  validate(sourceFile: ts.SourceFile, checker: ts.TypeChecker): ValidationResult {
+  validate(sourceFile: ts.SourceFile, checker: ts.TypeChecker, options: ValidatorOptions = {}): ValidationResult {
+    this.options = options;
     this.diagnostics = [];
     this.visit(sourceFile, sourceFile, checker);
 
@@ -329,7 +339,8 @@ export class Validator {
       const isInterfaceMember = parent && parent.parent && ts.isInterfaceDeclaration(parent.parent);
       const isFunctionSignature = !node.body; // Function signature (no implementation)
       
-      if (!isMethod && !isInterfaceMember && !isFunctionSignature) {
+      // In permissive mode (Test262), allow function expressions/declarations
+      if (!this.options.permissive && !isMethod && !isInterfaceMember && !isFunctionSignature) {
         this.addError(
           'Function declarations and expressions are not allowed. Use arrow functions for lexical "this" binding, or class methods',
           location,
@@ -428,6 +439,11 @@ export class Validator {
    * Check for implicit truthy/falsy conditions (GS110)
    */
   private checkTruthyFalsy(node: ts.Node, sourceFile: ts.SourceFile, checker: ts.TypeChecker): void {
+    // In permissive mode (Test262), allow implicit truthiness
+    if (this.options.permissive) {
+      return;
+    }
+    
     // Check if statements
     if (ts.isIfStatement(node)) {
       this.checkConditionExpression(node.expression, sourceFile, checker);

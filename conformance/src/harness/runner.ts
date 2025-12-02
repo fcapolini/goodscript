@@ -61,7 +61,8 @@ export async function runTest262Test(
     // Compile with GoodScript
     const compileResult = await compileGoodScript(test.code, {
       strict: true,
-      generateCpp: !options.skipCppExecution
+      generateCpp: !options.skipCppExecution,
+      permissive: true  // Enable permissive mode for Test262
     });
 
     // Handle expected compilation errors

@@ -39,6 +39,7 @@ export interface CompileOptions {
   strict?: boolean;
   generateCpp?: boolean;
   useGcMode?: boolean;  // Default true for conformance testing
+  permissive?: boolean;  // Allow function expressions and implicit truthiness for Test262
 }
 
 export interface CompileResult {
@@ -91,7 +92,9 @@ export async function compileGoodScript(
 
     // Phase 1: Validate "Good Parts"
     const validator = new Validator();
-    const validationResult = validator.validate(sourceFile, checker);
+    const validationResult = validator.validate(sourceFile, checker, {
+      permissive: options.permissive ?? false
+    });
     if (!validationResult.success) {
       return {
         success: false,

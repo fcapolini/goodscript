@@ -106,4 +106,12 @@ export interface GoodScriptConfig {
    * Default: false
    */
   verbose?: boolean;
+  
+  /**
+   * Permissive mode for Test262 conformance testing
+   * Allows function expressions/declarations and implicit truthiness
+   * Still enforces memory safety (ownership/DAG)
+   * Default: false
+   */
+  permissive?: boolean;
 }
