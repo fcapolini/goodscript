@@ -175,4 +175,101 @@ describe('Phase 3: Map Basic (Triple-Mode)', () => {
       `);
     });
   });
+
+  describe('Map iteration', () => {
+    it('should return keys array in insertion order', () => {
+      expectTripleModeEquivalence(`
+        const map = new Map<string, number>();
+        map.set("first", 1);
+        map.set("second", 2);
+        map.set("third", 3);
+        const keys = Array.from(map.keys());
+        console.log(keys[0]);
+        console.log(keys[1]);
+        console.log(keys[2]);
+      `);
+    });
+
+    it('should return values array in insertion order', () => {
+      expectTripleModeEquivalence(`
+        const map = new Map<string, number>();
+        map.set("a", 100);
+        map.set("b", 200);
+        map.set("c", 300);
+        const values = Array.from(map.values());
+        console.log(values[0]);
+        console.log(values[1]);
+        console.log(values[2]);
+      `);
+    });
+
+    it('should preserve insertion order after updates', () => {
+      expectTripleModeEquivalence(`
+        const map = new Map<string, number>();
+        map.set("a", 1);
+        map.set("b", 2);
+        map.set("c", 3);
+        map.set("b", 999);
+        const keys = Array.from(map.keys());
+        console.log(keys[0]);
+        console.log(keys[1]);
+        console.log(keys[2]);
+        const values = Array.from(map.values());
+        console.log(values[0]);
+        console.log(values[1]);
+        console.log(values[2]);
+      `);
+    });
+
+    it('should maintain order after delete', () => {
+      expectTripleModeEquivalence(`
+        const map = new Map<string, number>();
+        map.set("a", 1);
+        map.set("b", 2);
+        map.set("c", 3);
+        map.set("d", 4);
+        map.delete("b");
+        const keys = Array.from(map.keys());
+        console.log(keys[0]);
+        console.log(keys[1]);
+        console.log(keys[2]);
+      `);
+    });
+
+    it('should handle keys/values on empty map', () => {
+      expectTripleModeEquivalence(`
+        const map = new Map<string, number>();
+        const keys = Array.from(map.keys());
+        const values = Array.from(map.values());
+        console.log(keys.length);
+        console.log(values.length);
+      `);
+    });
+
+    it('should handle keys/values after clear', () => {
+      expectTripleModeEquivalence(`
+        const map = new Map<string, number>();
+        map.set("a", 1);
+        map.set("b", 2);
+        map.clear();
+        const keys = Array.from(map.keys());
+        const values = Array.from(map.values());
+        console.log(keys.length);
+        console.log(values.length);
+      `);
+    });
+
+    it('should work with number keys', () => {
+      expectTripleModeEquivalence(`
+        const map = new Map<number, string>();
+        map.set(10, "ten");
+        map.set(20, "twenty");
+        map.set(30, "thirty");
+        const keys = Array.from(map.keys());
+        console.log(keys[0]);
+        console.log(keys[1]);
+        console.log(keys[2]);
+      `);
+    });
+  });
 });

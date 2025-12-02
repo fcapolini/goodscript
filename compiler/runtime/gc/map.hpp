@@ -229,6 +229,15 @@ public:
         return index_.size();
     }
 
+    // Forward declaration for Array<T>
+    template<typename T> friend class Array;
+
+    // Get keys as array
+    Array<K> keys() const;
+    
+    // Get values as array  
+    Array<V> values() const;
+
     // Iterators for range-based for loops (in insertion order, skip tombstones)
     iterator begin() { return iterator(items_.begin(), items_.end(), &index_); }
     iterator end() { return iterator(items_.end(), items_.end(), &index_); }
@@ -237,5 +246,34 @@ public:
     const_iterator cbegin() const { return const_iterator(items_.cbegin(), items_.cend(), &index_); }
     const_iterator cend() const { return const_iterator(items_.cend(), items_.cend(), &index_); }
 };
+
+// Include Array for keys()/values() implementations
+template<typename T> class Array;
+
+} // namespace gs
+
+// Include array.hpp after Map declaration to avoid circular dependency
+#include "array.hpp"
+
+namespace gs {
+
+// Implement keys() and values() after Array is defined
+template<typename K, typename V>
+Array<K> Map<K, V>::keys() const {
+    Array<K> result;
+    for (const auto& [key, value] : *this) {
+        result.push(key);
+    }
+    return result;
+}
+
+template<typename K, typename V>
+Array<V> Map<K, V>::values() const {
+    Array<V> result;
+    for (const auto& [key, value] : *this) {
+        result.push(value);
+    }
+    return result;
+}
 
 } // namespace gs

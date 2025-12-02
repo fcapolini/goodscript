@@ -5,11 +5,9 @@
 #include <unordered_set>
 #include <optional>
 #include <vector>
+#include "gs_array.hpp"
 
 namespace gs {
-
-// Forward declarations
-template<typename T> class Array;
 
 /**
  * GoodScript Map class - TypeScript-compatible map wrapper

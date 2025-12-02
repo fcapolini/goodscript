@@ -208,23 +208,65 @@ export class AstCodegen {
         }
       } else if (decl.initializer && ts.isCallExpression(decl.initializer) && this.checker) {
         // Infer type from function call return type
-        // Check if the call returns a nullable interface (Interface | null)
-        const returnType = this.checker.getTypeAtLocation(decl.initializer);
-        const returnTypeStr = this.checker.typeToString(returnType);
         
-        // Check for union type with null
-        if (returnTypeStr.includes(' | null')) {
-          // Extract the non-null type
-          const baseType = returnTypeStr.replace(' | null', '').trim();
-          // Check if it's an interface
-          if (this.interfaceNames.has(baseType)) {
-            // Map to shared_ptr<Interface> (which can be null)
-            cppType = new ast.CppType(`std::shared_ptr<gs::${baseType}>`);
+        // Special case: map.keys() and map.values() return Array types
+        if (ts.isPropertyAccessExpression(decl.initializer.expression)) {
+          const methodName = decl.initializer.expression.name.text;
+          if (methodName === 'keys' || methodName === 'values') {
+            const objExpr = decl.initializer.expression.expression;
+            const objType = this.checker.getTypeAtLocation(objExpr);
+            const objTypeStr = this.checker.typeToString(objType);
+            
+            // Match Map<K, V> type
+            const mapMatch = objTypeStr.match(/Map<([^,]+),\s*(.+)>/);
+            if (mapMatch) {
+              const keyType = mapMatch[1].trim();
+              const valueType = mapMatch[2].trim();
+              const elementType = methodName === 'keys' ? keyType : valueType;
+              const cppElementType = this.mapTypeScriptTypeToCpp(elementType);
+              cppType = new ast.CppType(`gs::Array<${cppElementType}>`);
+            } else {
+              cppType = new ast.CppType('auto');
+            }
+          } else {
+            // Check if the call returns a nullable interface (Interface | null)
+            const returnType = this.checker.getTypeAtLocation(decl.initializer);
+            const returnTypeStr = this.checker.typeToString(returnType);
+            
+            // Check for union type with null
+            if (returnTypeStr.includes(' | null')) {
+              // Extract the non-null type
+              const baseType = returnTypeStr.replace(' | null', '').trim();
+              // Check if it's an interface
+              if (this.interfaceNames.has(baseType)) {
+                // Map to shared_ptr<Interface> (which can be null)
+                cppType = new ast.CppType(`std::shared_ptr<gs::${baseType}>`);
+              } else {
+                cppType = new ast.CppType('auto');
+              }
+            } else {
+              cppType = new ast.CppType('auto');
+            }
+          }
+        } else {
+          // Check if the call returns a nullable interface (Interface | null)
+          const returnType = this.checker.getTypeAtLocation(decl.initializer);
+          const returnTypeStr = this.checker.typeToString(returnType);
+          
+          // Check for union type with null
+          if (returnTypeStr.includes(' | null')) {
+            // Extract the non-null type
+            const baseType = returnTypeStr.replace(' | null', '').trim();
+            // Check if it's an interface
+            if (this.interfaceNames.has(baseType)) {
+              // Map to shared_ptr<Interface> (which can be null)
+              cppType = new ast.CppType(`std::shared_ptr<gs::${baseType}>`);
+            } else {
+              cppType = new ast.CppType('auto');
+            }
           } else {
             cppType = new ast.CppType('auto');
           }
-        } else {
-          cppType = new ast.CppType('auto');
         }
       } else if (decl.initializer && ts.isObjectLiteralExpression(decl.initializer)) {
         // Object literal expression → gs::LiteralObject
@@ -2170,7 +2212,15 @@ export class AstCodegen {
       // Special case: console.log, Math.max, JSON.stringify, String.fromCharCode, etc.
       if (ts.isIdentifier(objNode)) {
         const objName = objNode.text;
-        if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON' || objName === 'Date' || objName === 'String') {
+        if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON' || objName === 'Date' || objName === 'String' || objName === 'Array') {
+          // Special case: Array.from(iterable) → just use the iterable directly
+          // In GoodScript, map.keys() and map.values() return arrays directly
+          // but in JavaScript they return iterators, so we need Array.from()
+          // In C++, we just use the value directly since it's already an array
+          if (objName === 'Array' && methodName === 'from') {
+            return args[0];
+          }
+          
           // For console.log specifically, dereference pointers from Map.get() calls
           const processedArgs = (objName === 'console' && methodName === 'log') ? 
             args.map((arg, index) => {
