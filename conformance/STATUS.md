@@ -1,32 +1,88 @@
 # Test262 Conformance Status
 
-**Last Updated**: December 2, 2024 (Evening - Final)
+**Last Updated**: December 2, 2024 (Evening - With Permissive Mode)
+
+## Overview
+
+GoodScript now supports **permissive mode** for Test262 conformance testing. This mode allows standard JavaScript features (function expressions, implicit truthiness) while maintaining memory safety through ownership/DAG validation.
 
 ## Overall Statistics
 
-- **Total Tests**: 110 ⬆️
-- **Passing**: 9 (64.3% pass rate on executed tests) ⬆️
-- **Failed**: 5 (down from 11 → 6 → 5)
-- **Skipped**: 96 (correctly filtered for GoodScript restrictions)
-- **Executed**: 14
+- **Total Tests**: 110
+- **Executed**: 20 (up from 14, +43%) ⬆️
+- **Passing**: 9 (45.0% pass rate)
+- **Failed**: 11
+- **Skipped**: 90 (correctly filtered)
+
+### Permissive Mode Impact
+
+**Before Permissive Mode**:
+- Executed: 14 tests
+- Pass rate: 64.3%
+- Many tests skipped for GS108 (function expressions) and GS110 (implicit truthiness)
+
+**With Permissive Mode**:
+- Executed: 20 tests (+43%)
+- Pass rate: 45.0%
+- More authentic conformance testing
+- Failures now highlight C++ codegen gaps vs validator restrictions
 
 ### Status by Category
 
-| Category | Total | Passed | Failed | Skipped | Pass Rate |
-|----------|-------|--------|--------|---------|-----------|
-| Numeric Literals | 5 | 2 | 0 | 3 | 100% ✅ |
-| Strict Equality | 15 | 4 | 0 | 11 | 100% ✅ |
-| If Statements | 10 | 3 | 1 | 6 | 75% 🟡 |
-| While Statements | 10 | 0 | 2 | 8 | 0% |
-| String Types | 10 | 0 | 0 | 10 | - |
-| Boolean Types | 5 | 0 | 2 | 3 | 0% |
-| Addition | 10 | 0 | 0 | 10 | - |
-| Logical AND | 10 | 0 | 0 | 10 | - |
-| Let Declarations | 10 | 0 | 0 | 10 | - |
-| Const Declarations | 10 | 0 | 0 | 10 | - |
-| Array Literals | 15 | 0 | 0 | 15 | - |
+| Category | Total | Passed | Failed | Skipped | Pass Rate | Notes |
+|----------|-------|--------|--------|---------|-----------|-------|
+| Numeric Literals | 5 | 2 | 0 | 3 | 100% ✅ | Stable |
+| Strict Equality | 15 | 4 | 0 | 11 | 100% ✅ | Stable |
+| If Statements | 10 | 3 | 4 | 3 | 43% 🟡 | More tests running |
+| Addition | 10 | 0 | 2 | 8 | 0% | C++ codegen issues |
+| Logical AND | 10 | 0 | 1 | 9 | 0% | Undeclared vars |
+| While Statements | 10 | 0 | 2 | 8 | 0% | C++ codegen issues |
+| Boolean Types | 5 | 0 | 2 | 3 | 0% | Error type mismatch |
+| String Types | 10 | 0 | 0 | 10 | - | Uses new String() |
+| Let Declarations | 10 | 0 | 0 | 10 | - | TDZ tests |
+| Const Declarations | 10 | 0 | 0 | 10 | - | TDZ tests |
+| Array Literals | 15 | 0 | 0 | 15 | - | Test harness deps |
 
-**Key Achievement**: Strict Equality improved from 57% to **100%** pass rate! ✨
+**Key**: ✅ Excellent (≥75%) | 🟡 Good (≥50%) | ⚠️ Needs Work (<50%)
+
+## Permissive Mode
+
+### What is Permissive Mode?
+
+Permissive mode is a compiler flag (`--permissive`) that relaxes GoodScript's "Good Parts" restrictions while **maintaining memory safety**. This enables more authentic ECMAScript conformance testing.
+
+### Allowed in Permissive Mode
+
+✅ **Function expressions/declarations** (normally GS108)
+```javascript
+// Allowed in permissive mode
+const obj = {
+  valueOf: function() { return 1; }
+};
+```
+
+✅ **Implicit truthy/falsy** (normally GS110)
+```javascript
+// Allowed in permissive mode
+if (0) { }
+if (null) { }
+if ("") { }
+```
+
+### Still Enforced in Permissive Mode
+
+❌ **Memory Safety** (ownership annotations, DAG validation)
+❌ **No var keyword** (GS105)
+❌ **No == operator** (GS106)  
+❌ **No eval/with** (GS101/GS102)
+❌ **No primitive wrappers** (GS116 - `new Boolean()`, etc.)
+
+### Why Permissive Mode?
+
+1. **Authentic Conformance**: Test262 uses standard JS patterns
+2. **Separation of Concerns**: Memory safety ≠ syntactic restrictions
+3. **Better Diagnostics**: Failures highlight real C++ codegen gaps
+4. **Gradual Adoption**: Strict mode for production, permissive for testing
 
 ## Known Issues
 
