@@ -170,7 +170,7 @@ public:
    * Equivalent to TypeScript: map.size
    */
   int size() const {
-    return static_cast<int>(items_.size());
+    return static_cast<int>(index_.size());
   }
   
   /**

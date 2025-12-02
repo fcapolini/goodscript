@@ -145,4 +145,34 @@ describe('Phase 3: Map Basic (Triple-Mode)', () => {
       `);
     });
   });
+
+  describe('Map delete', () => {
+    it('should delete entries', () => {
+      expectTripleModeEquivalence(`
+        const map = new Map<string, number>();
+        map.set("a", 1);
+        map.set("b", 2);
+        map.set("c", 3);
+        console.log(map.size);
+        map.delete("b");
+        console.log(map.size);
+        console.log(map.has("b"));
+      `);
+    });
+
+    it('should track size after deletes', () => {
+      expectTripleModeEquivalence(`
+        const map = new Map<string, number>();
+        console.log(map.size);
+        map.set("a", 1);
+        console.log(map.size);
+        map.set("b", 2);
+        console.log(map.size);
+        map.set("c", 3);
+        console.log(map.size);
+        map.delete("b");
+        console.log(map.size);
+      `);
+    });
+  });
 });
