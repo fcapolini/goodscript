@@ -39,16 +39,22 @@ GoodScript is a **TypeScript specialization** for safe systems programming with 
   - Implemented LiteralObject support for object literals (Dec 1, 2025)
   - Implemented optional field syntax (`field?: Type` → `std::optional<T>`) (Dec 1, 2025)
 
-### Phase 3.5: Conformance Testing (✅ Infrastructure Complete)
+### Phase 3.5: Conformance Testing (✅ Infrastructure Complete, 🚀 84.4% Native Pass Rate)
 - TypeScript Compiler (TSC) conformance suite integration
 - Dual-mode validation (JavaScript transpilation + optional C++ GC compilation)
 - Feature filtering for "Good Parts" subset
 - Automated test batching and execution
 - **Status**: Infrastructure 100% complete (Dec 2, 2024)
 - **JavaScript Mode**: ✅ 100% pass rate (17/17 eligible tests from Classes category)
-- **Native Mode**: ✅ First test passing (1/17), infrastructure validated
+- **Native Mode**: 🚀 84.4% pass rate (27/32 tests), **14x improvement** from initial 5.9%
 - **Achievement**: Successfully compiles TypeScript → C++ with MPS GC and executes
-- **Value**: Discovered and fixed codegen bug (method return type inference)
+- **Recent Improvements** (Dec 2, 2024):
+  - ✅ Auto-main() generation for declaration-only tests
+  - ✅ typeof keyword handling (maps to `auto` in C++)
+  - ✅ Function return type inference via TypeChecker
+  - ✅ Enhanced filters for TypeScript-specific features
+  - Remaining 5 failures are edge cases (super, overloads, arrow function types)
+- **Value**: Discovered and fixed multiple codegen bugs (method/function return types, typeof handling)
 - **Key files**: `conformance-tsc/src/harness/`, `conformance-tsc/src/suites/`
 - **Documentation**: `conformance-tsc/README.md`, `conformance-tsc/STATUS.md`
 
