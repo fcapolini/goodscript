@@ -13,7 +13,7 @@ import { Validator } from './validator';
 import { NullCheckAnalyzer } from './null-check-analyzer';
 import { TypeScriptCodegen } from './ts-codegen';
 import { AstCodegen } from './cpp/codegen'; // AST-based codegen with optional unwrapping
-import { GcCodegen } from './cpp/gc-codegen'; // GC-mode codegen
+import { GcAstCodegen } from './cpp/gc-ast-codegen'; // GC-mode AST codegen (efficient)
 import { Diagnostic, SourceLocation } from './types';
 
 export interface CompileOptions {
@@ -528,7 +528,7 @@ export class Compiler {
 
     // Create C++ codegen based on mode
     const cppCodegen = mode === 'gc' 
-      ? new GcCodegen(checker)
+      ? new GcAstCodegen(checker)  // Direct AST-based GC codegen (fast, efficient)
       : new AstCodegen(checker);
 
     // Process each GoodScript source file

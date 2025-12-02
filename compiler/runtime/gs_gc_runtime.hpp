@@ -9,6 +9,7 @@
 
 // MPS (Memory Pool System) garbage collector
 #include "gc/allocator.hpp"
+#include "gc/allocator-bump.hpp"  // Fast bump allocator for short-lived objects
 
 // GC runtime types
 #include "gc/string.hpp"

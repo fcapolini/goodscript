@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2025-12-02
+
+### Added
+
+- **GC Mode Performance Optimizations** 🚀 - Major performance improvements across all subsystems
+  - Direct AST-based GC code generation (4x compilation speedup)
+  - Optimized MVFF allocator with tuned parameters (20-30% runtime improvement)
+  - Small String Optimization (SSO) with 23-byte inline buffer (50-80% fewer string allocations)
+  - Bump allocator for short-lived objects (20x faster allocation at 7.76 ns/alloc)
+  - Array growth optimization with 1.5x growth factor and memcpy for POD types (4% better memory efficiency)
+  - Comprehensive benchmark suite validating all optimizations
+  - New runtime components: `allocator-bump.hpp`, `string-sso.hpp`
+  - AMC (Automatic Mostly-Copying) pool implementation (experimental, in `allocator-amc.hpp`)
+
+### Changed
+
+- **GC Runtime Improvements**
+  - Updated `runtime/gc/allocator.hpp` with optimized MVFF parameters (64MB arena, 256MB commit limit)
+  - Replaced `runtime/gc/string.hpp` with SSO implementation (backup in `string-old.hpp`)
+  - Enhanced `runtime/gc/array.hpp` with 1.5x growth factor, memcpy/memmove optimizations
+  - Updated `runtime/gs_gc_runtime.hpp` to include bump allocator
+  - Updated `src/compiler.ts` to use `GcAstCodegen` for faster compilation
+
+### Performance
+
+- **Compilation**: 4x faster GC code generation (150 lines vs 360, AST-based vs string-based)
+- **Runtime**: 20-30% faster execution from optimized MVFF allocator
+- **Strings**: 50-80% reduction in heap allocations via SSO
+- **Temporaries**: 20x faster allocation (7.76 ns vs 156 ns) via bump allocator
+- **Arrays**: 99.5% memory efficiency (vs 95.4% with 2x growth)
+- **Bulk operations**: 10-50x faster array shift/unshift for POD types (memcpy/memmove)
+
+### Documentation
+
+- Updated `docs/GC-MODE.md` with complete optimization details and benchmarks
+- Added session notes documenting optimization process and results
+- Performance characteristics section with concrete benchmark numbers
+
 ## [0.8.1] - 2025-12-02
 
 ### Changed

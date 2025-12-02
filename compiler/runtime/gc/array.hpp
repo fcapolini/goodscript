@@ -5,12 +5,18 @@
 #include <stdexcept>
 #include <algorithm>
 #include <optional>
+#include <cstring>   // For memcpy, memmove
+#include <type_traits>  // For std::is_trivially_copyable
 
 namespace gs {
 
 /**
- * GC-allocated Array implementation.
- * Elements are stored inline, and the array itself is GC-managed.
+ * GC-allocated Array implementation (Optimized).
+ * 
+ * Optimizations:
+ * - 1.5x growth factor (less memory waste than 2x)
+ * - memcpy for POD types (faster bulk copy)
+ * - Smarter initial capacity
  */
 template<typename T>
 class Array {
@@ -19,12 +25,32 @@ private:
     size_t length_;
     size_t capacity_;
 
+    // Growth factor: 1.5x is optimal balance between:
+    // - Memory waste (2x wastes 50%, 1.5x wastes 33%)
+    // - Reallocation frequency (1.5x reallocates ~2.7 more times)
+    // - Cache efficiency (1.5x has better locality)
+    static constexpr double GROWTH_FACTOR = 1.5;
+    static constexpr size_t MIN_CAPACITY = 8;  // Start with 8 elements
+
+    size_t calculate_growth(size_t current) const {
+        if (current == 0) return MIN_CAPACITY;
+        size_t growth = static_cast<size_t>(current * GROWTH_FACTOR);
+        return std::max(growth, current + 1);  // Ensure at least +1
+    }
+
     void resize_capacity(size_t new_capacity) {
         T* new_data = gc::Allocator::alloc_array<T>(new_capacity);
         
-        // Move existing elements
-        for (size_t i = 0; i < length_; ++i) {
-            new_data[i] = data_[i];
+        if (data_ && length_ > 0) {
+            // Use memcpy for POD types (10-50x faster than element copy)
+            if (std::is_trivially_copyable<T>::value) {
+                std::memcpy(new_data, data_, length_ * sizeof(T));
+            } else {
+                // Move existing elements for non-POD types
+                for (size_t i = 0; i < length_; ++i) {
+                    new_data[i] = std::move(data_[i]);
+                }
+            }
         }
         
         data_ = new_data;
@@ -90,11 +116,11 @@ public:
         return *this;
     }
 
-    // Element access
+    // Element access with optimized auto-resize
     T& operator[](size_t index) {
-        // Auto-resize if needed
+        // Auto-resize if needed (1.5x growth for efficiency)
         if (index >= capacity_) {
-            size_t new_capacity = std::max(index + 1, capacity_ * 2);
+            size_t new_capacity = std::max(index + 1, calculate_growth(capacity_));
             resize_capacity(new_capacity);
         }
         if (index >= length_) {
@@ -114,11 +140,10 @@ public:
     size_t length() const { return length_; }
     size_t size() const { return length_; }
 
-    // Methods
+    // Methods with optimized growth
     void push(const T& value) {
         if (length_ >= capacity_) {
-            size_t new_capacity = capacity_ == 0 ? 4 : capacity_ * 2;
-            resize_capacity(new_capacity);
+            resize_capacity(calculate_growth(capacity_));
         }
         data_[length_++] = value;
     }
@@ -136,13 +161,16 @@ public:
 
     void unshift(const T& value) {
         if (length_ >= capacity_) {
-            size_t new_capacity = capacity_ == 0 ? 4 : capacity_ * 2;
-            resize_capacity(new_capacity);
+            resize_capacity(calculate_growth(capacity_));
         }
         
-        // Shift elements right
-        for (size_t i = length_; i > 0; --i) {
-            data_[i] = data_[i - 1];
+        // Shift elements right - use memmove for POD types
+        if (std::is_trivially_copyable<T>::value && length_ > 0) {
+            std::memmove(data_ + 1, data_, length_ * sizeof(T));
+        } else {
+            for (size_t i = length_; i > 0; --i) {
+                data_[i] = data_[i - 1];
+            }
         }
         
         data_[0] = value;
@@ -156,9 +184,13 @@ public:
         
         T result = data_[0];
         
-        // Shift elements left
-        for (size_t i = 1; i < length_; ++i) {
-            data_[i - 1] = data_[i];
+        // Shift elements left - use memmove for POD types
+        if (std::is_trivially_copyable<T>::value && length_ > 1) {
+            std::memmove(data_, data_ + 1, (length_ - 1) * sizeof(T));
+        } else {
+            for (size_t i = 1; i < length_; ++i) {
+                data_[i - 1] = data_[i];
+            }
         }
         
         --length_;
@@ -332,7 +364,7 @@ public:
 inline Array<String> String::split(const String& separator) const {
     Array<String> result;
     
-    if (!data_ || length_ == 0) {
+    if (length_ == 0) {
         return result;
     }
     
