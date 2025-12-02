@@ -164,6 +164,43 @@ describe('DAG Analysis Edge Cases', () => {
     });
   });
 
+  describe('Intersection types', () => {
+    it('should detect cycle through intersection type alias', () => {
+      const code = `
+        type HasNext = { next: share<Node> };
+        type HasValue = { value: number };
+        type Node = HasNext & HasValue;
+      `;
+      const result = compileWithOwnership(code);
+      // Node inherits the 'next' field from HasNext, creating a cycle
+      expect(hasError(result.diagnostics, 'GS301')).toBe(true);
+    });
+
+    it('should detect cycle in field with intersection type', () => {
+      const code = `
+        type HasNext = { next: share<Node> };
+        type HasValue = { value: number };
+        type Node = {
+          data: HasNext & HasValue;
+        };
+      `;
+      const result = compileWithOwnership(code);
+      // Node -> data (intersection) -> next -> share<Node>
+      expect(hasError(result.diagnostics, 'GS301')).toBe(true);
+    });
+
+    it('should handle safe intersection types', () => {
+      const code = `
+        type HasValue = { value: number };
+        type HasId = { id: string };
+        type Node = HasValue & HasId;
+      `;
+      const result = compileWithOwnership(code);
+      // No share<T> in the intersection, so no cycle
+      expect(isSuccess(result)).toBe(true);
+    });
+  });
+
   describe('Complex nesting', () => {
     it('should detect cycle in deeply nested union', () => {
       const code = `
