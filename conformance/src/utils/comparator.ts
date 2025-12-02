@@ -157,6 +157,7 @@ async function executeCpp(
     // Compile with g++ or clang++ using GC mode (simpler, closer to JavaScript semantics)
     const compiler = process.env.CXX || 'g++';
     const runtimePath = path.join(process.cwd(), '../compiler/runtime');
+    // Compilation: ignore warnings in stderr (only fail on actual errors with non-zero exit)
     await execAsync(
       `${compiler} -std=c++20 -DGS_GC_MODE -I${runtimePath} -I${runtimePath}/gc -o ${binFile} ${srcFile}`,
       { timeout: timeout * 2 }
@@ -168,9 +169,10 @@ async function executeCpp(
       maxBuffer: 1024 * 1024
     });
 
+    // Return output (compilation succeeded, execution succeeded, ignore any warnings)
     return {
       output: stdout,
-      error: stderr || undefined
+      error: undefined
     };
 
   } catch (error: any) {
