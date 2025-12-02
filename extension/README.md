@@ -8,6 +8,7 @@ Language support for GoodScript - TypeScript without the bad parts.
 - **JSX/TSX Support**: Use `.gs.tsx` for React components with Phase 1 enforcement
 - **Zero Configuration**: Automatic setup - just open a `.gs.ts` or `.gs.tsx` file and start coding
 - **Real-time Validation**: Instant feedback on Phase 1 violations (var, ==, function keyword, etc.)
+- **Quick Fixes**: Intelligent code actions for common errors (e.g., add ownership qualifiers)
 - **Error Squiggles**: All GoodScript diagnostics shown as VS Code problems
 - **Incremental Adoption**: Mix `.gs.ts`, `.gs.tsx`, and `.ts` files in the same project
 
@@ -128,8 +129,34 @@ The extension shows all GoodScript compiler diagnostics:
 - **GS101-GS107**: Language restrictions (var, eval, ==, !=, etc.)
 - **GS201**: Type coercion not allowed
 - **GS301**: Missing null check on usage reference
+- **GS303**: Missing ownership annotation (naked class reference)
 
 And more!
+
+### Quick Fixes
+
+The extension provides intelligent quick fixes for common errors:
+
+**GS303 (Missing Ownership Annotation)**
+
+When you use a class type without an ownership qualifier:
+```typescript
+class Node {
+  next: Node | null = null;  // ❌ GS303: naked class reference
+}
+```
+
+Click the lightbulb 💡 to see quick fix options:
+- 🔒 **Wrap with own<Node>** - Exclusive ownership (unique_ptr)
+- 🔗 **Wrap with share<Node>** - Shared ownership (shared_ptr) [Preferred]
+- 👁️ **Wrap with use<Node>** - Non-owning reference (weak_ptr)
+
+Selecting an option automatically transforms your code:
+```typescript
+class Node {
+  next: share<Node> | null = null;  // ✅ Fixed!
+}
+```
 
 ## Commands
 
@@ -141,6 +168,14 @@ And more!
 - Requires GoodScript compiler to be installed separately
 
 ## Release Notes
+
+### 0.9.0
+
+Code Actions and Quick Fixes:
+- ✨ Added intelligent quick fixes for GS303 (naked class references)
+- 💡 Lightbulb suggestions with ownership qualifier options
+- 🎯 Context-aware code actions with helpful descriptions
+- 🚀 One-click fixes for missing ownership annotations
 
 ### 0.4.1
 

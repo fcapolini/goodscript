@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import { GoodScriptCodeActionProvider } from './codeActions';
 
 let diagnosticCollection: vscode.DiagnosticCollection;
 let validationTimeout: NodeJS.Timeout | undefined;
@@ -15,6 +16,20 @@ export function activate(context: vscode.ExtensionContext) {
   // Create diagnostic collection
   diagnosticCollection = vscode.languages.createDiagnosticCollection('goodscript');
   context.subscriptions.push(diagnosticCollection);
+
+  // Register code action provider for quick fixes
+  context.subscriptions.push(
+    vscode.languages.registerCodeActionsProvider(
+      [
+        { scheme: 'file', pattern: '**/*.gs.ts' },
+        { scheme: 'file', pattern: '**/*.gs.tsx' }
+      ],
+      new GoodScriptCodeActionProvider(),
+      {
+        providedCodeActionKinds: GoodScriptCodeActionProvider.providedCodeActionKinds
+      }
+    )
+  );
 
   // Validate on save
   context.subscriptions.push(
