@@ -20,7 +20,7 @@ export interface CompileOptions {
   files: string[];
   outDir?: string;
   target?: 'typescript' | 'native';  // Default: typescript
-  mode?: 'ownership' | 'gc';  // Memory management mode (native target only). Default: ownership
+  mode?: 'ownership' | 'gc';  // Memory management mode (native target only). Default: gc
   emit?: 'js' | 'ts' | 'both';  // Default: js (ts+js, emit both intermediate .ts and final .js)
   skipOwnershipChecks?: boolean;  // Skip ownership analysis ("Clean TypeScript" mode)
   project?: string;  // Path to tsconfig.json
@@ -207,7 +207,7 @@ export class Compiler {
         allDiagnostics.push(...tsDiagnostics);
       } else if (target === 'native') {
         try {
-          this.emitCpp(program, options.outDir, options.mode || 'ownership', options.compileBinary, options.arch);
+          this.emitCpp(program, options.outDir, options.mode || 'gc', options.compileBinary, options.arch);
         } catch (error: any) {
           allDiagnostics.push({
             severity: 'error',
@@ -499,7 +499,7 @@ export class Compiler {
   /**
    * Emit C++ code from GoodScript source files
    */
-  private emitCpp(program: ts.Program, outDir: string, mode: 'ownership' | 'gc' = 'ownership', compileBinary: boolean = false, arch?: string): void {
+  private emitCpp(program: ts.Program, outDir: string, mode: 'ownership' | 'gc' = 'gc', compileBinary: boolean = false, arch?: string): void {
     // Create output directory if it doesn't exist
     if (!fs.existsSync(outDir)) {
       fs.mkdirSync(outDir, { recursive: true });

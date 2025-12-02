@@ -112,7 +112,7 @@ Options:
   -o, --out-dir <dir>         Output directory for compiled files
   -p, --project <file>        Path to tsconfig.json (auto-detected from input files if not specified)
   -t, --target <target>       Target language: 'typescript' (default) or 'native'
-  -m, --mode <mode>           Memory management: 'ownership' (default) or 'gc' (use with -t native)
+  -m, --mode <mode>           Memory management: 'gc' (default) or 'ownership' (use with -t native)
   -e, --emit <format>         Output format: 'js' (default), 'ts', or 'both'
   -b, --compile-binary        Compile C++ to native binary (requires Zig, use with -t native)
   -a, --arch <architecture>   Target architecture for cross-compilation (e.g., x86_64-linux, aarch64-macos, wasm32-wasi)
