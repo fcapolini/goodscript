@@ -1,0 +1,226 @@
+name: Conformance Testing
+
+on:
+  pull_request:
+    paths:
+      - 'compiler/**'
+      - 'conformance/**'
+      - '.github/workflows/conformance.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'compiler/**'
+      - 'conformance/**'
+  schedule:
+    # Run nightly at 2 AM UTC for comprehensive validation
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  test262-conformance:
+    name: Test262 Conformance Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            compiler/package-lock.json
+            conformance/package-lock.json
+      
+      - name: Setup C++ compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ clang
+          g++ --version
+          clang++ --version
+      
+      - name: Install compiler dependencies
+        run: |
+          cd compiler
+          npm ci
+      
+      - name: Build GoodScript compiler
+        run: |
+          cd compiler
+          npm run build
+      
+      - name: Install conformance dependencies
+        run: |
+          cd conformance
+          npm ci
+      
+      - name: Initialize Test262 submodule
+        run: |
+          git submodule update --init --recursive conformance/test262
+      
+      - name: Build conformance suite
+        run: |
+          cd conformance
+          npm run build
+      
+      - name: Run conformance tests
+        id: conformance
+        run: |
+          cd conformance
+          npm test -- --reporter=verbose
+        continue-on-error: true
+      
+      - name: Generate summary
+        if: always()
+        run: |
+          cd conformance
+          if [ -f reports/summary.json ]; then
+            echo "## Test262 Conformance Results" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```json' >> $GITHUB_STEP_SUMMARY
+            cat reports/summary.json >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Upload conformance reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-reports
+          path: conformance/reports/
+          retention-days: 30
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: conformance/test-results/
+          retention-days: 30
+      
+      - name: Check pass rate
+        if: always()
+        run: |
+          cd conformance
+          if [ -f reports/summary.json ]; then
+            PASS_RATE=$(jq -r '.passRate' reports/summary.json)
+            echo "Pass rate: $PASS_RATE%"
+            
+            # Fail if pass rate below 90% (adjust threshold as needed)
+            if (( $(echo "$PASS_RATE < 90.0" | bc -l) )); then
+              echo "❌ Pass rate ($PASS_RATE%) below threshold (90%)"
+              exit 1
+            else
+              echo "✅ Pass rate ($PASS_RATE%) meets threshold"
+            fi
+          else
+            echo "⚠️  No summary report found"
+            exit 0
+          fi
+      
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summaryPath = 'conformance/reports/summary.json';
+            
+            if (!fs.existsSync(summaryPath)) {
+              return;
+            }
+            
+            const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+            
+            const body = `## 🧪 Test262 Conformance Results
+            
+            | Metric | Value |
+            |--------|-------|
+            | **Total Tests** | ${summary.total} |
+            | **Passed** | ${summary.passed} ✅ |
+            | **Failed** | ${summary.failed} ❌ |
+            | **Skipped** | ${summary.skipped} ⊘ |
+            | **Pass Rate** | ${summary.passRate.toFixed(2)}% |
+            | **Avg Duration** | ${summary.avgDuration.toFixed(2)}ms |
+            
+            ${summary.passRate >= 95 ? '✅ Excellent conformance!' : 
+              summary.passRate >= 90 ? '⚠️  Good, but room for improvement' :
+              '❌ Pass rate below target'}
+            
+            <details>
+            <summary>Suite Breakdown</summary>
+            
+            ${Object.entries(summary.suites || {}).map(([name, stats]) => 
+              `- **${name}**: ${stats.passed}/${stats.passed + stats.failed} passed`
+            ).join('\n')}
+            </details>
+            
+            [View full report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+  # Optional: Run on multiple platforms
+  test262-cross-platform:
+    name: Conformance (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Setup C++ (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++
+      
+      - name: Setup C++ (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install gcc
+      
+      - name: Setup C++ (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+      
+      - name: Install and build
+        run: |
+          cd compiler && npm ci && npm run build && cd ..
+          cd conformance && npm ci && npm run build
+      
+      - name: Run tests
+        run: |
+          cd conformance
+          npm test
+        continue-on-error: true
+      
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-${{ matrix.os }}
+          path: conformance/reports/

@@ -8,6 +8,9 @@
 			"path": "compiler"
 		},
 		{
+			"path": "conformance"
+		},
+		{
 			"path": "extension"
 		},
 		{
@@ -22,6 +25,7 @@
 			"**/.DS_Store": true,
 			"**/Thumbs.db": true,
 			"compiler": true,
+			"conformance": true,
 			"extension": true,
 			"vite-plugin": true,
 			"demos": true

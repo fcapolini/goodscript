@@ -39,6 +39,15 @@ GoodScript is a **TypeScript specialization** for safe systems programming with 
   - Implemented LiteralObject support for object literals (Dec 1, 2025)
   - Implemented optional field syntax (`field?: Type` → `std::optional<T>`) (Dec 1, 2025)
 
+### Phase 3.5: Conformance Testing (🚧 In Development)
+- TC39 Test262 conformance suite integration
+- Dual-mode validation (JavaScript vs C++ output comparison)
+- Feature filtering for "Good Parts" subset
+- Automated CI testing and regression detection
+- **Status**: Infrastructure complete, ready for test execution
+- **Key files**: `conformance/src/harness/`, `conformance/src/suites/`
+- **Documentation**: `docs/TEST262-CONFORMANCE.md`, `CONFORMANCE.md`
+
 ### Phase 4: Ecosystem (📋 Planned)
 - Standard library APIs for Node.js/Deno compatibility
 - Module system, package management, deployment

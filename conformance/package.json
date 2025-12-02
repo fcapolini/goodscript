@@ -1,0 +1,35 @@
+{
+  "name": "@goodscript/conformance",
+  "version": "0.1.0",
+  "description": "TC39 Test262 conformance testing for GoodScript",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:subset": "vitest run --grep",
+    "update-test262": "git submodule update --init --recursive",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "goodscript",
+    "test262",
+    "conformance",
+    "ecmascript",
+    "javascript",
+    "typescript"
+  ],
+  "author": "Fabio Capolini",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "@vitest/coverage-v8": "^1.0.4",
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.4"
+  },
+  "dependencies": {
+    "goodscript": "file:../compiler"
+  }
+}

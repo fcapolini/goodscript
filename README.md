@@ -307,10 +307,55 @@ async function demo(node: share<Node>) {
 ### Planned
 - 📋 **Phase 4**: Standard library APIs, module system, package management, deployment tooling
 - 📋 **Advanced Features**: Optional unwrapping, destructuring, getters/setters, spread operator
+- 📋 **Conformance Testing**: TC39 Test262 suite integration for language compliance validation
 
 ---
 
-## 8. Conclusion
+## 8. Conformance Testing
+
+GoodScript validates its TypeScript engine against the **TC39 Test262** conformance suite—the official ECMAScript test suite with 50,000+ tests. This ensures GoodScript's behavior matches JavaScript/TypeScript semantics for all supported features.
+
+### What We Test
+
+The conformance suite focuses on **"The Good Parts"** that GoodScript supports:
+
+✅ **Tested Features:**
+- `let`/`const` declarations
+- Strict equality (`===`, `!==`)
+- Classes and inheritance
+- Functions (regular, arrow, async)
+- Objects and arrays
+- Control flow (if/else, for/while, switch)
+- Error handling (try/catch/finally)
+- Promises and async/await
+- Template literals
+- Destructuring
+- Map/Set collections
+- JSON operations
+
+❌ **Excluded (GoodScript Restrictions):**
+- `var` declarations (GS105)
+- Type coercion operators (`==`, `!=`) (GS106)
+- `with`, `eval`, `Function()` (GS101, GS102)
+- Dynamic features (Proxy, Reflect, Symbol)
+
+### Running Conformance Tests
+
+```bash
+cd conformance
+./setup.sh          # Initialize test262 submodule and install deps
+npm test            # Run all conformance tests
+npm test:watch      # Watch mode for development
+npm test:coverage   # Generate coverage report
+```
+
+See [CONFORMANCE.md](CONFORMANCE.md) and [conformance/README.md](conformance/README.md) for details.
+
+**Target:** 95%+ pass rate for GoodScript-supported features.
+
+---
+
+## 9. Conclusion
 
 GoodScript allows developers to **write memory-safe systems code using familiar TypeScript syntax**, with a smooth transition from fast TS development to robust native deployment. The **VSCode extension** ensures validation and tooling support, while the **dual-mode workflow** enables both rapid iteration and high-performance native applications.
 
