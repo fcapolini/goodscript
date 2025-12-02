@@ -596,6 +596,18 @@ export class OwnershipAnalyzer {
       }
     }
 
+    // Type literals: { next: share<Node>, data: { nested: share<Node> } }
+    // Recursively analyze nested type literals to find all share<T> references
+    if (ts.isTypeLiteralNode(typeNode)) {
+      for (const member of typeNode.members) {
+        if (ts.isPropertySignature(member) && member.type) {
+          const memberOwned = this.extractSharedOwnership(member.type, sourceFile, checker);
+          memberOwned.forEach(t => ownedTypes.add(t));
+        }
+      }
+      return ownedTypes;
+    }
+
     // Resolve type aliases (for non-generic or already-handled cases)
     const resolvedType = this.resolveTypeAlias(typeNode, checker);
     

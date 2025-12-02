@@ -244,7 +244,7 @@ describe('Type Alias Cycle Detection', () => {
       expect(hasError(result.diagnostics, 'GS301')).toBe(true);
     });
 
-    it('should handle nested optional share<T>', () => {
+    it('should detect cycle in nested optional share<T>', () => {
       const code = `
         type Node = {
           data?: {
@@ -253,9 +253,9 @@ describe('Type Alias Cycle Detection', () => {
         };
       `;
       const result = compileWithOwnership(code);
-      // This should NOT create a cycle because the share<Node> is in a nested type literal,
-      // not directly in Node's type literal
-      expect(isSuccess(result)).toBe(true);
+      // This DOES create a cycle: Node -> (via data field) -> (via next field) -> share<Node>
+      // Nesting depth doesn't matter - any path to share<T> creates an ownership edge
+      expect(hasError(result.diagnostics, 'GS301')).toBe(true);
     });
 
     it('should handle type alias referencing class', () => {
