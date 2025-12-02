@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2025-12-02
+
+### Changed
+
+- **BREAKING**: Renamed ownership qualifiers for clarity and brevity
+  - `Unique<T>` → `own<T>` (exclusive ownership)
+  - `Shared<T>` → `share<T>` (shared ownership)
+  - `Weak<T>` → `use<T>` (non-owning reference)
+  - Updated all documentation, tests, and examples
+  - More intuitive and matches common ownership terminology
+
+### Fixed
+
+- **DAG Analysis Enhancements** - Closed all 7 identified gaps in cycle detection
+  - Index signatures: `[key: string]: share<T>` now properly analyzed
+  - Tuple types: `[share<A>, share<B>]` now detected
+  - Parenthesized unions: `(share<T> | null) | undefined` now unwrapped correctly
+  - Generic type aliases: Full type parameter substitution with nested resolution
+  - Mapped types: `{ [K in ...]: share<T> }` now analyzed
+  - Conditional types: Both branches analyzed for ownership cycles
+  - Nested type literals: Correctly detects cycles at any nesting depth
+  - Added 18 comprehensive edge case tests (all passing)
+  - 275 Phase 2 tests passing with no regressions
+
 ## [0.8.0] - 2025-12-02
 
 ### Added
