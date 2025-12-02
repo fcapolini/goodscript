@@ -141,11 +141,16 @@ export class GcCodegen {
     // Should be: if (x != nullptr)
     code = code.replace(/(\w+\s*!=\s*nullptr)\s*&&\s*\1/g, '$1');
 
-    // Add GC runtime initialization at start of main()
-    code = code.replace(
-      /int main\(\) \{/,
-      'int main() {\n  gs::gc::Runtime gc_runtime;'
-    );
+    // Add main() function if missing (for conformance tests that are just declarations)
+    if (!code.includes('int main()')) {
+      code += '\n\nint main() {\n  gs::gc::Runtime gc_runtime;\n  return 0;\n}\n';
+    } else {
+      // Add GC runtime initialization at start of main()
+      code = code.replace(
+        /int main\(\) \{/,
+        'int main() {\n  gs::gc::Runtime gc_runtime;'
+      );
+    }
 
     return code;
   }

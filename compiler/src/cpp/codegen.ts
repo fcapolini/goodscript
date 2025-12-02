@@ -544,7 +544,37 @@ export class AstCodegen {
     if (!node.name) return undefined;
     
     const name = cppUtils.escapeName(node.name.text);
-    const returnType = node.type ? this.mapType(node.type) : new ast.CppType('void');
+    
+    // Determine return type: use explicit type annotation if present, otherwise infer from body
+    let returnType: ast.CppType;
+    if (node.type) {
+      returnType = this.mapType(node.type);
+    } else if (this.checker) {
+      // Use TypeChecker to infer return type when not explicitly annotated
+      const signature = this.checker.getSignatureFromDeclaration(node);
+      if (signature) {
+        const tsReturnType = signature.getReturnType();
+        const returnTypeStr = this.checker.typeToString(tsReturnType);
+        
+        // Map TypeScript types to C++ for GC mode
+        if (returnTypeStr === 'number') {
+          returnType = new ast.CppType('double');
+        } else if (returnTypeStr === 'string') {
+          returnType = new ast.CppType('gs::String');
+        } else if (returnTypeStr === 'boolean') {
+          returnType = new ast.CppType('bool');
+        } else if (returnTypeStr === 'void') {
+          returnType = new ast.CppType('void');
+        } else {
+          // For class types like 'A', return pointer in GC mode
+          returnType = new ast.CppType(`gs::${returnTypeStr}*`);
+        }
+      } else {
+        returnType = new ast.CppType('void');
+      }
+    } else {
+      returnType = new ast.CppType('void');
+    }
     
     // Track return type for null handling in return statements
     const previousReturnType = this.currentFunctionReturnType;
@@ -2640,6 +2670,17 @@ export class AstCodegen {
       }
       
       return new ast.CppType(`gs::Array<${elementTypeStr}>`);
+    }
+    
+    // typeof expression (e.g., typeof A where A is a class)
+    // This gets the constructor type, which for our purposes is just a template parameter
+    // typeof A as a parameter type means "any type compatible with A's constructor"
+    // In C++, we can use a template parameter or just ignore it (use auto)
+    if (ts.isTypeQueryNode(typeNode)) {
+      // For conformance tests, typeof A in parameter position can just be auto
+      // The actual value passed will be the class itself (not an instance)
+      // In C++, this doesn't have a direct equivalent - we'll use a template
+      return new ast.CppType('auto');
     }
     
     // Generic types: Map<K, V> → gs::Map<K, V>

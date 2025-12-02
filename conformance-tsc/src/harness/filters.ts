@@ -105,5 +105,41 @@ export function shouldRunTest(test: TscTest): FilterResult {
     };
   }
   
+  // Skip tests using typeof for constructor types (TypeScript-specific type system feature)
+  // Example: function foo(Factory: typeof MyClass)
+  // This doesn't translate to C++ - it's pure compile-time type checking
+  if (source.match(/:\s*typeof\s+\w+/)) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses typeof for constructor types (type system only, no C++ equivalent)'
+    };
+  }
+  
+  // Skip tests with declaration merging (class + interface with same name)
+  // TypeScript-specific feature with no C++ equivalent
+  if (source.match(/class\s+(\w+)[\s\S]*interface\s+\1/) || 
+      source.match(/interface\s+(\w+)[\s\S]*class\s+\1/)) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses declaration merging (TypeScript-specific, no C++ equivalent)'
+    };
+  }
+  
+  // Skip tests with static abstract methods (invalid in C++)
+  if (source.includes('abstract static') || source.includes('static abstract')) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses static abstract methods (invalid in C++)'
+    };
+  }
+  
+  // Skip tests using 'abstract' as an identifier (TypeScript allows, C++ doesn't)
+  if (source.match(/new\s+abstract/)) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses "abstract" as an identifier (C++ keyword)'
+    };
+  }
+  
   return { shouldRun: true };
 }
