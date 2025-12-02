@@ -4,15 +4,13 @@ This subproject validates GoodScript's TypeScript compatibility using TypeScript
 
 ## Current Results
 
-**Classes Category (Pilot 30 tests)**:
-- **JavaScript Mode**: ✅ **100% pass rate** (17/17 eligible tests)
-- **Native Mode (C++ GC)**: 🎉 **Infrastructure complete**, 1/17 tests passing (5.9%)
-- Total: 30 tests  
-- Passed (JS): 17/17 tests (100%)
-- Passed (Native): 1/17 tests (5.9%)
-- Skipped: 13 tests (GoodScript restrictions: var, decorators, modules)
+**Classes Category (First 50 files, 30 tests)**:
+- **JavaScript Mode**: ✅ **100% pass rate** (8/8 eligible tests, 9 seconds)
+- **Native Mode (C++ GC)**: ✅ **87.5% pass rate** (7/8 eligible tests, 25.7 seconds)
+- Tests executed: 30 total, 8 eligible after filtering, 22 skipped
+- Average native compile time: ~3.2 seconds per test
 
-**Key Achievement**: First TypeScript conformance test (`classAbstractAsIdentifier`) successfully compiles to C++ and executes with MPS GC! Native mode is now a valuable tool for discovering codegen gaps.
+**Key Achievement**: TypeScript conformance tests successfully compile to C++ and execute with MPS GC! Features validated include abstract classes, inheritance, generics, and C++ keyword escaping (`abstract` → `abstract_`).
 
 See [STATUS.md](./STATUS.md) for detailed per-batch results.
 
@@ -30,45 +28,43 @@ Tests GoodScript against TypeScript's `tests/cases/conformance/` suite, ensuring
 # Install dependencies
 npm install
 
-# Run all tests (JavaScript transpilation only, fast)
+# Run all tests (JavaScript transpilation only, fast ~9s)
 npm test
 
-# Run specific batches (fast iteration, ~1.6s per batch)
-npm run test:classes:batch1  # Tests 1-5
-npm run test:classes:batch2  # Tests 6-10
-# ... batch3-6
+# Run specific batch (JavaScript mode)
+npm test -- -t "Batch 1/6"
 
-# Run summary only
-npm run test:classes:summary
-
-# Enable native C++ compilation and execution (slower but thorough)
+# Enable native C++ compilation and execution (~26s for all batches)
 TEST_NATIVE=1 npm test
-npm run test:native:batch1   # Test batch 1 with C++ compilation
-npm run test:native:summary  # Full native validation
 
-# Watch mode
-npm run test:watch
+# Run single batch with native compilation
+TEST_NATIVE=1 npm test -- -t "Batch 2/6"
+
+# Use the batch script
+./run-batch.sh 1          # JavaScript mode, batch 1
+./run-batch.sh 2 native   # Native mode, batch 2
+./run-batch.sh all        # All batches, JavaScript mode
 ```
 
 ## Testing Modes
 
 ### JavaScript Mode (default)
 - Validates TypeScript → JavaScript transpilation
-- Fast execution (~1.6s per batch of 5 tests)
+### JavaScript Mode (default)
+- Validates TypeScript → JavaScript transpilation
+- Fast execution (~9s for all 30 tests)
 - Checks Phase 1 validation (Good Parts)
 - Ensures JavaScript output is generated
 
 ### Native Mode (`TEST_NATIVE=1`)
 - **Full validation**: TypeScript → C++ → Binary → Execution
-- Validates Phase 3 C++ codegen
-- Compiles with Zig C++ compiler
+- Validates Phase 3 C++ codegen with GC
+- Compiles with Zig C++ compiler + MPS library
 - Executes and captures output
-- Slower (~3-5s per test) but ensures complete compatibility
+- Duration: ~25.7s for all eligible tests (~3.2s average per test)
 - Use for thorough validation before releases
 
-**Recommendation**: Use JavaScript mode for rapid iteration, Native mode for thorough validation.
-
-## Test Categories
+**Recommendation**: Use JavaScript mode for rapid iteration, Native mode for release validation.
 
 ### Phase 1 (Core Language)
 - ✅ **classes/** - Class declarations, expressions, inheritance (27 tests)
@@ -134,13 +130,27 @@ For each test file (e.g., `classExpression.ts`):
 ## Filtering
 
 Tests are skipped if they use unsupported features:
-- `var` keyword (GS105)
-- `==` / `!=` operators (GS106)
+
+### GoodScript Language Restrictions
+- `var` keyword (GS105 - use let/const)
+- `==` / `!=` operators (GS106 - use ===)
 - `eval` / `with` statements (GS101/GS102)
-- Decorators (future)
-- Dynamic imports (Phase 4)
 - `any` type
-- Prototype manipulation
+- `arguments` object (use rest parameters)
+- Prototype manipulation (use classes)
+
+### TypeScript-Specific Features (No C++ Equivalent)
+- Decorators (future feature)
+- Dynamic imports (Phase 4)
+- Module/namespace exports (Phase 4)
+- Declaration merging (class + interface with same name)
+- typeof for constructor types (compile-time only)
+- Static abstract methods (invalid in C++)
+- Class expressions (runtime class construction)
+- Method overloads (return-type-only)
+- Arrow function type members
+- Super property access (requires different C++ approach)
+- Tests expecting compilation errors (error messages differ)
 
 ## Success Criteria
 

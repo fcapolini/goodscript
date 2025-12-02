@@ -8,5 +8,11 @@ export default defineConfig({
     hookTimeout: 30000,
     include: ['src/suites/**/*.test.ts'],
     reporters: ['verbose'],
+    // Limit concurrency to avoid overwhelming the system
+    maxConcurrency: 10,
+    // Run tests in sequence within each file to manage resources
+    sequence: {
+      concurrent: false,
+    },
   },
 });

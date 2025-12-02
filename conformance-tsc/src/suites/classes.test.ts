@@ -50,18 +50,19 @@ function getTestFiles(category: string): string[] {
   return files;
 }
 
+// Cache the test file list to avoid repeated directory scans
+const ALL_TEST_FILES = getTestFiles('classes').slice(0, 50); // Limit to first 50
+console.log(`Loaded ${ALL_TEST_FILES.length} test files for classes category`);
+
 describe('TypeScript Conformance: Classes', () => {
-  const testFiles = getTestFiles('classes');
-  
-  it(`should have test files available (${testFiles.length} total tests)`, () => {
-    expect(testFiles.length).toBeGreaterThan(0);
+  it(`should have test files available (${ALL_TEST_FILES.length} total tests)`, () => {
+    expect(ALL_TEST_FILES.length).toBeGreaterThan(0);
   });
 });
 
-// Batch 1: First 5 tests
+// Batch 1: First 5 tests (out of first 50 total to keep tests fast)
 describe('TypeScript Conformance: Classes - Batch 1/6', () => {
-  const testFiles = getTestFiles('classes');
-  const batchTests = testFiles.slice(0, 5);
+  const batchTests = ALL_TEST_FILES.slice(0, 5);
   
   for (const testPath of batchTests) {
     const testName = testPath.split('/').pop()?.replace('.ts', '') || testPath;
@@ -86,8 +87,7 @@ describe('TypeScript Conformance: Classes - Batch 1/6', () => {
 
 // Batch 2: Tests 6-10
 describe('TypeScript Conformance: Classes - Batch 2/6', () => {
-  const testFiles = getTestFiles('classes');
-  const batchTests = testFiles.slice(5, 10);
+  const batchTests = ALL_TEST_FILES.slice(5, 10);
   
   for (const testPath of batchTests) {
     const testName = testPath.split('/').pop()?.replace('.ts', '') || testPath;
@@ -112,8 +112,7 @@ describe('TypeScript Conformance: Classes - Batch 2/6', () => {
 
 // Batch 3: Tests 11-15
 describe('TypeScript Conformance: Classes - Batch 3/6', () => {
-  const testFiles = getTestFiles('classes');
-  const batchTests = testFiles.slice(10, 15);
+  const batchTests = ALL_TEST_FILES.slice(10, 15);
   
   for (const testPath of batchTests) {
     const testName = testPath.split('/').pop()?.replace('.ts', '') || testPath;
@@ -138,8 +137,7 @@ describe('TypeScript Conformance: Classes - Batch 3/6', () => {
 
 // Batch 4: Tests 16-20
 describe('TypeScript Conformance: Classes - Batch 4/6', () => {
-  const testFiles = getTestFiles('classes');
-  const batchTests = testFiles.slice(15, 20);
+  const batchTests = ALL_TEST_FILES.slice(15, 20);
   
   for (const testPath of batchTests) {
     const testName = testPath.split('/').pop()?.replace('.ts', '') || testPath;
@@ -164,8 +162,7 @@ describe('TypeScript Conformance: Classes - Batch 4/6', () => {
 
 // Batch 5: Tests 21-25
 describe('TypeScript Conformance: Classes - Batch 5/6', () => {
-  const testFiles = getTestFiles('classes');
-  const batchTests = testFiles.slice(20, 25);
+  const batchTests = ALL_TEST_FILES.slice(20, 25);
   
   for (const testPath of batchTests) {
     const testName = testPath.split('/').pop()?.replace('.ts', '') || testPath;
@@ -190,8 +187,7 @@ describe('TypeScript Conformance: Classes - Batch 5/6', () => {
 
 // Batch 6: Tests 26-30
 describe('TypeScript Conformance: Classes - Batch 6/6', () => {
-  const testFiles = getTestFiles('classes');
-  const batchTests = testFiles.slice(25, 30);
+  const batchTests = ALL_TEST_FILES.slice(25, 30);
   
   for (const testPath of batchTests) {
     const testName = testPath.split('/').pop()?.replace('.ts', '') || testPath;
@@ -217,8 +213,7 @@ describe('TypeScript Conformance: Classes - Batch 6/6', () => {
 // Summary across all batches
 describe('TypeScript Conformance: Classes - Summary', () => {
   it('should report overall pass rate', async () => {
-    const testFiles = getTestFiles('classes');
-    const pilotTests = testFiles.slice(0, 30);
+    const pilotTests = ALL_TEST_FILES.slice(0, 30);
     
     const tests = await Promise.all(
       pilotTests.map(path => parseTscTest(path, BASELINES_DIR))

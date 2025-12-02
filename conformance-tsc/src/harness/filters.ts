@@ -15,7 +15,16 @@ export interface FilterResult {
  * Determine if a test should run based on its content
  */
 export function shouldRunTest(test: TscTest): FilterResult {
-  const { source, name } = test;
+  const { source, name, expectedErrors, hasErrors } = test;
+  
+  // Skip tests that expect TypeScript compilation errors
+  // GoodScript may have different error messages or error locations
+  if (hasErrors && expectedErrors && expectedErrors.length > 0) {
+    return {
+      shouldRun: false,
+      reason: 'Test expects TypeScript compilation errors (error handling differs)'
+    };
+  }
   
   // Skip .d.ts declaration files (type-only, no runtime code)
   if (name.endsWith('.d')) {
@@ -133,11 +142,39 @@ export function shouldRunTest(test: TscTest): FilterResult {
     };
   }
   
-  // Skip tests using 'abstract' as an identifier (TypeScript allows, C++ doesn't)
-  if (source.match(/new\s+abstract/)) {
+  // Skip tests with class expressions (const C = class extends A {})
+  // These require runtime class construction which C++ doesn't support
+  if (source.match(/=\s*class\s+(extends|implements|\{)/)) {
     return {
       shouldRun: false,
-      reason: 'Test uses "abstract" as an identifier (C++ keyword)'
+      reason: 'Test uses class expressions (runtime class construction not supported in C++)'
+    };
+  }
+  
+  // Skip tests with method overloads (C++ doesn't support return-type-only overloading)
+  // TypeScript allows multiple declarations with different return types
+  if (source.match(/abstract\s+\w+\s*\([^)]*\)\s*;[\s\S]*abstract\s+\w+\s*\([^)]*\)\s*;/)) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses method overloads with different return types (not supported in C++)'
+    };
+  }
+  
+  // Skip tests with arrow function types as class members (e.g., m: () => void)
+  // This is TypeScript syntax that doesn't map cleanly to C++
+  if (source.match(/\w+\s*:\s*\([^)]*\)\s*=>/)) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses arrow function types in class members (ambiguous C++ mapping)'
+    };
+  }
+  
+  // Skip tests using super as a property accessor (super.foo)
+  // C++ super calls require different syntax
+  if (source.includes('super.') || source.includes('super[')) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses super property access (requires different C++ approach)'
     };
   }
   

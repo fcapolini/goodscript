@@ -23,7 +23,7 @@ import * as ast from './ast';
  */
 export function escapeName(name: string): string {
   // C++ keywords and common macros that conflict
-  const keywords = new Set(['class', 'namespace', 'template', 'EOF', 'delete', 'char']);
+  const keywords = new Set(['class', 'namespace', 'template', 'EOF', 'delete', 'char', 'abstract']);
   let result = keywords.has(name) ? name + '_' : name;
   
   // Sanitize Unicode characters to hex codes for portability

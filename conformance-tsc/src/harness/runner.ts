@@ -266,13 +266,18 @@ async function compileAndRunNative(
 
 /**
  * Run multiple tests and collect results
+ * 
+ * @param tests - Tests to run
+ * @param concurrency - Maximum number of tests to run in parallel (default: 10)
  */
-export async function runTests(tests: TscTest[]): Promise<TestResult[]> {
+export async function runTests(tests: TscTest[], concurrency = 10): Promise<TestResult[]> {
   const results: TestResult[] = [];
   
-  for (const test of tests) {
-    const result = await runTest(test);
-    results.push(result);
+  // Run tests in batches of `concurrency` size
+  for (let i = 0; i < tests.length; i += concurrency) {
+    const batch = tests.slice(i, i + concurrency);
+    const batchResults = await Promise.all(batch.map(test => runTest(test)));
+    results.push(...batchResults);
   }
   
   return results;
