@@ -71,9 +71,10 @@ if ("") { }
 
 ### Still Enforced in Permissive Mode
 
-❌ **Memory Safety** (ownership annotations, DAG validation) - **only for C++ compilation**
+❌ **Memory Safety** (ownership annotations, DAG validation) - **only for ownership mode**
   - Note: GC mode (default for Test262) skips Phase 2 ownership analysis entirely
-  - Ownership/DAG validation only runs when compiling to C++ without GC
+  - Ownership/DAG validation only runs when using smart pointer mode (`useGcMode: false`)
+  - Both JavaScript GC and C++ BDW-GC skip Phase 2
 ❌ **No var keyword** (GS105)
 ❌ **No == operator** (GS106)  
 ❌ **No eval/with** (GS101/GS102)
@@ -85,7 +86,7 @@ if ("") { }
 2. **Separation of Concerns**: Memory safety ≠ syntactic restrictions
 3. **Better Diagnostics**: Failures highlight real C++ codegen gaps
 4. **Gradual Adoption**: Strict mode for production, permissive for testing
-5. **Performance**: Skips Phase 2 ownership analysis in GC mode (not needed for JavaScript execution)
+5. **Performance**: Skips Phase 2 ownership analysis in GC mode (not needed for garbage-collected execution)
 
 ## Known Issues
 

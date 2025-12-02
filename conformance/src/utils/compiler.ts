@@ -38,7 +38,7 @@ const $DONOTEVALUATE = (): never => {
 export interface CompileOptions {
   strict?: boolean;
   generateCpp?: boolean;
-  useGcMode?: boolean;  // Default true for conformance testing (disables Phase 2)
+  useGcMode?: boolean;  // Default true - use GC (skips Phase 2); false = smart pointer mode
   permissive?: boolean;  // Allow function expressions and implicit truthiness for Test262
 }
 
@@ -110,10 +110,11 @@ export async function compileGoodScript(
       };
     }
 
-    // Phase 2: Ownership analysis (skip for GC mode - not needed)
-    // GC mode uses JavaScript's garbage collector, so DAG cycles and ownership
-    // derivation rules are irrelevant. Only validate for C++ compilation.
-    if (options.generateCpp && !useGcMode) {
+    // Phase 2: Ownership analysis (only needed for ownership mode)
+    // GC mode (MPS for C++ or JavaScript GC) handles memory automatically, making
+    // ownership annotations and DAG cycle detection irrelevant.
+    // Only validate ownership/DAG rules when using smart pointer mode.
+    if (!useGcMode) {
       const ownershipAnalyzer = new OwnershipAnalyzer();
       ownershipAnalyzer.analyze(sourceFile, checker);
       ownershipAnalyzer.finalizeAnalysis();
