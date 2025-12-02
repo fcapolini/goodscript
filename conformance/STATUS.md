@@ -1,6 +1,6 @@
 # Test262 Conformance Status
 
-**Last Updated**: December 2, 2024 (Evening - With Permissive Mode)
+**Last Updated**: December 2, 2024 (Evening - Post GS124 SyntaxError Fix)
 
 ## Overview
 
@@ -10,8 +10,8 @@ GoodScript now supports **permissive mode** for Test262 conformance testing. Thi
 
 - **Total Tests**: 110
 - **Executed**: 20 (up from 14, +43%) ⬆️
-- **Passing**: 9 (45.0% pass rate)
-- **Failed**: 11
+- **Passing**: 11 (55.0% pass rate) ⬆️
+- **Failed**: 9 (down from 11)
 - **Skipped**: 90 (correctly filtered)
 
 ### Permissive Mode Impact
@@ -33,11 +33,11 @@ GoodScript now supports **permissive mode** for Test262 conformance testing. Thi
 |----------|-------|--------|--------|---------|-----------|-------|
 | Numeric Literals | 5 | 2 | 0 | 3 | 100% ✅ | Stable |
 | Strict Equality | 15 | 4 | 0 | 11 | 100% ✅ | Stable |
+| Boolean Types | 5 | 2 | 0 | 3 | 100% ✅ | Fixed GS124 error messages |
 | If Statements | 10 | 3 | 4 | 3 | 43% 🟡 | More tests running |
 | Addition | 10 | 0 | 2 | 8 | 0% | C++ codegen issues |
 | Logical AND | 10 | 0 | 1 | 9 | 0% | Undeclared vars |
 | While Statements | 10 | 0 | 2 | 8 | 0% | C++ codegen issues |
-| Boolean Types | 5 | 0 | 2 | 3 | 0% | Error type mismatch |
 | String Types | 10 | 0 | 0 | 10 | - | Uses new String() |
 | Let Declarations | 10 | 0 | 0 | 10 | - | TDZ tests |
 | Const Declarations | 10 | 0 | 0 | 10 | - | TDZ tests |

@@ -525,7 +525,7 @@ export class Validator {
         if (left.kind === ts.SyntaxKind.TrueKeyword || left.kind === ts.SyntaxKind.FalseKeyword) {
           const location = Parser.getLocation(left, sourceFile);
           this.addError(
-            `Cannot assign to "${left.kind === ts.SyntaxKind.TrueKeyword ? 'true' : 'false'}". It is a reserved keyword`,
+            `SyntaxError: Cannot assign to "${left.kind === ts.SyntaxKind.TrueKeyword ? 'true' : 'false'}". It is a reserved keyword`,
             location,
             'GS124'
           );
@@ -536,7 +536,7 @@ export class Validator {
           if (left.text === 'null' || left.text === 'undefined' || left.text === 'NaN' || left.text === 'Infinity') {
             const location = Parser.getLocation(left, sourceFile);
             this.addError(
-              `Cannot assign to "${left.text}". It is a reserved keyword or literal`,
+              `SyntaxError: Cannot assign to "${left.text}". It is a reserved keyword or literal`,
               location,
               'GS124'
             );
