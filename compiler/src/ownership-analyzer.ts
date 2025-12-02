@@ -190,6 +190,11 @@ export class OwnershipAnalyzer {
         // Interfaces are analyzed through their properties
         ts.forEachChild(node, visit);
       }
+      // Analyze type alias declarations with object literal types
+      else if (ts.isTypeAliasDeclaration(node)) {
+        this.analyzeTypeAliasForOwnership(node, sourceFile, checker);
+        ts.forEachChild(node, visit);
+      }
       // Only analyze property declarations/signatures
       else if (ts.isPropertyDeclaration(node) || ts.isPropertySignature(node)) {
         this.analyzePropertyForOwnership(node, sourceFile, checker);
@@ -320,6 +325,59 @@ export class OwnershipAnalyzer {
     // Create edges for each owned type
     for (const ownedType of ownedTypes) {
       this.addEdge(containingType, ownedType, fieldName, location);
+    }
+  }
+
+  /**
+   * Analyze a type alias declaration for ownership edges
+   * Handles type aliases with object literal types like:
+   * type Node = { next?: share<Node> }
+   * Also handles intersection types like:
+   * type NamedItem = Item & Named
+   */
+  private analyzeTypeAliasForOwnership(
+    node: ts.TypeAliasDeclaration,
+    sourceFile: ts.SourceFile,
+    checker: ts.TypeChecker
+  ): void {
+    const typeName = node.name.text;
+    
+    // Handle type literal (object types)
+    if (ts.isTypeLiteralNode(node.type)) {
+      // Analyze each property in the object literal type
+      for (const member of node.type.members) {
+        if (ts.isPropertySignature(member) && member.type) {
+          const fieldName = member.name?.getText(sourceFile) ?? 'unknown';
+          const location = Parser.getLocation(member, sourceFile);
+
+          // Check for ownership qualifiers on primitive types (not allowed)
+          this.checkPrimitiveOwnership(member.type, fieldName, location, sourceFile);
+
+          // Check for naked class references (class types without ownership wrappers)
+          this.checkForNakedClassReference(member.type, fieldName, location, sourceFile, checker);
+
+          // Extract all share<T> ownership relationships from the field type
+          const ownedTypes = this.extractSharedOwnership(member.type, sourceFile, checker);
+          
+          // Create edges for each owned type
+          for (const ownedType of ownedTypes) {
+            this.addEdge(typeName, ownedType, fieldName, location);
+          }
+        }
+      }
+    }
+    // Handle intersection types like: type NamedItem = Item & Named
+    // Create an edge from the alias to each class/interface in the intersection
+    else if (ts.isIntersectionTypeNode(node.type)) {
+      for (const intersectionMember of node.type.types) {
+        if (ts.isTypeReferenceNode(intersectionMember)) {
+          const referencedTypeName = this.getFullyQualifiedName(intersectionMember.typeName, sourceFile);
+          // Add edge from alias to referenced type (e.g., NamedItem → Item)
+          // This allows cycles to be detected when someone uses share<NamedItem>
+          const location = Parser.getLocation(node, sourceFile);
+          this.addEdge(typeName, referencedTypeName, 'intersection', location);
+        }
+      }
     }
   }
 
@@ -682,16 +740,16 @@ export class OwnershipAnalyzer {
    * Extract the type name from a type node (resolving type aliases)
    */
   private getTypeNameFromTypeNode(typeNode: ts.TypeNode, sourceFile: ts.SourceFile, checker: ts.TypeChecker): string | null {
-    // Resolve type aliases first
-    const resolvedType = this.resolveTypeAlias(typeNode, checker);
+    // DO NOT resolve type aliases here - we want the alias name itself (e.g., "Node" not the object literal)
+    // Only resolve ownership wrappers (share/own/use)
     
-    if (ts.isTypeReferenceNode(resolvedType)) {
-      return this.getFullyQualifiedName(resolvedType.typeName, sourceFile);
+    if (ts.isTypeReferenceNode(typeNode)) {
+      return this.getFullyQualifiedName(typeNode.typeName, sourceFile);
     }
     
     // Handle intersection types - use the first type as the base
-    if (ts.isIntersectionTypeNode(resolvedType) && resolvedType.types.length > 0) {
-      return this.getTypeNameFromTypeNode(resolvedType.types[0], sourceFile, checker);
+    if (ts.isIntersectionTypeNode(typeNode) && typeNode.types.length > 0) {
+      return this.getTypeNameFromTypeNode(typeNode.types[0], sourceFile, checker);
     }
     
     return null;
