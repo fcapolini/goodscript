@@ -33,7 +33,8 @@ export function parseTest262Test(content: string, path: string): Test262Test {
   }
 
   const frontmatter = frontmatterMatch[1];
-  const code = content.slice(frontmatterMatch[0].length).trim();
+  const codeStart = (frontmatterMatch.index || 0) + frontmatterMatch[0].length;
+  const code = content.slice(codeStart).trim();
   
   // Parse YAML frontmatter (simple parser, enough for Test262 format)
   const metadata = parseYAML(frontmatter);

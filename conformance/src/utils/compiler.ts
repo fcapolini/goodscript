@@ -9,6 +9,32 @@ import * as ts from 'typescript';
 import { Validator } from 'goodscript/dist/validator';
 import { OwnershipAnalyzer } from 'goodscript/dist/ownership-analyzer';
 import { AstCodegen } from 'goodscript/dist/cpp/codegen';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+
+// Test262 harness prelude
+const TEST262_HARNESS = `
+class Test262Error {
+  message: string;
+  
+  constructor(msg: string) {
+    this.message = msg;
+  }
+  
+  toString(): string {
+    return "Test262Error: " + this.message;
+  }
+  
+  static thrower(msg: string): never {
+    throw new Test262Error(msg);
+  }
+}
+
+const $DONOTEVALUATE = (): never => {
+  throw new Test262Error("Test262: This statement should not be evaluated.");
+};
+`;
+
 
 export interface CompileOptions {
   strict?: boolean;
@@ -36,10 +62,13 @@ export async function compileGoodScript(
   options: CompileOptions = {}
 ): Promise<CompileResult> {
   try {
+    // Prepend Test262 harness for compatibility
+    const fullCode = TEST262_HARNESS + '\n' + code;
+    
     // Create TypeScript program
     const sourceFile = ts.createSourceFile(
       'test.gs.ts',
-      code,
+      fullCode,
       ts.ScriptTarget.ES2020,
       true,
       ts.ScriptKind.TS
@@ -49,7 +78,7 @@ export async function compileGoodScript(
       target: ts.ScriptTarget.ES2020,
       module: ts.ModuleKind.ES2020,
       strict: options.strict ?? true,
-      noEmit: true,
+      noEmit: false,  // We need to emit to get JavaScript output
     };
 
     const host = ts.createCompilerHost(compilerOptions);
@@ -93,8 +122,21 @@ export async function compileGoodScript(
       };
     }
 
-    // JavaScript code is just the input (GoodScript is TypeScript-compatible)
-    const jsCode = code;
+    // JavaScript code: transpile TypeScript to JavaScript
+    let jsCode: string | undefined;
+    const emitResult = program.emit(sourceFile, (fileName, data) => {
+      if (fileName.endsWith('.js')) {
+        jsCode = data;
+      }
+    }, undefined, false);
+    
+    if (!jsCode) {
+      // Fallback: just strip type annotations manually (basic)
+      jsCode = fullCode
+        .replace(/:\s*[a-zA-Z_][a-zA-Z0-9_<>[\]|&\s,]*(?=[;=),\n])/g, '')
+        .replace(/\bconst\s+(\w+)\s*=\s*\(\)\s*:\s*never\s*=>/g, 'const $1 = () =>')
+        .replace(/static\s+(\w+)\([^)]*\)\s*:\s*never/g, 'static $1()');
+    }
 
     // Phase 3: Generate C++ if requested
     let cppCode: string | undefined;
