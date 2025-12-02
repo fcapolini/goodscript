@@ -1,6 +1,6 @@
 # Test262 Conformance Status
 
-**Last Updated**: December 2, 2024 (Evening - Post GS124 SyntaxError Fix)
+**Last Updated**: December 2, 2024 (Evening - Post Function Expression Support)
 
 ## Overview
 
@@ -10,8 +10,8 @@ GoodScript now supports **permissive mode** for Test262 conformance testing. Thi
 
 - **Total Tests**: 110
 - **Executed**: 20 (up from 14, +43%) ⬆️
-- **Passing**: 11 (55.0% pass rate) ⬆️
-- **Failed**: 9 (down from 11)
+- **Passing**: 12 (60.0% pass rate) ⬆️
+- **Failed**: 8 (down from 11)
 - **Skipped**: 90 (correctly filtered)
 
 ### Permissive Mode Impact
@@ -34,7 +34,7 @@ GoodScript now supports **permissive mode** for Test262 conformance testing. Thi
 | Numeric Literals | 5 | 2 | 0 | 3 | 100% ✅ | Stable |
 | Strict Equality | 15 | 4 | 0 | 11 | 100% ✅ | Stable |
 | Boolean Types | 5 | 2 | 0 | 3 | 100% ✅ | Fixed GS124 error messages |
-| If Statements | 10 | 3 | 4 | 3 | 43% 🟡 | More tests running |
+| If Statements | 10 | 4 | 3 | 3 | 57% 🟡 | Function expression support added |
 | Addition | 10 | 0 | 2 | 8 | 0% | C++ codegen issues |
 | Logical AND | 10 | 0 | 1 | 9 | 0% | Undeclared vars |
 | While Statements | 10 | 0 | 2 | 8 | 0% | C++ codegen issues |

@@ -1541,6 +1541,12 @@ export class AstCodegen {
       return this.visitArrowFunction(node);
     }
     
+    if (ts.isFunctionExpression(node)) {
+      // Function expressions work just like arrow functions in C++
+      // Convert to lambda with the same logic
+      return this.visitArrowFunction(node as any as ts.ArrowFunction);
+    }
+    
     if (ts.isTemplateExpression(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
       return this.visitTemplateLiteral(node);
     }
