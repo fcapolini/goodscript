@@ -42,11 +42,37 @@ public:
         return impl_.size();
     }
 
+    // Forward declaration for Array<T>
+    template<typename U> friend class Array;
+
+    // Get values as array
+    Array<T> values() const;
+
     // Iterators for range-based for loops
     auto begin() { return impl_.begin(); }
     auto end() { return impl_.end(); }
     auto begin() const { return impl_.begin(); }
     auto end() const { return impl_.end(); }
 };
+
+// Include Array for values() implementation
+template<typename T> class Array;
+
+} // namespace gs
+
+// Include array.hpp after Set declaration to avoid circular dependency
+#include "array.hpp"
+
+namespace gs {
+
+// Implement values() after Array is defined
+template<typename T>
+Array<T> Set<T>::values() const {
+    Array<T> result;
+    for (const auto& value : impl_) {
+        result.push(value);
+    }
+    return result;
+}
 
 } // namespace gs

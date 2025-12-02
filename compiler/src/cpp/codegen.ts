@@ -209,7 +209,7 @@ export class AstCodegen {
       } else if (decl.initializer && ts.isCallExpression(decl.initializer) && this.checker) {
         // Infer type from function call return type
         
-        // Special case: map.keys() and map.values() return Array types
+        // Special case: map.keys(), map.values(), and set.values() return Array types
         if (ts.isPropertyAccessExpression(decl.initializer.expression)) {
           const methodName = decl.initializer.expression.name.text;
           if (methodName === 'keys' || methodName === 'values') {
@@ -226,7 +226,15 @@ export class AstCodegen {
               const cppElementType = this.mapTypeScriptTypeToCpp(elementType);
               cppType = new ast.CppType(`gs::Array<${cppElementType}>`);
             } else {
-              cppType = new ast.CppType('auto');
+              // Match Set<T> type
+              const setMatch = objTypeStr.match(/Set<(.+)>/);
+              if (setMatch && methodName === 'values') {
+                const valueType = setMatch[1].trim();
+                const cppElementType = this.mapTypeScriptTypeToCpp(valueType);
+                cppType = new ast.CppType(`gs::Array<${cppElementType}>`);
+              } else {
+                cppType = new ast.CppType('auto');
+              }
             }
           } else {
             // Check if the call returns a nullable interface (Interface | null)

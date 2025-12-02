@@ -311,6 +311,16 @@ public:
         return *this;
     }
 
+    // Check if array includes a value
+    bool includes(const T& searchElement) const {
+        for (size_t i = 0; i < length_; ++i) {
+            if (data_[i] == searchElement) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Iterators for range-based for loops
     T* begin() { return data_; }
     T* end() { return data_ + length_; }
