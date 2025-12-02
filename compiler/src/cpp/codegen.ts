@@ -968,8 +968,15 @@ export class AstCodegen {
     // Detect null checks BEFORE visiting condition
     const unwrappedVar = tsUtils.extractNullCheck(node.expression, (name) => cppUtils.escapeName(name));
     
-    // Visit condition WITHOUT unwrapping (condition contains the null check itself)
-    const condition = this.visitExpression(node.expression);
+    // Visit condition
+    let condition = this.visitExpression(node.expression);
+    
+    // In JavaScript, functions/lambdas are truthy. C++ lambdas don't convert to bool.
+    // Wrap function expressions with true (they're always truthy in JS)
+    if (ts.isArrowFunction(node.expression) || ts.isFunctionExpression(node.expression)) {
+      // Lambda is always truthy in JavaScript - use (lambda, true) to evaluate and discard
+      condition = cpp.binary(condition, ',', cpp.id('true'));
+    }
     
     // Process then block WITH unwrapped variable in scope
     if (unwrappedVar) {

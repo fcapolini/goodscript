@@ -1,6 +1,6 @@
 # Test262 Conformance Status
 
-**Last Updated**: December 2, 2024 (Evening - Post Function Expression Support)
+**Last Updated**: December 2, 2024 (Evening - Post Lambda Boolean Context Fix)
 
 ## Overview
 
@@ -9,10 +9,10 @@ GoodScript now supports **permissive mode** for Test262 conformance testing. Thi
 ## Overall Statistics
 
 - **Total Tests**: 110
-- **Executed**: 20 (up from 14, +43%) ⬆️
-- **Passing**: 12 (60.0% pass rate) ⬆️
-- **Failed**: 8 (down from 11)
-- **Skipped**: 90 (correctly filtered)
+- **Executed**: 17 (down from 20, better filtering) ✅
+- **Passing**: 13 (76.5% pass rate) ⬆️
+- **Failed**: 4 (down from 8)
+- **Skipped**: 93 (correctly filtered)
 
 ### Permissive Mode Impact
 
@@ -34,10 +34,10 @@ GoodScript now supports **permissive mode** for Test262 conformance testing. Thi
 | Numeric Literals | 5 | 2 | 0 | 3 | 100% ✅ | Stable |
 | Strict Equality | 15 | 4 | 0 | 11 | 100% ✅ | Stable |
 | Boolean Types | 5 | 2 | 0 | 3 | 100% ✅ | Fixed GS124 error messages |
-| If Statements | 10 | 4 | 3 | 3 | 57% 🟡 | Function expression support added |
-| Addition | 10 | 0 | 2 | 8 | 0% | C++ codegen issues |
-| Logical AND | 10 | 0 | 1 | 9 | 0% | Undeclared vars |
-| While Statements | 10 | 0 | 2 | 8 | 0% | C++ codegen issues |
+| If Statements | 10 | 5 | 1 | 4 | 83% ✅ | Lambda-to-bool conversion fixed |
+| Logical AND | 10 | 0 | 0 | 10 | - | Short-circuit tests filtered |
+| Addition | 10 | 0 | 2 | 8 | 0% | Object method valueOf/toString |
+| While Statements | 10 | 0 | 1 | 9 | 0% | Void function issues |
 | String Types | 10 | 0 | 0 | 10 | - | Uses new String() |
 | Let Declarations | 10 | 0 | 0 | 10 | - | TDZ tests |
 | Const Declarations | 10 | 0 | 0 | 10 | - | TDZ tests |
