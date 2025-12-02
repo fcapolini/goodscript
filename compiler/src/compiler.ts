@@ -455,6 +455,23 @@ export class Compiler {
    * Compile C++ file to native binary using Zig
    */
   private compileCppToBinary(cppFile: string, outFile: string, targetArch?: string): void {
+    // Check if this is a GC-mode file (contains gs_gc_runtime.hpp)
+    const isGcMode = fs.readFileSync(cppFile, 'utf-8').includes('gs_gc_runtime.hpp');
+    if (isGcMode) {
+      throw new Error(
+        'GC mode binary compilation is experimental and requires manual MPS library setup.\n' +
+        'The Memory Pool System (MPS) library must be built and linked separately.\n' +
+        '\n' +
+        'For now, please use ownership mode (default) for binary compilation:\n' +
+        '  gsc -t native -b -o dist main.gs.ts\n' +
+        '\n' +
+        'Or generate GC-mode C++ source only (without -b flag):\n' +
+        '  gsc -t native -m gc -o dist main.gs.ts\n' +
+        '\n' +
+        'Full GC mode support with automated MPS integration is coming in a future release.'
+      );
+    }
+    
     if (!this.isZigAvailable()) {
       throw new Error(
         'Zig compiler not found. To compile C++ to native binaries, please install Zig:\n' +

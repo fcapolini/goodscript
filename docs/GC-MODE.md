@@ -11,9 +11,11 @@ This dual-mode approach significantly improves language adoptability by offering
 
 ## Test Coverage
 
-**Status**: 1025/1025 tests passing (100%) ✅
+**Status**: C++ generation works, binary compilation requires MPS setup ⚠️
 
-GC mode has comprehensive triple-mode testing across all 15 concrete examples:
+GC mode C++ generation is fully functional and tested. However, compiling to native binaries requires the Memory Pool System (MPS) library to be built and linked, which is not yet automated in the npm package.
+
+GC mode has comprehensive triple-mode testing across all 15 concrete examples (in development environment):
 - **JavaScript execution** - Reference behavior
 - **Ownership C++ compilation** - Smart pointer based
 - **GC C++ compilation** - Raw pointer based
@@ -308,7 +310,7 @@ gsc -t native -m ownership -o dist cache.gs.ts
 ## FAQ
 
 **Q: Is GC mode production-ready?**  
-A: The MVP (malloc-based) is suitable for testing and short-running programs. Full MPS integration is coming soon for production use.
+A: **No, GC mode is experimental.** C++ code generation works, but binary compilation requires manual MPS library setup. Use ownership mode (default) for production. Full MPS integration and automated builds are coming in a future release.
 
 **Q: Will GC mode be slower than ownership mode?**  
 A: Yes, GC mode will have some overhead due to garbage collection pauses. However, it will be competitive with Node.js/Deno and faster than Python/Ruby.

@@ -136,7 +136,7 @@ Examples:
   gsc -e both -o dist main.gs.ts        Emit both .ts and .js files
   gsc --no-ownership-checks -o dist main.gs.ts   Skip ownership checks
   gsc -t native -o dist main.gs.ts    Compile to C++ source (ownership mode)
-  gsc -t native -m gc -o dist main.gs.ts   Compile with garbage collection
+  gsc -t native -m gc -o dist main.gs.ts   [EXPERIMENTAL] Compile with garbage collection
   gsc -t native -b -o dist main.gs.ts Compile to native binary (requires Zig)
   gsc -t native -b -a x86_64-linux -o dist main.gs.ts   Cross-compile for Linux x64
   gsc -t native -b -a aarch64-macos -o dist main.gs.ts  Cross-compile for macOS ARM64

@@ -1,4 +1,5 @@
 notes/
+*.log
 
 # Temporary test directories
 compiler/test/phase3/regexp-test-*/

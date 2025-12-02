@@ -7,30 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2025-12-02
+
 ### Added
 
-- **C++ AST-Based Code Generation Infrastructure** - New modular architecture for C++ codegen
+- **Phase 3 Complete** 🎉 - C++ code generation now at 100% (1208/1208 tests passing)
+  - AST-based code generation (migrated from legacy string-based approach)
+  - Complete type mappings for primitives, ownership types, and collections
+  - Full statement and expression generation support
+  - Namespace wrapping (`gs::`) and keyword escaping
+  - Runtime library (String, Array, Map, Set, JSON, console)
+  - STL compatibility layer
+  - Smart pointer wrapping helpers
+  - Generic base classes with template argument mapping
+  - Class inheritance support
+  - Property accessor detection (array.length(), RegExp.global())
+  - Array auto-resize with IIFE pattern
+  - LiteralObject support for object literals
+  - Optional field syntax (`field?: Type` → `std::optional<T>`)
+
+- **Phase 3.5 TypeScript Conformance Testing** - Infrastructure 100% complete
+  - TypeScript Compiler (TSC) conformance suite integration
+  - Dual-mode validation (JavaScript transpilation + C++ compilation)
+
+- **GC Mode (Experimental)** ⚠️ - C++ generation only, binary compilation not yet supported
+  - GC mode generates valid C++ code but requires manual MPS library setup for compilation
+  - Use ownership mode (default) for production binary compilation
+  - Full automated GC mode support coming in future release
+  - Feature filtering for "Good Parts" subset
+  - Automated test batching and execution
+  - JavaScript mode: 100% pass rate (17/17 eligible tests)
+  - Native C++ mode: 84.4% pass rate (27/32 tests) - **14x improvement** from initial 5.9%
+  - Auto-main() generation for declaration-only tests
+  - typeof keyword handling (maps to `auto` in C++)
+  - Function return type inference via TypeChecker API
+  - Enhanced filters for TypeScript-specific features
+
+- **C++ AST-Based Code Generation Infrastructure**
   - `src/cpp/ast.ts` - Complete C++ AST node type definitions (735 lines)
   - `src/cpp/builder.ts` - Fluent API for type-safe AST construction (405 lines)
   - `src/cpp/renderer.ts` - AST to formatted C++ source converter (672 lines)
   - Visitor pattern for extensibility and transformations
   - Smart pointer helpers (`makeUnique`, `makeShared`, `move`)
-  - 25 comprehensive unit tests (100% passing)
-  - Full documentation with examples (`src/cpp/README.md`)
+  - Type-safe construction at compile time
+  - Composable and reusable code patterns
 
 ### Changed
 
+- Migrated from legacy string-based to AST-based codegen (December 1, 2025)
+- Legacy codegen removed - AST-based implementation is now sole approach
 - Updated architecture documentation to reflect AST-based approach
-- Test count updated to 929/946 (98% passing)
+- Set implementation now uses insertion-order preservation (vector+index pattern)
+- Improved method return type inference and tracking
+- Better parameter type handling in methods
 
-### Benefits
+### Fixed
 
-- Type-safe construction at compile time
-- Composable and reusable code patterns
-- Testable without string comparisons
-- Enables transformations and optimizations
-- Clean separation: construction vs. rendering
-- Foundation for gradual migration of existing `cpp-codegen.ts`
+- Property accessor detection for array.length and RegExp properties
+- Array out-of-bounds writes now properly auto-resize
+- Object literal generation with mixed types
+- Optional field unwrapping in C++ output
+- Multiple codegen bugs discovered via conformance testing
 
 ## [0.7.0] - 2025-11-23
 
@@ -113,6 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial public release with basic compiler infrastructure.
 
+[0.8.0]: https://github.com/fcapolini/goodscript/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/fcapolini/goodscript/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/fcapolini/goodscript/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/fcapolini/goodscript/compare/v0.4.0...v0.5.0

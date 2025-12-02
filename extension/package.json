@@ -2,7 +2,7 @@
   "name": "goodscript",
   "displayName": "GoodScript",
   "description": "Language support for GoodScript - TypeScript without the bad parts",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "publisher": "goodscript",
   "repository": {
     "type": "git",
