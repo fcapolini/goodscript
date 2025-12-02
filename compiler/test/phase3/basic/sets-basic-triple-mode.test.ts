@@ -170,7 +170,7 @@ describe('Phase 3: Set Basic (Triple-Mode)', () => {
   });
 
   describe('Set iteration', () => {
-    it('should return values array', () => {
+    it('should return values array in insertion order', () => {
       expectTripleModeEquivalence(`
         const set = new Set<string>();
         set.add("first");
@@ -178,9 +178,9 @@ describe('Phase 3: Set Basic (Triple-Mode)', () => {
         set.add("third");
         const values = Array.from(set.values());
         console.log(values.length);
-        console.log(values.includes("first"));
-        console.log(values.includes("second"));
-        console.log(values.includes("third"));
+        console.log(values[0]);
+        console.log(values[1]);
+        console.log(values[2]);
       `);
     });
 
@@ -203,21 +203,21 @@ describe('Phase 3: Set Basic (Triple-Mode)', () => {
       `);
     });
 
-    it('should work with number values', () => {
+    it('should work with number values in insertion order', () => {
       expectTripleModeEquivalence(`
         const set = new Set<number>();
+        set.add(30);
         set.add(10);
         set.add(20);
-        set.add(30);
         const values = Array.from(set.values());
         console.log(values.length);
-        console.log(values.includes(10));
-        console.log(values.includes(20));
-        console.log(values.includes(30));
+        console.log(values[0]);
+        console.log(values[1]);
+        console.log(values[2]);
       `);
     });
 
-    it('should not contain duplicates after iteration', () => {
+    it('should maintain insertion order with duplicates', () => {
       expectTripleModeEquivalence(`
         const set = new Set<string>();
         set.add("x");
@@ -226,6 +226,41 @@ describe('Phase 3: Set Basic (Triple-Mode)', () => {
         set.add("z");
         const values = Array.from(set.values());
         console.log(values.length);
+        console.log(values[0]);
+        console.log(values[1]);
+        console.log(values[2]);
+      `);
+    });
+
+    it('should maintain insertion order after deletes', () => {
+      expectTripleModeEquivalence(`
+        const set = new Set<string>();
+        set.add("a");
+        set.add("b");
+        set.add("c");
+        set.add("d");
+        set.delete("b");
+        const values = Array.from(set.values());
+        console.log(values.length);
+        console.log(values[0]);
+        console.log(values[1]);
+        console.log(values[2]);
+      `);
+    });
+
+    it('should preserve order when re-adding deleted items', () => {
+      expectTripleModeEquivalence(`
+        const set = new Set<string>();
+        set.add("first");
+        set.add("second");
+        set.add("third");
+        set.delete("second");
+        set.add("second");
+        const values = Array.from(set.values());
+        console.log(values.length);
+        console.log(values[0]);
+        console.log(values[1]);
+        console.log(values[2]);
       `);
     });
   });

@@ -29,7 +29,7 @@ GoodScript is a **TypeScript specialization** for safe systems programming with 
 - Generates idiomatic C++ with proper RAII, exception handling
 - All code wrapped in `gs` namespace to avoid keyword conflicts
 - Runtime library with `gs::String`, `gs::Array<T>`, `gs::Map<K,V>`, `gs::Set<T>`, `gs::RegExp`
-- **Status**: 960/960 tests passing (100%) - Phase 3 Complete! 🎉
+- **Status**: 1208/1208 tests passing (100%) - Phase 3 Complete! 🎉
 - **Key files**: `compiler/src/cpp/codegen.ts` (AST-based implementation), `runtime/*.hpp`
 - **Documentation**: `docs/COMPILATION-TARGET.md`, `docs/PHASE-3-CPP.md`
 - **Recent changes**: 
@@ -511,7 +511,7 @@ When implementing new features or fixing bugs:
 
 - **Phase 1**: ✅ 100% complete (244/244 tests)
 - **Phase 2**: ✅ 100% complete (425/425 tests)  
-- **Phase 3**: ✅ 100% complete (960/960 tests passing) 🎉
+- **Phase 3**: ✅ 100% complete (1208/1208 tests passing) 🎉
   - ✅ AST traversal and code emission
   - ✅ Type mappings (primitives, ownership types, collections)
   - ✅ Statement generation (variables, functions, classes, control flow)
@@ -521,7 +521,8 @@ When implementing new features or fixing bugs:
   - ✅ STL compatibility (push_back, size aliases for std::back_inserter)
   - ✅ Smart pointer wrapping (wrap_for_push helper)
   - ✅ String methods (indexOf, startsWith, fromCharCode)
-  - ✅ Map/Set operations (delete_, has, set, get)
+  - ✅ Map/Set operations (delete_, has, set, get, keys, values)
+  - ✅ **Set insertion-order preservation** (vector+index pattern like Map)
   - ✅ Legacy codegen removed, AST-based codegen is sole implementation
   - ✅ Generic base classes with template argument mapping
   - ✅ Class inheritance with proper keyword escaping

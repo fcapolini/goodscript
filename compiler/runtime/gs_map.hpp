@@ -437,23 +437,169 @@ public:
 /**
  * GoodScript Set class - TypeScript-compatible set wrapper
  * 
- * Wraps std::unordered_set with a TypeScript/JavaScript Set-like API.
+ * Preserves insertion order like JavaScript Set.
+ * Uses a vector to track insertion order and an unordered_map for O(1) lookup.
  */
 template<typename T>
 class Set {
 private:
-  std::unordered_set<T> impl_;
+  std::vector<T> items_;               // Insertion-ordered storage
+  std::unordered_map<T, size_t> index_; // Value -> index in items_ for O(1) lookup
+
+  // Compact the items_ vector by removing tombstones
+  void compact() {
+    std::vector<T> new_items;
+    new_items.reserve(index_.size());
+    std::unordered_map<T, size_t> new_index;
+    new_index.reserve(index_.size());
+    
+    for (size_t i = 0; i < items_.size(); ++i) {
+      // Check if this position is the canonical one for this value
+      auto it = index_.find(items_[i]);
+      if (it != index_.end() && it->second == i) {
+        new_index[items_[i]] = new_items.size();
+        new_items.push_back(std::move(items_[i]));
+      }
+    }
+    
+    items_ = std::move(new_items);
+    index_ = std::move(new_index);
+  }
 
 public:
+  // Custom iterator that skips tombstones
+  class iterator {
+  private:
+    typename std::vector<T>::iterator current_;
+    typename std::vector<T>::iterator end_;
+    const std::unordered_map<T, size_t>* index_;
+    typename std::vector<T>::iterator begin_; // Need to calculate position
+    
+    void skip_tombstones() {
+      while (current_ != end_) {
+        size_t pos = std::distance(begin_, current_);
+        auto it = index_->find(*current_);
+        // This position is valid if the index points to it
+        if (it != index_->end() && it->second == pos) {
+          break;
+        }
+        ++current_;
+      }
+    }
+    
+  public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = T;
+    using difference_type = std::ptrdiff_t;
+    using pointer = T*;
+    using reference = T&;
+    
+    iterator(typename std::vector<T>::iterator begin,
+             typename std::vector<T>::iterator current,
+             typename std::vector<T>::iterator end,
+             const std::unordered_map<T, size_t>* index)
+      : current_(current), end_(end), index_(index), begin_(begin) {
+      skip_tombstones();
+    }
+    
+    reference operator*() { return *current_; }
+    pointer operator->() { return &(*current_); }
+    
+    iterator& operator++() {
+      ++current_;
+      skip_tombstones();
+      return *this;
+    }
+    
+    iterator operator++(int) {
+      iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+    
+    bool operator==(const iterator& other) const {
+      return current_ == other.current_;
+    }
+    
+    bool operator!=(const iterator& other) const {
+      return current_ != other.current_;
+    }
+  };
+
+  class const_iterator {
+  private:
+    typename std::vector<T>::const_iterator current_;
+    typename std::vector<T>::const_iterator end_;
+    const std::unordered_map<T, size_t>* index_;
+    typename std::vector<T>::const_iterator begin_;
+    
+    void skip_tombstones() {
+      while (current_ != end_) {
+        size_t pos = std::distance(begin_, current_);
+        auto it = index_->find(*current_);
+        // This position is valid if the index points to it
+        if (it != index_->end() && it->second == pos) {
+          break;
+        }
+        ++current_;
+      }
+    }
+    
+  public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = T;
+    using difference_type = std::ptrdiff_t;
+    using pointer = const T*;
+    using reference = const T&;
+    
+    const_iterator(typename std::vector<T>::const_iterator begin,
+                   typename std::vector<T>::const_iterator current,
+                   typename std::vector<T>::const_iterator end,
+                   const std::unordered_map<T, size_t>* index)
+      : current_(current), end_(end), index_(index), begin_(begin) {
+      skip_tombstones();
+    }
+    
+    reference operator*() const { return *current_; }
+    pointer operator->() const { return &(*current_); }
+    
+    const_iterator& operator++() {
+      ++current_;
+      skip_tombstones();
+      return *this;
+    }
+    
+    const_iterator operator++(int) {
+      const_iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+    
+    bool operator==(const const_iterator& other) const {
+      return current_ == other.current_;
+    }
+    
+    bool operator!=(const const_iterator& other) const {
+      return current_ != other.current_;
+    }
+  };
+
   // Type aliases for STL compatibility
   using value_type = T;
-  using iterator = typename std::unordered_set<T>::iterator;
-  using const_iterator = typename std::unordered_set<T>::const_iterator;
+  // iterator and const_iterator are defined as classes above
   
   // Constructors
   Set() = default;
-  Set(std::initializer_list<T> init) : impl_(init) {}
-  Set(std::unordered_set<T> set) : impl_(std::move(set)) {}
+  Set(std::initializer_list<T> init) {
+    for (const auto& value : init) {
+      add(value);
+    }
+  }
+  Set(std::unordered_set<T> set) {
+    for (auto& value : set) {
+      add(std::move(value));
+    }
+  }
   Set(const Set& other) = default;
   Set(Set&& other) noexcept = default;
   
@@ -468,21 +614,48 @@ public:
    * Equivalent to TypeScript: set.size
    */
   int size() const {
-    return static_cast<int>(impl_.size());
+    return static_cast<int>(index_.size());
   }
   
   /**
-   * Adds a value to the set
+   * Adds a value to the set (insertion-order preserving)
    * Equivalent to TypeScript: set.add(value)
    * Returns the set itself for chaining
    */
   Set<T>& add(const T& value) {
-    impl_.insert(value);
+    // Check if already exists
+    if (index_.find(value) != index_.end()) {
+      return *this; // Already in set, maintain original insertion order
+    }
+    
+    // Add to vector and index
+    index_[value] = items_.size();
+    items_.push_back(value);
+    
+    // Compact if too many tombstones (same threshold as Map)
+    if (items_.size() > index_.size() * 2) {
+      compact();
+    }
+    
     return *this;
   }
   
   Set<T>& add(T&& value) {
-    impl_.insert(std::move(value));
+    // Check if already exists
+    if (index_.find(value) != index_.end()) {
+      return *this;
+    }
+    
+    // Add to vector and index
+    size_t idx = items_.size();
+    items_.push_back(std::move(value));
+    index_[items_.back()] = idx;
+    
+    // Compact if too many tombstones
+    if (items_.size() > index_.size() * 2) {
+      compact();
+    }
+    
     return *this;
   }
   
@@ -491,16 +664,31 @@ public:
    * Equivalent to TypeScript: set.has(value)
    */
   bool has(const T& value) const {
-    return impl_.find(value) != impl_.end();
+    return index_.find(value) != index_.end();
   }
   
   /**
    * Removes the specified element from the set
    * Equivalent to TypeScript: set.delete(value)
    * Returns true if the element was removed, false otherwise
+   * 
+   * Uses tombstone pattern - marks slot as deleted but preserves indices
    */
   bool delete_(const T& value) {
-    return impl_.erase(value) > 0;
+    auto it = index_.find(value);
+    if (it == index_.end()) {
+      return false;
+    }
+    
+    // Remove from index (creates tombstone in items_)
+    index_.erase(it);
+    
+    // Compact if too many tombstones
+    if (items_.size() > index_.size() * 2) {
+      compact();
+    }
+    
+    return true;
   }
   
   /**
@@ -508,7 +696,8 @@ public:
    * Equivalent to TypeScript: set.clear()
    */
   void clear() {
-    impl_.clear();
+    items_.clear();
+    index_.clear();
   }
   
   /**
@@ -517,63 +706,56 @@ public:
    */
   template<typename Fn>
   void forEach(Fn&& callback) {
-    for (auto& value : impl_) {
+    for (auto& value : *this) {
       callback(value);
     }
   }
   
   template<typename Fn>
   void forEach(Fn&& callback) const {
-    for (const auto& value : impl_) {
+    for (const auto& value : *this) {
       callback(value);
     }
   }
   
   /**
-   * Returns an array of all values in the set
+   * Returns an array of all values in insertion order
    * Equivalent to TypeScript: Array.from(set.values())
    */
   Array<T> values() const {
     Array<T> result;
-    for (const auto& value : impl_) {
-      result.push(value);
+    for (const auto& value : *this) {
+      result.push_back(value);
     }
     return result;
   }
   
-  // STL-compatible iterators
+  // STL-compatible iterators (skip tombstones, preserve insertion order)
   
-  iterator begin() { return impl_.begin(); }
-  iterator end() { return impl_.end(); }
-  const_iterator begin() const { return impl_.begin(); }
-  const_iterator end() const { return impl_.end(); }
-  const_iterator cbegin() const { return impl_.cbegin(); }
-  const_iterator cend() const { return impl_.cend(); }
-  
-  // Conversion operators for C++ interop
-  
-  /**
-   * Explicit access to underlying std::unordered_set
-   */
-  const std::unordered_set<T>& set() const {
-    return impl_;
-  }
-  
-  /**
-   * Get underlying std::unordered_set (mutable)
-   */
-  std::unordered_set<T>& set() {
-    return impl_;
-  }
+  iterator begin() { return iterator(items_.begin(), items_.begin(), items_.end(), &index_); }
+  iterator end() { return iterator(items_.begin(), items_.end(), items_.end(), &index_); }
+  const_iterator begin() const { return const_iterator(items_.begin(), items_.begin(), items_.end(), &index_); }
+  const_iterator end() const { return const_iterator(items_.begin(), items_.end(), items_.end(), &index_); }
+  const_iterator cbegin() const { return const_iterator(items_.begin(), items_.begin(), items_.end(), &index_); }
+  const_iterator cend() const { return const_iterator(items_.begin(), items_.end(), items_.end(), &index_); }
   
   // Comparison operators
   
   bool operator==(const Set<T>& other) const {
-    return impl_ == other.impl_;
+    if (index_.size() != other.index_.size()) {
+      return false;
+    }
+    // Sets are equal if they contain the same elements (order doesn't matter for equality)
+    for (const auto& value : *this) {
+      if (!other.has(value)) {
+        return false;
+      }
+    }
+    return true;
   }
   
   bool operator!=(const Set<T>& other) const {
-    return impl_ != other.impl_;
+    return !(*this == other);
   }
 };
 
