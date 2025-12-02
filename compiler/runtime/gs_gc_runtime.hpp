@@ -13,6 +13,7 @@
 
 // GC runtime types
 #include "gc/string.hpp"
+#include "gc/string-builder.hpp"
 #include "gc/array.hpp"
 #include "gc/map.hpp"
 #include "gc/set.hpp"

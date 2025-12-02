@@ -2,6 +2,7 @@
 
 #include "allocator.hpp"
 #include "string.hpp"
+#include "string-builder.hpp"
 #include <stdexcept>
 #include <algorithm>
 #include <optional>
@@ -9,6 +10,9 @@
 #include <type_traits>  // For std::is_trivially_copyable
 
 namespace gs {
+
+// Forward declaration
+class StringBuilder;
 
 /**
  * GC-allocated Array implementation (Optimized).
@@ -227,12 +231,32 @@ public:
             return String("");
         }
         
-        String result = String::from(data_[0]);
-        for (size_t i = 1; i < length_; ++i) {
-            result += separator;
-            result += String::from(data_[i]);
+        if (length_ == 1) {
+            return String::from(data_[0]);
         }
-        return result;
+        
+        // Use StringBuilder for efficient concatenation
+        // Pre-calculate total size to allocate once
+        size_t total_size = 0;
+        for (size_t i = 0; i < length_; ++i) {
+            String elem = String::from(data_[i]);
+            total_size += elem.length();
+        }
+        if (length_ > 1) {
+            total_size += separator.length() * (length_ - 1);
+        }
+        
+        // Create StringBuilder with pre-calculated capacity
+        StringBuilder sb(total_size + 1);
+        
+        // Build the result
+        sb.append(String::from(data_[0]));
+        for (size_t i = 1; i < length_; ++i) {
+            sb.append(separator);
+            sb.append(String::from(data_[i]));
+        }
+        
+        return sb.toString();
     }
 
     // Higher-order array methods

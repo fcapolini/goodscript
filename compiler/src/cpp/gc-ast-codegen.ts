@@ -94,6 +94,18 @@ export class GcAstCodegen extends AstCodegen {
     code = code.replace(/\bconst\s+(gs::\w+)\*\s*&(\s+\w+)/g, '$1* const&$2');
     code = code.replace(/\bconst\s+(gs::\w+)\*(\s+\w+)/g, '$1* const$2');
     
+    // Remove * dereference when accessing array elements
+    // In GC mode, Array::operator[] returns T& instead of T*
+    // Pattern: *array[...] should become array[...]
+    // This handles complex patterns like: *arr[static_cast<int>(idx)]
+    code = code.replace(/\*([a-zA-Z_][a-zA-Z0-9_]*)\[/g, '$1[');
+    code = code.replace(/\*this->([a-zA-Z_][a-zA-Z0-9_]*)\[/g, 'this->$1[');
+    
+    // Fix array assignment pattern from auto-resize IIFE
+    // Pattern: return *(*__arr)[__idx] = value;
+    // In GC mode should be: return (*__arr)[__idx] = value;
+    code = code.replace(/return \*\(\*__arr\)\[__idx\]/g, 'return (*__arr)[__idx]');
+    
     return code;
   }
 

@@ -17,6 +17,39 @@ namespace gs {
 namespace gc {
 
 /**
+ * Configuration for MPS allocator.
+ * Provides JVM-style heap size configuration (-Xms/-Xmx equivalent).
+ */
+struct AllocatorConfig {
+    size_t arena_size;      // Initial arena size (like -Xms)
+    size_t commit_limit;    // Maximum committed memory (like -Xmx)
+
+    /**
+     * Default configuration: 64MB initial, 512MB max
+     * Good for most applications
+     */
+    static AllocatorConfig defaults() {
+        return AllocatorConfig{64 * 1024 * 1024, 512 * 1024 * 1024};
+    }
+
+    /**
+     * Large heap configuration: 256MB initial, 1GB max
+     * For memory-intensive workloads (large datasets, heavy string manipulation)
+     */
+    static AllocatorConfig large() {
+        return AllocatorConfig{256 * 1024 * 1024, 1024 * 1024 * 1024};
+    }
+
+    /**
+     * Small heap configuration: 16MB initial, 128MB max
+     * For embedded systems or memory-constrained environments
+     */
+    static AllocatorConfig small() {
+        return AllocatorConfig{16 * 1024 * 1024, 128 * 1024 * 1024};
+    }
+};
+
+/**
  * GoodScript MPS Allocator (Optimized)
  * 
  * Provides a C++ interface to the Memory Pool System (MPS).
@@ -46,23 +79,27 @@ private:
     static mps_thr_t thread;  // Thread handle
     static mps_root_t thread_root;
     static bool initialized;
+    static AllocatorConfig config;
 
 public:
     /**
      * Initialize the MPS arena and allocation pool.
      * Must be called before any allocations.
+     * 
+     * @param cfg Configuration (defaults to AllocatorConfig::defaults())
      */
-    static void init() {
+    static void init(const AllocatorConfig& cfg = AllocatorConfig::defaults()) {
         if (initialized) return;
+
+        config = cfg;  // Store configuration
 
         mps_res_t res;
 
         // Create the arena (MPS memory space)
         // Using mps_arena_class_vm() for virtual memory arena
-        // Set larger commit limit for better allocation performance
         MPS_ARGS_BEGIN(arena_args) {
-            MPS_ARGS_ADD(arena_args, MPS_KEY_ARENA_SIZE, 64 * 1024 * 1024);  // 64MB initial
-            MPS_ARGS_ADD(arena_args, MPS_KEY_COMMIT_LIMIT, 256 * 1024 * 1024);  // 256MB max
+            MPS_ARGS_ADD(arena_args, MPS_KEY_ARENA_SIZE, config.arena_size);
+            MPS_ARGS_ADD(arena_args, MPS_KEY_COMMIT_LIMIT, config.commit_limit);
             res = mps_arena_create_k(&arena, mps_arena_class_vm(), arena_args);
         } MPS_ARGS_END(arena_args);
         if (res != MPS_RES_OK) {
@@ -226,6 +263,32 @@ public:
         if (!initialized) return 0;
         return mps_arena_reserved(arena);
     }
+
+    /**
+     * Get the current configuration.
+     */
+    static const AllocatorConfig& get_config() {
+        return config;
+    }
+
+    /**
+     * Memory statistics.
+     */
+    struct Stats {
+        size_t committed;
+        size_t reserved;
+        size_t arena_size;
+        size_t commit_limit;
+    };
+
+    static Stats stats() {
+        return Stats{
+            committed_memory(),
+            reserved_memory(),
+            config.arena_size,
+            config.commit_limit
+        };
+    }
 };
 
 // Static member definitions
@@ -234,6 +297,7 @@ inline mps_pool_t Allocator::pool = nullptr;
 inline mps_thr_t Allocator::thread = nullptr;
 inline mps_root_t Allocator::thread_root = nullptr;
 inline bool Allocator::initialized = false;
+inline AllocatorConfig Allocator::config = AllocatorConfig::defaults();
 
 /**
  * RAII wrapper for MPS initialization/shutdown.
@@ -241,8 +305,8 @@ inline bool Allocator::initialized = false;
  */
 class Runtime {
 public:
-    Runtime() {
-        Allocator::init();
+    Runtime(const AllocatorConfig& cfg = AllocatorConfig::defaults()) {
+        Allocator::init(cfg);
     }
 
     ~Runtime() {

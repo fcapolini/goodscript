@@ -79,6 +79,14 @@ private:
     }
 
 public:
+    // Reserve capacity (allocate if needed, but don't change length)
+    void reserve(size_t new_capacity) {
+        if (new_capacity <= capacity_ || (!is_heap() && new_capacity <= SSO_SIZE)) {
+            return;  // Already have enough capacity
+        }
+        resize(new_capacity);
+    }
+
     // Default constructor: empty string (stack)
     String() : stack_data_{0}, length_(0), capacity_(0) {}
 

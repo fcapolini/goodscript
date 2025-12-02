@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gs_string.hpp"
+#include "gs_string_builder.hpp"
 #include "gs_array.hpp"
 
 namespace gs {
@@ -12,27 +13,51 @@ String Array<T>::join(const String& separator) const {
     return String("");
   }
   
-  std::ostringstream oss;
+  // Use StringBuilder for efficient concatenation
+  StringBuilder sb;
+  
+  // Pre-calculate capacity for better performance
+  size_t total_size = 0;
+  if constexpr (std::is_same_v<T, String>) {
+    for (const auto& elem : impl_) {
+      total_size += elem.length();
+    }
+  }
+  if (impl_.size() > 1) {
+    total_size += separator.length() * (impl_.size() - 1);
+  }
+  if (total_size > 0) {
+    sb.reserve(static_cast<int>(total_size));
+  }
   
   for (size_t i = 0; i < impl_.size(); ++i) {
     if (i > 0) {
-      oss << separator.str();
+      sb.append(separator);
     }
     
     // Convert element to string
     if constexpr (std::is_same_v<T, String>) {
-      oss << impl_[i].str();
+      sb.append(impl_[i]);
     } else if constexpr (std::is_same_v<T, std::string>) {
-      oss << impl_[i];
+      sb.append(impl_[i]);
+    } else if constexpr (std::is_same_v<T, double>) {
+      sb.append(String::from(impl_[i]));
+    } else if constexpr (std::is_same_v<T, int>) {
+      sb.append(String::from(impl_[i]));
+    } else if constexpr (std::is_same_v<T, bool>) {
+      sb.append(String::from(impl_[i]));
     } else if constexpr (std::is_arithmetic_v<T>) {
-      oss << impl_[i];
+      // For other numeric types
+      sb.append(String::from(static_cast<double>(impl_[i])));
     } else {
-      // For other types, try operator<<
+      // For other types, use ostringstream as fallback
+      std::ostringstream oss;
       oss << impl_[i];
+      sb.append(oss.str());
     }
   }
   
-  return String(oss.str());
+  return sb.toString();
 }
 
 // Implementation of String::split that depends on Array
