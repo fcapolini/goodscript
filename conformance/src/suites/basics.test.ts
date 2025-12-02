@@ -3,7 +3,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { runTest262Test, summarizeResults } from '../harness/runner';
+import { runTest262Test, runTest262Suite, summarizeResults } from '../harness/runner';
+import path from 'path';
+import fs from 'fs';
+
+const TEST262_ROOT = path.join(__dirname, '../../test262/test');
 
 describe('Test262 Conformance: Basics', () => {
   it('should support let declarations', async () => {
@@ -39,10 +43,46 @@ describe('Test262 Conformance: Basics', () => {
     expect(true).toBe(true);
   });
 
-  // TODO: Once test262 submodule is added:
-  // - Load actual Test262 test files
-  // - Run them through the harness
-  // - Compare JS vs C++ outputs
-  
-  it.todo('should run Test262 let/const suite when submodule is initialized');
+  // Run actual Test262 tests if available
+  it('should run Test262 numeric literal tests', async () => {
+    const testDir = path.join(TEST262_ROOT, 'language/literals/numeric');
+    
+    if (!fs.existsSync(testDir)) {
+      console.log('Test262 not found, skipping');
+      return;
+    }
+
+    // Run just a few simple numeric tests
+    const testFiles = fs.readdirSync(testDir)
+      .filter(f => f.endsWith('.js'))
+      .slice(0, 5);  // Just first 5 for now
+
+    const results: any[] = [];
+    for (const testFile of testFiles) {
+      // Pass relative path from test262/ root
+      const relativePath = path.join('test/language/literals/numeric', testFile);
+      const result = await runTest262Test(relativePath);
+      results.push(result);
+    }
+    
+    const summary = summarizeResults(results);
+    
+    console.log('\nTest262 Numeric Literals:');
+    console.log(`  Total: ${summary.total}`);
+    console.log(`  Passed: ${summary.passed}`);
+    console.log(`  Failed: ${summary.failed}`);
+    console.log(`  Skipped: ${summary.skipped}`);
+    console.log(`  Pass Rate: ${summary.passRate}%`);
+    
+    if (summary.failed > 0) {
+      console.log('\nFailures:');
+      results.filter(r => !r.passed && !r.skipped).slice(0, 3).forEach(r => {
+        console.log(`  ${path.basename(r.path)}: ${r.error}`);
+      });
+    }
+    
+    // We expect some failures at this early stage
+    // The test passes if we can run the infrastructure
+    expect(summary.total).toBeGreaterThan(0);
+  }, 30000);  // 30 second timeout
 });

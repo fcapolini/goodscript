@@ -6,9 +6,9 @@
  */
 
 import * as ts from 'typescript';
-import { validate } from 'goodscript/dist/validator';
-import { analyzeOwnership } from 'goodscript/dist/ownership-analyzer';
-import { CppCodegen } from 'goodscript/dist/cpp/codegen';
+import { Validator } from 'goodscript/dist/validator';
+import { OwnershipAnalyzer } from 'goodscript/dist/ownership-analyzer';
+import { AstCodegen } from 'goodscript/dist/cpp/codegen';
 
 export interface CompileOptions {
   strict?: boolean;
@@ -62,11 +62,12 @@ export async function compileGoodScript(
     const checker = program.getTypeChecker();
 
     // Phase 1: Validate "Good Parts"
-    const validationErrors = validate(sourceFile, program);
-    if (validationErrors.length > 0) {
+    const validator = new Validator();
+    const validationResult = validator.validate(sourceFile, checker);
+    if (!validationResult.success) {
       return {
         success: false,
-        errors: validationErrors.map(e => ({
+        errors: validationResult.diagnostics.map((e: any) => ({
           message: e.message,
           code: e.code || 'GS000',
           line: e.line,
@@ -76,11 +77,14 @@ export async function compileGoodScript(
     }
 
     // Phase 2: Ownership analysis
-    const ownershipErrors = analyzeOwnership(sourceFile, checker);
-    if (ownershipErrors.length > 0) {
+    const ownershipAnalyzer = new OwnershipAnalyzer();
+    ownershipAnalyzer.analyze(sourceFile, checker);
+    ownershipAnalyzer.finalizeAnalysis();
+    const ownershipDiagnostics = ownershipAnalyzer.getDiagnostics();
+    if (ownershipDiagnostics.length > 0) {
       return {
         success: false,
-        errors: ownershipErrors.map(e => ({
+        errors: ownershipDiagnostics.map((e: any) => ({
           message: e.message,
           code: e.code || 'GS300',
           line: e.line,
@@ -95,10 +99,8 @@ export async function compileGoodScript(
     // Phase 3: Generate C++ if requested
     let cppCode: string | undefined;
     if (options.generateCpp) {
-      const codegen = new CppCodegen(program, checker);
-      // Use GC mode by default for conformance testing (simpler, closer to JS semantics)
-      const useGc = options.useGcMode !== false;
-      cppCode = codegen.generate(sourceFile, useGc);
+      const codegen = new AstCodegen(checker);
+      cppCode = codegen.generate(sourceFile);
     }
 
     return {

@@ -81,7 +81,7 @@ export async function runTest262Test(
       );
       return {
         path: testPath,
-        passed: hasExpectedError,
+        passed: hasExpectedError ?? false,
         error: hasExpectedError ? undefined : 
           `Expected ${expectedError}, got: ${compileResult.errors?.[0]?.message}`,
         duration: Date.now() - startTime

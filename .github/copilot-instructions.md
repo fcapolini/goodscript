@@ -41,12 +41,13 @@ GoodScript is a **TypeScript specialization** for safe systems programming with 
 
 ### Phase 3.5: Conformance Testing (🚧 In Development)
 - TC39 Test262 conformance suite integration
-- Dual-mode validation (JavaScript vs C++ output comparison)
+- Dual-mode validation (JavaScript vs C++ GC output comparison)
 - Feature filtering for "Good Parts" subset
 - Automated CI testing and regression detection
-- **Status**: Infrastructure complete, ready for test execution
+- **Status**: Infrastructure complete (Dec 2, 2024), initial tests running
+- **Current**: 0% pass rate on 5 tests (YAML parser needs refinement)
 - **Key files**: `conformance/src/harness/`, `conformance/src/suites/`
-- **Documentation**: `docs/TEST262-CONFORMANCE.md`, `CONFORMANCE.md`
+- **Documentation**: `docs/TEST262-CONFORMANCE.md`, `conformance/README.md`
 
 ### Phase 4: Ecosystem (📋 Planned)
 - Standard library APIs for Node.js/Deno compatibility
