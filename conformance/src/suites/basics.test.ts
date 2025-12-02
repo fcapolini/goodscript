@@ -306,4 +306,156 @@ describe('Test262 Conformance: Basics', () => {
     
     expect(summary.total).toBeGreaterThan(0);
   }, 30000);
+
+  it('should run Test262 while statement tests', async () => {
+    const testDir = path.join(TEST262_ROOT, 'language/statements/while');
+    
+    if (!fs.existsSync(testDir)) {
+      console.log('Test262 not found, skipping');
+      return;
+    }
+
+    const testFiles = fs.readdirSync(testDir)
+      .filter(f => f.endsWith('.js'))
+      .slice(0, 10);  // First 10 while tests
+
+    const results: any[] = [];
+    for (const testFile of testFiles) {
+      const relativePath = path.join('test/language/statements/while', testFile);
+      const result = await runTest262Test(relativePath);
+      results.push(result);
+    }
+    
+    const summary = summarizeResults(results);
+    
+    console.log('\nTest262 While Statements:');
+    console.log(`  Total: ${summary.total}`);
+    console.log(`  Passed: ${summary.passed}`);
+    console.log(`  Failed: ${summary.failed}`);
+    console.log(`  Skipped: ${summary.skipped}`);
+    console.log(`  Pass Rate: ${summary.passRate}%`);
+    
+    if (summary.failed > 0) {
+      console.log('\nWhile Statement Failures:');
+      results.filter(r => !r.passed && !r.skipped).slice(0, 5).forEach(r => {
+        console.log(`  ${path.basename(r.path)}: ${r.error?.substring(0, 150)}`);
+      });
+    }
+    
+    expect(summary.total).toBeGreaterThan(0);
+  }, 30000);
+
+  it('should run Test262 let declaration tests', async () => {
+    const testDir = path.join(TEST262_ROOT, 'language/statements/let');
+    
+    if (!fs.existsSync(testDir)) {
+      console.log('Test262 not found, skipping');
+      return;
+    }
+
+    const testFiles = fs.readdirSync(testDir)
+      .filter(f => f.endsWith('.js'))
+      .slice(0, 10);  // First 10 let tests
+
+    const results: any[] = [];
+    for (const testFile of testFiles) {
+      const relativePath = path.join('test/language/statements/let', testFile);
+      const result = await runTest262Test(relativePath);
+      results.push(result);
+    }
+    
+    const summary = summarizeResults(results);
+    
+    console.log('\nTest262 Let Declarations:');
+    console.log(`  Total: ${summary.total}`);
+    console.log(`  Passed: ${summary.passed}`);
+    console.log(`  Failed: ${summary.failed}`);
+    console.log(`  Skipped: ${summary.skipped}`);
+    console.log(`  Pass Rate: ${summary.passRate}%`);
+    
+    if (summary.failed > 0) {
+      console.log('\nLet Declaration Failures:');
+      results.filter(r => !r.passed && !r.skipped).slice(0, 5).forEach(r => {
+        console.log(`  ${path.basename(r.path)}: ${r.error?.substring(0, 150)}`);
+      });
+    }
+    
+    expect(summary.total).toBeGreaterThan(0);
+  }, 30000);
+
+  it('should run Test262 const declaration tests', async () => {
+    const testDir = path.join(TEST262_ROOT, 'language/statements/const');
+    
+    if (!fs.existsSync(testDir)) {
+      console.log('Test262 not found, skipping');
+      return;
+    }
+
+    const testFiles = fs.readdirSync(testDir)
+      .filter(f => f.endsWith('.js'))
+      .slice(0, 10);  // First 10 const tests
+
+    const results: any[] = [];
+    for (const testFile of testFiles) {
+      const relativePath = path.join('test/language/statements/const', testFile);
+      const result = await runTest262Test(relativePath);
+      results.push(result);
+    }
+    
+    const summary = summarizeResults(results);
+    
+    console.log('\nTest262 Const Declarations:');
+    console.log(`  Total: ${summary.total}`);
+    console.log(`  Passed: ${summary.passed}`);
+    console.log(`  Failed: ${summary.failed}`);
+    console.log(`  Skipped: ${summary.skipped}`);
+    console.log(`  Pass Rate: ${summary.passRate}%`);
+    
+    if (summary.failed > 0) {
+      console.log('\nConst Declaration Failures:');
+      results.filter(r => !r.passed && !r.skipped).slice(0, 5).forEach(r => {
+        console.log(`  ${path.basename(r.path)}: ${r.error?.substring(0, 150)}`);
+      });
+    }
+    
+    expect(summary.total).toBeGreaterThan(0);
+  }, 30000);
+
+  it('should run Test262 array literal tests', async () => {
+    const testDir = path.join(TEST262_ROOT, 'language/expressions/array');
+    
+    if (!fs.existsSync(testDir)) {
+      console.log('Test262 not found, skipping');
+      return;
+    }
+
+    const testFiles = fs.readdirSync(testDir)
+      .filter(f => f.endsWith('.js'))
+      .slice(0, 15);  // First 15 array tests
+
+    const results: any[] = [];
+    for (const testFile of testFiles) {
+      const relativePath = path.join('test/language/expressions/array', testFile);
+      const result = await runTest262Test(relativePath);
+      results.push(result);
+    }
+    
+    const summary = summarizeResults(results);
+    
+    console.log('\nTest262 Array Literals:');
+    console.log(`  Total: ${summary.total}`);
+    console.log(`  Passed: ${summary.passed}`);
+    console.log(`  Failed: ${summary.failed}`);
+    console.log(`  Skipped: ${summary.skipped}`);
+    console.log(`  Pass Rate: ${summary.passRate}%`);
+    
+    if (summary.failed > 0) {
+      console.log('\nArray Literal Failures:');
+      results.filter(r => !r.passed && !r.skipped).slice(0, 5).forEach(r => {
+        console.log(`  ${path.basename(r.path)}: ${r.error?.substring(0, 150)}`);
+      });
+    }
+    
+    expect(summary.total).toBeGreaterThan(0);
+  }, 30000);
 });

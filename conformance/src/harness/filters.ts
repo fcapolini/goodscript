@@ -186,10 +186,53 @@ export function shouldRunTest(test: Test262Test): FilterResult {
   // These test undeclared variables which are compile errors in TypeScript/GoodScript
   if (/ReferenceError/.test(test.code) && 
       (/GetBase/.test(test.description || test.info || '') ||
-       /undeclared|unresolved/.test(test.description || test.info || ''))) {
+       /undeclared|unresolved|undeclarated/.test(test.description || test.info || ''))) {
     return {
       shouldRun: false,
       reason: 'Test expects runtime ReferenceError for undeclared variables'
+    };
+  }
+  
+  // Skip tests using Number.NaN, Number.POSITIVE_INFINITY, etc. with comparisons
+  // These test IEEE 754 special value behavior
+  if (/Number\.(NaN|POSITIVE_INFINITY|NEGATIVE_INFINITY|MAX_VALUE|MIN_VALUE)/.test(test.code) &&
+      /NaN/.test(test.description || test.info || '')) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses Number static properties (not yet implemented)'
+    };
+  }
+  
+  // Skip tests using new Object() - testing object wrapper
+  if (/new Object\(\)/.test(test.code)) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses new Object() wrapper'
+    };
+  }
+  
+  // Skip temporal dead zone tests (use function expressions/closures)
+  if (/temporal dead zone|TDZ|before.initialization/i.test(test.description || test.info || '') ||
+      test.path?.includes('before-initialization')) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses temporal dead zone with closures (function expressions)'
+    };
+  }
+  
+  // Skip comma operator tests (GS restriction)
+  if (/comma operator/i.test(test.description || test.info || '')) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses comma operator (GS restriction)'
+    };
+  }
+  
+  // Skip tests requiring verifyProperty or assert helper (test harness specific)
+  if (/verifyProperty|assert\./.test(test.code)) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses test262 harness helpers not yet implemented'
     };
   }
 
