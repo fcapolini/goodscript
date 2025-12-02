@@ -12,17 +12,16 @@ import { AstCodegen } from 'goodscript/dist/cpp/codegen';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-// Test262 harness prelude
+// Test262 harness prelude  
 const TEST262_HARNESS = `
-class Test262Error {
-  message: string;
-  
+class Test262Error extends Error {
   constructor(msg: string) {
-    this.message = msg;
+    super(msg);
   }
   
   toString(): string {
-    return "Test262Error: " + this.message;
+    const msg = this.message;
+    return "Test262Error: " + msg;
   }
   
   static thrower(msg: string): never {
@@ -31,7 +30,7 @@ class Test262Error {
 }
 
 const $DONOTEVALUATE = (): never => {
-  throw new Test262Error("Test262: This statement should not be evaluated.");
+  throw new Error("Test262: This statement should not be evaluated.");
 };
 `;
 

@@ -22,6 +22,7 @@
  *   - gs::Number: Number utilities (isNaN, isFinite, etc.)
  *   - gs::Object: Object utilities (keys, values, entries, assign, is)
  *   - gs::RegExp: Regular expression support with full JS semantics (PCRE2)
+ *   - gs::Error: Error classes (Error, TypeError, RangeError, SyntaxError, etc.)
  *   - gs::shared_ptr<T>: Non-atomic shared pointer for single-threaded use
  *   - gs::weak_ptr<T>: Non-atomic weak pointer for single-threaded use
  */
@@ -40,6 +41,7 @@
 #include "gs_number.hpp"
 #include "gs_tuple.hpp"
 #include "gs_date.hpp"
+#include "gs_error.hpp"
 
 // RegExp support (requires PCRE2 library)
 // Define GS_ENABLE_REGEXP to include RegExp support
