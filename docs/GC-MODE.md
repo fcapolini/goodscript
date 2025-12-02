@@ -225,11 +225,33 @@ GC mode provides its own runtime header:
 
 **GC Runtime Components:**
 - `gs::gc::Allocator` - MPS-based memory allocator with optimized parameters
+- `gs::gc::AllocatorConfig` - JVM-style heap configuration (see [GC Configuration](GC-CONFIGURATION.md))
 - `gs::gc::BumpAllocator` - Fast bump allocator for short-lived objects (20x faster)
-- `gs::gc::Runtime` - RAII wrapper for GC initialization/cleanup
+- `gs::gc::Runtime` - RAII wrapper for GC initialization/cleanup (accepts optional config)
 - `gs::String` - GC-allocated string with Small String Optimization (SSO)
 - `gs::Array<T>` - GC-allocated array with 1.5x growth and memcpy optimization
 - Standard containers (Map, Set) with GC support
+
+**Memory Configuration:**
+
+GC mode supports JVM-style heap configuration with three presets:
+- `defaults()`: 64MB arena / 512MB max (general use)
+- `large()`: 256MB arena / 1GB max (memory-intensive workloads)
+- `small()`: 16MB arena / 128MB max (constrained environments)
+
+```cpp
+// Use defaults
+gs::gc::Runtime runtime;
+
+// Use large configuration for string-heavy workloads
+gs::gc::Runtime runtime(gs::gc::AllocatorConfig::large());
+
+// Custom configuration
+gs::gc::AllocatorConfig custom{128*1024*1024, 2*1024*1024*1024};
+gs::gc::Runtime runtime(custom);
+```
+
+See [GC Configuration](GC-CONFIGURATION.md) for detailed documentation.
 
 ## Performance Characteristics
 
@@ -376,6 +398,8 @@ See:
 - `compiler/test/phase3/concrete-examples/` - 15 examples with full GC mode coverage
 - `compiler/test/gc-bump-test.cpp` - Bump allocator benchmarks
 - `compiler/test/gc-array-bench.cpp` - Array optimization benchmarks
+- `/tmp/test-config.cpp` - AllocatorConfig testing (all presets and custom configs)
+- [GC Configuration Guide](GC-CONFIGURATION.md) - Complete memory configuration documentation
 
 ## Contributing
 
