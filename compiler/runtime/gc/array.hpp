@@ -1,6 +1,6 @@
 #pragma once
 
-#include "allocator-simple.hpp"
+#include "allocator.hpp"
 #include "string.hpp"
 #include <stdexcept>
 #include <algorithm>

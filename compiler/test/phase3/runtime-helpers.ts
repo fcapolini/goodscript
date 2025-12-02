@@ -12,6 +12,10 @@ import { tmpdir } from 'os';
 // Path to GoodScript runtime headers
 const RUNTIME_DIR = resolve(__dirname, '../../runtime');
 
+// Path to MPS library
+const MPS_DIR = resolve(__dirname, '../../mps/code');
+const MPS_LIB = join(MPS_DIR, 'libmps.a');
+
 export interface ExecutionResult {
   success: boolean;
   stdout: string;
@@ -121,8 +125,9 @@ export const executeGcCpp = (gcCppCode: string, outDir: string): ExecutionResult
   
   try {
     // Compile the GC C++ code using Zig's C++ compiler (C++20 for runtime library features)
+    // Link with MPS (Memory Pool System) statically for garbage collection
     const compileOutput = execSync(
-      `zig c++ -std=c++20 -I${RUNTIME_DIR} ${cppFile} -o ${binFile}`,
+      `zig c++ -std=c++20 -I${RUNTIME_DIR} -I${MPS_DIR} ${cppFile} ${MPS_LIB} -o ${binFile}`,
       { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] }
     );
     

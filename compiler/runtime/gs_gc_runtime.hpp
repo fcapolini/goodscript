@@ -7,8 +7,8 @@
 
 #pragma once
 
-// Simple malloc-based allocator (MVP - MPS integration coming soon)
-#include "gc/allocator-simple.hpp"
+// MPS (Memory Pool System) garbage collector
+#include "gc/allocator.hpp"
 
 // GC runtime types
 #include "gc/string.hpp"

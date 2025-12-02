@@ -1,10 +1,16 @@
 #pragma once
 
-#include "mps.h"
 #include <stdexcept>
 #include <cstdlib>
 #include <cstring>
 #include <utility>
+
+// MPS is a C library - must use C linkage
+extern "C" {
+#include "mps.h"
+#include "mpsavm.h"  // mps_arena_class_vm
+#include "mpscmvff.h" // mps_class_mvff (manual pool, no format required)
+}
 
 namespace gs {
 namespace gc {
@@ -22,7 +28,6 @@ class Allocator {
 private:
     static mps_arena_t arena;
     static mps_pool_t pool;
-    static mps_ap_t ap;  // Allocation point for fast inline allocation
     static mps_thr_t thread;  // Thread handle
     static mps_root_t thread_root;
     static bool initialized;
@@ -39,33 +44,17 @@ public:
 
         // Create the arena (MPS memory space)
         // Using mps_arena_class_vm() for virtual memory arena
-        MPS_ARGS_BEGIN(arena_args) {
-            MPS_ARGS_ADD(arena_args, MPS_KEY_ARENA_SIZE, 64 * 1024 * 1024); // 64 MB
-        } MPS_ARGS_END(arena_args);
-        
-        res = mps_arena_create_k(&arena, mps_arena_class_vm(), arena_args);
+        res = mps_arena_create_k(&arena, mps_arena_class_vm(), mps_args_none);
         if (res != MPS_RES_OK) {
             throw std::runtime_error("Failed to create MPS arena");
         }
 
-        // Create AMS (Automatic Mark-and-Sweep) pool for objects
-        // AMS is simpler than AMC and works well with conservative GC
-        MPS_ARGS_BEGIN(pool_args) {
-            MPS_ARGS_ADD(pool_args, MPS_KEY_AMS_SUPPORT_AMBIGUOUS, 1); // Enable conservative scanning
-        } MPS_ARGS_END(pool_args);
-        
-        res = mps_pool_create_k(&pool, arena, mps_class_ams(), pool_args);
+        // Create MVFF (Manual Variable First-Fit) pool
+        // MVFF is simpler than AMC - doesn't require object format
+        res = mps_pool_create_k(&pool, arena, mps_class_mvff(), mps_args_none);
         if (res != MPS_RES_OK) {
             mps_arena_destroy(arena);
             throw std::runtime_error("Failed to create MPS pool");
-        }
-
-        // Create allocation point for fast allocation
-        res = mps_ap_create_k(&ap, pool, mps_args_none);
-        if (res != MPS_RES_OK) {
-            mps_pool_destroy(pool);
-            mps_arena_destroy(arena);
-            throw std::runtime_error("Failed to create allocation point");
         }
 
         // Register stack as GC root (conservative scanning)
@@ -73,7 +62,6 @@ public:
         void* cold;
         res = mps_thread_reg(&thread, arena);
         if (res != MPS_RES_OK) {
-            mps_ap_destroy(ap);
             mps_pool_destroy(pool);
             mps_arena_destroy(arena);
             throw std::runtime_error("Failed to register thread");
@@ -82,7 +70,6 @@ public:
         res = mps_root_create_thread(&thread_root, arena, thread, &cold);
         if (res != MPS_RES_OK) {
             mps_thread_dereg(thread);
-            mps_ap_destroy(ap);
             mps_pool_destroy(pool);
             mps_arena_destroy(arena);
             throw std::runtime_error("Failed to create thread root");
@@ -100,7 +87,6 @@ public:
 
         mps_root_destroy(thread_root);
         mps_thread_dereg(thread);
-        mps_ap_destroy(ap);
         mps_pool_destroy(pool);
         mps_arena_destroy(arena);
         initialized = false;
@@ -108,7 +94,6 @@ public:
 
     /**
      * Allocate memory for an object of type T with constructor arguments.
-     * Uses fast inline allocation via allocation point.
      */
     template<typename T, typename... Args>
     static T* alloc(Args&&... args) {
@@ -120,29 +105,20 @@ public:
         // Align to pointer size for conservative GC
         size = (size + sizeof(void*) - 1) & ~(sizeof(void*) - 1);
 
-        do {
-            mps_res_t res = mps_reserve(&addr, ap, size);
-            if (res != MPS_RES_OK) {
-                throw std::bad_alloc();
-            }
+        mps_res_t res = mps_alloc(&addr, pool, size);
+        if (res != MPS_RES_OK) {
+            throw std::bad_alloc();
+        }
 
-            // Initialize memory to zero (safe for conservative GC)
-            std::memset(addr, 0, size);
+        // Initialize memory to zero (safe for conservative GC)
+        std::memset(addr, 0, size);
 
-            // Construct object in-place with forwarded arguments
-            T* obj = new(addr) T(std::forward<Args>(args)...);
-
-            // Commit the allocation
-            if (mps_commit(ap, addr, size)) {
-                return obj;
-            }
-            // If commit failed, GC happened - retry
-        } while (true);
+        // Construct object in-place with forwarded arguments
+        return new(addr) T(std::forward<Args>(args)...);
     }
 
     /**
      * Allocate memory for an object of type T (no arguments).
-     * Uses fast inline allocation via allocation point.
      */
     template<typename T>
     static T* alloc() {
@@ -154,24 +130,16 @@ public:
         // Align to pointer size for conservative GC
         size = (size + sizeof(void*) - 1) & ~(sizeof(void*) - 1);
 
-        do {
-            mps_res_t res = mps_reserve(&addr, ap, size);
-            if (res != MPS_RES_OK) {
-                throw std::bad_alloc();
-            }
+        mps_res_t res = mps_alloc(&addr, pool, size);
+        if (res != MPS_RES_OK) {
+            throw std::bad_alloc();
+        }
 
-            // Initialize memory to zero (safe for conservative GC)
-            std::memset(addr, 0, size);
+        // Initialize memory to zero (safe for conservative GC)
+        std::memset(addr, 0, size);
 
-            // Construct object in-place
-            T* obj = new(addr) T();
-
-            // Commit the allocation
-            if (mps_commit(ap, addr, size)) {
-                return obj;
-            }
-            // If commit failed, GC happened - retry
-        } while (true);
+        // Construct object in-place
+        return new(addr) T();
     }
 
     /**
@@ -187,26 +155,21 @@ public:
         // Align to pointer size
         size = (size + sizeof(void*) - 1) & ~(sizeof(void*) - 1);
 
-        do {
-            mps_res_t res = mps_reserve(&addr, ap, size);
-            if (res != MPS_RES_OK) {
-                throw std::bad_alloc();
-            }
+        mps_res_t res = mps_alloc(&addr, pool, size);
+        if (res != MPS_RES_OK) {
+            throw std::bad_alloc();
+        }
 
-            // Initialize to zero
-            std::memset(addr, 0, size);
+        // Initialize to zero
+        std::memset(addr, 0, size);
 
-            // Construct each element
-            T* array = static_cast<T*>(addr);
-            for (size_t i = 0; i < count; ++i) {
-                new(&array[i]) T();
-            }
+        // Construct each element
+        T* array = static_cast<T*>(addr);
+        for (size_t i = 0; i < count; ++i) {
+            new(&array[i]) T();
+        }
 
-            // Commit
-            if (mps_commit(ap, addr, size)) {
-                return array;
-            }
-        } while (true);
+        return array;
     }
 
     /**
@@ -235,7 +198,6 @@ public:
 // Static member definitions
 inline mps_arena_t Allocator::arena = nullptr;
 inline mps_pool_t Allocator::pool = nullptr;
-inline mps_ap_t Allocator::ap = nullptr;
 inline mps_thr_t Allocator::thread = nullptr;
 inline mps_root_t Allocator::thread_root = nullptr;
 inline bool Allocator::initialized = false;
