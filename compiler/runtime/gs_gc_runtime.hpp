@@ -16,6 +16,7 @@
 #include "gc/map.hpp"
 #include "gc/set.hpp"
 #include "gc/number.hpp"
+#include "gc/date.hpp"
 
 #include <iostream>
 #include <sstream>
