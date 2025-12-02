@@ -17,6 +17,7 @@
 #include "gc/set.hpp"
 #include "gc/number.hpp"
 #include "gc/date.hpp"
+#include "gc/error.hpp"
 
 #include <iostream>
 #include <sstream>
