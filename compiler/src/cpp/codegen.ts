@@ -955,6 +955,11 @@ export class AstCodegen {
       return new ast.ContinueStmt();
     }
     
+    if (ts.isEmptyStatement(node)) {
+      // Empty statement (;) - emit nothing, just return empty block
+      return new ast.Block([]);
+    }
+    
     // Unsupported statement types
     return undefined;
   }

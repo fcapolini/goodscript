@@ -202,6 +202,23 @@ export function shouldRunTest(test: Test262Test): FilterResult {
     };
   }
 
+  // Skip tests that explicitly test implicit truthy/falsy behavior
+  // GoodScript requires explicit boolean expressions (GS110)
+  if ((test.description || test.info || '').match(/evaluated to (true|false)|truthy|falsy|implicit.*boolean|ToBoolean/i)) {
+    return {
+      shouldRun: false,
+      reason: 'Test requires implicit truthy/falsy behavior (GS110)'
+    };
+  }
+  
+  // Also check if test contains if statements with non-boolean literals (common pattern)
+  if (/if\s*\(\s*(0|null|undefined|""|NaN|Infinity)\s*\)/.test(test.code)) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses implicit truthy/falsy in if conditions (GS110)'
+    };
+  }
+
   return { shouldRun: true };
 }
 

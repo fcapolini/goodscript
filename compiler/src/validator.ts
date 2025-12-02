@@ -44,6 +44,9 @@ export class Validator {
 
     // Check for truthy/falsy conditions
     this.checkTruthyFalsy(node, sourceFile, checker);
+    
+    // Check for assignment to reserved words/literals
+    this.checkReservedWordAssignment(node, sourceFile);
 
     // Check for switch fall-through
     this.checkSwitchFallThrough(node, sourceFile);
@@ -479,6 +482,52 @@ export class Validator {
       location,
       'GS110'
     );
+  }
+
+  /**
+   * Check for assignment to reserved words and literals (GS124)
+   */
+  private checkReservedWordAssignment(node: ts.Node, sourceFile: ts.SourceFile): void {
+    // Check if this is a binary expression with assignment operator
+    if (ts.isBinaryExpression(node)) {
+      const op = node.operatorToken.kind;
+      const isAssignment = 
+        op === ts.SyntaxKind.EqualsToken ||
+        op === ts.SyntaxKind.PlusEqualsToken ||
+        op === ts.SyntaxKind.MinusEqualsToken ||
+        op === ts.SyntaxKind.AsteriskEqualsToken ||
+        op === ts.SyntaxKind.SlashEqualsToken ||
+        op === ts.SyntaxKind.PercentEqualsToken ||
+        op === ts.SyntaxKind.AmpersandEqualsToken ||
+        op === ts.SyntaxKind.BarEqualsToken ||
+        op === ts.SyntaxKind.CaretEqualsToken;
+      
+      if (isAssignment) {
+        const left = node.left;
+        
+        // Check for assignment to boolean literals
+        if (left.kind === ts.SyntaxKind.TrueKeyword || left.kind === ts.SyntaxKind.FalseKeyword) {
+          const location = Parser.getLocation(left, sourceFile);
+          this.addError(
+            `Cannot assign to "${left.kind === ts.SyntaxKind.TrueKeyword ? 'true' : 'false'}". It is a reserved keyword`,
+            location,
+            'GS124'
+          );
+        }
+        
+        // Check for assignment to null, undefined
+        if (ts.isIdentifier(left)) {
+          if (left.text === 'null' || left.text === 'undefined' || left.text === 'NaN' || left.text === 'Infinity') {
+            const location = Parser.getLocation(left, sourceFile);
+            this.addError(
+              `Cannot assign to "${left.text}". It is a reserved keyword or literal`,
+              location,
+              'GS124'
+            );
+          }
+        }
+      }
+    }
   }
 
   /**
