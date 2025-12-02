@@ -18,9 +18,19 @@ namespace gc {
 /**
  * GoodScript MPS Allocator
  * 
- * Provides a simple C++ interface to the Memory Pool System (MPS).
- * Uses conservative garbage collection for simplicity - no precise
- * format information needed.
+ * Provides a C++ interface to the Memory Pool System (MPS).
+ * Currently uses MVFF (Manual Variable First-Fit) pool with conservative GC.
+ * 
+ * MVFF is simple but not optimal for performance:
+ * - Conservative scanning (scans all memory as potential pointers)
+ * - Manual allocation (no automatic collection optimization)
+ * - No generational GC
+ * 
+ * Future optimization: Switch to AMC (Automatic Mostly-Copying) pool:
+ * - Requires implementing format descriptors (scan, skip, fwd, isfwd, pad)
+ * - Precise GC (knows exactly where pointers are)
+ * - Generational collection (much faster)
+ * - Expected 3-5x performance improvement
  * 
  * Thread-safety: Single-threaded for now (can be extended).
  */
@@ -50,7 +60,7 @@ public:
         }
 
         // Create MVFF (Manual Variable First-Fit) pool
-        // MVFF is simpler than AMC - doesn't require object format
+        // MVFF is conservative GC - doesn't require object format
         res = mps_pool_create_k(&pool, arena, mps_class_mvff(), mps_args_none);
         if (res != MPS_RES_OK) {
             mps_arena_destroy(arena);
