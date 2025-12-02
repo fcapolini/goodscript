@@ -163,6 +163,45 @@ export function shouldRunTest(test: Test262Test): FilterResult {
     };
   }
 
+  // GoodScript doesn't support function expressions/declarations (use arrow functions instead)
+  if (/function\s+\w+\s*\(/.test(test.code) || /:\s*function\s*\(/.test(test.code)) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses function expressions/declarations (GS108)'
+    };
+  }
+
+  // Skip tests that expect ReferenceError from undeclared variables
+  // (TypeScript/GoodScript catches these at compile time)
+  if (test.negative?.type === 'ReferenceError' && 
+      (test.negative.phase === 'parse' || test.negative.phase === 'runtime') &&
+      /throw.*ReferenceError/.test(test.code)) {
+    return {
+      shouldRun: false,
+      reason: 'Test expects runtime ReferenceError (caught at compile time in GoodScript)'
+    };
+  }
+
+  // Also skip tests that check for ReferenceError in try-catch blocks
+  // These test undeclared variables which are compile errors in TypeScript/GoodScript
+  if (/ReferenceError/.test(test.code) && 
+      (/GetBase/.test(test.description || test.info || '') ||
+       /undeclared|unresolved/.test(test.description || test.info || ''))) {
+    return {
+      shouldRun: false,
+      reason: 'Test expects runtime ReferenceError for undeclared variables'
+    };
+  }
+
+  // Skip tests using primitive wrapper constructors (new Boolean, new Number, new String)
+  // GoodScript rejects these in favor of primitive types
+  if (/new\s+(Boolean|Number|String)\s*\(/.test(test.code)) {
+    return {
+      shouldRun: false,
+      reason: 'Test uses primitive wrapper constructors (GS restriction)'
+    };
+  }
+
   return { shouldRun: true };
 }
 
