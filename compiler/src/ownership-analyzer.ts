@@ -364,6 +364,24 @@ export class OwnershipAnalyzer {
             this.addEdge(typeName, ownedType, fieldName, location);
           }
         }
+        // Handle index signatures: [key: string]: share<T>
+        else if (ts.isIndexSignatureDeclaration(member) && member.type) {
+          const location = Parser.getLocation(member, sourceFile);
+          
+          // Check for ownership qualifiers on primitive types (not allowed)
+          this.checkPrimitiveOwnership(member.type, '[index]', location, sourceFile);
+          
+          // Check for naked class references
+          this.checkForNakedClassReference(member.type, '[index]', location, sourceFile, checker);
+          
+          // Extract all share<T> ownership relationships from the index type
+          const ownedTypes = this.extractSharedOwnership(member.type, sourceFile, checker);
+          
+          // Create edges for each owned type
+          for (const ownedType of ownedTypes) {
+            this.addEdge(typeName, ownedType, '[index]', location);
+          }
+        }
       }
     }
     // Handle intersection types like: type NamedItem = Item & Named
@@ -377,6 +395,18 @@ export class OwnershipAnalyzer {
           const location = Parser.getLocation(node, sourceFile);
           this.addEdge(typeName, referencedTypeName, 'intersection', location);
         }
+      }
+    }
+    // Handle type references: type Node = Ref<Node> where Ref<T> = { value: share<T> }
+    else if (ts.isTypeReferenceNode(node.type)) {
+      const location = Parser.getLocation(node, sourceFile);
+      
+      // Extract ownership from the RHS
+      const ownedTypes = this.extractSharedOwnership(node.type, sourceFile, checker);
+      
+      // Create edges for each owned type
+      for (const ownedType of ownedTypes) {
+        this.addEdge(typeName, ownedType, 'alias', location);
       }
     }
   }
@@ -461,9 +491,16 @@ export class OwnershipAnalyzer {
   ): Set<string> {
     const ownedTypes = new Set<string>();
 
-    // Union types: check each branch first (before resolving aliases)
+    // Parenthesized types: unwrap and process the inner type
+    if (ts.isParenthesizedTypeNode(typeNode)) {
+      return this.extractSharedOwnership(typeNode.type, sourceFile, checker);
+    }
+
+    // Union types: check each branch recursively (handles nested unions)
     if (ts.isUnionTypeNode(typeNode)) {
       for (const unionMember of typeNode.types) {
+        // Recursively extract from each union member
+        // This handles both (A | B) and ((A | B) | C) patterns
         const memberOwnedTypes = this.extractSharedOwnership(unionMember, sourceFile, checker);
         memberOwnedTypes.forEach(t => ownedTypes.add(t));
       }
@@ -479,7 +516,39 @@ export class OwnershipAnalyzer {
       return ownedTypes;
     }
 
-    // Resolve type aliases
+    // Generic type aliases: Ref<Node> where Ref<T> = { value: share<T> }
+    // MUST handle BEFORE resolveTypeAlias, otherwise we lose type arguments
+    if (ts.isTypeReferenceNode(typeNode) && typeNode.typeArguments && typeNode.typeArguments.length > 0) {
+      const typeName = typeNode.typeName.getText(sourceFile);
+      
+      // Skip ownership wrappers
+      if (typeName !== 'share' && typeName !== 'use' && typeName !== 'own') {
+        const symbol = checker.getSymbolAtLocation(typeNode.typeName);
+        if (symbol?.declarations?.[0]) {
+          const declaration = symbol.declarations[0];
+          if (ts.isTypeAliasDeclaration(declaration) && declaration.typeParameters) {
+            // Build substitution map: T -> Node, U -> Item, etc.
+            const substitutionMap = new Map<string, ts.TypeNode>();
+            for (let i = 0; i < Math.min(declaration.typeParameters.length, typeNode.typeArguments.length); i++) {
+              const paramName = declaration.typeParameters[i].name.text;
+              substitutionMap.set(paramName, typeNode.typeArguments[i]);
+            }
+            
+            // Extract ownership from the alias body with substitution
+            const aliasOwnedTypes = this.extractSharedOwnershipWithSubstitution(
+              declaration.type,
+              declaration.getSourceFile(),
+              checker,
+              substitutionMap
+            );
+            aliasOwnedTypes.forEach(t => ownedTypes.add(t));
+            return ownedTypes;
+          }
+        }
+      }
+    }
+
+    // Resolve type aliases (for non-generic or already-handled cases)
     const resolvedType = this.resolveTypeAlias(typeNode, checker);
     
     // If the resolved type is different from the original (i.e., we resolved an alias),
@@ -565,6 +634,18 @@ export class OwnershipAnalyzer {
       }
     }
 
+    // Rule 1.2: Tuple types [share<T>, share<U>, ...]
+    if (ts.isTupleTypeNode(typeNode)) {
+      for (const elementType of typeNode.elements) {
+        // For each element, recursively extract share<T> ownership
+        // Handle NamedTupleMember (e.g., [name: share<T>])
+        const actualType = ts.isNamedTupleMember(elementType) ? elementType.type : elementType;
+        const elementOwnedTypes = this.extractSharedOwnership(actualType, sourceFile, checker);
+        elementOwnedTypes.forEach(t => ownedTypes.add(t));
+      }
+      return ownedTypes;
+    }
+
     // Rule 1.2: Array type syntax (share<T>[])
     if (ts.isArrayTypeNode(typeNode)) {
       const elementType = typeNode.elementType;
@@ -639,6 +720,17 @@ export class OwnershipAnalyzer {
   ): Set<string> {
     const ownedTypes = new Set<string>();
     
+    // Handle type literals (object types)
+    if (ts.isTypeLiteralNode(typeNode)) {
+      for (const member of typeNode.members) {
+        if (ts.isPropertySignature(member) && member.type) {
+          const memberOwned = this.extractSharedOwnershipWithSubstitution(member.type, sourceFile, checker, substitutionMap);
+          memberOwned.forEach(t => ownedTypes.add(t));
+        }
+      }
+      return ownedTypes;
+    }
+    
     // Handle unions
     if (ts.isUnionTypeNode(typeNode)) {
       for (const member of typeNode.types) {
@@ -692,6 +784,45 @@ export class OwnershipAnalyzer {
           }
         }
         return ownedTypes;
+      }
+      
+      // Handle nested generic type aliases: Container<T> where Container<T> = Box<T>
+      // We need to recursively resolve and apply substitution
+      if (typeNode.typeArguments && typeNode.typeArguments.length > 0) {
+        const symbol = checker.getSymbolAtLocation(typeNode.typeName);
+        if (symbol?.declarations?.[0]) {
+          const declaration = symbol.declarations[0];
+          if (ts.isTypeAliasDeclaration(declaration) && declaration.typeParameters) {
+            // Build a new substitution map for the nested alias
+            const nestedSubstitutionMap = new Map<string, ts.TypeNode>();
+            for (let i = 0; i < Math.min(declaration.typeParameters.length, typeNode.typeArguments.length); i++) {
+              const paramName = declaration.typeParameters[i].name.text;
+              const argNode = typeNode.typeArguments[i];
+              
+              // If the argument is a type parameter (e.g., T), substitute it from our map
+              if (ts.isTypeReferenceNode(argNode) && ts.isIdentifier(argNode.typeName)) {
+                const argParamName = argNode.typeName.text;
+                if (substitutionMap.has(argParamName)) {
+                  nestedSubstitutionMap.set(paramName, substitutionMap.get(argParamName)!);
+                } else {
+                  nestedSubstitutionMap.set(paramName, argNode);
+                }
+              } else {
+                nestedSubstitutionMap.set(paramName, argNode);
+              }
+            }
+            
+            // Recursively extract from the nested alias
+            const nestedOwned = this.extractSharedOwnershipWithSubstitution(
+              declaration.type,
+              declaration.getSourceFile(),
+              checker,
+              nestedSubstitutionMap
+            );
+            nestedOwned.forEach(t => ownedTypes.add(t));
+            return ownedTypes;
+          }
+        }
       }
       
       // For other generic types (e.g., Inner<T>), recursively analyze
