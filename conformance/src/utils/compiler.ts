@@ -38,7 +38,7 @@ const $DONOTEVALUATE = (): never => {
 export interface CompileOptions {
   strict?: boolean;
   generateCpp?: boolean;
-  useGcMode?: boolean;  // Default true for conformance testing
+  useGcMode?: boolean;  // Default true for conformance testing (disables Phase 2)
   permissive?: boolean;  // Allow function expressions and implicit truthiness for Test262
 }
 
@@ -62,6 +62,9 @@ export async function compileGoodScript(
   options: CompileOptions = {}
 ): Promise<CompileResult> {
   try {
+    // Default to GC mode for conformance testing (skips ownership analysis)
+    const useGcMode = options.useGcMode ?? true;
+    
     // Prepend Test262 harness for compatibility
     const fullCode = TEST262_HARNESS + '\n' + code;
     
@@ -107,21 +110,25 @@ export async function compileGoodScript(
       };
     }
 
-    // Phase 2: Ownership analysis
-    const ownershipAnalyzer = new OwnershipAnalyzer();
-    ownershipAnalyzer.analyze(sourceFile, checker);
-    ownershipAnalyzer.finalizeAnalysis();
-    const ownershipDiagnostics = ownershipAnalyzer.getDiagnostics();
-    if (ownershipDiagnostics.length > 0) {
-      return {
-        success: false,
-        errors: ownershipDiagnostics.map((e: any) => ({
-          message: e.message,
-          code: e.code || 'GS300',
-          line: e.line,
-          column: e.column
-        }))
-      };
+    // Phase 2: Ownership analysis (skip for GC mode - not needed)
+    // GC mode uses JavaScript's garbage collector, so DAG cycles and ownership
+    // derivation rules are irrelevant. Only validate for C++ compilation.
+    if (options.generateCpp && !useGcMode) {
+      const ownershipAnalyzer = new OwnershipAnalyzer();
+      ownershipAnalyzer.analyze(sourceFile, checker);
+      ownershipAnalyzer.finalizeAnalysis();
+      const ownershipDiagnostics = ownershipAnalyzer.getDiagnostics();
+      if (ownershipDiagnostics.length > 0) {
+        return {
+          success: false,
+          errors: ownershipDiagnostics.map((e: any) => ({
+            message: e.message,
+            code: e.code || 'GS300',
+            line: e.line,
+            column: e.column
+          }))
+        };
+      }
     }
 
     // JavaScript code: transpile TypeScript to JavaScript
