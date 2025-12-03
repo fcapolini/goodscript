@@ -18,19 +18,19 @@
 
 | Benchmark | GS Ownership | Reference C++ | Go | GS vs C++ | GS vs Go |
 |-----------|--------------|---------------|-----|-----------|----------|
-| Fibonacci(40) | 480ms | **318ms** | 349ms | 1.51x slower | **1.38x faster** ✅ |
-| Array Ops (5M) | 22ms | **9ms** | **7ms** | 2.44x slower | 3.14x slower |
-| Binary Search (1M) | 128ms | **42ms** | 40ms | 3.05x slower | **3.20x faster** ✅ |
-| Bubble Sort (10k) | **16ms** | 16ms | 72ms | **TIE!** 🎉 | **4.50x faster** ✅ |
-| HashMap (500k) | 217ms | **160ms** | 172ms | 1.36x slower | **1.26x faster** ✅ |
-| String Ops (2M) | 587ms | **105ms** | 359ms | 5.59x slower | **1.64x faster** ✅ |
-| **TOTAL** | **1450ms** | **650ms** | **999ms** | **2.23x slower** | **1.45x faster** ✅ |
+| Fibonacci(40) | 480ms | **318ms** | **349ms** | 1.51x slower | 1.38x slower ❌ |
+| Array Ops (5M) | 22ms | **9ms** | **7ms** | 2.44x slower | 3.14x slower ❌ |
+| Binary Search (1M) | 128ms | **42ms** | **40ms** | 3.05x slower | 3.20x slower ❌ |
+| Bubble Sort (10k) | **16ms** | **16ms** | 72ms | **TIE!** 🎉 | **4.50x faster** ✅ |
+| HashMap (500k) | 217ms | **160ms** | **172ms** | 1.36x slower | 1.26x slower ❌ |
+| String Ops (2M) | 587ms | **105ms** | **359ms** | 5.59x slower | 1.64x slower ❌ |
+| **TOTAL** | **1450ms** | **650ms** | **999ms** | **2.23x slower** | **1.45x slower** ❌ |
 
 ### Summary: GoodScript vs Go
-- **Overall: GoodScript is 1.45x faster than Go** ✅
-- **Wins 5 out of 6 benchmarks**
-- Only loses on array allocation (Go's strength)
-- Demonstrates ownership model superiority
+- **Overall: GoodScript is 1.45x SLOWER than Go** ❌
+- **Wins only 1 out of 6 benchmarks** (bubble sort)
+- Go beats us on most benchmarks due to highly optimized runtime
+- However, we still beat Node.js by 2.11x
 
 ## Key Insights
 
@@ -42,32 +42,32 @@
    - Proves zero-cost abstraction philosophy
    - **4.5x faster than Go**
 
-2. **GoodScript BEATS Go Overall**
-   - **1.45x faster** on same benchmarks
-   - Wins 5 out of 6 tests
-   - Only loses on array allocation (Go's specialty)
-   - Demonstrates ownership model superiority
+2. **Go is faster overall, but we win on bubble sort**
+   - Go is 1.45x faster overall (999ms vs our 1450ms)
+   - We win decisively on bubble sort (16ms vs 72ms - 4.5x faster)
+   - Go's highly optimized runtime and compiler beat us on most benchmarks
+   - Shows we have room for optimization
 
 3. **Only 2.23x slower than reference C++**
    - Competitive with hand-written code
    - Most overhead from runtime library, not codegen
    - Clear path to close the gap further
 
-### ⚠️ **Performance Gaps vs C++**
+### ⚠️ **Performance Gaps**
 
-1. **String Operations (5.6x slower)** - Largest gap
+1. **String Operations (5.6x slower than C++)** - Largest gap vs C++
    - Reference uses `std::string` with optimizations
    - Our String runtime has abstraction layers
-   - **Still 1.6x faster than Go!** ✅
+   - Also 1.6x slower than Go (587ms vs 359ms)
 
-2. **Binary Search (3.0x slower)** - Moderate gap
+2. **Binary Search (3.0x slower than C++)** - Major gap
    - Array access or function call overhead
-   - **Still 3.2x faster than Go!** ✅
+   - Also 3.2x slower than Go (128ms vs 40ms)
+   - Go's slice access is highly optimized
 
-3. **Array Operations (2.4x slower)** - Room for improvement
-   - Go beats us here (7ms vs 22ms)
-   - Reference C++ also faster (9ms)
-   - Allocation/iteration overhead in runtime
+3. **Array Operations (2.4x slower than C++)** - Room for improvement
+   - Go beats everyone here (7ms vs our 22ms vs C++ 9ms)
+   - Allocation/iteration overhead in our runtime
 
 ### 🤔 **Go Performance Observations**
 
@@ -76,21 +76,22 @@
    - Bulk memory operations are Go runtime's strength
 
 2. **Go struggles with:**
-   - HashMap: 172ms vs our 217ms (we're only 1.26x faster, both slower than C++)
-   - Bubble sort: 72ms vs our 16ms (4.5x slower - GC pressure)
-   - Binary search: 40ms vs our 128ms (we're slower but should investigate)
+   - Bubble sort: 72ms vs our 16ms (we're 4.5x faster - our only win!)
+   - GC pressure from frequent swaps hurts Go here
 
-3. **Interesting finding:**
-   - Go's binary search (40ms) beats ours (128ms)!
-   - Both are compiled, but Go's slice access is very fast
-   - Suggests our array access could be optimized further
+3. **Go beats us on most benchmarks:**
+   - Fibonacci: 349ms vs our 480ms (1.38x faster)
+   - Binary search: 40ms vs our 128ms (3.2x faster!)
+   - HashMap: 172ms vs our 217ms (1.26x faster)
+   - Strings: 359ms vs our 587ms (1.64x faster)
+   - Go's highly optimized runtime and compiler show their strength
 
 ## Conclusions
 
-1. **GoodScript beats Go!** 🎉
-   - 1.45x faster overall
-   - Wins 5 out of 6 benchmarks
-   - Ownership model proves superior to GC for most workloads
+1. **Go is faster overall** (999ms vs our 1450ms)
+   - Go wins 5 out of 6 benchmarks
+   - We only win on bubble sort (4.5x faster!)
+   - Go's mature compiler and runtime are highly optimized
 
 2. **Competitive with hand-written C++**
    - Only 2.23x slower on average
