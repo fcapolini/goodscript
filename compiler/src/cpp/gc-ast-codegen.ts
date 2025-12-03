@@ -78,10 +78,11 @@ export class GcAstCodegen extends AstCodegen {
     // std::shared_ptr<T> → T*
     code = this.replaceSmartPointers(code);
     
-    // Replace allocation calls
+    // Replace allocation calls (handles nested templates)
     // std::make_unique<T>(...) → gs::gc::Allocator::alloc<T>(...)
     // std::make_shared<T>(...) → gs::gc::Allocator::alloc<T>(...)
-    code = code.replace(/std::make_(?:unique|shared)<([^>]+)>\(/g, 'gs::gc::Allocator::alloc<$1>(');
+    // This needs to handle nested templates like make_shared<Stack<String>>
+    code = this.replaceMakeShared(code);
     
     // Remove .get() calls (pointers are already raw)
     code = code.replace(/\.get\(\)/g, '');
@@ -105,6 +106,48 @@ export class GcAstCodegen extends AstCodegen {
     // Pattern: return *(*__arr)[__idx] = value;
     // In GC mode should be: return (*__arr)[__idx] = value;
     code = code.replace(/return \*\(\*__arr\)\[__idx\]/g, 'return (*__arr)[__idx]');
+    
+    // Remove dereference before arrow operator for Map.get() results
+    // In ownership mode: (*node)->value where node is shared_ptr<T>*
+    // In GC mode: node->value where node is T*
+    // Pattern: (*variable)->  should become variable->
+    code = code.replace(/\(\*([a-zA-Z_][a-zA-Z0-9_]*)\)->/g, '$1->');
+    
+    // Fix standalone * dereference for object-pointer-typed Map values
+    // When Map<K, share<T>> transforms to Map<K, T*>, map.get() returns T* directly
+    // So `return *var` should be `return var` for these specific cases
+    //
+    // Strategy: Match each `gs::Map<K, gs::Type*>` field declaration
+    // Then find corresponding `.get()` calls on that specific field
+    // And remove * from return statements using those variables
+    //
+    // Example:
+    //   gs::Map<gs::String, gs::String*> strings;  // Field declaration
+    //   ...
+    //   const auto existing = this->strings.get(value);
+    //   return *existing;  // Should be: return existing;
+    
+    // Find all Map fields with object pointer values (gs::ClassName*)
+    const mapFieldPattern = /gs::Map<[^,]+,\s*(gs::\w+\*)>\s+(\w+);/g;
+    let match;
+    const mapFieldsWithObjPtrs = new Set();
+    
+    while ((match = mapFieldPattern.exec(code)) !== null) {
+      const fieldName = match[2];
+      mapFieldsWithObjPtrs.add(fieldName);
+    }
+    
+    // For each map field with object pointers, fix return statements
+    for (const fieldName of mapFieldsWithObjPtrs) {
+      // Pattern: const auto VAR = this->FIELD.get(...); ... return *VAR;
+      const getPattern = new RegExp(
+        `(const auto (\\w+) = this->${fieldName}\\.get\\([^)]+\\);[\\s\\S]*?)return \\*\\2;`,
+        'g'
+      );
+      code = code.replace(getPattern, (fullMatch, prefix, varName) => {
+        return `${prefix}return ${varName};`;
+      });
+    }
     
     return code;
   }
@@ -156,6 +199,55 @@ export class GcAstCodegen extends AstCodegen {
       // Extract type and replace std::unique_ptr<T> with T*
       const type = code.substring(pattern.lastIndex, i);
       result += `${type}*`;
+      pos = i + 1;
+    }
+    
+    return result;
+  }
+
+  /**
+   * Replace std::make_shared and std::make_unique calls with GC allocator
+   * Handles nested templates like make_shared<Stack<String>>
+   */
+  private replaceMakeShared(code: string): string {
+    let result = '';
+    let pos = 0;
+    const pattern = /std::make_(?:unique|shared)</g;
+    
+    while (true) {
+      pattern.lastIndex = pos;
+      const match = pattern.exec(code);
+      
+      if (!match) {
+        result += code.substring(pos);
+        break;
+      }
+      
+      result += code.substring(pos, match.index);
+      result += 'gs::gc::Allocator::alloc<';
+      
+      // Find matching closing > for the template argument
+      let depth = 0;
+      let i = pattern.lastIndex;
+      while (i < code.length) {
+        if (code[i] === '<') depth++;
+        else if (code[i] === '>') {
+          if (depth === 0) break;
+          depth--;
+        }
+        i++;
+      }
+      
+      if (i >= code.length) {
+        // Malformed - keep original
+        result += match[0];
+        pos = pattern.lastIndex;
+        continue;
+      }
+      
+      // Extract type and add it
+      const type = code.substring(pattern.lastIndex, i);
+      result += type + '>';
       pos = i + 1;
     }
     
