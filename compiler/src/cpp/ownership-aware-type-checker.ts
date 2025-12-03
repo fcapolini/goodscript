@@ -76,17 +76,19 @@ export class OwnershipAwareTypeChecker {
           return this.parseTypeNode(decl.type);
         }
         
-        // Fallback: use TypeChecker to look up the property type
-        const tsType = this.checker.getTypeAtLocation(expr.expression);
-        const prop = tsType.getProperty(expr.name.text);
-        if (prop && prop.valueDeclaration && ts.isPropertyDeclaration(prop.valueDeclaration) && prop.valueDeclaration.type) {
-          return this.parseTypeNode(prop.valueDeclaration.type);
+        // Fallback: use TypeChecker to look up the property type (if available)
+        if (this.checker) {
+          const tsType = this.checker.getTypeAtLocation(expr.expression);
+          const prop = tsType.getProperty(expr.name.text);
+          if (prop && prop.valueDeclaration && ts.isPropertyDeclaration(prop.valueDeclaration) && prop.valueDeclaration.type) {
+            return this.parseTypeNode(prop.valueDeclaration.type);
+          }
         }
       }
       
       // Handle obj.prop where we need to infer the property type
       const objType = this.getTypeOfExpression(expr.expression);
-      if (objType) {
+      if (objType && this.checker) {
         // Look up the property in the class/interface
         const tsType = this.checker.getTypeAtLocation(expr.expression);
         const prop = tsType.getProperty(expr.name.text);
@@ -112,10 +114,26 @@ export class OwnershipAwareTypeChecker {
     // Handle new expressions
     if (ts.isNewExpression(expr)) {
       const className = expr.expression.getText();
-      // New expressions create owned instances
+      
+      // Built-in value types (Array, Map, Set, String, etc.) are NOT heap-allocated
+      // Only user-defined classes get smart pointer ownership
+      const builtInValueTypes = ['Array', 'Map', 'Set', 'String', 'RegExp', 'Date', 'Promise'];
+      const isBuiltIn = builtInValueTypes.includes(className.split('<')[0]);
+      
+      if (isBuiltIn) {
+        // Built-in types are stack values, no ownership
+        return {
+          baseType: className,
+          ownership: undefined,
+          isArray: className.startsWith('Array'),
+          isNullable: false
+        };
+      }
+      
+      // User-defined class instances - default to shared ownership (matches JavaScript semantics)
       return {
         baseType: className,
-        ownership: 'share', // Default to share for class instances
+        ownership: 'share',
         isArray: false,
         isNullable: false
       };
@@ -393,6 +411,44 @@ export class OwnershipAwareTypeChecker {
   isSmartPointer(expr: ts.Expression): boolean {
     const type = this.getTypeOfExpression(expr);
     return !!type?.ownership && type.ownership !== 'use';
+  }
+  
+  /**
+   * Determine if a value needs to be wrapped in a smart pointer for assignment
+   * @param targetType The type of the target (variable being assigned to)
+   * @param sourceExpr The expression being assigned
+   * @returns undefined (no wrapping), 'unique' (make_unique), or 'shared' (make_shared)
+   */
+  needsSmartPointerWrapping(targetType: OwnershipType, sourceExpr: ts.Expression): 'unique' | 'shared' | undefined {
+    const sourceType = this.getTypeOfExpression(sourceExpr);
+    
+    // If target has ownership but source doesn't, we need to wrap
+    if (targetType.ownership && !sourceType?.ownership) {
+      // Don't wrap if source is already a 'new' expression (already creates smart pointer)
+      if (ts.isNewExpression(sourceExpr)) {
+        return undefined;
+      }
+      
+      return targetType.ownership === 'own' ? 'unique' : 'shared';
+    }
+    
+    return undefined;
+  }
+  
+  /**
+   * Check if an expression requires pointer access operator (->)
+   * Returns true for smart pointers (unique_ptr, shared_ptr, weak_ptr after lock)
+   */
+  requiresPointerAccess(expr: ts.Expression): boolean {
+    const type = this.getTypeOfExpression(expr);
+    if (!type) return false;
+    
+    // Smart pointers (own, share, but not use since it needs lock() first)
+    if (type.ownership === 'own' || type.ownership === 'share') {
+      return true;
+    }
+    
+    return false;
   }
   
   /**

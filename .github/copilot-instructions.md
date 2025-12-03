@@ -181,7 +181,25 @@ if (typeText?.startsWith('share<')) {
    // Map: 'number' → 'double', 'string' → 'gs::String', 'boolean' → 'bool'
    ```
 
-3. **Track state across statements**:
+3. **Use OwnershipAwareTypeChecker for type tracking**:
+   ```typescript
+   // Register all declarations
+   this.ownershipChecker.registerVariable(name, decl);
+   this.ownershipChecker.registerProperty(className, propName, decl);
+   
+   // Check if expression needs pointer access
+   if (this.ownershipChecker.requiresPointerAccess(expr)) {
+     // Use -> operator for smart pointers
+   }
+   
+   // Check if wrapping is needed
+   const wrapping = this.ownershipChecker.needsSmartPointerWrapping(targetType, sourceExpr);
+   if (wrapping === 'shared') {
+     // Wrap with std::make_shared
+   }
+   ```
+
+4. **Track state across statements** (fallback when OwnershipChecker insufficient):
    - Track variables with unique_ptr ownership (already moved/wrapped)
    - Track variables with shared_ptr (may need .get() for raw access)
    - Track nullable types (std::optional or pointer-based)
@@ -199,6 +217,55 @@ if (typeText?.startsWith('share<')) {
    ```typescript
    // C++ handles integer/float literals naturally
    // Use explicit type suffixes when needed: 1.0f, 1.0, 1L
+   ```
+
+### When Working on Type Tracking (`ownership-aware-type-checker.ts`)
+
+1. **Always register declarations**:
+   ```typescript
+   // In visitVariableStatement
+   this.ownershipChecker.registerVariable(name, decl);
+   
+   // In visitClass (for properties)
+   this.ownershipChecker.registerProperty(className, fieldName, member);
+   
+   // In visitFunction (for parameters)
+   this.ownershipChecker.registerVariable(paramName, param);
+   ```
+
+2. **Distinguish built-in value types from user classes**:
+   ```typescript
+   const builtInValueTypes = ['Array', 'Map', 'Set', 'String', 'RegExp', 'Date', 'Promise'];
+   const isBuiltIn = builtInValueTypes.includes(className.split('<')[0]);
+   
+   if (isBuiltIn) {
+     // These are stack values, no ownership
+     return { baseType: className, ownership: undefined };
+   } else {
+     // User classes get smart pointer ownership
+     return { baseType: className, ownership: 'share' };
+   }
+   ```
+
+3. **Use OwnershipChecker as primary source of truth**:
+   ```typescript
+   // FIRST: Check OwnershipChecker (most reliable)
+   if (this.ownershipChecker.requiresPointerAccess(expr)) {
+     return true;
+   }
+   
+   // SECOND: Fallback to manual variableTypes map
+   const varType = this.variableTypes.get(varName);
+   // ...
+   ```
+
+4. **Always null-check TypeChecker before use**:
+   ```typescript
+   // OwnershipChecker methods that use this.checker:
+   if (this.checker) {
+     const tsType = this.checker.getTypeAtLocation(expr);
+     // Safe to use TypeChecker
+   }
    ```
 
 ### When Working on Ownership Analysis (`ownership-analyzer.ts`)

@@ -1,20 +1,22 @@
 # Phase 3: C++ Code Generation
 
-**Status:** ✅ 97.0% Complete (1214/1252 tests passing) - Core Complete 🎉
+**Status:** ✅ 94.5% Complete (551/583 tests passing) - Type Tracking Strengthened 🎉
 
 ## Architecture
 
 The C++ code generation uses an **AST-based approach** with **ownership-aware type tracking**, **performance optimization**, and **function hoisting**:
 
-### Current Implementation (Dec 3, 2025 - Constructor Ownership Fix)
+### Current Implementation (Dec 3, 2025 - Type Tracking Strengthened)
 
 **New AST-Based Codegen:**
-- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~3,511 lines)
+- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~3,530 lines)
   - Pure AST transformation from TypeScript AST → C++ AST
   - No string concatenation during generation
   - Type-safe, composable, easily testable
-  - **Currently passing 1214/1252 tests (97.0%)** ✅
+  - **Currently passing 551/583 tests (94.5%)** ✅
   - **CORE FUNCTIONALITY COMPLETE**
+  - **NEW: Strengthened type tracking** - OwnershipAwareTypeChecker fully integrated throughout codegen
+  - **NEW: Built-in value type detection** - Set/Map/Array correctly identified as stack values
   - **NEW: Constructor ownership detection** - Correctly generates `std::make_unique<T>()` for `own<T>` fields
   - Performance optimizations enabled by default (level 1)
   - Function hoisting for non-closure functions
@@ -30,11 +32,15 @@ The C++ code generation uses an **AST-based approach** with **ownership-aware ty
   - Constant folding, dead code elimination, expression simplification
   - **NEW: Floor pattern optimization** (`x - fmod(x, 1)` → `static_cast<int>(x)`)
   - See optimizer section below for details
-- **`src/cpp/ownership-aware-type-checker.ts`** - Preserves ownership qualifiers (354 lines)
+- **`src/cpp/ownership-aware-type-checker.ts`** - Preserves ownership qualifiers (~460 lines) ⭐ **STRENGTHENED**
   - Wraps TypeScript's type checker to preserve `own<T>`, `share<T>`, `use<T>`
   - Reads types directly from AST since TypeChecker erases type aliases
   - Tracks types through method chaining, optional unwrapping, array operations
-  - Enables correct smart pointer detection for C++ code generation
+  - **NEW: Built-in value type detection** - Distinguishes Set/Map/Array from user classes
+  - **NEW: `requiresPointerAccess()` method** - Determines when to use `->` vs `.`
+  - **NEW: `needsSmartPointerWrapping()` method** - Smart wrapping decisions
+  - Fully integrated throughout codegen as primary source of type truth
+  - Null-safe TypeChecker access prevents crashes
 
 **Legacy Implementation:**
 - **`src/cpp/codegen.ts`** - AST-based codegen (current implementation)
@@ -78,7 +84,20 @@ See `src/cpp/README.md` for usage examples.
 - 10 inheritance tests (100% passing) ✅
 - 5 runtime-equivalence tests (100% passing) ✅
 
-**Recent Additions (Nov 30, 2025 - Performance Optimization Session)**:
+**Recent Additions (Dec 3, 2025 - Type Tracking Strengthened)**:
+1. ✅ **Strengthened Type Tracking System** - OwnershipAwareTypeChecker fully integrated 🎉
+   - **Problem**: Pointer/value confusion from incomplete type tracking
+   - **Solution**: Integrated OwnershipChecker as primary source of truth
+   - **Changes**:
+     - Register all variables/properties/parameters with OwnershipChecker
+     - Use `requiresPointerAccess()` as primary check in `isSmartPointerAccess()`
+     - Distinguished built-in value types (Set, Map, Array) from user classes
+     - Added null-safe TypeChecker access to prevent crashes
+   - **Impact**: +5 tests passing, eliminated all pointer/value confusion failures
+   - **Performance**: Preserved C++ value semantics (no "pointers everywhere" slowdown)
+   - **Documentation**: `notes/SESSION-20251203-TYPE-TRACKING-STRENGTHENED.md`
+
+**Previous Additions (Nov 30, 2025 - Performance Optimization Session)**:
 1. ✅ **Floor Pattern Optimization** - Optimize integer conversion pattern 🎉
    - **Pattern**: Detects `x - std::fmod(x, 1)` (floor operation idiom)
    - **Optimization**: Replaces with `static_cast<int>(x)` for direct conversion

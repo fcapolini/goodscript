@@ -535,6 +535,9 @@ export class AstCodegen {
       // Track variable type for smart pointer detection (AFTER potentially updating cppType)
       this.variableTypes.set(name, cppType);
       
+      // Register with OwnershipChecker for comprehensive type tracking
+      this.ownershipChecker.registerVariable(name, decl);
+      
       // In C++, 'const' on objects makes them immutable, but in TypeScript,
       // 'const' just means the binding can't be reassigned.
       // - Primitives (number, bool) and strings: can be const
@@ -741,6 +744,8 @@ export class AstCodegen {
           params.push(new ast.Parameter(paramName, paramType, undefined, passByConstRef, passByMutableRef));
           // Track parameter types for length() detection
           this.variableTypes.set(paramName, paramType);
+          // Register with OwnershipChecker
+          this.ownershipChecker.registerVariable(paramName, param);
         }
         
         const body = member.body ? this.visitBlock(member.body) : new ast.Block([]);
@@ -2886,7 +2891,12 @@ export class AstCodegen {
    * Check if a property access should use -> (for smart pointers) instead of .
    */
   private isSmartPointerAccess(expr: ts.Expression): boolean {
-    // Check if it's an identifier and look up its type
+    // FIRST: Try OwnershipChecker (most reliable - preserves ownership semantics)
+    if (this.ownershipChecker.requiresPointerAccess(expr)) {
+      return true;
+    }
+    
+    // SECOND: Check if it's an identifier and look up its type in variableTypes map
     if (ts.isIdentifier(expr)) {
       const varName = cppUtils.escapeName(expr.text);
       const varType = this.variableTypes.get(varName);
@@ -2931,7 +2941,7 @@ export class AstCodegen {
         }
       }
       
-      // Fallback: use ownership checker to infer type from AST
+      // Fallback: use ownership checker to infer type from AST (for unwrapped optionals)
       if (this.unwrappedOptionals.has(varName)) {
         const ownershipType = this.ownershipChecker.getTypeOfExpression(expr);
         if (ownershipType?.isNullable && ownershipType.ownership) {
