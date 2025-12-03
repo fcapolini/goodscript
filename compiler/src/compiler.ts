@@ -207,7 +207,9 @@ export class Compiler {
         allDiagnostics.push(...tsDiagnostics);
       } else if (target === 'native') {
         try {
-          this.emitCpp(program, options.outDir, options.mode || 'gc', options.compileBinary, options.arch);
+          // Automatically use ownership mode when compiling to binary, since GC mode requires MPS
+          const mode = options.compileBinary && !options.mode ? 'ownership' : (options.mode || 'gc');
+          this.emitCpp(program, options.outDir, mode, options.compileBinary, options.arch);
         } catch (error: any) {
           allDiagnostics.push({
             severity: 'error',

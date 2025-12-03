@@ -57,7 +57,8 @@ describe('CLI: Native Compilation', () => {
       expect(fs.existsSync(cppFile)).toBe(true);
       
       const cppContent = fs.readFileSync(cppFile, 'utf-8');
-      expect(cppContent).toContain('#include "gs_runtime.hpp"');
+      // Native target defaults to GC mode, which uses gs_gc_runtime.hpp
+      expect(cppContent).toContain('#include "gs_gc_runtime.hpp"');
       expect(cppContent).toContain('namespace gs {');
       expect(cppContent).toContain('int main()');
     });

@@ -184,27 +184,44 @@ export class AstCodegen {
         }
       } else if (decl.initializer && ts.isElementAccessExpression(decl.initializer) && this.checker) {
         // Infer type from array subscript: arr[i] where arr is Array<T>
-        // Since array subscript returns T*, and we dereference it, variable holds T
-        const arrayExpr = decl.initializer.expression;
-        const arrayType = this.checker.getTypeAtLocation(arrayExpr);
-        const arrayTypeStr = this.checker.typeToString(arrayType);
+        // at_ref() returns T& (reference), but when assigning to a variable we want a copy
+        // We need to know the actual type T so that isSmartPointerAccess works correctly
         
-        // Extract element type from Array<T> or T[]
-        const arrayMatch = arrayTypeStr.match(/(?:Array<)?(.+?)(?:\[\]|>)$/);
-        if (arrayMatch) {
-          const elementTypeStr = arrayMatch[1].trim();
-          // Map TypeScript element type to C++
-          let cppElementType = this.mapTypeScriptTypeToCpp(elementTypeStr);
+        // IMPORTANT: Use ownershipChecker to preserve ownership annotations (share<T>, own<T>)
+        // TypeChecker erases these because they're just type aliases
+        const arrayOwnership = this.ownershipChecker.getTypeOfExpression(decl.initializer.expression);
+        
+        if (arrayOwnership && arrayOwnership.isArray && arrayOwnership.elementType) {
+          // Get the element type from ownership analysis (preserves share<T>, own<T>, use<T>)
+          const elementOwnership = arrayOwnership.elementType;
+          const elementTypeStr = elementOwnership.baseType;
           
-          // If element type is an interface, we wrap it in shared_ptr
-          // So the variable type should be the shared_ptr, not auto
-          if (this.interfaceNames.has(elementTypeStr)) {
-            cppType = new ast.CppType(`std::shared_ptr<gs::${elementTypeStr}>`);
+          // Map ownership wrapper + type name to C++
+          if (elementOwnership.ownership === 'share') {
+            cppType = new ast.CppType(`std::shared_ptr<gs::${cppUtils.escapeName(elementTypeStr)}>`);
+          } else if (elementOwnership.ownership === 'own') {
+            cppType = new ast.CppType(`std::unique_ptr<gs::${cppUtils.escapeName(elementTypeStr)}>`);
+          } else if (elementOwnership.ownership === 'use') {
+            cppType = new ast.CppType(`std::weak_ptr<gs::${cppUtils.escapeName(elementTypeStr)}>`);
+          } else if (this.interfaceNames.has(cppUtils.escapeName(elementTypeStr))) {
+            // Interfaces are always wrapped in shared_ptr
+            cppType = new ast.CppType(`std::shared_ptr<gs::${cppUtils.escapeName(elementTypeStr)}>`);
           } else {
-            cppType = new ast.CppType(cppElementType);
+            // Plain type (number, string, boolean, or value class)
+            cppType = new ast.CppType(this.mapTypeScriptTypeToCpp(elementTypeStr));
           }
         } else {
-          cppType = new ast.CppType('auto');
+          // Fallback: use TypeChecker (will lose ownership annotations but better than nothing)
+          const arrayType = this.checker.getTypeAtLocation(decl.initializer.expression);
+          const arrayTypeStr = this.checker.typeToString(arrayType);
+          const arrayMatch = arrayTypeStr.match(/^(?:Array<(.+)>|(.+)\[\])$/);
+          if (arrayMatch) {
+            const elementTypeStr = arrayMatch[1] || arrayMatch[2];
+            const cppElementType = this.mapTypeScriptTypeToCpp(elementTypeStr.trim());
+            cppType = new ast.CppType(cppElementType);
+          } else {
+            cppType = new ast.CppType('auto');
+          }
         }
       } else if (decl.initializer && ts.isCallExpression(decl.initializer) && this.checker) {
         // Infer type from function call return type
@@ -212,7 +229,14 @@ export class AstCodegen {
         // Special case: map.keys(), map.values(), and set.values() return Array types
         if (ts.isPropertyAccessExpression(decl.initializer.expression)) {
           const methodName = decl.initializer.expression.name.text;
-          if (methodName === 'keys' || methodName === 'values') {
+          
+          // Special case: Map.get() returns V* (pointer to value)
+          // Always use auto to let C++ infer the correct pointer type
+          // For Map<K, share<V>>, get() returns shared_ptr<V>*
+          // For Map<K, V>, get() returns V*
+          if (methodName === 'get') {
+            cppType = new ast.CppType('auto');
+          } else if (methodName === 'keys' || methodName === 'values') {
             const objExpr = decl.initializer.expression.expression;
             const objType = this.checker.getTypeAtLocation(objExpr);
             const objTypeStr = this.checker.typeToString(objType);
@@ -348,34 +372,18 @@ export class AstCodegen {
             cppType = new ast.CppType(`${innerType}*`);
             this.pointerVariables.add(name);
           }
-        } else if (typeStr === 'auto' && this.checker && ts.isCallExpression(decl.initializer)) {
-          // For auto types from Map.get(), determine the actual type
+        } else if (typeStr === 'auto' && ts.isCallExpression(decl.initializer)) {
+          // For auto types from Map.get(), just use auto - let C++ infer the pointer type
+          // This works because Map<K,V>::get() returns V* in C++
+          // For Map<K, share<V>>, get() returns shared_ptr<V>*
+          // For Map<K, V>, get() returns V*
           const callExpr = decl.initializer;
           if (ts.isPropertyAccessExpression(callExpr.expression) && 
               callExpr.expression.name.text === 'get') {
-            const mapExpr = callExpr.expression.expression;
-            const mapType = this.checker.getTypeAtLocation(mapExpr);
-            const mapTypeStr = this.checker.typeToString(mapType);
-            
-            // Extract value type from Map<K,V>
-            const mapMatch = mapTypeStr.match(/Map<[^,]+,\s*(.+)>/);
-            if (mapMatch) {
-              const valueTypeStr = mapMatch[1].trim();
-              
-              // Check if value type is share<T> - return shared_ptr directly
-              const shareMatch = valueTypeStr.match(/share<(.+)>/);
-              if (shareMatch) {
-                const innerType = shareMatch[1].trim();
-                const cppInnerType = this.mapTypeScriptTypeToCpp(innerType);
-                // Return shared_ptr directly - it can be null
-                cppType = new ast.CppType(`std::shared_ptr<${cppInnerType}>`);
-              } else {
-                // Regular type - Map.get() returns V*
-                const cppValueType = this.mapTypeScriptTypeToCpp(valueTypeStr);
-                cppType = new ast.CppType(`${cppValueType}*`);
-                this.pointerVariables.add(name);
-              }
-            }
+            // Keep using auto - it will correctly infer the pointer type
+            cppType = new ast.CppType('auto');
+            // Mark as pointer variable for proper dereferencing later
+            this.pointerVariables.add(name);
           }
         } else if (typeStr.includes('std::shared_ptr') || 
                    typeStr.includes('std::unique_ptr') ||
@@ -1445,35 +1453,27 @@ export class AstCodegen {
       // Also checks if element type is an interface (which we wrap in shared_ptr)
       const hasSmartPtrElements = this.ownershipChecker.hasSmartPointerElements(node.expression, this.interfaceNames);
       
-      // For shared_ptr elements, use operator[] (returns shared_ptr<T>*, dereference once)
-      if (hasSmartPtrElements) {
-        const subscript = cpp.subscript(obj, index);
-        return cpp.unary('*', subscript);
-      }
-      
-      // OPTIMIZATION: For simple array element reads with primitive types,
-      // use at_ref() for direct reference access without pointer indirection
-      // Pattern: arr[i] where i is a simple index (identifier or simple expression)
+      // Always use at_ref() for array element access - it returns a reference to the element
+      // For Array<T>, at_ref() returns T&
+      // For Array<shared_ptr<T>>, at_ref() returns shared_ptr<T>&
+      // This is more consistent and safer than operator[] which returns T*
       const isSimpleRead = !isPartOfPropertyAccess && 
                           !this.isArrayAccessUsedAsLValue(node);
       
-      if (isSimpleRead && this.isSimpleArrayIndex(node.argumentExpression!)) {
+      if (isSimpleRead) {
         // Use at_ref() for direct access: arr.at_ref(i)
-        // This avoids the pointer dereference overhead of operator[]
         return cpp.call(cpp.member(obj, 'at_ref', false), [index]);
       }
       
-      // For other cases, use operator[] with appropriate dereferencing
-      const subscript = cpp.subscript(obj, index);
-      
-      // Check if this subscript is part of a property/method access chain
-      if (isPartOfPropertyAccess) {
-        // Don't dereference - parent will use -> to access the pointer
-        return subscript;
-      } else {
-        // Dereference to get value
-        return cpp.unary('*', subscript);
+      // For property access chains (arr[i].prop or arr[i]->method()), 
+      // still use at_ref() but wrap in dereference for smart pointers
+      if (isPartOfPropertyAccess && hasSmartPtrElements) {
+        // arr[i]->method() becomes arr.at_ref(i)->method()
+        return cpp.call(cpp.member(obj, 'at_ref', false), [index]);
       }
+      
+      // Fallback for other cases
+      return cpp.call(cpp.member(obj, 'at_ref', false), [index]);
     }
     
     if (ts.isPostfixUnaryExpression(node)) {
@@ -2019,6 +2019,19 @@ export class AstCodegen {
     
     // Assignment: x = new T() where x is own<T>
     if (ts.isBinaryExpression(parent) && parent.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+      // Special case: this.fieldName = new T() in constructor
+      if (ts.isPropertyAccessExpression(parent.left) &&
+          parent.left.expression.kind === ts.SyntaxKind.ThisKeyword) {
+        const fieldName = parent.left.name.getText();
+        // Look up field type from variableTypes (which preserves AST-based ownership)
+        const fieldType = this.variableTypes.get(`this.${fieldName}`);
+        if (fieldType) {
+          const fieldTypeStr = fieldType.toString();
+          if (fieldTypeStr.includes('std::unique_ptr')) return 'unique';
+          if (fieldTypeStr.includes('std::shared_ptr')) return 'shared';
+        }
+      }
+      
       const leftType = this.checker.getTypeAtLocation(parent.left);
       const leftTypeStr = this.checker.typeToString(leftType);
       if (leftTypeStr.startsWith('own<')) return 'unique';
@@ -2075,7 +2088,13 @@ export class AstCodegen {
           return `std::weak_ptr<${innerType}>`;
         }
         
-        // For custom types, prefix with gs:: namespace
+        // For custom types, check if it's an interface (needs shared_ptr wrapping)
+        // Interfaces are polymorphic and must be accessed through pointers
+        const escapedType = cppUtils.escapeName(tsType);
+        if (this.interfaceNames.has(escapedType)) {
+          return `std::shared_ptr<gs::${escapedType}>`;
+        }
+        
         return tsType.startsWith('gs::') ? tsType : `gs::${tsType}`;
     }
   }
@@ -2337,17 +2356,13 @@ export class AstCodegen {
       // Special case: number instance methods (toFixed, toExponential, toPrecision, toString)
       // value.toFixed(2) → gs::Number::toFixed(value, 2)
       // value.toString() → gs::Number::toString(value)
+      // arr[i].toString() → gs::Number::toString(arr.at_ref(i))
       if (this.checker && (methodName === 'toFixed' || methodName === 'toExponential' || methodName === 'toPrecision' || methodName === 'toString')) {
         const objType = this.checker.getTypeAtLocation(objNode);
         const objTypeStr = this.checker.typeToString(objType);
         if (objTypeStr === 'number') {
-          let objExpr = this.visitExpression(objNode);
-          
-          // If objNode is an array subscript, we need to dereference it
-          // because visitExpression() didn't dereference (it thought it was part of property access)
-          if (ts.isElementAccessExpression(objNode)) {
-            objExpr = cpp.unary('*', objExpr);
-          }
+          const objExpr = this.visitExpression(objNode);
+          // Note: at_ref() returns T& (reference), so no dereferencing needed
           
           // Call static method with object as first argument
           return cpp.call(cpp.id(`gs::Number::${methodName}`), [objExpr, ...args]);
@@ -2363,8 +2378,24 @@ export class AstCodegen {
       const objExpr = this.visitExpression(objNode);
       
       // Check if obj is an array subscript or smart pointer - needs ->
+      // For array subscripts: at_ref() returns T& where T is the element type
+      //   - If elements are smart pointers (Array<share<T>>), at_ref() returns shared_ptr<T>& → use ->
+      //   - If elements are values (Array<string>), at_ref() returns gs::String& → use .
       const isArraySubscript = ts.isElementAccessExpression(objNode);
-      const isPointer = isArraySubscript || this.isSmartPointerAccess(objNode);
+      let isPointer = false;
+      
+      if (isArraySubscript) {
+        // Check if array has smart pointer elements
+        const arrayExpr = (objNode as ts.ElementAccessExpression).expression;
+        const hasSmartPtrElements = this.ownershipChecker.hasSmartPointerElements(
+          arrayExpr,
+          this.interfaceNames
+        );
+        isPointer = hasSmartPtrElements;
+      } else {
+        // For non-array access, check if it's a smart pointer type
+        isPointer = this.isSmartPointerAccess(objNode);
+      }
       
       // If objExpr is a unary expression (like *arr[i]) and we're using ->, wrap in parens
       // Because *a->b is parsed as *(a->b), but we want (*a)->b
@@ -2561,14 +2592,25 @@ export class AstCodegen {
       }
     }
     
-    // Check if object is an array subscript (arr[i]) - these return pointers, so use ->
-    // BUT: if it's a share<T>[] array, we dereferenced to get the shared_ptr, so use ->
-    // for smart pointer access, not raw pointer access
+    // Check if object is an array subscript (arr[i])
+    // at_ref() returns T& where T is the element type
+    // - For Array<gs::String>, returns gs::String& → use .
+    // - For Array<shared_ptr<T>>, returns shared_ptr<T>& → use ->
     const isArraySubscript = ts.isElementAccessExpression(node.expression);
     
-    // Check if the object is a smart pointer type (needs -> instead of .)
-    const isPointer = this.isSmartPointerAccess(node.expression) || 
-                      (isArraySubscript && !this.isSmartPointerAccess(node.expression));
+    let isPointer = false;
+    if (isArraySubscript) {
+      // Check if the array has smart pointer elements
+      const arrayExpr = node.expression.expression;
+      const hasSmartPtrElements = this.ownershipChecker.hasSmartPointerElements(
+        arrayExpr,
+        this.interfaceNames
+      );
+      isPointer = hasSmartPtrElements;
+    } else {
+      // For non-array access, check if it's a smart pointer type
+      isPointer = this.isSmartPointerAccess(node.expression);
+    }
     
     // If object is a unary expression (like *arr[i]) and we're using ->, wrap in parens
     // Because *a->b is parsed as *(a->b), but we want (*a)->b

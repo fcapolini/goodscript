@@ -62,6 +62,7 @@ describe('RegExp End-to-End C++ Tests', () => {
       'gs_date.hpp',
       'gs_regexp.hpp',
       'gs_regexp_impl.hpp',
+      'gs_error.hpp',
       'gs_runtime.hpp'
     ];
     

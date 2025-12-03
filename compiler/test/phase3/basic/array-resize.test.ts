@@ -35,9 +35,8 @@ describe('Phase 3: Array Auto-Resize', () => {
     `;
     const cpp = compileToCpp(source);
     
-    // Should contain resize logic and dereferenced assignment
-    expect(cpp).toContain('resize');
-    expect(cpp).toContain('*(*__arr)[__idx] = 42');
+    // Should use set() method which handles auto-resize internally
+    expect(cpp).toContain('arr.set(5, 42)');
   });
   
   it('should handle assignment in a loop', () => {
@@ -49,8 +48,8 @@ describe('Phase 3: Array Auto-Resize', () => {
     `;
     const cpp = compileToCpp(source);
     
-    // Should contain resize logic
-    expect(cpp).toContain('resize');
+    // Should use set() method
+    expect(cpp).toContain('arr.set(i,');
   });
   
   it('should handle assignment to sparse array', () => {
@@ -61,8 +60,9 @@ describe('Phase 3: Array Auto-Resize', () => {
     `;
     const cpp = compileToCpp(source);
     
-    // Should contain resize logic for both assignments
-    expect(cpp).toContain('resize');
+    // Should use set() method for both assignments
+    expect(cpp).toContain('arr.set(0,');
+    expect(cpp).toContain('arr.set(100,');
   });
   
   it('should work with computed indices', () => {
@@ -73,7 +73,7 @@ describe('Phase 3: Array Auto-Resize', () => {
     `;
     const cpp = compileToCpp(source);
     
-    expect(cpp).toContain('resize');
+    expect(cpp).toContain('arr.set(idx, 99)');
   });
   
   it('should handle untyped array with assignment', () => {
@@ -83,9 +83,9 @@ describe('Phase 3: Array Auto-Resize', () => {
     `;
     const cpp = compileToCpp(source);
     
-    // Should infer type from usage and resize
-    expect(cpp).toContain('resize');
-    // Should create a typed array, not empty initializer
+    // Should use set() method
+    expect(cpp).toContain('.set(10, 0)');
+    // Should create a typed array
     expect(cpp).toMatch(/gs::Array|auto a\s*=\s*gs::Array/);
   });
 });

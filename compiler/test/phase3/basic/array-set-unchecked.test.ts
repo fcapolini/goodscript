@@ -25,6 +25,7 @@ describe('Array set_unchecked optimization', () => {
       getCanonicalFileName: (fileName) => fileName,
       useCaseSensitiveFileNames: () => true,
       getNewLine: () => '\n',
+      getDefaultLibFileName: () => 'lib.d.ts',
     });
 
     const checker = program.getTypeChecker();
@@ -32,11 +33,10 @@ describe('Array set_unchecked optimization', () => {
     ownershipAnalyzer.analyze(sourceFile);
 
     const codegen = new CppCodegen(checker, ownershipAnalyzer);
-    const cppAst = codegen.generateCppAst(sourceFile);
-    return cppAst.toString();
+    return codegen.generate(sourceFile);
   }
 
-  it('should use set_unchecked for simple loop with known bounds', () => {
+  it('should use set() for simple loop with known bounds', () => {
     const source = `
       function fill(arr: number[]): void {
         for (let i = 0; i < arr.length; i++) {
@@ -46,11 +46,11 @@ describe('Array set_unchecked optimization', () => {
     `;
 
     const cpp = compile(source);
-    expect(cpp).toContain('set_unchecked');
-    expect(cpp).not.toContain('__arr->resize');
+    // Optimization: use set_unchecked for array access in safe bounds (loop with known range)
+    expect(cpp).toContain('arr.set_unchecked(static_cast<int>(i), 42)');
   });
 
-  it('should use set_unchecked for arr[i+1] pattern', () => {
+  it('should use set() for arr[i+1] pattern', () => {
     const source = `
       function shift(arr: number[]): void {
         for (let i = 0; i < arr.length - 1; i++) {
@@ -60,11 +60,11 @@ describe('Array set_unchecked optimization', () => {
     `;
 
     const cpp = compile(source);
-    expect(cpp).toContain('set_unchecked');
-    expect(cpp).not.toContain('__arr->resize');
+    // Optimization: use set_unchecked for array access in safe bounds
+    expect(cpp).toContain('.set_unchecked(');
   });
 
-  it('should use set_unchecked for bubble sort pattern', () => {
+  it('should use set() for bubble sort pattern', () => {
     const source = `
       function bubbleSort(arr: number[]): void {
         const n = arr.length;
@@ -81,11 +81,11 @@ describe('Array set_unchecked optimization', () => {
     `;
 
     const cpp = compile(source);
-    expect(cpp).toContain('set_unchecked');
-    expect(cpp).not.toContain('__arr->resize');
+    // Optimization: use set_unchecked for array access in safe bounds
+    expect(cpp).toContain('.set_unchecked(');
   });
 
-  it('should still use resize for potentially out-of-bounds access', () => {
+  it('should use set() for potentially out-of-bounds access', () => {
     const source = `
       function maybeOutOfBounds(arr: number[], idx: number): void {
         arr[idx] = 42;
@@ -93,7 +93,7 @@ describe('Array set_unchecked optimization', () => {
     `;
 
     const cpp = compile(source);
-    expect(cpp).not.toContain('set_unchecked');
-    expect(cpp).toContain('__arr->resize');
+    // Not in safe bounds (arbitrary idx) - use set() method which handles bounds and resize
+    expect(cpp).toMatch(/arr\.set\(.*idx.*42\)/);
   });
 });

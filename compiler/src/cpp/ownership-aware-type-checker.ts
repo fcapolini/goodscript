@@ -75,6 +75,13 @@ export class OwnershipAwareTypeChecker {
         if (decl && decl.type) {
           return this.parseTypeNode(decl.type);
         }
+        
+        // Fallback: use TypeChecker to look up the property type
+        const tsType = this.checker.getTypeAtLocation(expr.expression);
+        const prop = tsType.getProperty(expr.name.text);
+        if (prop && prop.valueDeclaration && ts.isPropertyDeclaration(prop.valueDeclaration) && prop.valueDeclaration.type) {
+          return this.parseTypeNode(prop.valueDeclaration.type);
+        }
       }
       
       // Handle obj.prop where we need to infer the property type
@@ -183,6 +190,20 @@ export class OwnershipAwareTypeChecker {
       }
     }
     
+    // String.split() returns string[]
+    if (objType.baseType === 'string' && methodName === 'split') {
+      return {
+        baseType: 'Array',
+        isArray: true,
+        elementType: {
+          baseType: 'string',
+          isArray: false,
+          isNullable: false
+        },
+        isNullable: false
+      };
+    }
+    
     return undefined;
   }
   
@@ -223,6 +244,25 @@ export class OwnershipAwareTypeChecker {
     // Handle nullable types (T | null | undefined)
     const isNullable = typeStr.includes('| null') || typeStr.includes('| undefined');
     const baseTypeStr = typeStr.split('|')[0].trim();
+    
+    // Handle ownership qualifiers in type strings
+    const ownMatch = baseTypeStr.match(/^own<(.+)>$/);
+    if (ownMatch) {
+      const innerType = this.parseTypeString(ownMatch[1]);
+      return { ...innerType, ownership: 'own', isNullable };
+    }
+    
+    const shareMatch = baseTypeStr.match(/^share<(.+)>$/);
+    if (shareMatch) {
+      const innerType = this.parseTypeString(shareMatch[1]);
+      return { ...innerType, ownership: 'share', isNullable };
+    }
+    
+    const useMatch = baseTypeStr.match(/^use<(.+)>$/);
+    if (useMatch) {
+      const innerType = this.parseTypeString(useMatch[1]);
+      return { ...innerType, ownership: 'use', isNullable: true };
+    }
     
     // Handle arrays
     if (baseTypeStr.endsWith('[]')) {
@@ -360,6 +400,7 @@ export class OwnershipAwareTypeChecker {
    */
   hasSmartPointerElements(expr: ts.Expression, interfaceNames: Set<string>): boolean {
     const type = this.getTypeOfExpression(expr);
+    
     if (!type?.isArray || !type.elementType) {
       return false;
     }

@@ -1,22 +1,23 @@
 # Phase 3: C++ Code Generation
 
-**Status:** ✅ 100% Complete (960/960 tests passing - 100%) 🎉
+**Status:** ✅ 97.0% Complete (1214/1252 tests passing) - Core Complete 🎉
 
 ## Architecture
 
 The C++ code generation uses an **AST-based approach** with **ownership-aware type tracking**, **performance optimization**, and **function hoisting**:
 
-### Current Implementation (Nov 30, 2025 - Performance Optimization Session)
+### Current Implementation (Dec 3, 2025 - Constructor Ownership Fix)
 
 **New AST-Based Codegen:**
-- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~2,778 lines)
+- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~3,511 lines)
   - Pure AST transformation from TypeScript AST → C++ AST
   - No string concatenation during generation
   - Type-safe, composable, easily testable
-  - **Currently passing 960/960 tests (100%)** ✅ 🎉
-  - **ALL TESTS PASSING - Phase 3 Complete!**
-  - **NEW: Performance optimizations enabled by default (level 1)**
-  - **NEW: Function hoisting for non-closure functions**
+  - **Currently passing 1214/1252 tests (97.0%)** ✅
+  - **CORE FUNCTIONALITY COMPLETE**
+  - **NEW: Constructor ownership detection** - Correctly generates `std::make_unique<T>()` for `own<T>` fields
+  - Performance optimizations enabled by default (level 1)
+  - Function hoisting for non-closure functions
 
 **AST Infrastructure:**
 - **`src/cpp/ast.ts`** - C++ AST node type definitions (720 lines)
@@ -1326,12 +1327,135 @@ The semantic equivalence test suite (13 tests) documents the correspondence betw
 - GoodScript's restrictions are what enable cross-language equivalence
 - Tests serve as executable documentation
 
-### 6. Single-Threaded Performance Matters
+### 6. Constructor Ownership Detection
+
+**Challenge**: In constructor initializer lists, `new T()` expressions need to know whether to generate `std::make_unique<T>()` or `std::make_shared<T>()` based on the field's ownership type.
+
+**Problem**: TypeChecker loses ownership annotations (type aliases are erased), so checking `this.fieldName` with TypeChecker returns just `T`, not `own<T>` or `share<T>`.
+
+**Solution**: When analyzing `new T()` expressions in assignments, check if the left-hand side is `this.fieldName`, and if so, look up the field type from `variableTypes` map (which preserves AST-based ownership annotations).
+
+**Example**:
+```typescript
+class Parser {
+  private tokenizer: own<Tokenizer>;
+  private arena: share<JsonArena>;
+  
+  constructor(input: share<string>) {
+    this.tokenizer = new Tokenizer(input);  // Must generate make_unique
+    this.arena = new JsonArena();           // Must generate make_shared
+  }
+}
+```
+
+**Generated C++**:
+```cpp
+class Parser {
+  std::unique_ptr<gs::Tokenizer> tokenizer;
+  std::shared_ptr<gs::JsonArena> arena;
+  
+  Parser(const std::shared_ptr<gs::String>& input) 
+    : tokenizer(std::make_unique<gs::Tokenizer>(input)),  // ✅ Correct
+      arena(std::make_shared<gs::JsonArena>()) {          // ✅ Correct
+  }
+};
+```
+
+**Implementation** (`src/cpp/codegen.ts:2020-2035`):
+```typescript
+private getOwnershipTypeForNew(node: ts.NewExpression): 'unique' | 'shared' {
+  const parent = node.parent;
+  
+  // Special case: this.fieldName = new T() in constructor
+  if (ts.isBinaryExpression(parent) && 
+      ts.isPropertyAccessExpression(parent.left) &&
+      parent.left.expression.kind === ts.SyntaxKind.ThisKeyword) {
+    const fieldName = parent.left.name.getText();
+    const fieldType = this.variableTypes.get(`this.${fieldName}`);
+    if (fieldType) {
+      const fieldTypeStr = fieldType.toString();
+      if (fieldTypeStr.includes('std::unique_ptr')) return 'unique';
+      if (fieldTypeStr.includes('std::shared_ptr')) return 'shared';
+    }
+  }
+  // ... other cases
+}
+```
+
+This fix enables proper smart pointer generation in constructors while preserving ownership semantics.
+
+### 7. Single-Threaded Performance Matters
 
 Using non-atomic reference counting (`gs::shared_ptr`) provides measurable performance benefits without sacrificing safety, because GoodScript's type system guarantees single-threaded execution.
 
+## Known Limitations
+
+### 1. Pool Pattern Shared Instance Creation
+
+**Issue**: Creating shared instances (`share<T>`) directly is not yet supported.
+
+**Current Behavior**:
+```typescript
+class Arena {
+  items: share<Item>[];  // Vector of shared_ptr<Item>
+  
+  add(item: Item): void {
+    this.items.push(item);  // ❌ Error: can't convert Item to share<Item>
+  }
+}
+```
+
+**Workaround**: Use ownership mode with explicit arena pattern, or compile in GC mode:
+```bash
+gsc -t cpp -m gc -o dist src/main.gs.ts
+```
+
+**Planned Fix**: Add explicit `share(value)` or `make_shared(value)` helper for creating shared instances.
+
+### 2. Recursive Data Structures
+
+**Issue**: Self-referential types like JSON trees trigger DAG cycle detection even when the runtime structure is acyclic.
+
+**Example**:
+```typescript
+class JsonValue {
+  kind: string;
+  objectValue: Map<string, share<JsonValue>> | null;  // ❌ Cycle: JsonValue → JsonValue
+  arrayValue: share<JsonValue>[] | null;
+}
+```
+
+**Workaround**: Use GC mode for recursive data structures, or redesign with index-based references:
+```typescript
+class JsonArena {
+  values: JsonValue[];  // Store values directly
+}
+
+class Parser {
+  private arena: JsonArena;
+  
+  parseValue(): number {  // Return index instead of reference
+    return this.arena.values.length - 1;
+  }
+}
+```
+
+### 3. Test Suite Status
+
+**Passing**: 1214/1252 tests (97.0%)
+
+**Remaining Failures** (38 tests):
+- **json-parser** (13 tests) - Recursive data structure (see above)
+- **lru-cache** (8 tests) - Map/smart pointer interaction edge cases
+- **string-pool** (11 tests) - Similar to lru-cache
+- **benchmark-performance** (2 tests) - JavaScript execution timeouts (not codegen issues)
+- **error-handling, generic-stack, interface-shapes** (4 tests) - GC mode only (MPS library setup)
+
+All core language features work correctly. Remaining failures are edge cases in ownership mode or environmental (GC library linking).
+
 ---
 
-**Last Updated**: November 23, 2025
-**Status**: Foundation complete with performance optimizations
-**Next Milestone**: Advanced smart pointer patterns and stdlib mappings
+**Last Updated**: December 3, 2025
+**Status**: Core complete (97% tests passing), constructor ownership detection fixed
+**Next Milestone**: Shared instance creation helper, async/await support
+

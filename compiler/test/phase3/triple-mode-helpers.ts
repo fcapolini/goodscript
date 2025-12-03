@@ -9,7 +9,7 @@
 
 import ts from 'typescript';
 import { AstCodegen } from '../../src/cpp/codegen.js';
-import { GcCodegen } from '../../src/cpp/gc-codegen.js';
+import { GcAstCodegen as GcCodegen } from '../../src/cpp/gc-ast-codegen.js';
 import { executeJS, executeCpp, executeGcCpp, compareOutputs, type ExecutionResult } from './runtime-helpers.js';
 
 export interface TripleModeResult {

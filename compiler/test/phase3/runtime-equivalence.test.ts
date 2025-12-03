@@ -3,7 +3,7 @@ import { Compiler } from '../../src/compiler';
 import { writeFileSync, mkdirSync, existsSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { executeJS, executeCpp, compareOutputs, normalizeOutput, isCppCompilerAvailable } from './runtime-helpers';
+import { executeJS, executeGcCpp, compareOutputs, normalizeOutput, isCppCompilerAvailable } from './runtime-helpers';
 
 describe('Phase 3 - Runtime Equivalence Tests', () => {
   let tmpDir: string;
@@ -25,7 +25,7 @@ describe('Phase 3 - Runtime Equivalence Tests', () => {
     jsCode: string;
     cppCode: string;
     jsResult: ReturnType<typeof executeJS>;
-    nativeResult: ReturnType<typeof executeCpp>;
+    nativeResult: ReturnType<typeof executeGcCpp>;
     equivalent: boolean;
   } => {
     const srcFile = join(tmpDir, 'test.gs.ts');
@@ -56,7 +56,7 @@ describe('Phase 3 - Runtime Equivalence Tests', () => {
     // Execute both
     const jsResult = executeJS(jsCode);
     const nativeResult = isCppCompilerAvailable() 
-      ? executeCpp(cppCode, outDir)
+      ? executeGcCpp(cppCode, outDir)
       : { success: false, stdout: '', stderr: 'C++ compiler not available', exitCode: 1 };
     
     const equivalent = compareOutputs(jsResult, nativeResult);

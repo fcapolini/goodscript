@@ -29,14 +29,14 @@ describe('Phase 3: JS/C++ Semantic Equivalence', () => {
     const cpp = compileToCpp(source);
     
     // JavaScript: arr[10] returns undefined
-    // C++ (our implementation): arr[10] has undefined behavior (like std::vector)
-    // This is a known limitation - future versions may add bounds checking
+    // C++ (our implementation): arr.at_ref(10) uses bounds-checked access
+    // This returns a reference and may throw std::out_of_range
     
-    expect(cpp).toContain('arr[10]');
+    expect(cpp).toContain('arr.at_ref(10)');
     
-    // Note: This is NOT a perfect match to JavaScript's undefined.
-    // In C++, out-of-bounds access causes undefined behavior.
-    // GoodScript prioritizes performance over runtime safety for array access.
+    // Note: GoodScript uses at_ref() for safety.
+    // This provides bounds checking similar to std::vector::at()
+    // rather than unchecked operator[] access.
   });
 
   it('should handle array writes', () => {
@@ -48,16 +48,14 @@ describe('Phase 3: JS/C++ Semantic Equivalence', () => {
     const cpp = compileToCpp(source);
     
     // JavaScript: arr[10] = 42 automatically resizes array to length 11
-    // C++ (our implementation): uses IIFE with resize to match behavior
-    // Uses lambda pattern: __arr, __idx, and resize
+    // C++ (our implementation): uses set() method which auto-resizes
+    // The set() method handles array bounds automatically
     
-    expect(cpp).toContain('__arr');
-    expect(cpp).toContain('__idx');
     expect(cpp).toContain('42');
-    expect(cpp).toContain('resize');
+    expect(cpp).toContain('arr.set(10, 42)');
   });
 
-  it('should demonstrate the semantic difference', () => {
+  it('should demonstrate bounds-checked array access', () => {
     // In JavaScript:
     // const arr = [1, 2, 3];
     // arr[10]  // undefined
@@ -65,23 +63,22 @@ describe('Phase 3: JS/C++ Semantic Equivalence', () => {
     
     // In our C++ (for number array):
     // gs::Array<double> arr = {1, 2, 3};
-    // arr[10]  // undefined behavior (out of bounds)
+    // arr.at_ref(10)  // throws std::out_of_range
     
-    // This is NOT a perfect match - C++ has undefined behavior for
-    // out-of-bounds access while JS returns undefined.
+    // GoodScript uses at_ref() for safety - bounds-checked access
     
     const cpp = compileToCpp(`
       const arr = [1, 2, 3];
       const x = arr[10];
     `);
     
-    expect(cpp).toContain('arr[10]');
+    expect(cpp).toContain('arr.at_ref(10)');
     
-    // The key difference:
-    // - JS: arr[10] === undefined (safe, returns undefined)
-    // - C++: arr[10] has undefined behavior (may crash or return garbage)
+    // The key similarity:
+    // - JS: arr[10] returns undefined (safe)
+    // - C++: arr.at_ref(10) throws exception (safe)
     //
-    // GoodScript prioritizes C++ performance over runtime safety.
+    // Both prevent silent data corruption from out-of-bounds access.
   });
 
   it('should document optional object member behavior', () => {
@@ -298,7 +295,7 @@ describe('Phase 3: JS/C++ Semantic Equivalence', () => {
     // - Both provide safe default values (.value_or() vs ?? operator)
   });
 
-  it('should document array bounds behavior difference', () => {
+  it('should document array bounds behavior', () => {
     const source = `
       const arr = [1, 2, 3];
       const inBounds = arr[1];
@@ -307,22 +304,21 @@ describe('Phase 3: JS/C++ Semantic Equivalence', () => {
     
     const cpp = compileToCpp(source);
     
-    // This is the ONE semantic difference we document:
+    // GoodScript provides bounds-checked array access:
     // JavaScript: arr[10] returns undefined
-    // C++ (our implementation): undefined behavior (like std::vector)
+    // C++ (our implementation): arr.at_ref(10) throws std::out_of_range
     
-    expect(cpp).toContain('arr[1]');
-    expect(cpp).toContain('arr[10]');
+    expect(cpp).toContain('arr.at_ref(1)');
+    expect(cpp).toContain('arr.at_ref(10)');
     
-    // WHY this is acceptable:
-    // 1. GoodScript prioritizes C++ performance
-    // 2. Bounds checking would require overhead on every access
-    // 3. For proper bounds checking, use arr.length explicitly
-    // 4. This matches standard C++ std::vector behavior
+    // WHY we use at_ref():
+    // 1. Provides safety similar to JavaScript's undefined return
+    // 2. Uses std::vector::at() which throws on out-of-bounds
+    // 3. Returns reference for efficient in-bounds access
+    // 4. Better than unchecked operator[] which has undefined behavior
     //
-    // Alternative would be bounds checking or optional<T>, but:
-    // - Bounds checking: runtime overhead on every access
-    // - optional<T>: would break type compatibility (arr[i] would be 
-    //   optional<number> instead of number, requiring .value() everywhere)
+    // Trade-off: slight performance cost for safety, but GoodScript
+    // prioritizes correctness. For performance-critical code where
+    // bounds are guaranteed, future versions may optimize this.
   });
 });

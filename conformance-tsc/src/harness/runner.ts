@@ -4,7 +4,7 @@
 
 import * as ts from 'typescript';
 import { Validator } from 'goodscript';
-import { GcCodegen } from 'goodscript/dist/cpp/gc-codegen';
+import { GcAstCodegen as GcCodegen } from 'goodscript/dist/cpp/gc-ast-codegen';
 import { TscTest } from '../utils/baseline';
 import { shouldRunTest } from './filters';
 import { writeFile, mkdir } from 'fs/promises';
