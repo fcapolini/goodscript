@@ -174,6 +174,34 @@ See `src/cpp/README.md` for usage examples.
 - Overall **2.07x average speedup** vs Node.js (up from 1.06x)
 - Optimizations enabled by default (level 1) for production performance
 
+**Recent Additions (Dec 3, 2025 - Array Access Optimization Session)**:
+1. ✅ **Array Access Optimization** - Safe bounds check elimination for proven-safe patterns 🎉
+   - **Problem**: Array bounds checking has ~20% performance overhead
+   - **Solution**: Pattern-based optimization that eliminates checks for provably safe access patterns
+   - **Safety Guarantee**: Only optimizes when static analysis proves access is in bounds
+   - **Supported Patterns**:
+     1. **Forward iteration**: `for (let i = 0; i < arr.length; i++)` with `arr[i]`
+     2. **Reverse iteration**: `for (let i = arr.length - 1; i >= 0; i--)` with `arr[i]`
+     3. **Range iteration**: `for (let i = start; i < end; i++)` with `arr[i]` (where start ≥ 0)
+     4. **Inner array iteration**: `for (let i = 0; i < arr[j].length; i++)` with `arr[j][i]`
+   - **Strict Validation**:
+     - Verifies loop initialization ≥ 0 (lower bound check)
+     - Ensures condition references array.length
+     - Confirms increment/decrement is exactly +1/-1
+     - For Pattern 4: validates outer array reference matches inner access
+   - **Implementation**:
+     - `at_ref()` - Returns reference to element (no bounds check, used for reads)
+     - `set_unchecked()` - Sets element without bounds check (used for writes)
+     - `set()` - Safe fallback with inline bounds check + auto-resize
+   - **Performance Impact**: Enables tight loops to run at maximum speed
+   - **Safety Trade-off**: Worth ~20% performance loss for guaranteed memory safety
+   - **Files**:
+     - `compiler/src/cpp/codegen.ts` - Pattern detection and optimization logic
+     - `compiler/runtime/gs_array.hpp` - Ownership mode implementation
+     - `compiler/runtime/gc/array.hpp` - GC mode implementation
+     - `compiler/test/phase3/basic/array-inline-bounds-check.test.ts` - Safety validation tests
+     - `compiler/test/phase3/basic/array-set-unchecked.test.ts` - Write optimization tests
+
 **Recent Additions (Nov 30, 2025 - Late Evening Session)**:
 1. ✅ **AST-Based Optimizer** - Clean, composable optimization passes (+14 tests) 🎉
    - **Architecture**: Visitor-based transformation on C++ AST before rendering
