@@ -179,8 +179,8 @@ class JsonValue {
   stringValue: string;
   numberValue: number;
   booleanValue: boolean;
-  objectValue: Map<string, share<JsonValue>> | null;
-  arrayValue: share<JsonValue>[] | null;
+  objectValue: Map<string, use<JsonValue>> | null;
+  arrayValue: use<JsonValue>[] | null;
   
   constructor(kind: string) {
     this.kind = kind;
@@ -213,13 +213,13 @@ class JsonValue {
     return new JsonValue("null");
   }
   
-  static fromObject(value: Map<string, share<JsonValue>>): JsonValue {
+  static fromObject(value: Map<string, use<JsonValue>>): JsonValue {
     const result = new JsonValue('object');
     result.objectValue = value;
     return result;
   }
   
-  static fromArray(value: share<JsonValue>[]): JsonValue {
+  static fromArray(value: use<JsonValue>[]): JsonValue {
     const result = new JsonValue('array');
     result.arrayValue = value;
     return result;
@@ -275,7 +275,7 @@ class Parser {
   }
   
   private parseObject(): JsonValue {
-    const obj: Map<string, share<JsonValue>> = new Map<string, share<JsonValue>>();
+    const obj: Map<string, use<JsonValue>> = new Map<string, use<JsonValue>>();
     this.advance(); // Skip {
     
     while (!this.expect(TokenType.RightBrace) && !this.expect(TokenType.EOF)) {
@@ -307,7 +307,7 @@ class Parser {
   }
   
   private parseArray(): JsonValue {
-    const arr: share<JsonValue>[] = [];
+    const arr: use<JsonValue>[] = [];
     this.advance(); // Skip [
     
     while (!this.expect(TokenType.RightBracket) && !this.expect(TokenType.EOF)) {

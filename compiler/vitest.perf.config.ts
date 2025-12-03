@@ -5,19 +5,17 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    // Enable parallel test execution with 10 worker threads
-    // Each test file runs in its own worker thread
-    pool: 'threads',
+    // Run performance tests in a single process for accurate timing
+    pool: 'forks',
     poolOptions: {
-      threads: {
-        maxThreads: 10,
-        minThreads: 1,
+      forks: {
+        singleFork: true,
       },
     },
-    // Exclude performance tests from default runs (run separately for accurate timing)
-    exclude: ['**/node_modules/**', '**/dist/**', '**/benchmark-performance.test.ts'],
-    // Increase timeout for longer-running tests (concrete examples can take 20-30s)
-    testTimeout: 60000,
+    // Only include performance tests
+    include: ['**/benchmark-performance.test.ts'],
+    // Longer timeout for performance tests
+    testTimeout: 120000,
   },
   resolve: {
     alias: {

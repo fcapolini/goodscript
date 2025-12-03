@@ -76,6 +76,7 @@ export class GcAstCodegen extends AstCodegen {
     // Replace smart pointer types with raw pointers
     // std::unique_ptr<T> → T*
     // std::shared_ptr<T> → T*
+    // std::weak_ptr<T> → T*
     code = this.replaceSmartPointers(code);
     
     // Replace allocation calls (handles nested templates)
@@ -112,6 +113,11 @@ export class GcAstCodegen extends AstCodegen {
     // In GC mode: node->value where node is T*
     // Pattern: (*variable)->  should become variable->
     code = code.replace(/\(\*([a-zA-Z_][a-zA-Z0-9_]*)\)->/g, '$1->');
+    
+    // Replace std::dynamic_pointer_cast with dynamic_cast for raw pointers
+    // In ownership mode: std::dynamic_pointer_cast<T>(shared_ptr)
+    // In GC mode: dynamic_cast<T*>(raw_ptr)
+    code = code.replace(/std::dynamic_pointer_cast<([^>]+)>\(/g, 'dynamic_cast<$1*>(');
     
     // Fix standalone * dereference for object-pointer-typed Map values
     // When Map<K, share<T>> transforms to Map<K, T*>, map.get() returns T* directly
@@ -158,13 +164,13 @@ export class GcAstCodegen extends AstCodegen {
    */
   private replaceSmartPointers(code: string): string {
     // Handle simple cases with regex (most common)
-    code = code.replace(/std::(?:unique|shared)_ptr<(\w+)>/g, '$1*');
+    code = code.replace(/std::(?:unique|shared|weak)_ptr<(\w+)>/g, '$1*');
     
     // Handle nested templates with iterative approach
     // This is still O(n) but only runs once instead of multiple times
     let result = '';
     let pos = 0;
-    const pattern = /std::(?:unique|shared)_ptr</g;
+    const pattern = /std::(?:unique|shared|weak)_ptr</g;
     
     while (true) {
       pattern.lastIndex = pos;

@@ -2267,8 +2267,9 @@ export class AstCodegen {
     const args = node.arguments.map((arg, index) => {
       let argExpr = this.visitExpression(arg);
       
-      // Special handling for .push() on Array<share<T>>
+      // Special handling for .push() on Array<share<T>> and Array<use<T>>
       // If pushing to an array of shared_ptrs, wrap the argument
+      // If pushing to an array of weak_ptrs, don't wrap (shared_ptr implicitly converts to weak_ptr)
       if (methodName === 'push' && index === 0 && objNode && this.checker) {
         // Use OwnershipAwareTypeChecker to check if array has smart pointer elements
         const arrayHasSharedElements = this.ownershipChecker.hasSmartPointerElements(objNode, this.interfaceNames);
@@ -2277,16 +2278,19 @@ export class AstCodegen {
           // Get the element type from the array type
           const arrayType = this.ownershipChecker.getTypeOfExpression(objNode);
           const elementType = arrayType?.elementType?.baseType;
+          const elementOwnership = arrayType?.elementType?.ownership;
           
-          if (elementType) {
+          if (elementType && elementOwnership) {
             // Check if the argument is already a smart pointer using OwnershipAwareTypeChecker
             const argOwnership = this.ownershipChecker.getTypeOfExpression(arg);
             const isAlreadyShared = argOwnership?.ownership === 'share';
             
-            // Wrap in std::make_shared unless it's already a share<T>
-            if (!isAlreadyShared) {
+            // If array element is use<T> (weak_ptr), don't wrap - shared_ptr converts to weak_ptr
+            // If array element is share<T> and arg is not already shared, wrap it
+            if (elementOwnership === 'share' && !isAlreadyShared) {
               argExpr = cpp.call(cpp.id(`std::make_shared<gs::${elementType}>`), [argExpr]);
             }
+            // For use<T> arrays, don't wrap - shared_ptr implicitly converts to weak_ptr
           }
         }
       }

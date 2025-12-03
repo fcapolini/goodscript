@@ -7,13 +7,14 @@ The GoodScript compiler (`gsc`) transforms [GoodScript](https://github.com/fcapo
 The project implements GoodScript in four phases:
 
 - **Phase 1** (✅ Complete): Strict TypeScript semantics - eliminates JavaScript "bad parts" (244 tests) - [Details](../docs/GOOD-PARTS.md)
-- **Phase 2** (✅ Complete): Ownership analysis (DAG validation + derivation rules) (231 tests, 100% coverage) - [Details](../docs/DAG-ANALYSIS.md)
+- **Phase 2** (✅ Complete): Ownership analysis (DAG validation + derivation rules) (425 tests, 100% coverage) - [Details](../docs/DAG-ANALYSIS.md)
   - DAG cycle detection prevents reference-counted memory leaks
   - Derivation rules prevent ownership logic mistakes (GS303, GS304, GS305)
-- **Phase 3** (✅ Complete): C++ code generation with AST-based optimizer (959 tests, 100% passing) - [Details](../docs/PHASE-3-CPP.md)
+- **Phase 3** (✅ Complete): C++ code generation with AST-based optimizer (1252 tests, 100% passing) - [Details](../docs/PHASE-3-CPP.md)
   - AST-based code generation with ownership-aware type checking
-  - Optional optimizer with constant folding and dead code elimination
+  - Dual-mode compilation: ownership mode (smart pointers) and GC mode (MPS garbage collector)
   - Full interface polymorphism and smart pointer support
+  - Optional optimizer with constant folding and dead code elimination
 - **Phase 4** (📋 Planned): Ecosystem integration - standard library and more - [Details](../docs/MINIMAL-STD-LIB.md)
 
 ## Installation
@@ -90,9 +91,9 @@ compiler/
 │   └── gs.ts                  # CLI runner entry point
 │
 ├── test/
-│   ├── phase1/                # Phase 1 restriction tests (142 tests)
-│   ├── phase2/                # Phase 2 ownership tests (283 tests)
-│   └── phase3/                # Phase 3 codegen + validation (450 tests)
+│   ├── phase1/                # Phase 1 restriction tests (244 tests)
+│   ├── phase2/                # Phase 2 ownership tests (425 tests)
+│   └── phase3/                # Phase 3 codegen + validation (583 tests)
 │
 └── lib/
     └── goodscript.d.ts        # Type definitions for ownership wrappers
@@ -111,11 +112,15 @@ npm run clean        # Remove build artifacts
 ### Testing
 
 ```bash
-npm test             # Run all tests
+npm test             # Run all tests (1252 total: 1244 fast + 8 performance)
+npm run test:fast    # Run fast tests only (excludes performance benchmarks)
+npm run test:perf    # Run performance benchmarks in isolation
 npm test -- phase1   # Run only Phase 1 tests
 npm run test:watch   # Watch mode for tests
 npm run test:coverage # Generate coverage report
 ```
+
+**Note**: Performance tests are run separately to ensure accurate timing measurements and prevent timeouts when run in parallel with other tests.
 
 ### Linting
 
