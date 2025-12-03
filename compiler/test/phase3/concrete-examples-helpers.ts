@@ -270,7 +270,7 @@ export function compileAndExecuteNative(
   const needsRegExp = execution.cppCode.includes('#ifdef GS_ENABLE_REGEXP') ||
                       execution.cppCode.includes('gs::RegExp');
   
-  let compileCmd = `zig c++ -std=c++20 -O2 -I${RUNTIME_DIR} ${cppFile} -o ${binFile}`;
+  let compileCmd = `zig c++ -std=c++20 -O3 -I${RUNTIME_DIR} ${cppFile} -o ${binFile}`;
   
   // Add PCRE2 support if needed
   if (needsRegExp) {

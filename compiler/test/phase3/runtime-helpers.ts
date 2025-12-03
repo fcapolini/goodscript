@@ -126,8 +126,9 @@ export const executeGcCpp = (gcCppCode: string, outDir: string): ExecutionResult
   try {
     // Compile the GC C++ code using Zig's C++ compiler (C++20 for runtime library features)
     // Link with MPS (Memory Pool System) statically for garbage collection
+    // Use -O3 for fair performance comparison with ownership mode
     const compileOutput = execSync(
-      `zig c++ -std=c++20 -I${RUNTIME_DIR} -I${MPS_DIR} ${cppFile} ${MPS_LIB} -o ${binFile}`,
+      `zig c++ -std=c++20 -O3 -I${RUNTIME_DIR} -I${MPS_DIR} ${cppFile} ${MPS_LIB} -o ${binFile}`,
       { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] }
     );
     

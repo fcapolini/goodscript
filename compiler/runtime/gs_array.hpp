@@ -470,6 +470,40 @@ public:
     return impl_[static_cast<size_t>(index)];
   }
   
+  /**
+   * Direct element assignment without bounds checking or resize
+   * For performance-critical code where bounds are known to be valid
+   * Not part of JavaScript API - C++ optimization
+   */
+  void set_unchecked(int index, const T& value) {
+    impl_[static_cast<size_t>(index)] = value;
+  }
+  
+  void set_unchecked(int index, T&& value) {
+    impl_[static_cast<size_t>(index)] = std::move(value);
+  }
+  
+  /**
+   * Element assignment with inline bounds checking and auto-resize
+   * More efficient than IIFE pattern for dynamic array access
+   * Not part of JavaScript API - C++ optimization for arr[idx] = value
+   */
+  void set(int index, const T& value) {
+    size_t idx = static_cast<size_t>(index);
+    if (idx >= impl_.size()) {
+      impl_.resize(idx + 1);
+    }
+    impl_[idx] = value;
+  }
+  
+  void set(int index, T&& value) {
+    size_t idx = static_cast<size_t>(index);
+    if (idx >= impl_.size()) {
+      impl_.resize(idx + 1);
+    }
+    impl_[idx] = std::move(value);
+  }
+  
   // STL-compatible iterators
   
   iterator begin() { return impl_.begin(); }

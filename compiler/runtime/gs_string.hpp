@@ -140,6 +140,15 @@ public:
   }
   
   /**
+   * Returns the character at the specified index (as char, not String)
+   * Optimized for character comparison: str[i] === 'x'
+   * Not part of JavaScript API - C++ optimization only
+   */
+  char charCodeAt_char(int index) const {
+    return impl_[index];
+  }
+  
+  /**
    * Concatenates strings
    * Equivalent to TypeScript: str.concat(str2, str3, ...)
    */

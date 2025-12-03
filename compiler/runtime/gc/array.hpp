@@ -338,6 +338,42 @@ public:
         }
     }
 
+    /**
+     * Performance optimization methods (not part of JavaScript API)
+     */
+
+    /**
+     * Direct element access by reference (no bounds checking)
+     * For performance-critical code where bounds are known to be valid
+     */
+    T& at_ref(int index) {
+        return data_[static_cast<size_t>(index)];
+    }
+
+    const T& at_ref(int index) const {
+        return data_[static_cast<size_t>(index)];
+    }
+
+    /**
+     * Direct element assignment without bounds checking or resize
+     * For performance-critical code where bounds are known to be valid
+     */
+    void set_unchecked(int index, const T& value) {
+        data_[static_cast<size_t>(index)] = value;
+    }
+
+    /**
+     * Element assignment with inline bounds checking and auto-resize
+     * More efficient than IIFE pattern for dynamic array access
+     */
+    void set(int index, const T& value) {
+        size_t idx = static_cast<size_t>(index);
+        if (idx >= length_) {
+            resize(idx + 1);
+        }
+        data_[idx] = value;
+    }
+
     Array<T> slice(int64_t start = 0, int64_t end = -1) const {
         if (start < 0) start = std::max(int64_t(0), int64_t(length_) + start);
         if (end < 0) end = length_;

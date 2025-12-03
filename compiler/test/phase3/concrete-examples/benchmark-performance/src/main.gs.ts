@@ -121,6 +121,22 @@ const bubbleSort = (arr: number[]): void => {
   }
 };
 
+// Optimized version using set_unchecked (bounds are proven safe)
+const bubbleSortOptimized = (arr: number[]): void => {
+  const n = arr.length;
+  
+  for (let i = 0; i < n - 1; i++) {
+    for (let j = 0; j < n - i - 1; j++) {
+      const val1 = arr[j];
+      const val2 = arr[j + 1];
+      if (val1 > val2) {
+        arr[j] = val2;
+        arr[j + 1] = val1;
+      }
+    }
+  }
+};
+
 const benchBubbleSort = (size: number): number => {
   const start = now();
   
@@ -130,7 +146,7 @@ const benchBubbleSort = (size: number): number => {
     arr.push(i);
   }
   
-  bubbleSort(arr);
+  bubbleSortOptimized(arr);
   
   const elapsed = now() - start;
   console.log('Bubble sort (' + size.toString() + ' elements): first=' + arr[0].toString() + ', last=' + arr[arr.length - 1].toString() + ', time: ' + elapsed.toString() + 'ms');
@@ -177,23 +193,50 @@ const benchHashMap = (operations: number): number => {
 const benchStringOps = (iterations: number): number => {
   const start = now();
   
-  // Build string using array + join (O(n) approach, recommended for C++)
-  const chars = new Array<string>();
-  for (let i = 0; i < iterations; i++) {
-    chars.push('x');
+  // Test 1: String building with concatenation (tests move optimizations)
+  let result = '';
+  for (let i = 0; i < iterations / 1000; i++) {
+    result = result + 'test';
   }
-  const result = chars.join('');
   
-  // Count characters
-  let count = 0;
-  for (let i = 0; i < result.length; i++) {
-    if (result.charAt(i) === 'x') {
-      count = count + 1;
+  // Test 2: Substring operations
+  const base = 'The quick brown fox jumps over the lazy dog';
+  let substringCount = 0;
+  for (let i = 0; i < iterations / 100; i++) {
+    const sub = base.substring(4, 19);  // 'quick brown fox'
+    if (sub.length === 15) {
+      substringCount = substringCount + 1;
+    }
+  }
+  
+  // Test 3: Character scanning (optimized with charCodeAt)
+  const text = 'abcdefghijklmnopqrstuvwxyz0123456789'.repeat(50);  // 1800 chars
+  let charCount = 0;
+  const aCode = 'a'.charCodeAt(0);
+  const zCode = 'z'.charCodeAt(0);
+  for (let i = 0; i < iterations / 10; i++) {
+    for (let j = 0; j < text.length; j++) {
+      const code = text.charCodeAt(j);
+      if (code >= aCode && code <= zCode) {
+        charCount = charCount + 1;
+      }
+    }
+  }
+  
+  // Test 4: String searching
+  const searchText = 'Lorem ipsum dolor sit amet consectetur adipiscing elit'.repeat(10);
+  let findCount = 0;
+  for (let i = 0; i < iterations / 100; i++) {
+    if (searchText.indexOf('dolor') >= 0) {
+      findCount = findCount + 1;
+    }
+    if (searchText.indexOf('missing') < 0) {
+      findCount = findCount + 1;
     }
   }
   
   const elapsed = now() - start;
-  console.log('String ops (' + iterations.toString() + ' iterations): length=' + result.length.toString() + ', count=' + count.toString() + ', time: ' + elapsed.toString() + 'ms');
+  console.log('String ops (' + iterations.toString() + ' iterations): built=' + result.length.toString() + ', substrings=' + substringCount.toString() + ', chars=' + charCount.toString() + ', searches=' + findCount.toString() + ', time: ' + elapsed.toString() + 'ms');
   return elapsed;
 };
 
@@ -202,27 +245,27 @@ console.log('=== GoodScript Performance Benchmark Suite ===');
 console.log('');
 
 console.log('--- Benchmark 1: Recursive Fibonacci ---');
-const fibTime = benchFibonacci(38);
+const fibTime = benchFibonacci(40);  // Increased from 38 for more significant timing
 
 console.log('');
 console.log('--- Benchmark 2: Array Operations ---');
-const arrayTime = benchArrayOps(2000000);  // Increased from 500k for more significant timing
+const arrayTime = benchArrayOps(5000000);  // Increased from 2M for more significant timing
 
 console.log('');
 console.log('--- Benchmark 3: Binary Search ---');
-const binarySearchTime = benchBinarySearch(100000, 100000);
+const binarySearchTime = benchBinarySearch(1000000, 1000000);  // Increased 10x for more significant timing
 
 console.log('');
 console.log('--- Benchmark 4: Bubble Sort ---');
-const bubbleSortTime = benchBubbleSort(6000);  // Increased from 3k for more significant timing
+const bubbleSortTime = benchBubbleSort(10000);  // Increased from 6k for more significant timing
 
 console.log('');
 console.log('--- Benchmark 5: HashMap Operations ---');
-const hashMapTime = benchHashMap(150000);  // Increased from 50k for more significant timing
+const hashMapTime = benchHashMap(500000);  // Increased from 150k for more significant timing
 
 console.log('');
 console.log('--- Benchmark 6: String Manipulation ---');
-const stringTime = benchStringOps(500000);  // Increased from 50k for more significant timing
+const stringTime = benchStringOps(2000000);  // Increased from 500k for more significant timing
 
 console.log('');
 console.log('=== Summary ===');

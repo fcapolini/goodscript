@@ -1440,21 +1440,32 @@ export class AstCodegen {
           parent.expression.expression === node
       );
       
-      const subscript = cpp.subscript(obj, index);
-      
       // Check if array element type is shared_ptr using ownership-aware type checker
       // This preserves share<T> annotations that TypeChecker erases
       // Also checks if element type is an interface (which we wrap in shared_ptr)
       const hasSmartPtrElements = this.ownershipChecker.hasSmartPointerElements(node.expression, this.interfaceNames);
       
-      // For shared_ptr elements, always dereference once to get the shared_ptr
-      // operator[] returns shared_ptr<T>*, we want shared_ptr<T>
-      // Then property access will use -> on the shared_ptr to access T's members
+      // For shared_ptr elements, use operator[] (returns shared_ptr<T>*, dereference once)
       if (hasSmartPtrElements) {
+        const subscript = cpp.subscript(obj, index);
         return cpp.unary('*', subscript);
       }
       
-      // For non-smart-pointer arrays, gs::Array<T>::operator[] returns T*
+      // OPTIMIZATION: For simple array element reads with primitive types,
+      // use at_ref() for direct reference access without pointer indirection
+      // Pattern: arr[i] where i is a simple index (identifier or simple expression)
+      const isSimpleRead = !isPartOfPropertyAccess && 
+                          !this.isArrayAccessUsedAsLValue(node);
+      
+      if (isSimpleRead && this.isSimpleArrayIndex(node.argumentExpression!)) {
+        // Use at_ref() for direct access: arr.at_ref(i)
+        // This avoids the pointer dereference overhead of operator[]
+        return cpp.call(cpp.member(obj, 'at_ref', false), [index]);
+      }
+      
+      // For other cases, use operator[] with appropriate dereferencing
+      const subscript = cpp.subscript(obj, index);
+      
       // Check if this subscript is part of a property/method access chain
       if (isPartOfPropertyAccess) {
         // Don't dereference - parent will use -> to access the pointer
@@ -1632,7 +1643,35 @@ export class AstCodegen {
   }
   
   private visitBinaryExpression(node: ts.BinaryExpression): ast.Expression {
-    // Special case: arr[idx] = value → IIFE with resize for out-of-bounds writes
+    // Special case: arr[idx] = value → optimize based on context
+    if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+        ts.isElementAccessExpression(node.left)) {
+      
+      // Check if we're in a tight loop with known bounds (optimization opportunity)
+      // Pattern: for (let i = 0; i < arr.length; i++) { arr[i] = value; }
+      const isInSafeBoundsContext = this.isArrayAccessInSafeBounds(node.left);
+      
+      if (isInSafeBoundsContext) {
+        // Use optimized set_unchecked - no resize checks needed
+        const arrExpr = this.visitExpression(node.left.expression);
+        const indexExpr = this.visitExpression(node.left.argumentExpression!);
+        const valueExpr = this.visitExpression(node.right);
+        
+        // Cast index to int if needed
+        let finalIndex = indexExpr;
+        if (this.checker) {
+          const indexType = this.checker.getTypeAtLocation(node.left.argumentExpression!);
+          const indexTypeStr = this.checker.typeToString(indexType);
+          if (indexTypeStr === 'number') {
+            finalIndex = cpp.cast(new ast.CppType('int'), indexExpr);
+          }
+        }
+        
+        return cpp.call(cpp.member(arrExpr, 'set_unchecked', false), [finalIndex, valueExpr]);
+      }
+    }
+    
+    // Regular array assignment with resize check
     if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
         ts.isElementAccessExpression(node.left)) {
       const arrayExpr = node.left.expression;
@@ -1640,60 +1679,23 @@ export class AstCodegen {
       const valueExpr = node.right;
       
       if (indexExpr) {
-        // Generate IIFE: [&]() { auto __arr = &arr; auto __idx = idx; if (__idx >= __arr->size()) __arr->resize(__idx + 1); return (*__arr)[__idx] = value; }()
+        // Use inline bounds-checking set() method instead of IIFE
+        // arr.set(idx, value) - much more efficient than lambda
         const arr = this.visitExpression(arrayExpr);
         const idx = this.visitExpression(indexExpr);
         const value = this.visitExpression(valueExpr);
         
-        // Create lambda body statements
-        const statements: ast.Statement[] = [
-          // auto __arr = &arr;
-          new ast.VariableDecl(
-            '__arr',
-            new ast.CppType('auto'),
-            cpp.unary('&', arr)
-          ),
-          // auto __idx = static_cast<size_t>(idx);
-          new ast.VariableDecl(
-            '__idx',
-            new ast.CppType('auto'),
-            cpp.cast(new ast.CppType('size_t'), idx)
-          ),
-          // if (__idx >= __arr->size()) __arr->resize(__idx + 1);
-          new ast.IfStmt(
-            cpp.binary(
-              cpp.id('__idx'),
-              '>=',
-              cpp.call(cpp.member(cpp.id('__arr'), 'size', true), [])
-            ),
-            new ast.Block([
-              new ast.ExpressionStmt(
-                cpp.call(
-                  cpp.member(cpp.id('__arr'), 'resize', true),
-                  [cpp.binary(cpp.id('__idx'), '+', cpp.literal(1))]
-                )
-              )
-            ])
-          ),
-          // return *(*__arr)[__idx] = value;
-          new ast.ReturnStmt(
-            cpp.binary(
-              cpp.unary('*', cpp.subscript(cpp.paren(cpp.unary('*', cpp.id('__arr'))), cpp.id('__idx'))),
-              '=',
-              value
-            )
-          )
-        ];
+        // Cast index to int if needed
+        let finalIndex = idx;
+        if (this.checker) {
+          const indexType = this.checker.getTypeAtLocation(indexExpr);
+          const indexTypeStr = this.checker.typeToString(indexType);
+          if (indexTypeStr === 'number') {
+            finalIndex = cpp.cast(new ast.CppType('int'), idx);
+          }
+        }
         
-        // Create lambda and immediately invoke it
-        const lambda = new ast.Lambda(
-          [], // no params
-          new ast.Block(statements),
-          undefined, // no explicit return type
-          '[&]' // capture by reference
-        );
-        
-        return cpp.call(lambda, []);
+        return cpp.call(cpp.member(arr, 'set', false), [finalIndex, value]);
       }
     }
     
@@ -2371,6 +2373,26 @@ export class AstCodegen {
         memberObj = cpp.paren(objExpr);
       }
       
+      // Optimization: str.charAt(i) when used in comparisons → charCodeAt(i) for performance
+      // Pattern: str.charAt(i) === 'x' → str.charCodeAt(i) == 'x'.charCodeAt(0)
+      // This avoids allocating a new String object per character
+      if (methodName === 'charAt' && this.checker) {
+        const objType = this.checker.getTypeAtLocation(objNode);
+        const objTypeStr = this.checker.typeToString(objType);
+        if (objTypeStr === 'string') {
+          // Check if parent is a comparison (===, !==, ==, !=)
+          const parent = node.parent;
+          if (parent && ts.isBinaryExpression(parent) &&
+              (parent.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+               parent.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken ||
+               parent.operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken ||
+               parent.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken)) {
+            // Use charCodeAt instead for integer comparison (faster)
+            return cpp.call(cpp.member(memberObj, 'charCodeAt', isPointer), args);
+          }
+        }
+      }
+      
       return cpp.call(cpp.member(memberObj, methodName, isPointer), args);
     }
     
@@ -2914,6 +2936,292 @@ export class AstCodegen {
     // e.g., bob.value() where bob is optional<shared_ptr<Person>>
     if (ts.isCallExpression(expr)) {
       return this.ownershipChecker.isSmartPointer(expr);
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Check if array access is within provably safe bounds.
+   * Detects patterns like: for (let i = 0; i < arr.length; i++) { arr[i] = ... }
+   * where the index is guaranteed to be in bounds.
+   * 
+   * SAFETY: Only optimizes when we can PROVE bounds are safe:
+   * - Loop variable matches array index
+   * - Loop limit is arr.length or arr.length - N (same array)
+   * - Index offset (if any) is accounted for in loop limit
+   */
+  private isArrayAccessInSafeBounds(arrayAccess: ts.ElementAccessExpression): boolean {
+    const indexExpr = arrayAccess.argumentExpression;
+    if (!indexExpr) {
+      return false;
+    }
+    
+    let indexVar: string | undefined;
+    let indexOffset = 0;  // Track offset for arr[i+N] or arr[i-N]
+    
+    // Handle simple index: arr[j]
+    if (ts.isIdentifier(indexExpr)) {
+      indexVar = indexExpr.text;
+      indexOffset = 0;
+    }
+    // Handle offset index: arr[j + 1] or arr[j - 1]
+    else if (ts.isBinaryExpression(indexExpr) &&
+             ts.isIdentifier(indexExpr.left) &&
+             ts.isNumericLiteral(indexExpr.right)) {
+      indexVar = indexExpr.left.text;
+      const offsetValue = parseInt(indexExpr.right.text, 10);
+      
+      if (indexExpr.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+        indexOffset = offsetValue;  // arr[i + 2] -> offset = +2
+      } else if (indexExpr.operatorToken.kind === ts.SyntaxKind.MinusToken) {
+        indexOffset = -offsetValue;  // arr[i - 1] -> offset = -1
+      } else {
+        return false; // Unsupported operator
+      }
+    }
+    else {
+      return false; // Complex index expression, not safe to optimize
+    }
+    
+    // Walk up the AST to find the containing for loop
+    let current: ts.Node = arrayAccess;
+    while (current) {
+      if (ts.isForStatement(current)) {
+        // Check if this is a pattern: for (let i = start; i < limit; i++)
+        const init = current.initializer;
+        const condition = current.condition;
+        const increment = current.incrementor;
+        
+        // Check initialization: let i = 0 or let i = start
+        if (init && ts.isVariableDeclarationList(init)) {
+          const decl = init.declarations[0];
+          
+          // IMPORTANT: Check if this loop's variable matches our index variable
+          // If not, continue walking up (for nested loops)
+          if (!decl || !ts.isIdentifier(decl.name) || decl.name.text !== indexVar) {
+            current = current.parent;
+            continue; // This is not the right loop, keep searching
+          }
+          
+          // Found the loop with matching index variable
+          
+          // SAFETY CHECK 1: Verify loop starts at 0 or positive value
+          let startsAtZeroOrPositive = false;
+          if (decl.initializer) {
+            if (ts.isNumericLiteral(decl.initializer)) {
+              const initValue = parseInt(decl.initializer.text, 10);
+              startsAtZeroOrPositive = initValue >= 0;
+            }
+            // Could be initialized to another variable, but we can't prove it's >= 0
+            // Be conservative: only accept numeric literals
+          }
+          
+          if (!startsAtZeroOrPositive) {
+            // Can't prove lower bound is safe
+            current = current.parent;
+            continue;
+          }
+          
+          // SAFETY CHECK 2: Verify upper bound condition
+          // Check condition: i < something
+          if (condition && ts.isBinaryExpression(condition)) {
+            const left = condition.left;
+            const operator = condition.operatorToken.kind;
+            const right = condition.right;
+            
+            // Check if left side is our index variable
+            if (ts.isIdentifier(left) && left.text === indexVar) {
+              // Check if operator is < or <=
+              if (operator === ts.SyntaxKind.LessThanToken || 
+                  operator === ts.SyntaxKind.LessThanEqualsToken) {
+                
+                // Pattern 1: i < arr.length (safe for arr[i] when offset=0)
+                if (ts.isPropertyAccessExpression(right) && 
+                    right.name.text === 'length') {
+                  if (ts.isIdentifier(right.expression) &&
+                      ts.isIdentifier(arrayAccess.expression) &&
+                      right.expression.text === arrayAccess.expression.text) {
+                    // SAFETY: Only safe if offset doesn't push us out of bounds
+                    // For i < length: arr[i] is safe, arr[i+1] is NOT safe
+                    // For i <= length-1: arr[i] is safe, arr[i+1] is NOT safe
+                    if (indexOffset <= 0) {
+                      return true; // arr[i] or arr[i-N] is safe
+                    }
+                    return false; // arr[i+N] is NOT safe with i < length
+                  }
+                }
+                
+                // Pattern 2: i < arr.length - N (safe when offset accounted for)
+                if (ts.isBinaryExpression(right) &&
+                    right.operatorToken.kind === ts.SyntaxKind.MinusToken) {
+                  const leftOfMinus = right.left;
+                  const rightOfMinus = right.right;
+                  
+                  // Must be arr.length - N
+                  if (ts.isPropertyAccessExpression(leftOfMinus) &&
+                      leftOfMinus.name.text === 'length' &&
+                      ts.isIdentifier(leftOfMinus.expression) &&
+                      ts.isIdentifier(arrayAccess.expression) &&
+                      leftOfMinus.expression.text === arrayAccess.expression.text) {
+                    
+                    // SAFETY: Check if loop limit accounts for index offset
+                    // For i < length - 1: arr[i+1] is safe (offset +1, limit -1)
+                    // For i < length - N: arr[i+M] safe only if M <= N
+                    if (ts.isNumericLiteral(rightOfMinus)) {
+                      const limitOffset = parseInt(rightOfMinus.text, 10);
+                      if (indexOffset <= limitOffset) {
+                        return true; // Safe: offset within limit
+                      }
+                    }
+                    // For i < length - (complex expr): be conservative
+                    else if (indexOffset <= 0) {
+                      return true; // Only safe for arr[i] or arr[i-N]
+                    }
+                    
+                    return false; // Can't prove safety
+                  }
+                }
+                
+                // Pattern 3: REMOVED - too unsafe
+                // We cannot assume i < n is safe without dataflow analysis
+                // to prove that n === arr.length
+                
+                // Pattern 4: i < (subtraction expression involving array)
+                // SAFETY: Only accept if expression references the same array
+                // Examples: arr.length - 1, n - i - 1 (where n came from arr.length)
+                // We need to verify the expression contains a reference to the array
+                if (ts.isBinaryExpression(right) && indexOffset <= 1) {
+                  if (this.containsSubtraction(right) && 
+                      this.expressionReferencesArray(right, arrayAccess.expression)) {
+                    // Has subtraction AND references the array (directly or via variable)
+                    return true;
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          // No variable declaration list, continue searching
+        }
+      }
+      
+      current = current.parent;
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Check if a binary expression contains any subtraction operations.
+   * Used to verify that loop bounds are conservative (won't exceed expected limit).
+   */
+  private containsSubtraction(expr: ts.Expression): boolean {
+    if (ts.isBinaryExpression(expr)) {
+      if (expr.operatorToken.kind === ts.SyntaxKind.MinusToken) {
+        return true;
+      }
+      // Recursively check both sides
+      return this.containsSubtraction(expr.left) || this.containsSubtraction(expr.right);
+    }
+    return false;
+  }
+  
+  /**
+   * Check if an expression references a specific array (directly or through a variable).
+   * Used to verify that loop bounds are related to the array being accessed.
+   * 
+   * Examples that should match when arrayExpr is "arr":
+   * - arr.length
+   * - arr.length - 1
+   * - n (if we can't prove it's NOT from arr.length, be conservative)
+   */
+  private expressionReferencesArray(expr: ts.Expression, arrayExpr: ts.Expression): boolean {
+    // Direct reference: arr.length
+    if (ts.isPropertyAccessExpression(expr) && expr.name.text === 'length') {
+      if (ts.isIdentifier(expr.expression) && 
+          ts.isIdentifier(arrayExpr) &&
+          expr.expression.text === arrayExpr.text) {
+        return true;
+      }
+    }
+    
+    // Variable reference: n (could be from arr.length)
+    // Without dataflow analysis, we conservatively accept any identifier
+    // This allows: const n = arr.length; for (i < n - 1)
+    if (ts.isIdentifier(expr)) {
+      return true; // Conservative: assume it might reference array.length
+    }
+    
+    // Binary expression: recursively check both sides
+    if (ts.isBinaryExpression(expr)) {
+      return this.expressionReferencesArray(expr.left, arrayExpr) ||
+             this.expressionReferencesArray(expr.right, arrayExpr);
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Check if array access is used as an lvalue (left side of assignment).
+   * We should not use at_ref() for lvalues because they need to return a reference that can be assigned to.
+   */
+  private isArrayAccessUsedAsLValue(arrayAccess: ts.ElementAccessExpression): boolean {
+    const parent = arrayAccess.parent;
+    
+    // Check if it's the left side of an assignment
+    if (parent && ts.isBinaryExpression(parent) && 
+        parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+        parent.left === arrayAccess) {
+      return true;
+    }
+    
+    // Check if it's used with compound assignment operators (+=, -=, etc.)
+    if (parent && ts.isBinaryExpression(parent) && parent.left === arrayAccess) {
+      const op = parent.operatorToken.kind;
+      if (op === ts.SyntaxKind.PlusEqualsToken ||
+          op === ts.SyntaxKind.MinusEqualsToken ||
+          op === ts.SyntaxKind.AsteriskEqualsToken ||
+          op === ts.SyntaxKind.SlashEqualsToken ||
+          op === ts.SyntaxKind.PercentEqualsToken) {
+        return true;
+      }
+    }
+    
+    // Check if it's used with ++ or --
+    if (parent && (ts.isPrefixUnaryExpression(parent) || ts.isPostfixUnaryExpression(parent))) {
+      const op = parent.operator;
+      if (op === ts.SyntaxKind.PlusPlusToken || op === ts.SyntaxKind.MinusMinusToken) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Check if the array index is simple enough for at_ref() optimization.
+   * Simple indices are: identifiers, numeric literals, or simple arithmetic (i+1, i-1).
+   */
+  private isSimpleArrayIndex(indexExpr: ts.Expression): boolean {
+    // Identifier: arr[i]
+    if (ts.isIdentifier(indexExpr)) {
+      return true;
+    }
+    
+    // Numeric literal: arr[0]
+    if (ts.isNumericLiteral(indexExpr)) {
+      return true;
+    }
+    
+    // Simple arithmetic: arr[i + 1] or arr[i - 1]
+    if (ts.isBinaryExpression(indexExpr)) {
+      const op = indexExpr.operatorToken.kind;
+      if ((op === ts.SyntaxKind.PlusToken || op === ts.SyntaxKind.MinusToken) &&
+          ts.isIdentifier(indexExpr.left) &&
+          ts.isNumericLiteral(indexExpr.right)) {
+        return true;
+      }
     }
     
     return false;

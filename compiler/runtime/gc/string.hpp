@@ -149,6 +149,41 @@ public:
         return *this;
     }
 
+    // Move constructor - reuse existing buffer
+    String(String&& other) noexcept 
+        : length_(other.length_), capacity_(other.capacity_) {
+        if (other.is_heap()) {
+            heap_data_ = other.heap_data_;
+            // Leave other in valid but empty state
+            other.length_ = 0;
+            other.capacity_ = 0;
+            other.stack_data_[0] = '\0';
+        } else {
+            capacity_ = 0;
+            std::memcpy(stack_data_, other.stack_data_, length_ + 1);
+        }
+    }
+
+    // Move assignment - reuse existing buffer
+    String& operator=(String&& other) noexcept {
+        if (this != &other) {
+            length_ = other.length_;
+            capacity_ = other.capacity_;
+            
+            if (other.is_heap()) {
+                heap_data_ = other.heap_data_;
+                // Leave other in valid but empty state
+                other.length_ = 0;
+                other.capacity_ = 0;
+                other.stack_data_[0] = '\0';
+            } else {
+                capacity_ = 0;
+                std::memcpy(stack_data_, other.stack_data_, length_ + 1);
+            }
+        }
+        return *this;
+    }
+
     // String concatenation
     String operator+(const String& other) const {
         String result;
@@ -169,6 +204,124 @@ public:
             result.heap_data_[result.length_] = '\0';
         }
         
+        return result;
+    }
+
+    // Optimize for rvalue (temporary) on right side: a + String("temp")
+    // Prepend to the temporary instead of creating new string
+    String operator+(String&& other) const {
+        size_t new_length = length_ + other.length_;
+        
+        if (new_length <= SSO_SIZE) {
+            // Small enough for stack - build new string
+            String result;
+            result.length_ = new_length;
+            result.capacity_ = 0;
+            std::memcpy(result.stack_data_, data(), length_);
+            std::memcpy(result.stack_data_ + length_, other.data(), other.length_);
+            result.stack_data_[new_length] = '\0';
+            return result;
+        }
+        
+        // If other has heap space and enough capacity, prepend to it
+        if (other.is_heap() && other.capacity_ >= new_length + 1) {
+            std::memmove(other.heap_data_ + length_, other.heap_data_, other.length_);
+            std::memcpy(other.heap_data_, data(), length_);
+            other.length_ = new_length;
+            other.heap_data_[new_length] = '\0';
+            return std::move(other);
+        }
+        
+        // Otherwise, allocate new buffer
+        String result;
+        result.length_ = new_length;
+        result.capacity_ = new_length + 1;
+        result.heap_data_ = gc::Allocator::alloc_array<char>(result.capacity_);
+        std::memcpy(result.heap_data_, data(), length_);
+        std::memcpy(result.heap_data_ + length_, other.data(), other.length_);
+        result.heap_data_[new_length] = '\0';
+        return result;
+    }
+
+    // Optimize for rvalue on left: String("temp") + b
+    // Append to the temporary instead of creating new string
+    friend String operator+(String&& left, const String& right) {
+        size_t new_length = left.length_ + right.length_;
+        
+        if (new_length <= SSO_SIZE) {
+            // Small enough for stack
+            if (!left.is_heap()) {
+                std::memcpy(left.stack_data_ + left.length_, right.data(), right.length_);
+                left.length_ = new_length;
+                left.stack_data_[new_length] = '\0';
+                return std::move(left);
+            }
+        }
+        
+        // If left has enough capacity, append in place
+        if (left.is_heap() && left.capacity_ >= new_length + 1) {
+            std::memcpy(left.heap_data_ + left.length_, right.data(), right.length_);
+            left.length_ = new_length;
+            left.heap_data_[new_length] = '\0';
+            return std::move(left);
+        }
+        
+        // Need to resize
+        if (new_length > SSO_SIZE) {
+            left.resize(new_length + 1);
+            std::memcpy(left.data() + left.length_, right.data(), right.length_);
+            left.length_ = new_length;
+            left.data()[new_length] = '\0';
+            return std::move(left);
+        }
+        
+        // Fallback: create new string
+        String result;
+        result.length_ = new_length;
+        result.capacity_ = 0;
+        std::memcpy(result.stack_data_, left.data(), left.length_);
+        std::memcpy(result.stack_data_ + left.length_, right.data(), right.length_);
+        result.stack_data_[new_length] = '\0';
+        return result;
+    }
+
+    // Optimize for both rvalues: String("a") + String("b")
+    friend String operator+(String&& left, String&& right) {
+        size_t new_length = left.length_ + right.length_;
+        
+        // If left has enough capacity, append right to it
+        if (left.is_heap() && left.capacity_ >= new_length + 1) {
+            std::memcpy(left.heap_data_ + left.length_, right.data(), right.length_);
+            left.length_ = new_length;
+            left.heap_data_[new_length] = '\0';
+            return std::move(left);
+        }
+        
+        // If right has enough capacity, prepend left to it
+        if (right.is_heap() && right.capacity_ >= new_length + 1) {
+            std::memmove(right.heap_data_ + left.length_, right.heap_data_, right.length_);
+            std::memcpy(right.heap_data_, left.data(), left.length_);
+            right.length_ = new_length;
+            right.heap_data_[new_length] = '\0';
+            return std::move(right);
+        }
+        
+        // Neither has capacity - create new string
+        String result;
+        result.length_ = new_length;
+        
+        if (new_length <= SSO_SIZE) {
+            result.capacity_ = 0;
+            std::memcpy(result.stack_data_, left.data(), left.length_);
+            std::memcpy(result.stack_data_ + left.length_, right.data(), right.length_);
+            result.stack_data_[new_length] = '\0';
+        } else {
+            result.capacity_ = new_length + 1;
+            result.heap_data_ = gc::Allocator::alloc_array<char>(result.capacity_);
+            std::memcpy(result.heap_data_, left.data(), left.length_);
+            std::memcpy(result.heap_data_ + left.length_, right.data(), right.length_);
+            result.heap_data_[new_length] = '\0';
+        }
         return result;
     }
 
@@ -232,6 +385,32 @@ public:
         if (index >= length_) return String();
         char buf[2] = { data()[index], '\0' };
         return String(buf);
+    }
+
+    /**
+     * Returns the Unicode code point at the specified index
+     * Equivalent to TypeScript: str.charCodeAt(index)
+     */
+    int charCodeAt(int index) const {
+        if (index < 0 || static_cast<size_t>(index) >= length_) {
+            return 0; // NaN equivalent in integer context
+        }
+        return static_cast<int>(static_cast<unsigned char>(data()[index]));
+    }
+
+    /**
+     * Returns the character at the specified index (as char, not String)
+     * Optimized for character comparison
+     */
+    char charCodeAt_char(int index) const {
+        return data()[index];
+    }
+
+    /**
+     * Array subscript operator for direct character access
+     */
+    char operator[](int index) const {
+        return data()[index];
     }
 
     int64_t indexOf(const String& search, size_t start = 0) const {
@@ -301,6 +480,39 @@ public:
         while (end > start && std::isspace(data()[end - 1])) --end;
         
         return substring(start, end);
+    }
+
+    /**
+     * Repeats the string count times
+     * Equivalent to TypeScript: str.repeat(count)
+     */
+    String repeat(int count) const {
+        if (count <= 0 || length_ == 0) {
+            return String();
+        }
+        
+        size_t new_length = length_ * count;
+        String result;
+        result.length_ = new_length;
+        
+        if (new_length <= SSO_SIZE) {
+            // Result fits in stack
+            result.capacity_ = 0;
+            for (int i = 0; i < count; ++i) {
+                std::memcpy(result.stack_data_ + (i * length_), data(), length_);
+            }
+            result.stack_data_[new_length] = '\0';
+        } else {
+            // Result needs heap
+            result.capacity_ = new_length + 1;
+            result.heap_data_ = gc::Allocator::alloc_array<char>(result.capacity_);
+            for (int i = 0; i < count; ++i) {
+                std::memcpy(result.heap_data_ + (i * length_), data(), length_);
+            }
+            result.heap_data_[new_length] = '\0';
+        }
+        
+        return result;
     }
 
     // Split string by separator (implemented in array.hpp after Array is defined)

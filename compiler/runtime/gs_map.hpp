@@ -238,6 +238,19 @@ public:
     return nullptr;
   }
   
+  /**
+   * Returns the value associated with the key, or a default value if not found
+   * Optimized for primitive types to avoid optional unwrapping overhead
+   * Not part of JavaScript API - C++ optimization
+   */
+  V get_or_default(const K& key, const V& defaultValue) const {
+    auto it = index_.find(key);
+    if (it != index_.end()) {
+      return items_[it->second].second;
+    }
+    return defaultValue;
+  }
+  
   const V* get(const K& key) const {
     auto it = index_.find(key);
     if (it != index_.end()) {
