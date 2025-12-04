@@ -562,6 +562,12 @@ See [CONFORMANCE.md](CONFORMANCE.md) and [conformance/README.md](conformance/REA
 
 GoodScript allows developers to **write memory-safe systems code using familiar TypeScript syntax**, with a smooth transition from fast TS development to robust native deployment. The **VSCode extension** ensures validation and tooling support, while the **dual-mode workflow** enables both rapid iteration and high-performance native applications.
 
+## License
+
+Dual-licensed under your choice of:
+- MIT License ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+
 ---
 
 *End of document.*

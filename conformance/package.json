@@ -22,7 +22,7 @@
     "typescript"
   ],
   "author": "Fabio Capolini",
-  "license": "MIT",
+  "license": "(MIT OR Apache-2.0)",
   "devDependencies": {
     "@types/node": "^20.10.6",
     "@vitest/coverage-v8": "^1.0.4",

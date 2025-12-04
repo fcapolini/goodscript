@@ -46,7 +46,7 @@
     "cli"
   ],
   "author": "Fabio Capolini",
-  "license": "MIT",
+  "license": "(MIT OR Apache-2.0)",
   "devDependencies": {
     "@types/node": "^20.10.6",
     "@typescript-eslint/eslint-plugin": "^6.17.0",
