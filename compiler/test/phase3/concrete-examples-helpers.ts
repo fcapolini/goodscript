@@ -270,7 +270,19 @@ export function compileAndExecuteNative(
   const needsRegExp = execution.cppCode.includes('#ifdef GS_ENABLE_REGEXP') ||
                       execution.cppCode.includes('gs::RegExp');
   
+  // Check if code uses async/await (needs cppcoro)
+  const needsCppcoro = execution.cppCode.includes('cppcoro/task.hpp');
+  const CPPCORO_DIR = join(RUNTIME_DIR, "../cppcoro/include");
+  const CPPCORO_LIB_DIR = join(RUNTIME_DIR, "../cppcoro/lib");
+  
   let compileCmd = `zig c++ -std=c++20 -O3 -I${RUNTIME_DIR} ${cppFile} -o ${binFile}`;
+  
+  // Add cppcoro include path and source files if needed
+  if (needsCppcoro) {
+    compileCmd += ` -I${CPPCORO_DIR}`;
+    // Add the minimal cppcoro sources needed for sync_wait
+    compileCmd += ` ${CPPCORO_LIB_DIR}/lightweight_manual_reset_event.cpp`;
+  }
   
   // Add PCRE2 support if needed
   if (needsRegExp) {

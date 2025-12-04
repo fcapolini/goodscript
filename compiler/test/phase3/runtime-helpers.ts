@@ -124,11 +124,24 @@ export const executeGcCpp = (gcCppCode: string, outDir: string): ExecutionResult
   writeFileSync(cppFile, gcCppCode, 'utf-8');
   
   try {
+    // Check if code uses cppcoro (async/await)
+    const needsCppcoro = gcCppCode.includes('cppcoro/task.hpp');
+    const CPPCORO_DIR = join(RUNTIME_DIR, '../cppcoro/include');
+    const CPPCORO_LIB_DIR = join(RUNTIME_DIR, '../cppcoro/lib');
+    
+    let compileCmd = `zig c++ -std=c++20 -O3 -I${RUNTIME_DIR} -I${MPS_DIR} ${cppFile} ${MPS_LIB}`;
+    
+    if (needsCppcoro) {
+      compileCmd += ` -I${CPPCORO_DIR} ${CPPCORO_LIB_DIR}/lightweight_manual_reset_event.cpp`;
+    }
+    
+    compileCmd += ` -o ${binFile}`;
+    
     // Compile the GC C++ code using Zig's C++ compiler (C++20 for runtime library features)
     // Link with MPS (Memory Pool System) statically for garbage collection
     // Use -O3 for fair performance comparison with ownership mode
     const compileOutput = execSync(
-      `zig c++ -std=c++20 -O3 -I${RUNTIME_DIR} -I${MPS_DIR} ${cppFile} ${MPS_LIB} -o ${binFile}`,
+      compileCmd,
       { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] }
     );
     

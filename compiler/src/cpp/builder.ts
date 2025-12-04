@@ -68,6 +68,10 @@ export class CppBuilder {
     return AST.CppType.map(keyType, valueType);
   }
 
+  task(returnType: AST.CppType): AST.CppType {
+    return new AST.CppType('cppcoro::task', [returnType]);
+  }
+
   // ============================================================================
   // Top-level
   // ============================================================================
@@ -196,6 +200,10 @@ export class CppBuilder {
     return new AST.ReturnStmt(value);
   }
 
+  coReturn(value?: AST.Expression): AST.CoReturnStmt {
+    return new AST.CoReturnStmt(value);
+  }
+
   if_(
     condition: AST.Expression,
     thenBranch: AST.Statement,
@@ -276,6 +284,10 @@ export class CppBuilder {
 
   ternary(condition: AST.Expression, whenTrue: AST.Expression, whenFalse: AST.Expression): AST.ConditionalExpr {
     return new AST.ConditionalExpr(condition, whenTrue, whenFalse);
+  }
+
+  await(expression: AST.Expression): AST.AwaitExpr {
+    return new AST.AwaitExpr(expression);
   }
 
   initList(elements: AST.Expression[]): AST.InitializerList {

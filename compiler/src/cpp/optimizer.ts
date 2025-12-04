@@ -191,6 +191,11 @@ class AstOptimizer implements ast.CppVisitor<ast.CppNode> {
     return new ast.ReturnStmt(value);
   }
   
+  visitCoReturnStmt(node: ast.CoReturnStmt): ast.CppNode {
+    const value = node.value ? this.visitExpression(node.value) : undefined;
+    return new ast.CoReturnStmt(value);
+  }
+  
   visitIfStmt(node: ast.IfStmt): ast.CppNode {
     const condition = this.visitExpression(node.condition);
     const thenBranch = this.visitStatement(node.thenBranch);
@@ -468,6 +473,11 @@ class AstOptimizer implements ast.CppVisitor<ast.CppNode> {
   visitInitializerList(node: ast.InitializerList): ast.CppNode {
     const elements = node.elements.map(el => this.visitExpression(el));
     return new ast.InitializerList(elements);
+  }
+  
+  visitAwaitExpr(node: ast.AwaitExpr): ast.CppNode {
+    const expression = this.visitExpression(node.expression);
+    return new ast.AwaitExpr(expression);
   }
   
   // ============================================================================

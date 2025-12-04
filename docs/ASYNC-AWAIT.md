@@ -1,5 +1,8 @@
 # GoodScript Async/Await → C++20 / cppcoro Templates
 
+> **✅ IMPLEMENTATION STATUS**: Async/await support is now **fully implemented** as of December 2024.
+> See [ASYNC-AWAIT-IMPLEMENTATION.md](./ASYNC-AWAIT-IMPLEMENTATION.md) for implementation details, test results, and usage guide.
+
 **Audience:** GoodScript compiler implementors and codegen engineers
 
 **Purpose:** Provide C++ templates for generating GoodScript `async`/`await` constructs using cppcoro.

@@ -33,6 +33,7 @@ export interface CppVisitor<T> {
   visitVariableDecl(node: VariableDecl): T;
   visitExpressionStmt(node: ExpressionStmt): T;
   visitReturnStmt(node: ReturnStmt): T;
+  visitCoReturnStmt(node: CoReturnStmt): T;
   visitIfStmt(node: IfStmt): T;
   visitWhileStmt(node: WhileStmt): T;
   visitForStmt(node: ForStmt): T;
@@ -57,6 +58,7 @@ export interface CppVisitor<T> {
   visitParenExpr(node: ParenExpr): T;
   visitConditionalExpr(node: ConditionalExpr): T;
   visitInitializerList(node: InitializerList): T;
+  visitAwaitExpr(node: AwaitExpr): T;
 }
 
 // ============================================================================
@@ -288,7 +290,8 @@ export class Method extends CppNode {
     public readonly isVirtual: boolean = false,
     public readonly isPureVirtual: boolean = false,
     public readonly isOverride: boolean = false,
-    public readonly isDefault: boolean = false
+    public readonly isDefault: boolean = false,
+    public readonly isAsync: boolean = false
   ) {
     super();
   }
@@ -304,7 +307,8 @@ export class Function extends CppNode {
     public readonly returnType: CppType,
     public readonly params: Parameter[],
     public readonly body: Block,
-    public readonly templateParams: string[] = []
+    public readonly templateParams: string[] = [],
+    public readonly isAsync: boolean = false
   ) {
     super();
   }
@@ -338,6 +342,7 @@ export type Statement =
   | VariableDecl 
   | ExpressionStmt 
   | ReturnStmt 
+  | CoReturnStmt
   | IfStmt 
   | WhileStmt 
   | ForStmt 
@@ -384,6 +389,18 @@ export class ReturnStmt extends CppNode {
 
   accept<T>(visitor: CppVisitor<T>): T {
     return visitor.visitReturnStmt(this);
+  }
+}
+
+export class CoReturnStmt extends CppNode {
+  constructor(
+    public readonly value?: Expression
+  ) {
+    super();
+  }
+
+  accept<T>(visitor: CppVisitor<T>): T {
+    return visitor.visitCoReturnStmt(this);
   }
 }
 
@@ -514,7 +531,8 @@ export type Expression =
   | MapInit
   | ParenExpr
   | ConditionalExpr
-  | InitializerList;
+  | InitializerList
+  | AwaitExpr;
 
 export class BinaryExpr extends CppNode {
   constructor(
@@ -715,5 +733,17 @@ export class InitializerList extends CppNode {
 
   accept<T>(visitor: CppVisitor<T>): T {
     return visitor.visitInitializerList(this);
+  }
+}
+
+export class AwaitExpr extends CppNode {
+  constructor(
+    public readonly expression: Expression
+  ) {
+    super();
+  }
+
+  accept<T>(visitor: CppVisitor<T>): T {
+    return visitor.visitAwaitExpr(this);
   }
 }

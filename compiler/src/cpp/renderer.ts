@@ -452,6 +452,13 @@ export class CppRenderer implements AST.CppVisitor<string> {
     return this.line('return;');
   }
 
+  visitCoReturnStmt(node: AST.CoReturnStmt): string {
+    if (node.value) {
+      return this.line(`co_return ${node.value.accept(this)};`);
+    }
+    return this.line('co_return;');
+  }
+
   visitIfStmt(node: AST.IfStmt): string {
     const parts: string[] = [];
     
@@ -760,6 +767,10 @@ export class CppRenderer implements AST.CppVisitor<string> {
     }
     const elements = node.elements.map(e => e.accept(this)).join(', ');
     return `{${elements}}`;
+  }
+
+  visitAwaitExpr(node: AST.AwaitExpr): string {
+    return `co_await ${node.expression.accept(this)}`;
   }
 }
 

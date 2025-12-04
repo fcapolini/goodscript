@@ -7,3 +7,6 @@
 [submodule "conformance-tsc/typescript"]
 	path = conformance-tsc/typescript
 	url = https://github.com/microsoft/TypeScript.git
+[submodule "compiler/cppcoro"]
+	path = compiler/cppcoro
+	url = https://github.com/andreasbuhr/cppcoro.git

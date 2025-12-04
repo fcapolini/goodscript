@@ -16,6 +16,7 @@ import { optimize, OptimizationOptions } from './optimizer';
 export class AstCodegen {
   private enumNames = new Set<string>(); // Track enum names for property access
   private currentFunctionReturnType?: ast.CppType; // Track current function return type for null handling
+  private currentFunctionIsAsync = false; // Track if current function is async
   private unwrappedOptionals = new Set<string>(); // Track variables known to be non-null in current scope
   private smartPointerNullChecks = new Set<string>(); // Track smart pointer variables checked against nullptr
   private variableTypes = new Map<string, ast.CppType>(); // Track variable types for smart pointer detection
@@ -42,9 +43,18 @@ export class AstCodegen {
     this.interfaceMethods.clear(); // Reset for each file
     this.interfaceNames.clear(); // Reset for each file
     this.hoistedFunctions.clear(); // Reset for each file
+    
+    // Check if we need cppcoro for async/await
+    const hasAsync = this.sourceFileHasAsync(sourceFile);
     const includes = [new ast.Include('gs_runtime.hpp', false)];
+    if (hasAsync) {
+      includes.push(new ast.Include('cppcoro/task.hpp', true));
+      includes.push(new ast.Include('cppcoro/sync_wait.hpp', true));
+    }
+    
     const declarations: ast.Declaration[] = [];
     const mainStatements: ast.Statement[] = [];
+    let gsMainIsAsync = false;
     
     // Separate declarations from top-level statements
     for (const stmt of sourceFile.statements) {
@@ -80,7 +90,13 @@ export class AstCodegen {
         mainStatements.push(...decls.map(d => d as any)); // VariableDecl can act as Statement
       } else if (ts.isFunctionDeclaration(stmt)) {
         const func = this.visitFunction(stmt);
-        if (func) declarations.push(func);
+        if (func) {
+          declarations.push(func);
+          // Check if this is the main function and if it's async
+          if (stmt.name?.text === 'main') {
+            gsMainIsAsync = stmt.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ?? false;
+          }
+        }
       } else if (ts.isClassDeclaration(stmt)) {
         const cls = this.visitClass(stmt);
         if (cls) declarations.push(cls);
@@ -107,11 +123,81 @@ export class AstCodegen {
     // Create main function if there are top-level statements
     let mainFunction: ast.Function | undefined;
     if (mainStatements.length > 0) {
+      // Check if the only statement is a call to async main()
+      if (gsMainIsAsync && mainStatements.length === 1) {
+        const stmt = mainStatements[0];
+        // Check if it's a call to main()
+        if (stmt instanceof ast.ExpressionStmt) {
+          const expr = (stmt as ast.ExpressionStmt).expression;
+          if (expr instanceof ast.CallExpr) {
+            const callee = (expr as ast.CallExpr).callee;
+            if (callee instanceof ast.Identifier && (callee.name === 'main' || callee.name === 'gs::main')) {
+              // Replace main() with cppcoro::sync_wait(gs::main())
+              mainFunction = new ast.Function(
+                'main',
+                new ast.CppType('int'),
+                [],
+                new ast.Block([
+                  new ast.ExpressionStmt(
+                    cpp.call(
+                      cpp.id('cppcoro::sync_wait'),
+                      [cpp.call(cpp.id('gs::main'), [])]
+                    )
+                  ),
+                  new ast.ReturnStmt(cpp.id('0'))
+                ])
+              );
+            } else {
+              // Not a call to main, use regular statements
+              mainFunction = new ast.Function(
+                'main',
+                new ast.CppType('int'),
+                [],
+                new ast.Block([...mainStatements, new ast.ReturnStmt(cpp.id('0'))])
+              );
+            }
+          } else {
+            // Not a call expression, use regular statements
+            mainFunction = new ast.Function(
+              'main',
+              new ast.CppType('int'),
+              [],
+              new ast.Block([...mainStatements, new ast.ReturnStmt(cpp.id('0'))])
+            );
+          }
+        } else {
+          // Not an expression statement, use regular statements
+          mainFunction = new ast.Function(
+            'main',
+            new ast.CppType('int'),
+            [],
+            new ast.Block([...mainStatements, new ast.ReturnStmt(cpp.id('0'))])
+          );
+        }
+      } else {
+        // Either not async or multiple statements, use regular version
+        mainFunction = new ast.Function(
+          'main',
+          new ast.CppType('int'),
+          [],
+          new ast.Block([...mainStatements, new ast.ReturnStmt(cpp.id('0'))])
+        );
+      }
+    } else if (gsMainIsAsync) {
+      // If gs::main is async but no top-level statements, create a C++ main that calls cppcoro::sync_wait(gs::main())
       mainFunction = new ast.Function(
         'main',
         new ast.CppType('int'),
         [],
-        new ast.Block([...mainStatements, new ast.ReturnStmt(cpp.id('0'))])
+        new ast.Block([
+          new ast.ExpressionStmt(
+            cpp.call(
+              cpp.id('cppcoro::sync_wait'),
+              [cpp.call(cpp.id('gs::main'), [])]
+            )
+          ),
+          new ast.ReturnStmt(cpp.id('0'))
+        ])
       );
     }
     
@@ -555,11 +641,21 @@ export class AstCodegen {
     if (!node.name) return undefined;
     
     const name = cppUtils.escapeName(node.name.text);
+    const isAsync = node.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ?? false;
     
     // Determine return type: use explicit type annotation if present, otherwise infer from body
     let returnType: ast.CppType;
     if (node.type) {
-      returnType = this.mapType(node.type);
+      // Check if the type annotation is Promise<T> (for async functions)
+      const typeText = node.type.getText();
+      if (typeText.startsWith('Promise<')) {
+        // Promise<T> will be mapped to cppcoro::task<T> by mapType, don't wrap again
+        returnType = this.mapType(node.type);
+      } else {
+        const baseType = this.mapType(node.type);
+        // If async but no Promise annotation, wrap return type in cppcoro::task<T>
+        returnType = isAsync ? cpp.task(baseType) : baseType;
+      }
     } else if (this.checker) {
       // Use TypeChecker to infer return type when not explicitly annotated
       const signature = this.checker.getSignatureFromDeclaration(node);
@@ -567,29 +663,56 @@ export class AstCodegen {
         const tsReturnType = signature.getReturnType();
         const returnTypeStr = this.checker.typeToString(tsReturnType);
         
-        // Map TypeScript types to C++ for GC mode
-        if (returnTypeStr === 'number') {
-          returnType = new ast.CppType('double');
-        } else if (returnTypeStr === 'string') {
-          returnType = new ast.CppType('gs::String');
-        } else if (returnTypeStr === 'boolean') {
-          returnType = new ast.CppType('bool');
-        } else if (returnTypeStr === 'void') {
-          returnType = new ast.CppType('void');
+        let baseType: ast.CppType;
+        // For async functions, unwrap Promise<T> to get T
+        if (isAsync && returnTypeStr.startsWith('Promise<')) {
+          const innerMatch = returnTypeStr.match(/Promise<(.+)>/);
+          if (innerMatch) {
+            const innerTypeStr = innerMatch[1];
+            // Map the inner type
+            if (innerTypeStr === 'number') {
+              baseType = new ast.CppType('double');
+            } else if (innerTypeStr === 'string') {
+              baseType = new ast.CppType('gs::String');
+            } else if (innerTypeStr === 'boolean') {
+              baseType = new ast.CppType('bool');
+            } else if (innerTypeStr === 'void') {
+              baseType = new ast.CppType('void');
+            } else {
+              // For class types like 'A', return pointer in GC mode
+              baseType = new ast.CppType(`gs::${innerTypeStr}*`);
+            }
+          } else {
+            baseType = new ast.CppType('void');
+          }
         } else {
-          // For class types like 'A', return pointer in GC mode
-          returnType = new ast.CppType(`gs::${returnTypeStr}*`);
+          // Map TypeScript types to C++ for GC mode
+          if (returnTypeStr === 'number') {
+            baseType = new ast.CppType('double');
+          } else if (returnTypeStr === 'string') {
+            baseType = new ast.CppType('gs::String');
+          } else if (returnTypeStr === 'boolean') {
+            baseType = new ast.CppType('bool');
+          } else if (returnTypeStr === 'void') {
+            baseType = new ast.CppType('void');
+          } else {
+            // For class types like 'A', return pointer in GC mode
+            baseType = new ast.CppType(`gs::${returnTypeStr}*`);
+          }
         }
+        returnType = isAsync ? cpp.task(baseType) : baseType;
       } else {
-        returnType = new ast.CppType('void');
+        returnType = isAsync ? cpp.task(new ast.CppType('void')) : new ast.CppType('void');
       }
     } else {
-      returnType = new ast.CppType('void');
+      returnType = isAsync ? cpp.task(new ast.CppType('void')) : new ast.CppType('void');
     }
     
     // Track return type for null handling in return statements
     const previousReturnType = this.currentFunctionReturnType;
+    const previousIsAsync = this.currentFunctionIsAsync;
     this.currentFunctionReturnType = returnType;
+    this.currentFunctionIsAsync = isAsync;
     
     const params: ast.Parameter[] = [];
     for (const param of node.parameters) {
@@ -608,8 +731,9 @@ export class AstCodegen {
     
     // Restore previous return type
     this.currentFunctionReturnType = previousReturnType;
+    this.currentFunctionIsAsync = previousIsAsync;
     
-    return new ast.Function(name, returnType, params, body);
+    return new ast.Function(name, returnType, params, body, [], isAsync);
   }
   
   private visitClass(node: ts.ClassDeclaration): ast.Class | undefined {
@@ -699,11 +823,21 @@ export class AstCodegen {
     for (const member of node.members) {
       if (ts.isMethodDeclaration(member)) {
         const methodName = cppUtils.escapeName(member.name.getText());
+        const isAsync = member.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ?? false;
         
         // Get return type: use explicit annotation if present, otherwise infer from TypeChecker
         let returnType: ast.CppType;
         if (member.type) {
-          returnType = this.mapType(member.type);
+          // Check if the type annotation is Promise<T> (for async methods)
+          const typeText = member.type.getText();
+          if (typeText.startsWith('Promise<')) {
+            // Promise<T> will be mapped to cppcoro::task<T> by mapType, don't wrap again
+            returnType = this.mapType(member.type);
+          } else {
+            const baseType = this.mapType(member.type);
+            // If async but no Promise annotation, wrap return type in cppcoro::task<T>
+            returnType = isAsync ? cpp.task(baseType) : baseType;
+          }
         } else if (this.checker) {
           // Use TypeChecker to infer return type
           const signature = this.checker.getSignatureFromDeclaration(member);
@@ -711,29 +845,56 @@ export class AstCodegen {
             const tsReturnType = signature.getReturnType();
             const returnTypeStr = this.checker.typeToString(tsReturnType);
             
-            // Map TypeScript type string to C++ type
-            if (returnTypeStr === 'number') {
-              returnType = new ast.CppType('double');
-            } else if (returnTypeStr === 'string') {
-              returnType = new ast.CppType('gs::String');
-            } else if (returnTypeStr === 'boolean') {
-              returnType = new ast.CppType('bool');
-            } else if (returnTypeStr === 'void') {
-              returnType = new ast.CppType('void');
+            let baseType: ast.CppType;
+            // For async methods, unwrap Promise<T> to get T
+            if (isAsync && returnTypeStr.startsWith('Promise<')) {
+              const innerMatch = returnTypeStr.match(/Promise<(.+)>/);
+              if (innerMatch) {
+                const innerTypeStr = innerMatch[1];
+                // Map the inner type
+                if (innerTypeStr === 'number') {
+                  baseType = new ast.CppType('double');
+                } else if (innerTypeStr === 'string') {
+                  baseType = new ast.CppType('gs::String');
+                } else if (innerTypeStr === 'boolean') {
+                  baseType = new ast.CppType('bool');
+                } else if (innerTypeStr === 'void') {
+                  baseType = new ast.CppType('void');
+                } else {
+                  // For complex types, use auto for now
+                  baseType = new ast.CppType('auto');
+                }
+              } else {
+                baseType = new ast.CppType('void');
+              }
             } else {
-              // For complex types, use auto for now
-              returnType = new ast.CppType('auto');
+              // Map TypeScript type string to C++ type
+              if (returnTypeStr === 'number') {
+                baseType = new ast.CppType('double');
+              } else if (returnTypeStr === 'string') {
+                baseType = new ast.CppType('gs::String');
+              } else if (returnTypeStr === 'boolean') {
+                baseType = new ast.CppType('bool');
+              } else if (returnTypeStr === 'void') {
+                baseType = new ast.CppType('void');
+              } else {
+                // For complex types, use auto for now
+                baseType = new ast.CppType('auto');
+              }
             }
+            returnType = isAsync ? cpp.task(baseType) : baseType;
           } else {
-            returnType = new ast.CppType('void');
+            returnType = isAsync ? cpp.task(new ast.CppType('void')) : new ast.CppType('void');
           }
         } else {
-          returnType = new ast.CppType('void');
+          returnType = isAsync ? cpp.task(new ast.CppType('void')) : new ast.CppType('void');
         }
         
         // Track return type for null handling in return statements
         const previousReturnType = this.currentFunctionReturnType;
+        const previousIsAsync = this.currentFunctionIsAsync;
         this.currentFunctionReturnType = returnType;
+        this.currentFunctionIsAsync = isAsync;
         
         const params: ast.Parameter[] = [];
         for (const param of member.parameters) {
@@ -758,6 +919,7 @@ export class AstCodegen {
         
         // Restore previous return type
         this.currentFunctionReturnType = previousReturnType;
+        this.currentFunctionIsAsync = previousIsAsync;
         
         // Check if method should be const (doesn't modify 'this') and if it's static
         // Static methods cannot be const in C++
@@ -773,7 +935,7 @@ export class AstCodegen {
         // Otherwise, check if method mutates this
         const isConst = isOverride ? true : (!isStatic && tsUtils.shouldMethodBeConst(member));
         
-        methods.push(new ast.Method(methodName, returnType, params, body, ast.AccessSpecifier.Public, isConst, isStatic, isVirtual, false, isOverride, false));
+        methods.push(new ast.Method(methodName, returnType, params, body, ast.AccessSpecifier.Public, isConst, isStatic, isVirtual, false, isOverride, false, isAsync));
       }
     }
     
@@ -935,7 +1097,8 @@ export class AstCodegen {
             : [];
           // Create make_unique call
           const expr = cpp.call(cpp.id(`std::make_unique<${innerType}>`), args);
-          return new ast.ReturnStmt(expr);
+          // Use co_return for async functions
+          return this.currentFunctionIsAsync ? cpp.coReturn(expr) : new ast.ReturnStmt(expr);
         }
       }
       
@@ -979,7 +1142,8 @@ export class AstCodegen {
         expr = cpp.id('std::nullopt');
       }
       
-      return new ast.ReturnStmt(expr);
+      // Use co_return for async functions, return for sync functions
+      return this.currentFunctionIsAsync ? cpp.coReturn(expr) : new ast.ReturnStmt(expr);
     }
     
     if (ts.isExpressionStatement(node)) {
@@ -1630,6 +1794,12 @@ export class AstCodegen {
       return this.visitArrowFunction(node as any as ts.ArrowFunction);
     }
     
+    if (ts.isAwaitExpression(node)) {
+      // await expression -> co_await in C++
+      const expr = this.visitExpression(node.expression);
+      return cpp.await(expr);
+    }
+    
     if (ts.isTemplateExpression(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
       return this.visitTemplateLiteral(node);
     }
@@ -2164,6 +2334,8 @@ export class AstCodegen {
    * Generates a template function instead of a std::function variable
    */
   private visitGenericArrowFunction(name: string, node: ts.ArrowFunction): ast.Function {
+    const isAsync = node.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ?? false;
+    
     // Extract template parameters
     const templateParams: string[] = [];
     if (node.typeParameters) {
@@ -2183,7 +2355,22 @@ export class AstCodegen {
     }
     
     // Get return type
-    const returnType = node.type ? this.mapType(node.type) : new ast.CppType('auto');
+    let returnType: ast.CppType;
+    if (node.type) {
+      const typeText = node.type.getText();
+      if (typeText.startsWith('Promise<')) {
+        returnType = this.mapType(node.type);
+      } else {
+        const baseType = this.mapType(node.type);
+        returnType = isAsync ? cpp.task(baseType) : baseType;
+      }
+    } else {
+      returnType = isAsync ? cpp.task(new ast.CppType('auto')) : new ast.CppType('auto');
+    }
+    
+    // Track async state for return statement handling
+    const previousIsAsync = this.currentFunctionIsAsync;
+    this.currentFunctionIsAsync = isAsync;
     
     // Extract function body
     let body: ast.Block;
@@ -2192,8 +2379,11 @@ export class AstCodegen {
     } else {
       // Expression body: (x) => x * 2
       const expr = this.visitExpression(node.body);
-      body = new ast.Block([new ast.ReturnStmt(expr)]);
+      body = new ast.Block([isAsync ? cpp.coReturn(expr) : new ast.ReturnStmt(expr)]);
     }
+    
+    // Restore async state
+    this.currentFunctionIsAsync = previousIsAsync;
     
     // Clear template parameters after processing function
     if (node.typeParameters) {
@@ -2203,7 +2393,7 @@ export class AstCodegen {
     }
     
     // Create template function
-    return new ast.Function(name, returnType, params, body, templateParams);
+    return new ast.Function(name, returnType, params, body, templateParams, isAsync);
   }
   
   private visitTemplateLiteral(node: ts.TemplateExpression | ts.NoSubstitutionTemplateLiteral): ast.Expression {
@@ -2771,6 +2961,12 @@ export class AstCodegen {
       }
       if (baseName === 'use') {
         return new ast.CppType(`std::weak_ptr<${typeArgs[0]}>`);
+      }
+      
+      // Promise<T> maps to cppcoro::task<T> (return type of async functions)
+      // This should only appear in return type position
+      if (baseName === 'Promise') {
+        return new ast.CppType(`cppcoro::task<${typeArgs[0]}>`);
       }
       
       return new ast.CppType(`gs::${baseName}<${typeArgs.join(', ')}>`);
@@ -3413,6 +3609,31 @@ export class AstCodegen {
   }
   
   /**
+   * Check if source file contains async functions/methods/arrow functions
+   * Returns true if cppcoro support is needed
+   */
+  private sourceFileHasAsync(sourceFile: ts.SourceFile): boolean {
+    const checkNode = (node: ts.Node): boolean => {
+      // Check for async keyword on functions/methods
+      if ((ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node) || 
+           ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
+          node.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword)) {
+        return true;
+      }
+      
+      // Check for await expressions
+      if (ts.isAwaitExpression(node)) {
+        return true;
+      }
+      
+      // Recursively check children
+      return ts.forEachChild(node, checkNode) ?? false;
+    };
+    
+    return checkNode(sourceFile);
+  }
+  
+  /**
    * Check if an arrow function uses any variables from the enclosing scope (closure)
    * Returns true if the function captures external variables, false otherwise
    */
@@ -3489,6 +3710,8 @@ export class AstCodegen {
    * This avoids the overhead of std::function wrapper for functions that don't capture variables
    */
   private visitNonClosureArrowFunction(name: string, node: ts.ArrowFunction): ast.Function {
+    const isAsync = node.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ?? false;
+    
     // Extract function parameters
     const params: ast.Parameter[] = [];
     for (const param of node.parameters) {
@@ -3516,8 +3739,23 @@ export class AstCodegen {
     }
     
     // Get return type
-    const returnType = node.type ? this.mapType(node.type) : 
-                       (tsUtils.arrowFunctionHasReturnValue(node) ? new ast.CppType('double') : new ast.CppType('void'));
+    let returnType: ast.CppType;
+    if (node.type) {
+      const typeText = node.type.getText();
+      if (typeText.startsWith('Promise<')) {
+        returnType = this.mapType(node.type);
+      } else {
+        const baseType = this.mapType(node.type);
+        returnType = isAsync ? cpp.task(baseType) : baseType;
+      }
+    } else {
+      const baseType = tsUtils.arrowFunctionHasReturnValue(node) ? new ast.CppType('double') : new ast.CppType('void');
+      returnType = isAsync ? cpp.task(baseType) : baseType;
+    }
+    
+    // Track async state for return statement handling
+    const previousIsAsync = this.currentFunctionIsAsync;
+    this.currentFunctionIsAsync = isAsync;
     
     // Convert body
     let body: ast.Block;
@@ -3526,10 +3764,13 @@ export class AstCodegen {
     } else {
       // Expression body: convert to return statement
       const expr = this.visitExpression(node.body);
-      body = new ast.Block([new ast.ReturnStmt(expr)]);
+      body = new ast.Block([isAsync ? cpp.coReturn(expr) : new ast.ReturnStmt(expr)]);
     }
     
-    return new ast.Function(name, returnType, params, body);
+    // Restore async state
+    this.currentFunctionIsAsync = previousIsAsync;
+    
+    return new ast.Function(name, returnType, params, body, [], isAsync);
   }
 }
 
