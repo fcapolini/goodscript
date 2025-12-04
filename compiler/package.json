@@ -1,7 +1,7 @@
 {
   "name": "goodscript",
-  "version": "0.8.1",
-  "description": "TypeScript without the bad parts - strict, ownership-aware compiler with tsc compatibility",
+  "version": "0.9.0",
+  "description": "Go for TypeScript developers - compile TypeScript to single-file native executables",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -36,13 +36,14 @@
   "keywords": [
     "goodscript",
     "typescript",
+    "go",
+    "native",
     "compiler",
-    "ownership",
-    "memory-management",
-    "tsc",
-    "strict-typescript",
+    "single-binary",
+    "cross-compilation",
     "cpp",
-    "systems-programming"
+    "deployment",
+    "cli"
   ],
   "author": "Fabio Capolini",
   "license": "MIT",
