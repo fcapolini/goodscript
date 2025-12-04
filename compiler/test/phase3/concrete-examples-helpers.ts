@@ -20,6 +20,8 @@ import {
   executeCpp,
   executeGcCpp,
   compareOutputs,
+  CPPCORO_DIR,
+  getCppcoroObjectFile,
 } from "./runtime-helpers.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -272,16 +274,13 @@ export function compileAndExecuteNative(
   
   // Check if code uses async/await (needs cppcoro)
   const needsCppcoro = execution.cppCode.includes('cppcoro/task.hpp');
-  const CPPCORO_DIR = join(RUNTIME_DIR, "../vendor/cppcoro/include");
-  const CPPCORO_LIB_DIR = join(RUNTIME_DIR, "../vendor/cppcoro/lib");
   
   let compileCmd = `zig c++ -std=c++20 -O3 -I${RUNTIME_DIR} ${cppFile} -o ${binFile}`;
   
-  // Add cppcoro include path and source files if needed
+  // Add cppcoro include path and cached object file if needed
   if (needsCppcoro) {
-    compileCmd += ` -I${CPPCORO_DIR}`;
-    // Add the minimal cppcoro sources needed for sync_wait
-    compileCmd += ` ${CPPCORO_LIB_DIR}/lightweight_manual_reset_event.cpp`;
+    const cppcoroObj = getCppcoroObjectFile();
+    compileCmd += ` -I${CPPCORO_DIR} ${cppcoroObj}`;
   }
   
   // Add PCRE2 support if needed

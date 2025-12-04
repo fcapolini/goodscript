@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-#include "../../mps/code/mps.h"
+#include "../../vendor/mps/src/mps.h"
 
 #ifdef __cplusplus
 }

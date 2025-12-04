@@ -12,9 +12,75 @@ import { tmpdir } from 'os';
 // Path to GoodScript runtime headers
 const RUNTIME_DIR = resolve(__dirname, '../../runtime');
 
-// Path to MPS library
-const MPS_DIR = resolve(__dirname, '../../mps/code');
-const MPS_LIB = join(MPS_DIR, 'libmps.a');
+// Path to MPS source (vendored)
+const MPS_SRC_DIR = resolve(__dirname, '../../vendor/mps/src');
+
+// Path to cppcoro (vendored)
+const CPPCORO_DIR = resolve(__dirname, '../../vendor/cppcoro/include');
+const CPPCORO_LIB_DIR = resolve(__dirname, '../../vendor/cppcoro/lib');
+
+// Cached object files (compile once, reuse across all tests)
+let MPS_CACHED_OBJ: string | null = null;
+let CPPCORO_CACHED_OBJ: string | null = null;
+
+/**
+ * Get or compile the MPS object file (cached for performance)
+ */
+function getMpsObjectFile(): string {
+  if (MPS_CACHED_OBJ && existsSync(MPS_CACHED_OBJ)) {
+    return MPS_CACHED_OBJ;
+  }
+  
+  // Compile MPS to a persistent cache location
+  const cacheDir = join(tmpdir(), 'goodscript-mps-cache');
+  mkdirSync(cacheDir, { recursive: true });
+  
+  const mpsObj = join(cacheDir, 'mps.o');
+  
+  // Only compile if not already cached
+  if (!existsSync(mpsObj)) {
+    const compileMpsCmd = `cc -O2 -c ${join(MPS_SRC_DIR, 'mps.c')} -o ${mpsObj}`;
+    execSync(compileMpsCmd, { 
+      encoding: 'utf-8', 
+      timeout: 30000,  // First compile may take longer
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+  }
+  
+  MPS_CACHED_OBJ = mpsObj;
+  return mpsObj;
+}
+
+/**
+ * Get or compile the cppcoro object file (cached for performance)
+ */
+function getCppcoroObjectFile(): string {
+  if (CPPCORO_CACHED_OBJ && existsSync(CPPCORO_CACHED_OBJ)) {
+    return CPPCORO_CACHED_OBJ;
+  }
+  
+  // Compile cppcoro to a persistent cache location
+  const cacheDir = join(tmpdir(), 'goodscript-cppcoro-cache');
+  mkdirSync(cacheDir, { recursive: true });
+  
+  const cppcoroObj = join(cacheDir, 'cppcoro.o');
+  
+  // Only compile if not already cached
+  if (!existsSync(cppcoroObj)) {
+    const compileCppcoroCmd = `zig c++ -std=c++20 -O2 -I${CPPCORO_DIR} -c ${join(CPPCORO_LIB_DIR, 'lightweight_manual_reset_event.cpp')} -o ${cppcoroObj}`;
+    execSync(compileCppcoroCmd, { 
+      encoding: 'utf-8', 
+      timeout: 10000,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+  }
+  
+  CPPCORO_CACHED_OBJ = cppcoroObj;
+  return cppcoroObj;
+}
+
+// Export paths and caching functions for use in other test helpers
+export { RUNTIME_DIR, MPS_SRC_DIR, CPPCORO_DIR, CPPCORO_LIB_DIR, getMpsObjectFile, getCppcoroObjectFile };
 
 export interface ExecutionResult {
   success: boolean;
@@ -129,10 +195,15 @@ export const executeGcCpp = (gcCppCode: string, outDir: string): ExecutionResult
     const CPPCORO_DIR = join(RUNTIME_DIR, '../vendor/cppcoro/include');
     const CPPCORO_LIB_DIR = join(RUNTIME_DIR, '../vendor/cppcoro/lib');
     
-    let compileCmd = `zig c++ -std=c++20 -O3 -I${RUNTIME_DIR} -I${MPS_DIR} ${cppFile} ${MPS_LIB}`;
+    // Get cached MPS object file (compiled once, reused across all tests)
+    const mpsObj = getMpsObjectFile();
+    
+    let compileCmd = `zig c++ -std=c++20 -O3 -I${RUNTIME_DIR} -I${MPS_SRC_DIR} ${cppFile} ${mpsObj}`;
     
     if (needsCppcoro) {
-      compileCmd += ` -I${CPPCORO_DIR} ${CPPCORO_LIB_DIR}/lightweight_manual_reset_event.cpp`;
+      // Get cached cppcoro object file
+      const cppcoroObj = getCppcoroObjectFile();
+      compileCmd += ` -I${CPPCORO_DIR} ${cppcoroObj}`;
     }
     
     compileCmd += ` -o ${binFile}`;

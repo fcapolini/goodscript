@@ -10,86 +10,137 @@ npm i -g goodscript
 gsc build main.gs      # Compiles to native binary immediately
 ```
 
-## Current State (Dec 2024)
+## Current State (Dec 4, 2024)
 
 **What works:**
 - ✅ TypeScript → C++ code generation
-- ✅ GC mode with MPS (bundled as `compiler/mps/libmps.a`)
-- ✅ Async/await with cppcoro (git submodule)
 - ✅ Runtime library (bundled in `compiler/runtime/`)
+- ✅ Async/await with cppcoro (✅ VENDORED - Phase 1 complete!)
 
 **Dependencies:**
-1. **Zig** - C++ compiler (external, must install)
-2. **cppcoro** - Git submodule (requires `git submodule update --init`)
+1. **Zig** - C++ compiler (external, must install separately)
+2. **MPS** - Git submodule, pre-built `libmps.a` for arm64 only ⚠️
 3. **PCRE2** - Optional, for RegExp (via `brew install pcre2` or pkg-config)
 
 **Pain points:**
-- Git submodule not included in npm package by default
-- PCRE2 requires system installation
-- Not "install and go"
+- ✅ ~~cppcoro was git submodule~~ → **SOLVED in Phase 1**
+- ⚠️ MPS only built for macOS arm64 (not Intel Macs, Linux, Windows)
+- ⚠️ MPS is git submodule (requires `git submodule update --init`)
+- ⚠️ PCRE2 requires system installation
+- Not "install and go" - architecture-dependent
 
 ## Roadmap to Go-Like DX
 
-### Phase 1: Vendor cppcoro ✅ Next
+### Phase 1: Vendor cppcoro ✅ COMPLETE (Dec 4, 2024)
 **Goal:** Remove git submodule dependency
 
 **Why we CAN vendor cppcoro:**
-- Small footprint (~50 source files, mostly headers)
+- Small footprint (~70 header files + 3 source files)
 - We only need: `task.hpp`, `sync_wait.hpp`, `lightweight_manual_reset_event.cpp`
 - MIT license (compatible)
 - Stable API (C++20 coroutines)
 
+**What we did:**
+1. ✅ Copied cppcoro sources to `compiler/vendor/cppcoro/`
+2. ✅ Updated compilation paths in test helpers
+3. ✅ Removed `.gitmodules` entry and `compiler/cppcoro/` submodule
+4. ✅ Added LICENSE file crediting andreasbuhr/cppcoro
+5. ✅ All async/await tests passing (20/20)
+
+**Result:** ✅ `npm i -g goodscript` includes everything for async/await
+
+### Phase 2: Vendor MPS + PCRE2 ✅ Critical
+**Goal:** Remove all system and architecture dependencies
+
+#### Part A: Vendor MPS sources (compile on-the-fly)
+**Problem:** Current MPS is:
+- Git submodule (not in npm package)
+- Pre-built `libmps.a` for macOS arm64 only ⚠️
+- Fails on Intel Macs, Linux, Windows
+- **Blocks GC mode** (strategic differentiator) everywhere except Apple Silicon
+
+**Discovery:** MPS doesn't ship precompiled binaries - you build from source. But it's **trivial**:
+```bash
+cc -O2 -c mps.c    # Single-file compilation!
+```
+
+**Why compile on-the-fly (like cppcoro):**
+- ✅ MPS is a single amalgamation file: `mps.c` (294 lines of #includes)
+- ✅ No external dependencies - just C99
+- ✅ Fast compilation (~1-2 seconds)
+- ✅ Works on any platform with a C compiler
+- ✅ No need to maintain pre-built binaries for each platform
+- ✅ Simpler than cppcoro (no C++ templates, just C)
+
 **Actions:**
-1. Copy needed cppcoro sources to `compiler/vendor/cppcoro/`
+1. Copy MPS source files to `compiler/vendor/mps/`:
    ```
-   compiler/vendor/cppcoro/
-   ├── include/cppcoro/    # Headers we use
-   │   ├── task.hpp
-   │   ├── sync_wait.hpp
-   │   └── detail/...
-   └── lib/
-       └── lightweight_manual_reset_event.cpp
+   compiler/vendor/mps/
+   ├── src/
+   │   ├── mps.c          # Main amalgamation (includes all other .c files)
+   │   ├── mpstd.h        # Platform interface
+   │   ├── mps.h          # Public API
+   │   └── *.c, *.h       # All source files (referenced by mps.c)
+   └── LICENSE
    ```
-2. Update compilation paths in test helpers
-3. Remove `.gitmodules` and `compiler/cppcoro/` submodule
-4. Add LICENSE file crediting andreasbuhr/cppcoro
-5. Test all async/await tests still pass
 
-**Result:** `npm i -g goodscript` includes everything for async/await
+2. Update runtime-helpers.ts to compile on-the-fly:
+   ```typescript
+   // Compile MPS if not already compiled for this test run
+   const mpsObj = join(tmpDir, 'mps.o');
+   if (!existsSync(mpsObj)) {
+     execSync(`cc -O2 -c ${MPS_SRC}/mps.c -o ${mpsObj}`, { cwd: tmpDir });
+   }
+   
+   // Link with GC code
+   compileCmd += ` ${mpsObj}`;
+   ```
 
-### Phase 2: Vendor PCRE2 ✅ Should Do This
+3. Update concrete-examples-helpers.ts similarly
+4. Remove MPS git submodule from .gitmodules
+5. Test on multiple platforms (GitHub Actions CI)
+
+**Benefits:**
+- ✅ Works on any platform (darwin, linux, windows)
+- ✅ Works on any architecture (arm64, x64)
+- ✅ No pre-built binary maintenance
+- ✅ Users only need a C compiler (already required for Zig)
+- ✅ Compilation is fast enough to be transparent
+
+**Result:** GC mode works everywhere, enabling "Go for TypeScript developers" positioning
+
+#### Part B: Vendor PCRE2 (compile on-the-fly or precompiled)
 **Goal:** Remove system dependency for RegExp support
 
 **Why we CAN vendor PCRE2:**
 - **Precompiled static libraries** approach (like MPS):
-  - Build `libpcre2-8.a` for major platforms:
-    - macOS arm64 (`libpcre2-8-darwin-arm64.a`)
-    - macOS x64 (`libpcre2-8-darwin-x64.a`)
-    - Linux x64 (`libpcre2-8-linux-x64.a`)
-    - Windows x64 (`pcre2-8-win64.lib`)
-  - Bundle in `compiler/pcre2/` (similar to `compiler/mps/`)
+  - Build `libpcre2-8.a` for major platforms
+  - Bundle in `compiler/vendor/pcre2/`
   - Auto-select correct library based on platform
+  - BSD license (compatible)
 
 **OR - Simpler alternative:**
 - Bundle PCRE2 source files (minimal set for basic regex)
 - Compile on-the-fly like we do with cppcoro
 - PCRE2 is BSD license (compatible)
 
-**Actions (Precompiled approach):**
-1. Build static PCRE2 libraries for target platforms
-2. Add to `compiler/pcre2/`:
+**Actions (Precompiled approach - preferred):**
+1. Build static PCRE2 libraries for target platforms:
    ```
-   compiler/pcre2/
+   compiler/vendor/pcre2/
    ├── libpcre2-8-darwin-arm64.a
    ├── libpcre2-8-darwin-x64.a
    ├── libpcre2-8-linux-x64.a
+   ├── libpcre2-8-linux-arm64.a
    ├── pcre2-8-win64.lib
    └── include/
        └── pcre2.h
    ```
-3. Update runtime-helpers.ts to auto-select platform library
-4. Update concrete-examples-helpers.ts similarly
-5. Remove brew/pkg-config detection code
+
+2. Update runtime-helpers.ts to auto-select platform library
+3. Update concrete-examples-helpers.ts similarly
+4. Remove brew/pkg-config detection code
+5. Test RegExp on all platforms
 
 **Result:** RegExp works out of the box, no system dependencies
 
