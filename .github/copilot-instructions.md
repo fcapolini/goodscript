@@ -2,9 +2,13 @@
 
 ## Project Overview
 
-GoodScript is a **TypeScript specialization** for safe systems programming with **deterministic memory management**. It compiles TypeScript code with ownership annotations to C++, providing memory safety without garbage collection.
+GoodScript is a **TypeScript specialization** for native compilation, positioned as **"Go for TypeScript developers"**. It compiles TypeScript code to C++ for deployment as single binaries.
 
-**Core Innovation**: Ownership qualifiers (`own<T>`, `share<T>`, `use<T>`) that are transparent type aliases in TypeScript but map to C++ smart pointers (unique_ptr, shared_ptr, weak_ptr).
+**Core Innovation**: Two compilation modes:
+1. **GC Mode (default)**: Automatic garbage collection, no ownership annotations, Go-like deployment with TypeScript syntax
+2. **Ownership Mode (advanced)**: Ownership qualifiers (`own<T>`, `share<T>`, `use<T>`) that are transparent type aliases in TypeScript but map to C++ smart pointers (unique_ptr, shared_ptr, weak_ptr) for zero-GC performance
+
+**Market Position**: Competing with Go for TypeScript developers who want single-binary deployment without learning a new language. Not competing with Node.js - different use cases.
 
 ## Architecture Phases
 
@@ -595,14 +599,16 @@ When implementing new features or fixing bugs:
 
 ## Philosophy & Goals
 
-1. **Memory safety without GC**: Deterministic destruction via ownership
-2. **Familiar syntax**: TypeScript developers should feel at home
-3. **Dual-mode execution**: Run in Node.js/Deno OR compile to C++
-4. **Zero-cost abstractions**: C++ code should be as fast as hand-written
-5. **Explicit over implicit**: If it can surprise, make it explicit
-6. **Fail early**: Compile-time errors > Runtime errors > Memory corruption
+1. **"Go for TypeScript developers"**: Target TS devs evaluating Go, offer same deployment benefits without language switch
+2. **Single-binary deployment**: Like Go's `go build`, but with TypeScript syntax
+3. **New stdlib is expected**: We're not Node.js - new APIs are par for the course (like Go has different APIs than Node)
+4. **TypeScript familiarity**: Classes, async/await, familiar patterns work - no paradigm shift required
+5. **Dual-mode execution**: Develop in Node.js/Deno, deploy as native binary
+6. **Optional ownership for experts**: Zero-GC mode available for embedded/real-time/high-performance use cases
+7. **Explicit over implicit**: If it can surprise, make it explicit
+8. **Fail early**: Compile-time errors > Runtime errors > Memory corruption
 
-## Current Status (as of Dec 1, 2025)
+## Current Status (as of Dec 4, 2025)
 
 - **Phase 1**: ✅ 100% complete (244/244 tests)
 - **Phase 2**: ✅ 100% complete (425/425 tests)  
@@ -637,10 +643,11 @@ When implementing new features or fixing bugs:
 - **Phase 4**: 📋 Planned
 
 **Next priorities**:
-1. Fix remaining native mode failures (typeof, super, overloads)
-2. Phase 4 ecosystem development
-3. Add async/await coroutine support
-4. Expand standard library APIs
+1. **Phase 4 ecosystem development** - Node.js API compatibility (fs, http, path, etc.)
+2. Standard library expansion for GC mode
+3. Package management and build tooling
+4. Migration guides and example projects
+5. Optimize GC performance further (target 2-3x faster than Node.js)
 
 ---
 

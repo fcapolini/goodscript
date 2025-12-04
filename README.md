@@ -1,24 +1,60 @@
-# Introducing GoodScript: TypeScript with Deterministic Memory Safety
+# GoodScript: Go for TypeScript Developers
 
 > **🚧 Alpha State:** GoodScript is currently in active development. The compiler is 100% complete (1169/1169 tests passing) with all core features working. Phase 3 (C++ code generation) is complete! See [Current Status](#7-current-status-december-2025) for details.
 
-**Audience:** TypeScript developers interested in writing memory-safe systems code
+**For:** TypeScript developers who want Go's deployment benefits without learning a new language
 
-**Purpose:** Highlight GoodScript's dual-mode workflow, tooling support, and memory-safety features.
+**Value Proposition:** Get everything you love about Go (single binaries, cross-compilation, fast performance) while writing TypeScript. **No new syntax to learn** - just avoid JavaScript's "bad parts" and compile to native.
 
 ---
 
 ## 1. What is GoodScript?
 
-GoodScript is a **TypeScript specialization** designed to enable safe systems programming with deterministic memory management. It retains **TypeScript syntax** while removing JavaScript dynamic features which would prevent native compilation, and augmenting the language with **ownership qualifiers** which allow for automatic memory management without the need of a garbage collector or complex borrowing rules like in Rust.
+**Considering Go?** GoodScript gives you the same benefits - single binaries, cross-compilation, great performance - but you **keep writing TypeScript**.
 
-This turns TypeScript into an enterprise-level, natively compilable language with deterministic memory management and small footprint, making it ideal for systems programming in alternative to Rust and Go.
+### Why Learn Go?
 
-> GoodScript's name is inspired by Douglas Crockford's "JavaScript: The Good Parts" as it advocated ignoring the "bad" or dangerous features of the language.
+TypeScript developers typically consider Go for:
+- ✅ Single binary deployment
+- ✅ Cross-platform compilation  
+- ✅ Fast startup and performance
+- ✅ Better than Node.js for CLIs and servers
 
-### 1.1. Fully Statically Typed Language
+**But then you have to:**
+- ❌ Learn new syntax (structs, interfaces, defer, goroutines)
+- ❌ Learn new standard library (different from Node.js)
+- ❌ Learn new tooling (go mod, go test, go fmt)
+- ❌ Adapt to different patterns (no classes, composition over inheritance)
 
-GoodScript enforces **"The Good Parts"** of TypeScript by removing JavaScript's dynamic features that prevent reliable static analysis and native compilation:
+### GoodScript Alternative
+
+**Get Go's benefits, keep TypeScript:**
+
+✅ **Single binary deployment** - Just like `go build`  
+✅ **Cross-compilation** - Just like Go's `GOOS=linux GOARCH=amd64`  
+✅ **Small binaries** - 2-10MB (comparable to Go)  
+✅ **Fast startup & performance** - Compiled, not JIT  
+✅ **TypeScript syntax** - Classes, interfaces, async/await you already know  
+✅ **Familiar patterns** - Object-oriented + functional, your choice
+
+**Yes, you'll learn new libraries** (like you would with Go), but **you skip learning a new language**.
+
+### Two Compilation Modes
+
+1. **GC Mode** (recommended - like Go's GC)
+   - Write TypeScript, no annotations needed
+   - Automatic garbage collection
+   - Perfect for CLIs, APIs, data processing
+
+2. **Ownership Mode** (advanced - like Rust, simpler)
+   - Optional: Add ownership types for zero-GC
+   - For embedded/real-time systems
+
+> GoodScript's name is inspired by Douglas Crockford's "JavaScript: The Good Parts" - write better code by avoiding the dangerous features.
+
+### 1.1. "The Good Parts" - All You Need for GC Mode
+
+To use GoodScript in **GC mode**, you just need to avoid JavaScript's problematic features. These restrictions make your code more maintainable and enable native compilation:
 
 **Prohibited features:**
 * No `var` keyword (only `const` and `let`)
@@ -70,27 +106,27 @@ GoodScript enforces **"The Good Parts"** of TypeScript by removing JavaScript's 
 
 These restrictions make GoodScript code more maintainable and ensure that TypeScript development behavior matches native compilation behavior exactly.
 
-### 1.2. Simple Automatic Memory Management
+**That's it!** Follow these rules and you can compile TypeScript to native code with automatic GC. No ownership annotations needed.
 
-In GoodScript, reference to heap-allocated values are qualified using ownership qualifiers:
+### 1.2. Optional: Ownership Mode for Zero-GC Performance
 
-* `own<T>` — exclusive ownership of a value.
-* `share<T>` — reference-counted shared ownership.
-* `use<T>` — non-owning references (may be `null` or `undefined`).
+> **Advanced Feature:** Most applications don't need this. Use GC mode unless you need deterministic memory management for systems programming.
 
-The compiler checks the correctness of memory ownership rules and performs analysis to ensure no ownership loops can be formed at runtime in compiled apps. This allows GoodScript to reliably use simple and performant reference counting instead of complex and unpredictable garbage collection.
+For **maximum performance** and **zero runtime overhead**, GoodScript supports ownership annotations:
 
-Complex structures which require cross referencing between nodes must be implemented using the Arena/Pool pattern, where node ownership is centralized in a single pool and nodes only keep non-owning references to each other.
+* `own<T>` — exclusive ownership (→ `std::unique_ptr<T>`)
+* `share<T>` — reference-counted shared ownership (→ `gs::shared_ptr<T>`)
+* `use<T>` — non-owning references (→ `gs::weak_ptr<T>`)
 
-This is rarely needed in most application, and it's a small price to pay for getting rid of garbage collection and gain in memory footprint, performance and predictability, completely eliminating GC latencies and huge binaries containing complex runtimes.
+The compiler enforces DAG (Directed Acyclic Graph) rules to prevent memory cycles, eliminating GC entirely. Complex data structures use the Arena/Pool pattern.
 
-These types are **transparent in TypeScript**, making GoodScript code valid TS code for development and prototyping.
+**When to use ownership mode:**
+- Embedded systems / IoT devices
+- Real-time applications (no GC pauses)
+- High-performance libraries
+- Memory-constrained environments
 
-```ts
-declare type own<T> = T;
-declare type share<T> = T;
-declare type use<T> = T | null | undefined;
-```
+See [docs/GC-VS-OWNERSHIP.md](docs/GC-VS-OWNERSHIP.md) for the complete guide.
 
 ---
 
@@ -154,15 +190,112 @@ gsc -t native -m ownership -o dist src/main.gs.ts  # or just -t native
 
 ---
 
-## 3. Memory Safety and Reference Qualifiers
+## 3. Go vs GoodScript: Side-by-Side
 
-* All heap-allocated values must have **explicit reference qualification**.
-* Reference derivation rules prevent cycles and unsafe memory access:
+### Why TypeScript Devs Consider Go
 
-  * From `own<T>` → only `use<T>` can be derived.
-  * From `share<T>` → `share<T>` or `use<T>`.
-  * From `use<T>` → only `use<T>`.
-* Weak references are accessed with optional chaining (`?.`) in TS, which maps to safe upgrade in native code.
+You're productive in TypeScript but you see Go's advantages:
+- Single binaries for easy deployment
+- Fast compilation and execution  
+- Great for CLIs, microservices, system tools
+- Growing ecosystem and community
+
+**The catch:** You need to learn Go.
+
+### Learning Curve Comparison
+
+**Go (new language + new ecosystem):**
+```go
+// Go - Everything is new
+package main
+
+import (
+    "fmt"
+    "os"
+    "path/filepath"
+)
+
+type FileCounter struct {
+    count int
+}
+
+func (fc *FileCounter) countFiles(dir string) error {
+    return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+        if err != nil {
+            return err
+        }
+        if !info.IsDir() {
+            fc.count++
+        }
+        return nil
+    })
+}
+
+func main() {
+    fc := &FileCounter{}
+    fc.countFiles(".")
+    fmt.Printf("Files: %d\n", fc.count)
+}
+```
+
+**GoodScript (TypeScript you know):**
+```typescript
+// GoodScript - TypeScript you already know
+import * as fs from 'fs';
+import * as path from 'path';
+
+class FileCounter {
+    count: number = 0;
+    
+    countFiles(dir: string): void {
+        const items = fs.readdirSync(dir);
+        for (const item of items) {
+            const fullPath = path.join(dir, item);
+            if (fs.statSync(fullPath).isFile()) {
+                this.count++;
+            } else {
+                this.countFiles(fullPath);
+            }
+        }
+    }
+}
+
+const fc = new FileCounter();
+fc.countFiles('.');
+console.log(`Files: ${fc.count}`);
+```
+
+### Build & Deploy Comparison
+
+**Both give you the same deployment story:**
+
+```bash
+# Go
+GOOS=linux GOARCH=amd64 go build -o myapp
+
+# GoodScript  
+gsc -t native -b -a x86_64-linux -o myapp src/main.gs.ts
+
+# Both produce single binaries you can deploy anywhere
+scp myapp user@server:/usr/local/bin/
+```
+
+### What's Different?
+
+| Feature | Go | GoodScript |
+|---------|----|-----------|
+| **Single binaries** | ✅ Yes | ✅ Yes |
+| **Cross-compilation** | ✅ Yes | ✅ Yes |
+| **Fast compilation** | ✅ Yes | ✅ Yes |
+| **Fast execution** | ✅ Yes | ✅ Yes (1.2-2x faster than Node.js) |
+| **Memory management** | ✅ GC | ✅ GC (or optional ownership) |
+| **Syntax** | ❌ Learn Go | ✅ TypeScript you know |
+| **Standard library** | ❌ Learn new APIs | ❌ Learn new APIs (but familiar patterns) |
+| **Ecosystem maturity** | ✅ Mature | 🚧 Growing |
+| **Async model** | Goroutines | async/await (familiar) |
+| **OOP support** | Composition only | ✅ Classes + composition |
+
+**Bottom line:** Same deployment benefits, but you keep your TypeScript skills.
 
 ---
 
@@ -240,40 +373,104 @@ gsc -t native -b -a wasm32-wasi -o dist src/main.gs.ts
 
 ---
 
-## 5. Benefits for Developers
+## 5. Why Choose GoodScript Over Go?
 
-1. **Familiar TS syntax:** Minimal learning curve.
-2. **Rapid iteration:** Node.js execution allows testing before native deployment.
-3. **Memory-safe systems programming:** Safe ownership semantics enforced during transpilation.
-4. **Cross-platform native builds:** C++20 backend + Zig toolchain for multiple targets.
-5. **Safe complex data structures:** Arena/Pool pattern handles graphs and trees without violating DAG rules.
-6. **Integrated tooling:** VSCode extension ensures errors are caught early.
-7. **Modern C++ output:** RAII, smart pointers, and C++20 features (concepts, ranges, coroutines).
+### Keep Your TypeScript Skills
+1. **No new syntax to learn** - Classes, interfaces, generics you know
+2. **No new async model** - async/await, not goroutines and channels  
+3. **No paradigm shift** - OOP works, not just composition
+4. **TypeScript tooling** - ESLint, Prettier, your existing setup
+5. **Easier onboarding** - Your team already knows TypeScript
+6. **Code reuse** - Share types and logic with frontend/Node.js code
+
+### Same Deployment Benefits as Go
+1. **Single binaries** - Just like `go build`
+2. **Cross-compilation** - Just like Go's GOOS/GOARCH
+3. **Small executables** - 2-10MB (comparable to Go)
+4. **Fast startup** - Compiled, not JIT
+5. **Great performance** - Native code, competitive with Go
+
+### When to Choose Go Instead
+- ✅ You need Go's mature ecosystem (databases, AWS SDKs, etc.)
+- ✅ You want goroutines' concurrency model
+- ✅ You're building in an existing Go codebase
+- ✅ You have time to learn a new language
+
+### When to Choose GoodScript
+- ✅ You're a TypeScript developer (most web/Node.js devs)
+- ✅ You want deployment benefits without learning Go
+- ✅ You want to share code/types with frontend
+- ✅ Your team knows TS but not Go
+- ✅ You prefer classes and familiar OOP patterns
 
 ---
 
 ## 6. Example: GoodScript in Action
 
-```ts
-// .gs.ts file
-declare type share<T> = T;
-declare type use<T> = T | null | undefined;
+### GC Mode (No Annotations Needed)
 
-class Node {
-    value: number;
-    parent: use<Node>;
-    children: share<Node>[];
+```ts
+// cli-tool.gs.ts - A simple file counter
+import * as fs from 'fs';
+import * as path from 'path';
+
+function countFiles(dir: string): number {
+    let count = 0;
+    const items = fs.readdirSync(dir);
+    
+    for (const item of items) {
+        const fullPath = path.join(dir, item);
+        const stat = fs.statSync(fullPath);
+        
+        if (stat.isDirectory()) {
+            count += countFiles(fullPath);
+        } else {
+            count++;
+        }
+    }
+    
+    return count;
 }
 
-async function demo(node: share<Node>) {
-    let child: share<Node> = node;
-    let weakRef: use<Node> = child;
-    console.log(weakRef?.value);
+const directory = process.argv[2] ?? '.';
+console.log(`Total files: ${countFiles(directory)}`);
+```
+
+```bash
+# Develop in Node.js
+node cli-tool.gs.ts /path/to/project
+
+# Compile to standalone binary (5MB)
+gsc -t native -b -o dist/filecount cli-tool.gs.ts
+
+# Distribute single file - runs anywhere, no Node.js needed!
+./dist/filecount /path/to/project
+
+# Cross-compile for Linux from your Mac
+gsc -t native -b -a x86_64-linux -o dist/filecount-linux cli-tool.gs.ts
+
+# Now you have a Linux binary - copy and run on any Linux server
+```
+
+### Ownership Mode (Advanced)
+
+```ts
+// tree.gs.ts - zero-GC tree structure
+declare type own<T> = T;
+declare type use<T> = T | null | undefined;
+
+class Tree {
+    nodes: own<TreeNode>[];  // Tree owns all nodes
+}
+
+class TreeNode {
+    value: number;
+    children: use<TreeNode>[];  // Non-owning references
 }
 ```
 
-* Runs directly in Node.js.
-* Transpiles to C++20 with optimized `gs::shared_ptr`/`gs::weak_ptr` (3x faster than standard library).
+* GC mode: Runs in Node.js, compiles to fast native code
+* Ownership mode: Compiles to zero-GC C++20 with smart pointers
 
 ---
 
