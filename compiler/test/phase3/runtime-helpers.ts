@@ -19,9 +19,13 @@ const MPS_SRC_DIR = resolve(__dirname, '../../vendor/mps/src');
 const CPPCORO_DIR = resolve(__dirname, '../../vendor/cppcoro/include');
 const CPPCORO_LIB_DIR = resolve(__dirname, '../../vendor/cppcoro/lib');
 
+// Path to PCRE2 source (vendored)
+const PCRE2_SRC_DIR = resolve(__dirname, '../../vendor/pcre2/src');
+
 // Cached object files (compile once, reuse across all tests)
 let MPS_CACHED_OBJ: string | null = null;
 let CPPCORO_CACHED_OBJ: string | null = null;
+let PCRE2_CACHED_OBJ: string | null = null;
 
 /**
  * Get or compile the MPS object file (cached for performance)
@@ -79,8 +83,42 @@ function getCppcoroObjectFile(): string {
   return cppcoroObj;
 }
 
+/**
+ * Get or compile the PCRE2 object files (cached for performance)
+ * Returns array of [pcre2_all.o, pcre2_chartables.o]
+ */
+function getPcre2ObjectFiles(): string[] {
+  const cacheDir = join(tmpdir(), 'goodscript-pcre2-cache');
+  mkdirSync(cacheDir, { recursive: true });
+  
+  const pcre2AllObj = join(cacheDir, 'pcre2_all.o');
+  const pcre2ChartablesObj = join(cacheDir, 'pcre2_chartables.o');
+  
+  // Compile pcre2_all.c if not cached
+  if (!existsSync(pcre2AllObj)) {
+    const compileCmd = `zig cc -O2 -DPCRE2_CODE_UNIT_WIDTH=8 -DHAVE_CONFIG_H -DPCRE2_STATIC -I${PCRE2_SRC_DIR} -c ${join(PCRE2_SRC_DIR, 'pcre2_all.c')} -o ${pcre2AllObj}`;
+    execSync(compileCmd, { 
+      encoding: 'utf-8', 
+      timeout: 30000,  // First compile may take longer
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+  }
+  
+  // Compile pcre2_chartables.c if not cached
+  if (!existsSync(pcre2ChartablesObj)) {
+    const compileCmd = `zig cc -O2 -DPCRE2_CODE_UNIT_WIDTH=8 -DHAVE_CONFIG_H -DPCRE2_STATIC -I${PCRE2_SRC_DIR} -c ${join(PCRE2_SRC_DIR, 'pcre2_chartables.c')} -o ${pcre2ChartablesObj}`;
+    execSync(compileCmd, { 
+      encoding: 'utf-8', 
+      timeout: 10000,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+  }
+  
+  return [pcre2AllObj, pcre2ChartablesObj];
+}
+
 // Export paths and caching functions for use in other test helpers
-export { RUNTIME_DIR, MPS_SRC_DIR, CPPCORO_DIR, CPPCORO_LIB_DIR, getMpsObjectFile, getCppcoroObjectFile };
+export { RUNTIME_DIR, MPS_SRC_DIR, CPPCORO_DIR, CPPCORO_LIB_DIR, PCRE2_SRC_DIR, getMpsObjectFile, getCppcoroObjectFile, getPcre2ObjectFiles };
 
 export interface ExecutionResult {
   success: boolean;

@@ -21,7 +21,9 @@ import {
   executeGcCpp,
   compareOutputs,
   CPPCORO_DIR,
+  PCRE2_SRC_DIR,
   getCppcoroObjectFile,
+  getPcre2ObjectFiles,
 } from "./runtime-helpers.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -285,37 +287,9 @@ export function compileAndExecuteNative(
   
   // Add PCRE2 support if needed
   if (needsRegExp) {
-    try {
-      // Try to find PCRE2 via brew (macOS)
-      const brewPrefix = execSync('brew --prefix pcre2 2>/dev/null', {
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'ignore']
-      }).trim();
-      compileCmd += ` -DGS_ENABLE_REGEXP -I${brewPrefix}/include -L${brewPrefix}/lib -lpcre2-8`;
-    } catch {
-      try {
-        // Try pkg-config
-        const pcre2Flags = execSync('pkg-config --cflags --libs libpcre2-8 2>/dev/null', {
-          encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'ignore']
-        }).trim();
-        compileCmd += ` -DGS_ENABLE_REGEXP ${pcre2Flags}`;
-      } catch {
-        // PCRE2 not available - compilation will fail
-        cppCompileStderr = 'PCRE2 library not found. Install with: brew install pcre2';
-        return {
-          ...execution,
-          cppCompileSuccess: false,
-          cppCompileStdout: '',
-          cppCompileStderr,
-          cppOutput: '',
-          cppStderr: '',
-          cppSuccess: false,
-          cppError: 'PCRE2 not available',
-          outputMatches: false,
-        };
-      }
-    }
+    // Use vendored PCRE2 with caching
+    const pcre2Objs = getPcre2ObjectFiles();
+    compileCmd += ` -DGS_ENABLE_REGEXP -I${PCRE2_SRC_DIR} ${pcre2Objs.join(' ')}`;
   }
 
   // Compile C++ to binary (with O2 optimization)
