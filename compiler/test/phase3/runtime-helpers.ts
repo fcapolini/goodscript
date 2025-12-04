@@ -126,8 +126,8 @@ export const executeGcCpp = (gcCppCode: string, outDir: string): ExecutionResult
   try {
     // Check if code uses cppcoro (async/await)
     const needsCppcoro = gcCppCode.includes('cppcoro/task.hpp');
-    const CPPCORO_DIR = join(RUNTIME_DIR, '../cppcoro/include');
-    const CPPCORO_LIB_DIR = join(RUNTIME_DIR, '../cppcoro/lib');
+    const CPPCORO_DIR = join(RUNTIME_DIR, '../vendor/cppcoro/include');
+    const CPPCORO_LIB_DIR = join(RUNTIME_DIR, '../vendor/cppcoro/lib');
     
     let compileCmd = `zig c++ -std=c++20 -O3 -I${RUNTIME_DIR} -I${MPS_DIR} ${cppFile} ${MPS_LIB}`;
     

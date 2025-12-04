@@ -272,8 +272,8 @@ export function compileAndExecuteNative(
   
   // Check if code uses async/await (needs cppcoro)
   const needsCppcoro = execution.cppCode.includes('cppcoro/task.hpp');
-  const CPPCORO_DIR = join(RUNTIME_DIR, "../cppcoro/include");
-  const CPPCORO_LIB_DIR = join(RUNTIME_DIR, "../cppcoro/lib");
+  const CPPCORO_DIR = join(RUNTIME_DIR, "../vendor/cppcoro/include");
+  const CPPCORO_LIB_DIR = join(RUNTIME_DIR, "../vendor/cppcoro/lib");
   
   let compileCmd = `zig c++ -std=c++20 -O3 -I${RUNTIME_DIR} ${cppFile} -o ${binFile}`;
   
