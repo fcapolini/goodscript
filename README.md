@@ -364,29 +364,26 @@ scp myapp user@server:/usr/local/bin/
 GoodScript uses the **Zig C++ compiler** for native compilation, providing:
 
 * **Zero-config cross-compilation** - Compile for any platform from any platform
-* **No complex toolchain setup** - Single 15MB self-contained binary
+* **No complex toolchain setup** - Just Zig (15MB self-contained binary)
 * **Aggressive optimizations** - `-O2`, `-march=native`, `-ffast-math`, `-funroll-loops`
 * **Multiple targets** - Linux, Windows, macOS, WebAssembly, and more
 
-**Installation:**
+**Prerequisites:**
 ```bash
-# Zig compiler
+# Zig compiler (required - the only external dependency)
 # macOS
 brew install zig
 
-# Linux/Windows
-# See https://ziglang.org/download/
+# Linux
+# Download from https://ziglang.org/download/
+# Or use your package manager (apt, dnf, pacman, etc.)
 
-# PCRE2 library (required for RegExp support)
-# macOS
-brew install pcre2
-
-# Ubuntu/Debian
-sudo apt-get install libpcre2-dev
-
-# Fedora/RHEL
-sudo dnf install pcre2-devel
+# Windows
+# Download from https://ziglang.org/download/
+# Or use: winget install -e --id zig.zig
 ```
+
+> **Note:** All other dependencies (cppcoro, MPS garbage collector, PCRE2 regex library) are bundled with GoodScript and compile automatically. You only need to install Zig.
 
 **Compiler Implementation Phases:**
 * **Phase 1**: Validates TypeScript "Good Parts" restrictions (no `var`, no `==`, etc.)

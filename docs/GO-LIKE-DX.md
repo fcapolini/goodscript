@@ -184,7 +184,37 @@ Both MPS and PCRE2 are now vendored and compile on-the-fly:
 - RegExp support built-in
 - `npm i -g goodscript` includes everything except Zig
 
-### Phase 3: Zig Auto-Install (Optional)
+### Phase 3: Zig Documentation ✅ COMPLETE (Option C - Dec 5, 2024)
+**Goal:** Clear documentation and helpful error messages for Zig requirement
+
+**Why document rather than bundle:**
+- Zig is actively maintained and improving rapidly
+- Bundling Clang/LLVM would add 100MB+ to installation
+- Similar to how Go requires Go to be installed
+- Zig is already cross-platform and easy to install
+
+**Implementation:**
+1. ✅ Created comprehensive INSTALLATION.md guide
+   - Platform-specific installation instructions (macOS, Linux, Windows)
+   - Troubleshooting section
+   - Explanation of first-run dependency compilation
+2. ✅ Updated README.md prerequisites section
+   - Removed outdated PCRE2 installation instructions
+   - Emphasized Zig as only external dependency
+   - Listed bundled dependencies (cppcoro, MPS, PCRE2)
+3. ✅ Added checkZigAvailable() with helpful error messages
+   - Platform-specific installation commands
+   - Links to official Zig downloads
+   - Link to GoodScript installation docs
+4. ✅ Improved error message clarity in compiler.ts
+
+**Result:** ✅ Clear expectations set, helpful guidance when Zig is missing
+
+**Future options** (if users request):
+- Option B: Zig auto-download on first use (~50MB, cache in ~/.goodscript/zig/)
+- Option A: Platform-specific npm packages (@goodscript/zig-darwin-arm64, etc.)
+
+### Phase 3: Zig Auto-Install (Optional - Future)
 **Goal:** Remove last external dependency
 
 **Two approaches:**

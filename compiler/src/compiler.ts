@@ -491,7 +491,48 @@ export class Compiler {
   }
 
   /**
-   * Check if Zig C++ compiler is available
+   * Check if Zig C++ compiler is available and provide helpful error message
+   */
+  private checkZigAvailable(): void {
+    try {
+      execSync('zig version', { stdio: 'ignore' });
+    } catch {
+      const installUrl = 'https://ziglang.org/download/';
+      const docsUrl = 'https://github.com/fcapolini/goodscript/blob/main/docs/INSTALLATION.md';
+      
+      let installCmd = '';
+      switch (process.platform) {
+        case 'darwin':
+          installCmd = '  brew install zig';
+          break;
+        case 'linux':
+          installCmd = '  # See: ' + installUrl + '\n' +
+                      '  # Or use your package manager (apt, dnf, pacman, snap)';
+          break;
+        case 'win32':
+          installCmd = '  winget install -e --id zig.zig\n' +
+                      '  # Or use: scoop install zig\n' +
+                      '  # Or download from: ' + installUrl;
+          break;
+        default:
+          installCmd = '  # Download from: ' + installUrl;
+      }
+      
+      throw new Error(
+        '❌ Zig compiler not found\n\n' +
+        'GoodScript requires Zig to compile TypeScript to native binaries.\n' +
+        'Zig is the only external dependency - all other libraries (cppcoro, MPS, PCRE2) are bundled.\n\n' +
+        'To install Zig:\n' +
+        installCmd + '\n\n' +
+        'After installation, verify with: zig version\n\n' +
+        'For detailed installation instructions, see:\n' +
+        docsUrl + '\n'
+      );
+    }
+  }
+
+  /**
+   * Check if Zig C++ compiler is available (returns boolean for conditional use)
    */
   private isZigAvailable(): boolean {
     try {
@@ -506,6 +547,9 @@ export class Compiler {
    * Compile C++ file to native binary using Zig
    */
   private compileCppToBinary(cppFile: string, outFile: string, targetArch?: string): void {
+    // Check Zig availability first with helpful error message
+    this.checkZigAvailable();
+    
     // Check if this is a GC-mode file (contains gs_gc_runtime.hpp)
     const isGcMode = fs.readFileSync(cppFile, 'utf-8').includes('gs_gc_runtime.hpp');
     if (isGcMode) {
@@ -520,19 +564,6 @@ export class Compiler {
         '  gsc -t native -m gc -o dist main-gs.ts\\n' +
         '\\n' +
         'Full GC mode support with automated MPS integration is coming in a future release.'
-      );
-    }
-    
-    if (!this.isZigAvailable()) {
-      throw new Error(
-        'Zig compiler not found. To compile C++ to native binaries, please install Zig:\n' +
-        '\n' +
-        'macOS:   brew install zig\n' +
-        'Linux:   https://ziglang.org/download/\n' +
-        'Windows: https://ziglang.org/download/\n' +
-        '\n' +
-        'Zig provides a cross-platform C++ compiler with zero additional dependencies.\n' +
-        'Alternatively, use --target native without --compile-binary to generate C++ source only.'
       );
     }
 
