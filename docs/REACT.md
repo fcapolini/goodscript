@@ -336,21 +336,28 @@ export default defineConfig({
 });
 ```
 
-### "GS108: Function declarations not allowed"
+### "GS108: 'this' not allowed in function declarations"
 
-React components must be arrow functions in GoodScript:
+React components using function declarations are now allowed, but they cannot use `this`:
 
 ```tsx
-// ❌ Not allowed
-function MyComponent(props) {
-  return <div>...</div>;
+// ✅ Allowed - function declaration without 'this'
+function MyComponent(props: Props) {
+  return <div>{props.name}</div>;
 }
 
-// ✅ Use this
+// ✅ Also allowed - arrow function
 const MyComponent = (props: Props) => {
-  return <div>...</div>;
+  return <div>{props.name}</div>;
 };
+
+// ❌ Not allowed - function with 'this'
+function MyComponent(props: Props) {
+  return <div>{this.prefix + props.name}</div>;
+}
 ```
+
+**Note**: Arrow functions are still recommended for React components as they provide lexical `this` binding and better consistency with hooks.
 
 ### "GS109: any type not allowed"
 

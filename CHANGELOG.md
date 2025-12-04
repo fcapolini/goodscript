@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Relaxed GS108 Restriction** - Function declarations and expressions are now allowed, but cannot use `this`
+  - Previously: All function declarations/expressions were prohibited (use arrow functions only)
+  - Now: Function declarations/expressions allowed, but `this` keyword is prohibited within them
+  - Use arrow functions for lexical `this` binding, or class methods for instance access
+  - Benefits: Function hoisting, better performance, more TypeScript compatibility
+  - Rationale: The real problem is dynamic `this` binding, not the function syntax itself
+  - Updated validator to check for `this` usage in function bodies with proper nested function handling
+  - Updated all tests and documentation to reflect the new rule
+
 - **File Naming Convention Migration** - Migrated from `.gs.ts` double extension to `-gs.ts` suffix pattern
   - Files now use proper `.ts` extension with `-gs` suffix in basename (e.g., `module-gs.ts`)
   - Standard TypeScript tooling (VSCode, tsc, etc.) now works seamlessly without custom configuration

@@ -65,10 +65,22 @@ describe('JSX/TSX Support', () => {
     expect(gsErrors).toHaveLength(0);
   });
 
-  it('should reject function declarations in JSX files', () => {
+  it('should accept function declarations in JSX files (no this)', () => {
     const source = `
       function Component(props: { name: string }) {
         return <h1>{props.name}</h1>;
+      }
+    `;
+    
+    const result = compileSource(source, 'test-gs.tsx');
+    const gsErrors = result.diagnostics.filter(d => d.code === 'GS108');
+    expect(gsErrors).toHaveLength(0);
+  });
+
+  it('should reject function declarations with this in JSX files', () => {
+    const source = `
+      function Component(props: { name: string }) {
+        return <h1>{this.prefix + props.name}</h1>;
       }
     `;
     

@@ -329,25 +329,81 @@ export class Validator {
       );
     }
 
-    // No function declarations/expressions (lexical 'this' only - use arrow functions)
-    if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) {
-      // Allow if it's a class method, constructor, or function signature
-      const parent = node.parent;
-      const isMethod = ts.isMethodDeclaration(parent) || 
-                      ts.isMethodSignature(parent) ||
-                      ts.isConstructorDeclaration(parent);
-      const isInterfaceMember = parent && parent.parent && ts.isInterfaceDeclaration(parent.parent);
-      const isFunctionSignature = !node.body; // Function signature (no implementation)
-      
-      // In permissive mode (Test262), allow function expressions/declarations
-      if (!this.options.permissive && !isMethod && !isInterfaceMember && !isFunctionSignature) {
+    // No 'this' keyword in function declarations/expressions (only allowed in class methods)
+    // Function declarations and expressions are allowed, but they cannot use 'this'
+    // (Arrow functions, class methods, and constructors can use 'this')
+    this.checkThisInFunction(node, sourceFile);
+  }
+
+  /**
+   * Check for 'this' keyword usage in function declarations/expressions
+   * 'this' is only allowed in:
+   * - Class methods
+   * - Class constructors
+   * - Arrow functions (they inherit 'this' lexically)
+   */
+  private checkThisInFunction(node: ts.Node, sourceFile: ts.SourceFile): void {
+    // Only check function declarations and expressions (not arrow functions or methods)
+    if (!ts.isFunctionDeclaration(node) && !ts.isFunctionExpression(node)) {
+      return;
+    }
+
+    // Allow if it's a class method, constructor, or function signature
+    const parent = node.parent;
+    const isMethod = ts.isMethodDeclaration(parent) || 
+                    ts.isMethodSignature(parent) ||
+                    ts.isConstructorDeclaration(parent);
+    const isInterfaceMember = parent && parent.parent && ts.isInterfaceDeclaration(parent.parent);
+    const isFunctionSignature = !node.body; // Function signature (no implementation)
+    
+    // Skip if it's a method or signature (they can use 'this')
+    if (isMethod || isInterfaceMember || isFunctionSignature) {
+      return;
+    }
+
+    // Now check if the function body contains 'this' keyword
+    if (node.body) {
+      const hasThis = this.containsThisKeyword(node.body, node);
+      if (hasThis) {
+        const location = Parser.getLocation(node, sourceFile);
         this.addError(
-          'Function declarations and expressions are not allowed. Use arrow functions for lexical "this" binding, or class methods',
+          'The "this" keyword is not allowed in function declarations and expressions. Use arrow functions for lexical "this" binding, or class methods',
           location,
           'GS108'
         );
       }
     }
+  }
+
+  /**
+   * Check if a node or its descendants contain 'this' keyword
+   * Don't recurse into nested functions/arrow functions (they have their own scope)
+   */
+  private containsThisKeyword(node: ts.Node, functionNode: ts.Node): boolean {
+    // Found 'this' keyword
+    if (node.kind === ts.SyntaxKind.ThisKeyword) {
+      return true;
+    }
+
+    // Don't recurse into nested function declarations/expressions/arrow functions
+    // (they have their own 'this' scope)
+    if (node !== functionNode && (
+      ts.isFunctionDeclaration(node) ||
+      ts.isFunctionExpression(node) ||
+      ts.isArrowFunction(node)
+    )) {
+      return false;
+    }
+
+    // Recurse into children
+    let found = false;
+    ts.forEachChild(node, (child: ts.Node) => {
+      if (this.containsThisKeyword(child, functionNode)) {
+        found = true;
+      }
+    });
+
+    return found;
   }
 
   /**

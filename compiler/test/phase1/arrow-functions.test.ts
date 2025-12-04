@@ -1,13 +1,14 @@
 /**
- * Phase 1 Tests: Arrow functions only (GS108)
- * No function declarations or expressions (except class methods)
+ * Phase 1 Tests: No 'this' in function declarations/expressions (GS108)
+ * Function declarations and expressions are allowed, but cannot use 'this'
+ * (Use arrow functions for lexical 'this' binding, or class methods)
  */
 
 import { describe, it, expect } from 'vitest';
 import { compileSource, getErrors, hasError } from './test-helpers';
 
-describe('Phase 1: Arrow functions only', () => {
-  it('should reject function declaration', () => {
+describe('Phase 1: No this in function declarations/expressions', () => {
+  it('should accept function declaration without this', () => {
     const source = `
       function greet(name: string): void {
         console.log("Hello " + name);
@@ -15,15 +16,38 @@ describe('Phase 1: Arrow functions only', () => {
     `;
     const result = compileSource(source);
     
-    const errors = getErrors(result.diagnostics, 'GS108');
-    expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0].message).toContain('arrow function');
+    expect(hasError(result.diagnostics, 'GS108')).toBe(false);
   });
 
-  it('should reject function expression', () => {
+  it('should accept function expression without this', () => {
     const source = `
       const greet = function(name: string): void {
         console.log("Hello " + name);
+      };
+    `;
+    const result = compileSource(source);
+    
+    expect(hasError(result.diagnostics, 'GS108')).toBe(false);
+  });
+
+  it('should reject function declaration with this', () => {
+    const source = `
+      function greet(name: string): void {
+        console.log(this.prefix + name);
+      }
+    `;
+    const result = compileSource(source);
+    
+    const errors = getErrors(result.diagnostics, 'GS108');
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0].message).toContain('this');
+    expect(errors[0].message).toContain('arrow function');
+  });
+
+  it('should reject function expression with this', () => {
+    const source = `
+      const greet = function(name: string): void {
+        console.log(this.prefix + name);
       };
     `;
     const result = compileSource(source);
@@ -103,11 +127,25 @@ describe('Phase 1: Arrow functions only', () => {
     `;
     const result = compileSource(source);
     
-    const errors = getErrors(result.diagnostics, 'GS108');
-    expect(errors.length).toBe(2);
+    // Both functions are allowed (no 'this' used)
+    expect(hasError(result.diagnostics, 'GS108')).toBe(false);
   });
 
-  it('should reject nested function declaration', () => {
+  it('should reject nested function declaration with this', () => {
+    const source = `
+      const outer = () => {
+        function inner(x: number): number {
+          return this.multiplier * x;
+        }
+        return inner(5);
+      };
+    `;
+    const result = compileSource(source);
+    
+    expect(hasError(result.diagnostics, 'GS108')).toBe(true);
+  });
+
+  it('should accept nested function declaration without this', () => {
     const source = `
       const outer = () => {
         function inner(x: number): number {
@@ -118,10 +156,24 @@ describe('Phase 1: Arrow functions only', () => {
     `;
     const result = compileSource(source);
     
+    expect(hasError(result.diagnostics, 'GS108')).toBe(false);
+  });
+
+  it('should reject nested function expression with this', () => {
+    const source = `
+      const outer = () => {
+        const inner = function(x: number): number {
+          return this.multiplier * x;
+        };
+        return inner(5);
+      };
+    `;
+    const result = compileSource(source);
+    
     expect(hasError(result.diagnostics, 'GS108')).toBe(true);
   });
 
-  it('should reject nested function expression', () => {
+  it('should accept nested function expression without this', () => {
     const source = `
       const outer = () => {
         const inner = function(x: number): number {
@@ -132,7 +184,7 @@ describe('Phase 1: Arrow functions only', () => {
     `;
     const result = compileSource(source);
     
-    expect(hasError(result.diagnostics, 'GS108')).toBe(true);
+    expect(hasError(result.diagnostics, 'GS108')).toBe(false);
   });
 
   it('should accept nested arrow functions', () => {
@@ -162,7 +214,25 @@ describe('Phase 1: Arrow functions only', () => {
     expect(hasError(result.diagnostics, 'GS108')).toBe(false);
   });
 
-  it('should reject function declaration nested in class method', () => {
+  it('should reject function declaration nested in class method with this', () => {
+    const source = `
+      class Calculator {
+        multiplier: number = 2;
+        
+        compute(x: number): number {
+          function helper(n: number): number {
+            return this.multiplier * n;
+          }
+          return helper(x);
+        }
+      }
+    `;
+    const result = compileSource(source);
+    
+    expect(hasError(result.diagnostics, 'GS108')).toBe(true);
+  });
+
+  it('should accept function declaration nested in class method without this', () => {
     const source = `
       class Calculator {
         compute(x: number): number {
@@ -175,7 +245,7 @@ describe('Phase 1: Arrow functions only', () => {
     `;
     const result = compileSource(source);
     
-    expect(hasError(result.diagnostics, 'GS108')).toBe(true);
+    expect(hasError(result.diagnostics, 'GS108')).toBe(false);
   });
 
   it('should accept arrow function nested in class method', () => {
@@ -189,6 +259,72 @@ describe('Phase 1: Arrow functions only', () => {
     `;
     const result = compileSource(source);
     
+    expect(hasError(result.diagnostics, 'GS108')).toBe(false);
+  });
+
+  it('should allow this in class methods', () => {
+    const source = `
+      class Greeter {
+        prefix: string = "Hello, ";
+        
+        greet(name: string): void {
+          console.log(this.prefix + name);
+        }
+      }
+    `;
+    const result = compileSource(source);
+    
+    expect(hasError(result.diagnostics, 'GS108')).toBe(false);
+  });
+
+  it('should allow this in arrow functions (lexical)', () => {
+    const source = `
+      class Greeter {
+        prefix: string = "Hello, ";
+        
+        greet = (name: string): void => {
+          console.log(this.prefix + name);
+        };
+      }
+    `;
+    const result = compileSource(source);
+    
+    expect(hasError(result.diagnostics, 'GS108')).toBe(false);
+  });
+
+  it('should reject this in nested function within arrow function', () => {
+    const source = `
+      const outer = () => {
+        function inner(): void {
+          console.log(this.value);
+        }
+        inner();
+      };
+    `;
+    const result = compileSource(source);
+    
+    expect(hasError(result.diagnostics, 'GS108')).toBe(true);
+  });
+
+  it('should allow this in arrow function nested within function', () => {
+    const source = `
+      class MyClass {
+        value: number = 42;
+        
+        method(): void {
+          function outer(): void {
+            const inner = (): void => {
+              console.log(this.value);  // 'this' is in arrow function, so it's lexical
+            };
+            inner();
+          }
+          outer();
+        }
+      }
+    `;
+    const result = compileSource(source);
+    
+    // The 'this' is in the arrow function, which is lexical, so it's allowed
     expect(hasError(result.diagnostics, 'GS108')).toBe(false);
   });
 });

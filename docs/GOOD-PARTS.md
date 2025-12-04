@@ -227,30 +227,41 @@ const result2 = "sum: " + (1 + 2).toString();  // "sum: 3"
 
 ---
 
-### 6. No Function Declarations/Expressions (GS108)
+### 6. No 'this' in Function Declarations/Expressions (GS108)
 
-**Restriction:** Must use arrow functions instead of `function` keyword (except for class methods).
+**Restriction:** Function declarations and expressions are allowed, but they cannot use the `this` keyword. Use arrow functions for lexical `this` binding, or class methods for instance access.
 
 **Rationale:**
-- Arrow functions have lexical `this` binding - predictable and intuitive
+- Arrow functions and class methods have lexical/predictable `this` binding
 - Function declarations/expressions have dynamic `this` - changes based on call site
 - Dynamic `this` is one of JavaScript's most confusing features
+- By prohibiting `this` in regular functions, we prevent the confusion while still allowing regular functions for cases where `this` isn't needed
 - Arrow functions cannot be used as constructors, preventing another class of errors
-- Consistent syntax throughout codebase
+- Consistent and predictable behavior throughout codebase
 
 **Example:**
 ```typescript
-// ❌ Not allowed
-function greet(name: string) {
+// ✅ Allowed - function without 'this'
+function add(a: number, b: number): number {
+  return a + b;
+}
+
+// ✅ Allowed - function expression without 'this'
+const multiply = function(a: number, b: number): number {
+  return a * b;
+};
+
+// ❌ Not allowed - 'this' in function declaration
+function greet(name: string): void {
   console.log(this.prefix + name);  // What is 'this'? Depends on how it's called!
 }
 
-// ✅ Correct
+// ✅ Correct - arrow function with lexical 'this'
 const greet = (name: string): void => {
-  console.log(name);  // No 'this' confusion
+  console.log(this.prefix + name);  // 'this' is lexically scoped
 };
 
-// ✅ Class methods are allowed (they have well-defined 'this')
+// ✅ Correct - class method (well-defined 'this')
 class Greeter {
   prefix: string = "Hello, ";
   
@@ -266,7 +277,7 @@ class Greeter {
 - Whether it's called as a constructor with `new`
 - Whether it's in strict mode
 
-Arrow functions eliminate all this confusion.
+By allowing regular functions but prohibiting `this` within them, we get the benefits of function hoisting and traditional function syntax for simple utilities, while still preventing the confusion around dynamic `this` binding.
 
 ---
 
@@ -1211,7 +1222,7 @@ These restrictions transform TypeScript from a gradually-typed superset of JavaS
 | GS117 | Mixed-type ternary | Both branches must have compatible types |
 | GS118 | Inconsistent return types | All returns must have compatible types |
 | GS119 | Mixed-type nullish coalescing | Both sides of `??` must have compatible types |
-| GS108 | Function declarations/expressions | Use arrow functions or class methods |
+| GS108 | 'this' in function declarations/expressions | Use arrow functions for lexical 'this', or class methods |
 | GS109 | `any` type | Use explicit types, generics, or `unknown` |
 | GS110 | Implicit truthy/falsy checks | Use explicit comparisons |
 | GS111 | `delete` operator | Use optional properties or destructuring |
