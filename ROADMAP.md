@@ -39,24 +39,24 @@ See [CONFORMANCE.md](CONFORMANCE.md) and [conformance-tsc/README.md](conformance
 
 📋 **In Progress** - Building production-ready ecosystem
 
-**New Priority:** GC mode is now the default path to adoption. Phase 4 focuses on making GoodScript a productive Node.js alternative.
+**New Priority:** GC mode is now the default path to adoption. Phase 4 focuses on making GoodScript a productive alternative to Go for TypeScript developers.
 
 ### Phase 4.1 - Standard Library (🚧 Next)
 
-**Goal:** Node.js API compatibility for seamless migration
+**Goal:** Go-inspired stdlib with TypeScript idioms for common use cases
 
 **Core APIs:**
 - ✅ `String`, `Array`, `Map`, `Set` - Complete
 - ✅ `JSON`, `console`, `RegExp` - Complete
-- 🚧 `fs` - File system operations
-- 🚧 `path` - Path manipulation
-- 🚧 `http`/`https` - HTTP client and server
+- 🚧 `fs` - File system operations (Go-like simplicity, TS async patterns)
+- 🚧 `path` - Path manipulation (familiar API, cross-platform)
+- 🚧 `http`/`https` - HTTP client and server (classes + async/await)
 - 🚧 `process` - Process information and control
 - 🚧 `crypto` - Cryptographic functions
-- 🚧 `stream` - Streaming APIs
+- 🚧 `stream` - Streaming APIs (TypeScript-friendly)
 - 🚧 `buffer` - Binary data handling
 
-**Target:** Cover 80% of common Node.js use cases
+**Target:** Cover 80% of common CLI/server use cases (like Go's stdlib)
 
 ### Phase 4.2 - Package Management
 
@@ -93,19 +93,20 @@ See [CONFORMANCE.md](CONFORMANCE.md) and [conformance-tsc/README.md](conformance
 
 ### Phase 4.4 - Documentation & Examples
 
-**Goal:** Lower barrier to entry
+**Goal:** Lower barrier to entry for TypeScript developers
 
 **Deliverables:**
-- Migration guide from Node.js
+- Migration guide from Go (syntax comparison, pattern translation)
+- Migration guide from Node.js (API mapping, deployment changes)
 - Common patterns and recipes
 - Real-world example projects:
-  - REST API server
-  - CLI tool suite
-  - Data processing pipeline
+  - REST API server (like Go's net/http examples)
+  - CLI tool suite (argument parsing, file processing)
+  - Data processing pipeline (log analyzer, ETL)
   - WebSocket server
   - Background worker
-- Performance tuning guide
-- Benchmarks vs Node.js/Deno/Bun
+- Performance comparison: GoodScript vs Go vs Node.js
+- Deployment guide (Docker, systemd, cloud platforms)
 
 ### Phase 4.5 - Ecosystem Growth
 
