@@ -96,12 +96,17 @@ function parseArgs(args: string[]): CliOptions {
 function printHelp(): void {
   console.log(`
 GoodScript Compiler v${VERSION}
-Native performance for the rest of us
+
+Go for TypeScript developers - compile TypeScript to single-file native executables.
 
 Usage: gsc [options] [files...]
 
+✨ Two compilation modes:
+  - GC mode (default): Automatic memory management, no annotations needed
+  - Ownership mode (advanced): Zero-GC with ownership types (own<T>, share<T>, use<T>)
+
 ✨ Drop-in replacement for tsc:
-  - Compiles .gs.ts files as GoodScript (with ownership checking)
+  - Compiles .gs.ts files as GoodScript (enforces "Good Parts")
   - Compiles .ts files as regular TypeScript (tsc compatible)
   - Supports mixed projects with both file types
   - Use tsconfig.json when no files specified (like tsc)
@@ -112,7 +117,7 @@ Options:
   -o, --out-dir <dir>         Output directory for compiled files
   -p, --project <file>        Path to tsconfig.json (auto-detected from input files if not specified)
   -t, --target <target>       Target language: 'typescript' (default) or 'native'
-  -m, --mode <mode>           Memory management: 'gc' (default) or 'ownership' (use with -t native)
+  -m, --mode <mode>           Memory model: 'gc' (default, automatic) or 'ownership' (zero-GC, advanced)
   -e, --emit <format>         Output format: 'js' (default), 'ts', or 'both'
   -b, --compile-binary        Compile C++ to native binary (requires Zig, use with -t native)
   -a, --arch <architecture>   Target architecture for cross-compilation (e.g., x86_64-linux, aarch64-macos, wasm32-wasi)
@@ -135,12 +140,12 @@ Examples:
   gsc -e ts -o dist main.gs.ts        Compile to TypeScript only
   gsc -e both -o dist main.gs.ts        Emit both .ts and .js files
   gsc --no-ownership-checks -o dist main.gs.ts   Skip ownership checks
-  gsc -t native -o dist main.gs.ts    Compile to C++ source (ownership mode)
-  gsc -t native -m gc -o dist main.gs.ts   [EXPERIMENTAL] Compile with garbage collection
-  gsc -t native -b -o dist main.gs.ts Compile to native binary (requires Zig)
+  gsc -t native -o dist main.gs.ts    Compile to C++ (GC mode, default)
+  gsc -t native -b -o dist main.gs.ts Compile to native binary (GC mode, single file)
   gsc -t native -b -a x86_64-linux -o dist main.gs.ts   Cross-compile for Linux x64
   gsc -t native -b -a aarch64-macos -o dist main.gs.ts  Cross-compile for macOS ARM64
   gsc -t native -b -a wasm32-wasi -o dist main.gs.ts    Compile to WebAssembly
+  gsc -t native -m ownership -b -o dist main.gs.ts      Zero-GC ownership mode (advanced)
   `);
 }
 
