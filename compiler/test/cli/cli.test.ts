@@ -226,6 +226,224 @@ export class Good {
       expect(fs.existsSync(path.join(TEST_DIR, 'dist', 'regular.js'))).toBe(true);
       expect(fs.existsSync(path.join(TEST_DIR, 'dist', 'goodscript.js'))).toBe(true);
     });
+
+    it('should validate .ts file imported by -gs.ts file', () => {
+      // Regular .ts file with prohibited var keyword
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'lib.ts'),
+        'export var badVar = 5;'  // var is prohibited
+      );
+
+      // GoodScript -gs.ts file importing the bad .ts file
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'main-gs.ts'),
+        `import { badVar } from "./lib";
+console.log(badVar);`
+      );
+
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'tsconfig.json'),
+        JSON.stringify({
+          compilerOptions: {
+            target: 'ES2020',
+            module: 'commonjs',
+            outDir: 'dist'
+          },
+          goodscript: {
+            level: 1  // Phase 1 validation - validates ALL files
+          }
+        }, null, 2)
+      );
+
+      try {
+        execSync(`node ${GSC} -o dist main-gs.ts`, {
+          cwd: TEST_DIR,
+          encoding: 'utf-8',
+          stdio: 'pipe'
+        });
+        expect.fail('Should have failed due to var in imported file');
+      } catch (e: any) {
+        const output = e.stdout || e.stderr;
+        expect(output).toContain('var');
+        expect(output).toContain('GS105');
+        expect(output).toContain('lib.ts');  // Error should reference the imported file
+      }
+    });
+
+    it('should validate transitively imported files', () => {
+      // a.ts with prohibited feature
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'a.ts'),
+        'export var bad = true;'  // var is prohibited
+      );
+
+      // b.ts imports a.ts (both regular .ts files)
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'b.ts'),
+        `import { bad } from "./a";
+export const value = bad === true ? 1 : 0;`
+      );
+
+      // main-gs.ts imports b.ts (GoodScript imports regular TS)
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'main-gs.ts'),
+        `import { value } from "./b";
+console.log(value);`
+      );
+
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'tsconfig.json'),
+        JSON.stringify({
+          compilerOptions: {
+            target: 'ES2020',
+            module: 'commonjs',
+            outDir: 'dist'
+          },
+          goodscript: {
+            level: 1  // Phase 1 validation
+          }
+        }, null, 2)
+      );
+
+      try {
+        execSync(`node ${GSC} -o dist main-gs.ts`, {
+          cwd: TEST_DIR,
+          encoding: 'utf-8',
+          stdio: 'pipe'
+        });
+        expect.fail('Should have failed due to var in transitively imported file');
+      } catch (e: any) {
+        const output = e.stdout || e.stderr;
+        expect(output).toContain('var');
+        expect(output).toContain('GS105');
+        expect(output).toContain('a.ts');  // Error should reference the transitively imported file
+      }
+    });
+
+    it('should validate ALL files when level >= 1', () => {
+      // standalone.ts with prohibited feature
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'standalone.ts'),
+        'export var bad = 5;'  // var is prohibited
+      );
+
+      // main-gs.ts doesn't import standalone.ts, but it's in the compilation
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'main-gs.ts'),
+        'console.log("Hello");'
+      );
+
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'tsconfig.json'),
+        JSON.stringify({
+          compilerOptions: {
+            target: 'ES2020',
+            module: 'commonjs',
+            outDir: 'dist'
+          },
+          goodscript: {
+            level: 1  // Phase 1 validation validates ALL files
+          }
+        }, null, 2)
+      );
+
+      // Should FAIL - level 1 validates all files
+      try {
+        execSync(`node ${GSC} -o dist main-gs.ts standalone.ts`, {
+          cwd: TEST_DIR,
+          encoding: 'utf-8',
+          stdio: 'pipe'
+        });
+        expect.fail('Should have failed - GoodScript entry point validates all files');
+      } catch (e: any) {
+        const output = e.stdout || e.stderr;
+        expect(output).toContain('var');
+        expect(output).toContain('GS105');
+        expect(output).toContain('standalone.ts');
+      }
+    });
+
+    it('should NOT validate when level is 0 (default for typescript target)', () => {
+      // GoodScript -gs.ts file
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'lib-gs.ts'),
+        'export class Lib { value: number = 42; }'
+      );
+
+      // Regular .ts file (entry point) importing GoodScript file - can use any TS features
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'main.ts'),
+        `import { Lib } from "./lib-gs";
+var x = 5;  // var is allowed - entry point is .ts, not -gs.ts
+const lib = new Lib();
+console.log(lib.value, x);`
+      );
+
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'tsconfig.json'),
+        JSON.stringify({
+          compilerOptions: {
+            target: 'ES2020',
+            module: 'commonjs',
+            outDir: 'dist'
+          }
+        }, null, 2)
+      );
+
+      // Should compile successfully - level defaults to 0 for typescript target
+      const result = execSync(`node ${GSC} -o dist main.ts lib-gs.ts`, {
+        cwd: TEST_DIR,
+        encoding: 'utf-8'
+      });
+
+      expect(result).not.toContain('ERROR');
+      expect(fs.existsSync(path.join(TEST_DIR, 'dist', 'main.js'))).toBe(true);
+      expect(fs.existsSync(path.join(TEST_DIR, 'dist', 'lib.js'))).toBe(true);
+    });
+
+    it('should provide helpful context when validating imported files', () => {
+      // lib.ts with prohibited feature
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'lib.ts'),
+        'export var bad = true;'  // var is prohibited
+      );
+
+      // main-gs.ts imports lib.ts
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'main-gs.ts'),
+        `import { bad } from "./lib";
+console.log(bad);`
+      );
+
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'tsconfig.json'),
+        JSON.stringify({
+          compilerOptions: {
+            target: 'ES2020',
+            module: 'commonjs',
+            outDir: 'dist'
+          },
+          goodscript: {
+            level: 1  // Phase 1 validation
+          }
+        }, null, 2)
+      );
+
+      try {
+        execSync(`node ${GSC} -o dist main-gs.ts`, {
+          cwd: TEST_DIR,
+          encoding: 'utf-8',
+          stdio: 'pipe'
+        });
+        expect.fail('Should have failed');
+      } catch (e: any) {
+        const output = e.stdout || e.stderr;
+        // Should report the error in lib.ts
+        expect(output).toContain('var');
+        expect(output).toContain('GS105');
+        expect(output).toContain('lib.ts');
+      }
+    });
   });
 
   describe('tsconfig.json usage', () => {
@@ -287,6 +505,20 @@ export class Good {
       fs.writeFileSync(
         path.join(TEST_DIR, 'bad-gs.ts'),
         'var x = 5;' // var is prohibited
+      );
+
+      fs.writeFileSync(
+        path.join(TEST_DIR, 'tsconfig.json'),
+        JSON.stringify({
+          compilerOptions: {
+            target: 'ES2020',
+            module: 'commonjs',
+            outDir: 'dist'
+          },
+          goodscript: {
+            level: 1  // Enable Phase 1 validation
+          }
+        }, null, 2)
       );
 
       try {

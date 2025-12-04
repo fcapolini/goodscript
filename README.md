@@ -128,11 +128,61 @@ See [docs/GC-VS-OWNERSHIP.md](docs/GC-VS-OWNERSHIP.md) for the complete guide.
 
 ---
 
-## 2. Dual-Mode Workflow
+## 2. File Naming & Validation Levels
+
+### **2.1 The `-gs.ts` Suffix**
+
+The `-gs.ts` file extension is **optional** and serves as a **hint for the VS Code extension**:
+
+- **With `-gs.ts`**: VS Code provides real-time GoodScript validation as you type
+- **Without `-gs.ts`**: Standard TypeScript files, validated only during compilation
+
+**Both can compile to native!** The file extension doesn't control compilation behavior.
+
+### **2.2 Validation Levels (tsconfig.json)**
+
+Control what validation runs during compilation using the `level` setting:
+
+```json
+{
+  "compilerOptions": { "target": "ES2020", "module": "commonjs" },
+  "goodscript": {
+    "level": 1  // 0=none, 1="clean", 2="dag", 3="native"
+  }
+}
+```
+
+**Levels:**
+- **`level: 0`** — No validation (regular TypeScript compilation)
+- **`level: 1`** ("clean") — Phase 1: "The Good Parts" validation (required for native compilation)
+- **`level: 2`** ("dag") — Phase 1 + 2: Ownership + DAG validation  
+- **`level: 3`** ("native") — Full validation (all phases)
+
+**Default level:**
+- TypeScript target (`-t typescript`): defaults to `level: 0`
+- Native target (`-t native`): defaults to `level: 1`
+
+**Example workflows:**
+
+```typescript
+// Option 1: -gs.ts with level (recommended for GoodScript projects)
+// main-gs.ts + tsconfig.json with "level": 1
+// → Real-time editor validation + compile-time validation
+
+// Option 2: .ts with level (for existing TypeScript projects)
+// main.ts + tsconfig.json with "level": 1  
+// → No editor hints, but still validates during compilation
+
+// Option 3: .ts without level (plain TypeScript)
+// main.ts + no level setting (or "level": 0)
+// → No validation, regular TypeScript compilation
+```
+
+### **2.3 Dual-Mode Workflow**
 
 GoodScript supports **two modes of execution** and **two memory management strategies**:
 
-### **2.1 TypeScript Runtime Mode**
+**TypeScript Runtime Mode:**
 
 * `-gs.ts` files are valid TypeScript.
 * Run directly in Node.js, Deno, or Bun.

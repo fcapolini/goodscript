@@ -81,21 +81,42 @@ export class Compiler {
     const goodscriptConfig = this.parser.getGoodScriptConfig();
     const target = options.target || 'typescript';
     
-    // Determine language level
-    // - For TypeScript target: default to 'clean' (Phase 1 only)
-    // - For C++ target: default to 'native' (full validation)
-    const defaultLevel = target === 'native' ? 'native' : 'clean';
-    const level = goodscriptConfig?.level ?? defaultLevel;
+    // Determine validation level
+    // Level can be a number (0-3) or a string ('clean', 'dag', 'native')
+    // - Level 0: No validation (regular TypeScript)
+    // - Level 1 ('clean'): Phase 1 validation only ("The Good Parts")
+    // - Level 2 ('dag'): Phase 1 + Phase 2 (ownership + DAG)
+    // - Level 3 ('native'): Full validation (all phases)
+    //
+    // Default level depends on target:
+    // - typescript target: default level 0 (no validation unless explicitly requested)
+    // - native target: default level 1 (at minimum "clean" TypeScript)
+    const defaultLevel = target === 'native' ? 1 : 0;
+    
+    let numericLevel: number;
+    const configLevel = goodscriptConfig?.level;
+    
+    if (configLevel === undefined || configLevel === null) {
+      numericLevel = defaultLevel;
+    } else if (typeof configLevel === 'number') {
+      numericLevel = configLevel;
+    } else {
+      // Convert string level to numeric
+      const levelMap: { [key: string]: number } = {
+        'clean': 1,
+        'dag': 2,
+        'native': 3
+      };
+      numericLevel = levelMap[configLevel] ?? defaultLevel;
+    }
+    
+    // Determine what validation to perform
+    const shouldValidatePhase1 = numericLevel >= 1;  // "The Good Parts"
+    const shouldValidatePhase2 = numericLevel >= 2;  // Ownership + DAG
     
     // For backwards compatibility, check deprecated skipOwnership flag
     const explicitSkipOwnership = options.skipOwnershipChecks ?? goodscriptConfig?.skipOwnership;
-    
-    // Determine if ownership analysis should run based on level
-    // - 'clean': no ownership analysis (Phase 1 only)
-    // - 'dag': ownership + DAG validation (Phase 2)
-    // - 'native': full validation (Phase 3)
-    const shouldAnalyzeOwnership = level === 'dag' || level === 'native';
-    const effectiveSkipOwnership = explicitSkipOwnership ?? !shouldAnalyzeOwnership;
+    const effectiveSkipOwnership = explicitSkipOwnership ?? !shouldValidatePhase2;
 
     // Determine output directory
     // Priority: CLI option > tsconfig.json > default 'dist'
@@ -132,25 +153,26 @@ export class Compiler {
         
         if (isGoodScript) {
           goodscriptFileCount++;
-          
-          // Validate GoodScript restrictions
+        } else {
+          typescriptFileCount++;
+        }
+        
+        // Validate based on level setting
+        if (shouldValidatePhase1) {
+          // Validate GoodScript restrictions (Phase 1 - "The Good Parts")
           const validationResult = this.validator.validate(sourceFile, checker);
           allDiagnostics.push(...validationResult.diagnostics);
-
-          // Analyze ownership (unless skipped)
-          if (!effectiveSkipOwnership) {
-            this.ownershipAnalyzer.analyze(sourceFile, checker);
-          }
-        } else {
-          // Regular TypeScript file - just count it
-          typescriptFileCount++;
-          // TypeScript diagnostics already included above
+        }
+        
+        // Analyze ownership for GoodScript files if Phase 2+ validation enabled
+        if (isGoodScript && shouldValidatePhase2 && !effectiveSkipOwnership) {
+          this.ownershipAnalyzer.analyze(sourceFile, checker);
         }
       }
     }
 
     // Finalize ownership analysis for GoodScript files (detect cross-file cycles)
-    if (!effectiveSkipOwnership && goodscriptFileCount > 0) {
+    if (shouldValidatePhase2 && !effectiveSkipOwnership && goodscriptFileCount > 0) {
       this.ownershipAnalyzer.finalizeAnalysis();
       allDiagnostics.push(...this.ownershipAnalyzer.getDiagnostics());
 
