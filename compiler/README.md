@@ -1,6 +1,6 @@
 # GoodScript Compiler
 
-The GoodScript compiler (`gsc`) transforms [GoodScript](https://github.com/fcapolini/goodscript) (`.gs.ts` and `.gs.tsx`) files into JavaScript/TypeScript or C++, enforcing ownership semantics and memory safety guarantees.
+The GoodScript compiler (`gsc`) transforms [GoodScript](https://github.com/fcapolini/goodscript) (`-gs.ts` and `-gs.tsx`) files into JavaScript/TypeScript or C++, enforcing ownership semantics and memory safety guarantees.
 
 ## Overview
 
@@ -36,9 +36,9 @@ npm install -g goodscript
 Compile a single file:
 
 ```bash
-gsc myfile.gs.ts
+gsc myfile-gs.ts
 # or for React/JSX:
-gsc mycomponent.gs.tsx
+gsc mycomponent-gs.tsx
 ```
 
 > Why React/JSX? Because this way a complex projects can use the same style of TypeScript with the same rules with no confusion for both the purely JS parts (like the React frontend) and the natively compiled parts. Plus, GoodScript restrictions of JS features help with long term maintainability and common bugs prevention.
@@ -46,13 +46,13 @@ gsc mycomponent.gs.tsx
 Compile with options:
 
 ```bash
-gsc --outDir dist --target ES2020 src/**/*.gs.ts
+gsc --outDir dist --target ES2020 src/**/*-gs.ts
 ```
 
 Run a GoodScript file directly:
 
 ```bash
-gs myfile.gs.ts
+gs myfile-gs.ts
 ```
 
 ### Programmatic API
@@ -61,7 +61,7 @@ gs myfile.gs.ts
 import { compile } from 'goodscript';
 
 const result = compile({
-  filePath: 'src/main.gs.ts',
+  filePath: 'src/main-gs.ts',
   outDir: 'dist',
   target: 'ES2020'
 });

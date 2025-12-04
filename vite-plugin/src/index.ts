@@ -1,6 +1,6 @@
 /**
  * @goodscript/vite-plugin
- * Vite plugin for compiling GoodScript (.gs.ts) files on-the-fly
+ * Vite plugin for compiling GoodScript (-gs.ts) files on-the-fly
  */
 
 import type { Plugin } from 'vite';
@@ -20,7 +20,7 @@ export interface GoodScriptPluginOptions {
   
   /**
    * Glob patterns for files to include
-   * @default ['**\/*.gs.ts', '**\/*.gs.tsx']
+   * @default ['**\/*-gs.ts', '**\/*-gs.tsx']
    */
   include?: string[];
   
@@ -50,7 +50,7 @@ export interface GoodScriptPluginOptions {
  *   plugins: [
  *     goodscript({
  *       level: 'clean',
- *       include: ['**\/*.gs.ts', '**\/*.gs.tsx']
+ *       include: ['**\/*-gs.ts', '**\/*-gs.tsx']
  *     })
  *   ]
  * });
@@ -61,7 +61,7 @@ export default function goodscriptPlugin(
 ): Plugin {
   const {
     level = 'clean',
-    include = ['**/*.gs.ts', '**/*.gs.tsx'],
+    include = ['**/*-gs.ts', '**/*-gs.tsx'],
     exclude = ['node_modules/**'],
     skipOwnershipChecks = level === 'clean',
   } = options;
@@ -79,7 +79,7 @@ export default function goodscriptPlugin(
     // Run before other plugins (like @vitejs/plugin-react)
     enforce: 'pre',
     
-    // Resolve .gs.ts and .gs.tsx imports
+    // Resolve -gs.ts and -gs.tsx imports
     resolveId(source: string, importer?: string) {
       // Handle imports like: import { X } from './file.gs'
       if (source.endsWith('.gs') && !source.includes('.gs.')) {
@@ -88,9 +88,9 @@ export default function goodscriptPlugin(
       return null;
     },
     
-    // Transform .gs.ts and .gs.tsx files
+    // Transform -gs.ts and -gs.tsx files
     async transform(code: string, id: string) {
-      // Only process .gs.ts and .gs.tsx files
+      // Only process -gs.ts and -gs.tsx files
       if (!id.match(/\.gs\.tsx?$/)) {
         return null;
       }

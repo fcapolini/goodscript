@@ -38,12 +38,12 @@ Future commands (planned):
 For compiler-specific options, use 'gsc --help'
 
 Examples:
-  gs compile main.gs.ts           Compile a file
-  gs compile src/**/*.gs.ts       Compile multiple files
-  gs compile -o dist main.gs.ts   Compile with output directory
+  gs compile main-gs.ts           Compile a file
+  gs compile src/**/*-gs.ts       Compile multiple files
+  gs compile -o dist main-gs.ts   Compile with output directory
   
   # Future:
-  gs run main.gs.ts               Compile and run
+  gs run main-gs.ts               Compile and run
   gs build                        Build entire project
   gs test                         Run all tests
   gs fmt                          Format all code

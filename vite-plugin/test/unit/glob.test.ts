@@ -19,7 +19,7 @@ describe('glob pattern matching', () => {
     it('should match files with * wildcard', () => {
       expect(matchGlob('test.ts', '*.ts')).toBe(true);
       expect(matchGlob('main.ts', '*.ts')).toBe(true);
-      expect(matchGlob('file.gs.ts', '*.gs.ts')).toBe(true);
+      expect(matchGlob('file-gs.ts', '*-gs.ts')).toBe(true);
     });
 
     it('should not match across directories with *', () => {
@@ -32,7 +32,7 @@ describe('glob pattern matching', () => {
     it('should match across directories with **', () => {
       expect(matchGlob('src/test.ts', '**/*.ts')).toBe(true);
       expect(matchGlob('src/components/Button.tsx', '**/*.tsx')).toBe(true);
-      expect(matchGlob('deeply/nested/path/file.gs.ts', '**/*.gs.ts')).toBe(true);
+      expect(matchGlob('deeply/nested/path/file-gs.ts', '**/*-gs.ts')).toBe(true);
     });
 
     it('should match node_modules exclusion', () => {
@@ -56,9 +56,9 @@ describe('glob pattern matching', () => {
 
   describe('combined patterns', () => {
     it('should handle complex patterns', () => {
-      expect(matchGlob('src/components/Button.gs.tsx', '**/*.gs.tsx')).toBe(true);
-      expect(matchGlob('test/fixtures/app/main.gs.ts', '**/*.gs.ts')).toBe(true);
-      expect(matchGlob('lib/utils.ts', '**/*.gs.ts')).toBe(false);
+      expect(matchGlob('src/components/Button-gs.tsx', '**/*-gs.tsx')).toBe(true);
+      expect(matchGlob('test/fixtures/app/main-gs.ts', '**/*-gs.ts')).toBe(true);
+      expect(matchGlob('lib/utils.ts', '**/*-gs.ts')).toBe(false);
     });
   });
 
@@ -70,7 +70,7 @@ describe('glob pattern matching', () => {
 
     it('should handle files with dots in name', () => {
       expect(matchGlob('file.test.ts', '*.test.ts')).toBe(true);
-      expect(matchGlob('file.spec.gs.ts', '*.spec.gs.ts')).toBe(true);
+      expect(matchGlob('file.spec-gs.ts', '*.spec-gs.ts')).toBe(true);
     });
   });
 });

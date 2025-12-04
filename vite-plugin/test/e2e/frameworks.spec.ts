@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('React App E2E', () => {
-  test('should render React components from .gs.tsx files', async ({ page }) => {
+  test('should render React components from -gs.tsx files', async ({ page }) => {
     await page.goto('/');
     
     // Check that the React app loaded
@@ -17,7 +17,7 @@ test.describe('React App E2E', () => {
     await expect(page.locator('p')).toContainText('Count: 1');
   });
 
-  test('should support HMR for .gs.tsx files', async ({ page }) => {
+  test('should support HMR for -gs.tsx files', async ({ page }) => {
     await page.goto('/');
     
     // Initial load
@@ -25,7 +25,7 @@ test.describe('React App E2E', () => {
     
     // HMR would require file system modifications during test
     // This is a placeholder for HMR testing
-    // In a real scenario, you'd modify a .gs.tsx file and check that the page updates
+    // In a real scenario, you'd modify a -gs.tsx file and check that the page updates
   });
 });
 

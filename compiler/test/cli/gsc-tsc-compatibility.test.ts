@@ -55,7 +55,7 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
     });
 
     it('should support --out-dir flag', () => {
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, 'const x = 42;\nexport { x };');
@@ -66,7 +66,7 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
     });
 
     it('should support -o flag (shorthand for --out-dir)', () => {
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, 'const x = 42;\nexport { x };');
@@ -78,7 +78,7 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
 
     it('should support --project flag', () => {
       const tsconfig = path.join(tmpDir, 'tsconfig.json');
-      const sourceFile = path.join(tmpDir, 'src', 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'src', 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
@@ -103,7 +103,7 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
 
     it('should support -p flag (shorthand for --project)', () => {
       const tsconfig = path.join(tmpDir, 'tsconfig.json');
-      const sourceFile = path.join(tmpDir, 'src', 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'src', 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
@@ -130,7 +130,7 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
   describe('tsconfig.json handling', () => {
     it('should use tsconfig.json when no files specified (like tsc)', () => {
       const tsconfig = path.join(tmpDir, 'tsconfig.json');
-      const sourceFile = path.join(tmpDir, 'src', 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'src', 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
@@ -155,7 +155,7 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
 
     it('should respect tsconfig.json outDir setting', () => {
       const tsconfig = path.join(tmpDir, 'tsconfig.json');
-      const sourceFile = path.join(tmpDir, 'src', 'main.gs.ts');
+      const sourceFile = path.join(tmpDir, 'src', 'main-gs.ts');
       
       fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
       fs.writeFileSync(sourceFile, 'const greeting = "Hello";\nexport { greeting };');
@@ -178,7 +178,7 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
 
     it('should respect tsconfig.json target setting', () => {
       const tsconfig = path.join(tmpDir, 'tsconfig.json');
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, 'const x = () => 42;\nexport { x };');
@@ -189,7 +189,7 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
           module: 'CommonJS',
           lib: ['ES5']
         },
-        files: ['test.gs.ts']
+        files: ['test-gs.ts']
       }, null, 2));
       
       execSync(`node ${GSC_BIN} -p ${tsconfig}`, { 
@@ -205,7 +205,7 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
 
     it('should override tsconfig.json outDir with CLI --out-dir', () => {
       const tsconfig = path.join(tmpDir, 'tsconfig.json');
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const cliOutDir = path.join(tmpDir, 'cli-out');
       
       fs.writeFileSync(sourceFile, 'const x = 42;\nexport { x };');
@@ -215,7 +215,7 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
           target: 'ES2020',
           lib: ['ES2020']
         },
-        files: ['test.gs.ts']
+        files: ['test-gs.ts']
       }, null, 2));
       
       execSync(`node ${GSC_BIN} -p ${tsconfig} -o ${cliOutDir}`, { 
@@ -230,9 +230,9 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
   });
 
   describe('Mixed TypeScript and GoodScript files', () => {
-    it('should compile both .ts and .gs.ts files', () => {
+    it('should compile both .ts and -gs.ts files', () => {
       const tsFile = path.join(tmpDir, 'regular.ts');
-      const gsFile = path.join(tmpDir, 'goodscript.gs.ts');
+      const gsFile = path.join(tmpDir, 'goodscript-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(tsFile, 'export const tsValue = 1;');
@@ -262,8 +262,8 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
       expect(result).not.toContain('GS108'); // No function keyword error
     });
 
-    it('should enforce Phase 1 restrictions on .gs.ts files', () => {
-      const gsFile = path.join(tmpDir, 'strict.gs.ts');
+    it('should enforce Phase 1 restrictions on -gs.ts files', () => {
+      const gsFile = path.join(tmpDir, 'strict-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(gsFile, `
@@ -282,7 +282,7 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
 
   describe('Exit codes', () => {
     it('should exit with 0 on successful compilation', () => {
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, 'const x = 42;\nexport { x };');
@@ -296,7 +296,7 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
     });
 
     it('should exit with non-zero on compilation error', () => {
-      const sourceFile = path.join(tmpDir, 'error.gs.ts');
+      const sourceFile = path.join(tmpDir, 'error-gs.ts');
       
       fs.writeFileSync(sourceFile, 'var x = 42;'); // Phase 1 violation
       
@@ -312,7 +312,7 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
   describe('File resolution', () => {
     it('should error on non-existent file', () => {
       try {
-        execSync(`node ${GSC_BIN} nonexistent.gs.ts`, { encoding: 'utf-8' });
+        execSync(`node ${GSC_BIN} nonexistent-gs.ts`, { encoding: 'utf-8' });
         expect.fail('Should have thrown an error');
       } catch (error: any) {
         const output = error.stderr?.toString() || error.stdout?.toString() || error.message;
@@ -321,7 +321,7 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
     });
 
     it('should compile files with absolute paths', () => {
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, 'const x = 42;\nexport { x };');
@@ -332,7 +332,7 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
     });
 
     it('should compile files with relative paths', () => {
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const tsconfig = path.join(tmpDir, 'tsconfig.json');
       const outDir = path.join(tmpDir, 'dist');
       
@@ -345,7 +345,7 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
         }
       }, null, 2));
       
-      execSync(`node ${GSC_BIN} -o dist test.gs.ts`, { 
+      execSync(`node ${GSC_BIN} -o dist test-gs.ts`, { 
         cwd: tmpDir,
         encoding: 'utf-8' 
       });

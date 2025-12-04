@@ -83,7 +83,7 @@ If you know TypeScript, you already know **95% of GoodScript**. Just avoid JavaS
 ### Your First GoodScript Program
 
 ```typescript
-// hello.gs.ts
+// hello-gs.ts
 function greet(name: string): string {
     return `Hello, ${name}!`;
 }
@@ -93,10 +93,10 @@ console.log(greet("World"));
 
 ```bash
 # Run in Node.js during development
-node hello.gs.ts
+node hello-gs.ts
 
 # Compile to native for production
-gsc -t native -b -o dist hello.gs.ts
+gsc -t native -b -o dist hello-gs.ts
 
 # Run native binary (faster!)
 ./dist/hello
@@ -110,7 +110,7 @@ GoodScript supports **dual-mode development** for maximum productivity:
 
 ### Development Phase: Node.js/Deno
 
-* `.gs.ts` files are valid TypeScript
+* `-gs.ts` files are valid TypeScript
 * Use your existing tools: `tsc`, `eslint`, `prettier`
 * Full IDE support with autocomplete and type checking
 * Hot reload and instant feedback
@@ -252,7 +252,7 @@ console.log(`Total: ${total} lines`);
 go build -o linecount
 
 # GoodScript
-gsc -t native -b -o linecount src/main.gs.ts
+gsc -t native -b -o linecount src/main-gs.ts
 
 # Same deployment story
 ./linecount  # ~5MB, no dependencies
@@ -269,7 +269,7 @@ gsc -t native -b -o linecount src/main.gs.ts
 **Perfect for:** Command-line utilities that users can just download and run
 
 ```typescript
-// git-stats.gs.ts - Analyze git repository
+// git-stats-gs.ts - Analyze git repository
 import * as child_process from 'child_process';
 
 function execSync(cmd: string): string {
@@ -287,9 +287,9 @@ console.log(`Unique authors: ${uniqueAuthors}`);
 **Distribution:**
 ```bash
 # Build for multiple platforms
-gsc -t native -b -a x86_64-linux -o git-stats-linux src/git-stats.gs.ts
-gsc -t native -b -a x86_64-macos -o git-stats-macos src/git-stats.gs.ts  
-gsc -t native -b -a x86_64-windows -o git-stats.exe src/git-stats.gs.ts
+gsc -t native -b -a x86_64-linux -o git-stats-linux src/git-stats-gs.ts
+gsc -t native -b -a x86_64-macos -o git-stats-macos src/git-stats-gs.ts  
+gsc -t native -b -a x86_64-windows -o git-stats.exe src/git-stats-gs.ts
 
 # Users just download and run - no "install Node.js first"
 curl -L github.com/you/git-stats/releases/latest/git-stats-linux -o git-stats
@@ -309,7 +309,7 @@ chmod +x git-stats
 **Perfect for:** REST APIs, GraphQL servers, microservices
 
 ```typescript
-// server.gs.ts
+// server-gs.ts
 import * as http from 'http';
 
 const server = http.createServer((req, res) => {
@@ -338,7 +338,7 @@ server.listen(3000, () => {
 **Perfect for:** ETL pipelines, log analysis, data transformation
 
 ```typescript
-// log-analyzer.gs.ts
+// log-analyzer-gs.ts
 import * as fs from 'fs';
 
 interface LogEntry {
@@ -391,7 +391,7 @@ analyzeLog(process.argv[2]);
 **Perfect for:** File watchers, backup tools, system monitors
 
 ```typescript
-// disk-usage.gs.ts
+// disk-usage-gs.ts
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -475,14 +475,14 @@ for (const key of Object.keys(obj)) { ... }
 
 ### Step 3: Test in Node.js
 
-Your `.gs.ts` files are still valid TypeScript:
+Your `-gs.ts` files are still valid TypeScript:
 
 ```bash
 # Test with Node.js first
-node src/main.gs.ts
+node src/main-gs.ts
 
 # Or use ts-node
-npx ts-node src/main.gs.ts
+npx ts-node src/main-gs.ts
 ```
 
 ### Step 4: Compile to Native
@@ -491,13 +491,13 @@ Once tests pass in Node.js:
 
 ```bash
 # Compile with GC mode (default)
-gsc -t native -b -o dist src/main.gs.ts
+gsc -t native -b -o dist src/main-gs.ts
 
 # Test native binary
 ./dist/main
 
 # Compare performance
-time node src/main.gs.ts
+time node src/main-gs.ts
 time ./dist/main
 ```
 
@@ -507,11 +507,11 @@ Profile your application:
 
 ```bash
 # Node.js
-node --prof src/main.gs.ts
+node --prof src/main-gs.ts
 node --prof-process isolate-*.log
 
 # GoodScript (use standard C++ profilers)
-gsc -t native -b -g -o dist src/main.gs.ts  # -g for debug symbols
+gsc -t native -b -g -o dist src/main-gs.ts  # -g for debug symbols
 perf record ./dist/main
 perf report
 ```

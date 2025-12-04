@@ -18,7 +18,7 @@ interface CompileSourceResult extends CompileResult {
  */
 export function compileWithOwnership(
   source: string, 
-  fileName: string = 'test.gs.ts',
+  fileName: string = 'test-gs.ts',
   level: 'dag' | 'native' = 'dag'
 ): CompileSourceResult {
     // Create a temporary directory

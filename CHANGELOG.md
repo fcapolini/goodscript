@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **File Naming Convention Migration** - Migrated from `.gs.ts` double extension to `-gs.ts` suffix pattern
+  - Files now use proper `.ts` extension with `-gs` suffix in basename (e.g., `module-gs.ts`)
+  - Standard TypeScript tooling (VSCode, tsc, etc.) now works seamlessly without custom configuration
+  - Imports must include the `-gs` suffix: `import from './module-gs'`
+  - JavaScript output automatically removes `-gs` suffix: `module-gs.ts` → `module.js`
+  - C++ output automatically removes `-gs` suffix: `module-gs.ts` → `module.cpp`
+  - Updated compiler file renaming logic to correctly handle `outDir` vs source directory
+  - All 24 test/example files migrated from `.gs.ts` to `-gs.ts`
+  - All documentation updated to reflect new convention
+
+### Fixed
+
+- Fixed module resolution issues with `.gs.ts` double extension that prevented standard TypeScript tooling from working
+- Fixed file renaming logic to look for compiled files in `outDir` instead of source directory
+- Fixed CLI integration tests to use correct import syntax with `-gs` suffix
+- Fixed test helper to prevent overwriting `dist/parser.js` during compilation
+
 ## [0.9.0] - 2025-12-02
 
 ### Added

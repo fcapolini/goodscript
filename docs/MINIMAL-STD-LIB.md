@@ -122,7 +122,7 @@ namespace Math {
 ## **8️⃣ Example Usage in GoodScript**
 
 ```ts
-// .gs.ts file
+// -gs.ts file
 async function demo() {
     let val: number = Math.sqrt(9);
     let response = await fetch('https://example.com');

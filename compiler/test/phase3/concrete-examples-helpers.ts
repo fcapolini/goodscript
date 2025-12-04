@@ -90,11 +90,11 @@ export function compileExample(
 ): CompilationResult {
   const compiler = new Compiler();
   const exampleDir = join(EXAMPLES_DIR, exampleName);
-  const srcFile = join(exampleDir, "src", "main.gs.ts");
+  const srcFile = join(exampleDir, "src", "main-gs.ts");
   const outDir = join(exampleDir, "dist");
 
   if (!existsSync(srcFile)) {
-    throw new Error(`Example ${exampleName} missing src/main.gs.ts`);
+    throw new Error(`Example ${exampleName} missing src/main-gs.ts`);
   }
 
   mkdirSync(outDir, { recursive: true });

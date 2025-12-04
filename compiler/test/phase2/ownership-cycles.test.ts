@@ -368,7 +368,7 @@ describe('Phase 2: Ownership Cycle Detection', () => {
     it('should detect cycles across multiple files', () => {
       const result = compileMultipleWithOwnership([
         {
-          name: 'a.gs.ts',
+          name: 'a-gs.ts',
           source: `
             import { B } from './b';
             export class A {
@@ -377,7 +377,7 @@ describe('Phase 2: Ownership Cycle Detection', () => {
           `
         },
         {
-          name: 'b.gs.ts',
+          name: 'b-gs.ts',
           source: `
             import { A } from './a';
             export class B {

@@ -16,7 +16,7 @@ describe('Integration: Vanilla TypeScript', () => {
     }
   });
 
-  it('should build vanilla TS project with .gs.ts files', async () => {
+  it('should build vanilla TS project with -gs.ts files', async () => {
     const config: InlineConfig = {
       root: fixtureDir,
       build: {

@@ -1233,7 +1233,7 @@ These restrictions transform TypeScript from a gradually-typed superset of JavaS
 
 ## Compatibility with TypeScript
 
-GoodScript files (`.gs.ts`) are valid TypeScript files with additional restrictions. You can:
+GoodScript files (`-gs.ts`) are valid TypeScript files with additional restrictions. You can:
 
 - Use GoodScript files in TypeScript projects (they're strict TypeScript)
 - Gradually migrate TypeScript to GoodScript

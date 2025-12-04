@@ -57,7 +57,7 @@ npm run test:coverage
 
 ### Integration Tests (`test/integration/`)
 - Full build process with Vite API
-- Compilation of `.gs.ts` and `.gs.tsx` files
+- Compilation of `-gs.ts` and `-gs.tsx` files
 - Output verification
 - Framework integration (React, Vue)
 
@@ -70,13 +70,13 @@ npm run test:coverage
 ## Test Fixtures
 
 ### vanilla-ts
-Plain TypeScript project with `.gs.ts` files demonstrating Phase 1 "clean" restrictions.
+Plain TypeScript project with `-gs.ts` files demonstrating Phase 1 "clean" restrictions.
 
 ### react-app
-React application with `.gs.tsx` components showing JSX support and integration with @vitejs/plugin-react.
+React application with `-gs.tsx` components showing JSX support and integration with @vitejs/plugin-react.
 
 ### vue-app
-Vue 3 application with `.gs.ts` utility files demonstrating Vue + GoodScript integration.
+Vue 3 application with `-gs.ts` utility files demonstrating Vue + GoodScript integration.
 
 ## Writing New Tests
 

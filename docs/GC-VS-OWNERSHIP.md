@@ -34,7 +34,7 @@ GC Mode compiles TypeScript to native code with **automatic garbage collection**
 
 1. **Write TypeScript** - No ownership annotations needed
 2. **Avoid "bad parts"** - No `var`, no `==`, etc. (see [GOOD-PARTS.md](GOOD-PARTS.md))
-3. **Compile** - `gsc -t native -b -o dist src/main.gs.ts`
+3. **Compile** - `gsc -t native -b -o dist src/main-gs.ts`
 4. **Deploy** - Single native binary, no dependencies
 
 ### Performance Characteristics
@@ -67,7 +67,7 @@ GC Mode compiles TypeScript to native code with **automatic garbage collection**
 ### Example: Simple CLI Tool
 
 ```typescript
-// word-count.gs.ts
+// word-count-gs.ts
 import * as fs from 'fs';
 
 function countWords(text: string): number {
@@ -82,7 +82,7 @@ console.log(`Word count: ${count}`);
 
 ```bash
 # Compile to native
-gsc -t native -b -o dist word-count.gs.ts
+gsc -t native -b -o dist word-count-gs.ts
 
 # Run (faster than Node.js!)
 ./dist/word-count large-file.txt
@@ -311,7 +311,7 @@ type Result = {
 
 ```bash
 # Compile with GC
-gsc -t native -b -o dist processor.gs.ts
+gsc -t native -b -o dist processor-gs.ts
 ```
 
 ### Optimize Hot Paths with Ownership
@@ -347,7 +347,7 @@ type Result = {
 
 ```bash
 # Compile with ownership mode
-gsc -t native -m ownership -b -o dist processor.gs.ts
+gsc -t native -m ownership -b -o dist processor-gs.ts
 ```
 
 ### Gradual Migration Strategy

@@ -1,7 +1,7 @@
 /**
  * GoodScript/TypeScript Interoperability Tests
  * 
- * Tests that .gs.ts and .ts files can seamlessly import from each other
+ * Tests that -gs.ts and .ts files can seamlessly import from each other
  */
 
 import { describe, it, expect } from 'vitest';
@@ -33,7 +33,8 @@ describe('GoodScript/TypeScript Interoperability', () => {
           module: 'commonjs',
           strict: true,
           lib: ['ES2020'],
-          skipLibCheck: true
+          skipLibCheck: true,
+          outDir: 'out'  // Don't output to dist/ to avoid overwriting compiler files
         }
       };
       fs.writeFileSync(path.join(tmpDir, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2));
@@ -43,7 +44,8 @@ describe('GoodScript/TypeScript Interoperability', () => {
       const result = compiler.compile({
         files: filePaths,
         skipOwnershipChecks: true,
-        project: path.join(tmpDir, 'tsconfig.json')
+        project: path.join(tmpDir, 'tsconfig.json'),
+        outDir: path.join(tmpDir, 'out')  // Output to tmpDir/out to avoid conflicts
       });
       
       const errors = result.diagnostics
@@ -69,10 +71,10 @@ describe('GoodScript/TypeScript Interoperability', () => {
   }
 
   describe('TypeScript importing from GoodScript', () => {
-    it('should import type from .gs.ts using .gs extension', () => {
+    it('should import type from -gs.ts', () => {
       const result = compileMultipleFiles([
         {
-          name: 'node.gs.ts',
+          name: 'node-gs.ts',
           content: `
 export interface Node {
   id: number;
@@ -88,7 +90,7 @@ export const createNode = (id: number, name: string): Node => ({
         {
           name: 'main.ts',
           content: `
-import { Node } from './node.gs';
+import { Node } from './node-gs';
 
 const node: Node = {
   id: 1,
@@ -102,10 +104,10 @@ const node: Node = {
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should import function from .gs.ts', () => {
+    it('should import function from -gs.ts', () => {
       const result = compileMultipleFiles([
         {
-          name: 'utils.gs.ts',
+          name: 'utils-gs.ts',
           content: `
 export const add = (a: number, b: number): number => a + b;
 export const multiply = (a: number, b: number): number => a * b;
@@ -114,7 +116,7 @@ export const multiply = (a: number, b: number): number => a * b;
         {
           name: 'calculator.ts',
           content: `
-import { add, multiply } from './utils.gs';
+import { add, multiply } from './utils-gs';
 
 const result = add(2, 3);
 const product = multiply(4, 5);
@@ -126,10 +128,10 @@ const product = multiply(4, 5);
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should import class from .gs.ts', () => {
+    it('should import class from -gs.ts', () => {
       const result = compileMultipleFiles([
         {
-          name: 'config.gs.ts',
+          name: 'config-gs.ts',
           content: `
 export class Config {
   constructor(public name: string) {}
@@ -141,7 +143,7 @@ export class Config {
         {
           name: 'app.ts',
           content: `
-import { Config } from './config.gs';
+import { Config } from './config-gs';
 
 const config = new Config('myapp');
 const name = config.getName();
@@ -167,7 +169,7 @@ export interface User {
 `
         },
         {
-          name: 'service.gs.ts',
+          name: 'service-gs.ts',
           content: `
 import { User } from './types';
 
@@ -194,7 +196,7 @@ export function log(message: string): void {
 `
         },
         {
-          name: 'main.gs.ts',
+          name: 'main-gs.ts',
           content: `
 import { log } from './logger';
 
@@ -224,7 +226,7 @@ export class Database {
 `
         },
         {
-          name: 'app.gs.ts',
+          name: 'app-gs.ts',
           content: `
 import { Database } from './database';
 
@@ -239,7 +241,7 @@ const db = new Database('localhost:5432');
   });
 
   describe('Bidirectional imports', () => {
-    it('should allow .gs.ts and .ts files to import from each other', () => {
+    it('should allow -gs.ts and .ts files to import from each other', () => {
       const result = compileMultipleFiles([
         {
           name: 'types.ts',
@@ -250,7 +252,7 @@ export interface Config {
 `
         },
         {
-          name: 'parser.gs.ts',
+          name: 'parser-gs.ts',
           content: `
 import { Config } from './types';
 
@@ -262,7 +264,7 @@ export const parseConfig = (data: string): Config => ({
         {
           name: 'server.ts',
           content: `
-import { parseConfig } from './parser.gs';
+import { parseConfig } from './parser-gs';
 
 const config = parseConfig('8080');
 `
@@ -273,10 +275,10 @@ const config = parseConfig('8080');
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should handle circular dependencies between .gs.ts and .ts', () => {
+    it('should handle circular dependencies between -gs.ts and .ts', () => {
       const result = compileMultipleFiles([
         {
-          name: 'a.gs.ts',
+          name: 'a-gs.ts',
           content: `
 import { BType } from './b';
 
@@ -292,7 +294,7 @@ export const createA = (): AType => ({
         {
           name: 'b.ts',
           content: `
-import { AType } from './a.gs';
+import { AType } from './a-gs';
 
 export interface BType {
   value: number;
@@ -311,10 +313,10 @@ export function processA(a: AType): number {
   });
 
   describe('Mixed file extensions', () => {
-    it('should import .gs.ts files using .gs extension (without .ts)', () => {
+    it('should import -gs.ts files using -gs suffix', () => {
       const result = compileMultipleFiles([
         {
-          name: 'module.gs.ts',
+          name: 'module-gs.ts',
           content: `
 export const VERSION = '1.0.0';
 `
@@ -322,8 +324,8 @@ export const VERSION = '1.0.0';
         {
           name: 'app.ts',
           content: `
-// Import .gs.ts files using .gs extension (TypeScript convention)
-import { VERSION } from './module.gs';
+// Import -gs.ts files using -gs suffix
+import { VERSION } from './module-gs';
 
 console.log(VERSION);
 `
@@ -334,10 +336,10 @@ console.log(VERSION);
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should work with multiple .gs.ts files importing each other', () => {
+    it('should work with multiple -gs.ts files importing each other', () => {
       const result = compileMultipleFiles([
         {
-          name: 'base.gs.ts',
+          name: 'base-gs.ts',
           content: `
 export interface Base {
   id: number;
@@ -345,9 +347,9 @@ export interface Base {
 `
         },
         {
-          name: 'derived.gs.ts',
+          name: 'derived-gs.ts',
           content: `
-import { Base } from './base.gs';
+import { Base } from './base-gs';
 
 export interface Derived extends Base {
   name: string;
@@ -355,9 +357,9 @@ export interface Derived extends Base {
 `
         },
         {
-          name: 'consumer.gs.ts',
+          name: 'consumer-gs.ts',
           content: `
-import { Derived } from './derived.gs';
+import { Derived } from './derived-gs';
 
 const item: Derived = {
   id: 1,
@@ -373,10 +375,10 @@ const item: Derived = {
   });
 
   describe('Re-exports', () => {
-    it('should support re-exporting from .gs.ts in .ts file', () => {
+    it('should support re-exporting from -gs.ts in .ts file', () => {
       const result = compileMultipleFiles([
         {
-          name: 'core.gs.ts',
+          name: 'core-gs.ts',
           content: `
 export interface CoreType {
   value: string;
@@ -386,8 +388,8 @@ export interface CoreType {
         {
           name: 'index.ts',
           content: `
-export { CoreType } from './core.gs';
-export type { CoreType as Core } from './core.gs';
+export { CoreType } from './core-gs';
+export type { CoreType as Core } from './core-gs';
 `
         },
         {
@@ -405,7 +407,7 @@ const another: Core = { value: 'test2' };
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should support re-exporting from .ts in .gs.ts file', () => {
+    it('should support re-exporting from .ts in -gs.ts file', () => {
       const result = compileMultipleFiles([
         {
           name: 'utils.ts',
@@ -416,16 +418,16 @@ export function format(s: string): string {
 `
         },
         {
-          name: 'index.gs.ts',
+          name: 'index-gs.ts',
           content: `
 export { format } from './utils';
 export { format as formatString } from './utils';
 `
         },
         {
-          name: 'app.gs.ts',
+          name: 'app-gs.ts',
           content: `
-import { format, formatString } from './index.gs';
+import { format, formatString } from './index-gs';
 
 const result = format('hello');
 const result2 = formatString('world');
@@ -438,8 +440,8 @@ const result2 = formatString('world');
     });
   });
 
-  describe('GoodScript restrictions only apply to .gs.ts files', () => {
-    it('should allow var in .ts but not in .gs.ts', () => {
+  describe('GoodScript restrictions only apply to -gs.ts files', () => {
+    it('should allow var in .ts but not in -gs.ts', () => {
       const result = compileMultipleFiles([
         {
           name: 'legacy.ts',
@@ -453,7 +455,7 @@ export function increment() {
 `
         },
         {
-          name: 'modern.gs.ts',
+          name: 'modern-gs.ts',
           content: `
 import { counter, increment } from './legacy';
 
@@ -467,7 +469,7 @@ const value = counter;
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should allow == in .ts but not in .gs.ts', () => {
+    it('should allow == in .ts but not in -gs.ts', () => {
       const result = compileMultipleFiles([
         {
           name: 'legacy.ts',
@@ -479,7 +481,7 @@ export function isEqual(a: any, b: any): boolean {
 `
         },
         {
-          name: 'modern.gs.ts',
+          name: 'modern-gs.ts',
           content: `
 import { isEqual } from './legacy';
 
@@ -493,7 +495,7 @@ const result = isEqual(1, '1');
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should allow function declarations in .ts but not in .gs.ts', () => {
+    it('should allow function declarations in .ts but not in -gs.ts', () => {
       const result = compileMultipleFiles([
         {
           name: 'legacy.ts',
@@ -505,11 +507,11 @@ export function oldStyle(x: number): number {
 `
         },
         {
-          name: 'modern.gs.ts',
+          name: 'modern-gs.ts',
           content: `
 import { oldStyle } from './legacy';
 
-// Must use arrow functions in .gs.ts
+// Must use arrow functions in -gs.ts
 const newStyle = (x: number): number => oldStyle(x);
 `
         }

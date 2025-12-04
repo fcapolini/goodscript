@@ -99,7 +99,7 @@ During `npm publish`:
 ```json
 {
   "goodscript": {
-    "source": "src/main.gs.ts",
+    "source": "src/main-gs.ts",
     "buildTool": "zig",
     "postinstall": "gsc build --release"
   }
@@ -154,11 +154,11 @@ Zig's build system provides:
 
 ```
 ┌─────────────────────────────────────────┐
-│  GoodScript Source (.gs.ts)             │
+│  GoodScript Source (-gs.ts)             │
 └───────────────┬─────────────────────────┘
                 │
                 ├──→ TypeScript Mode (Development)
-                │    • gsc run main.gs.ts
+                │    • gsc run main-gs.ts
                 │    • Type check only
                 │    • Execute in Node.js/Deno
                 │    • Fast iteration
@@ -239,7 +239,7 @@ Users never see this - `gsc build` generates and runs it automatically.
 
 ```bash
 # Development mode (TypeScript runtime)
-gsc run src/main.gs.ts
+gsc run src/main-gs.ts
 
 # Build for current platform
 gsc build
@@ -264,7 +264,7 @@ gsc package
 export default {
   name: "my-app",
   version: "1.0.0",
-  entry: "src/main.gs.ts",
+  entry: "src/main-gs.ts",
   
   // Build configuration
   build: {

@@ -27,7 +27,7 @@ describe('Phase 2: Ownership Analysis Overview', () => {
       }
     `;
     
-    const result = compileWithOwnership(source, 'test.gs.ts', 'dag');
+    const result = compileWithOwnership(source, 'test-gs.ts', 'dag');
     expect(hasError(result.diagnostics, 'GS301')).toBe(true);
   });
   
@@ -158,7 +158,7 @@ describe('Phase 2: Ownership Analysis Overview', () => {
         }
       `;
       
-      const dagResult = compileWithOwnership(source, 'test.gs.ts', 'dag');
+      const dagResult = compileWithOwnership(source, 'test-gs.ts', 'dag');
       expect(hasError(dagResult.diagnostics, 'GS301')).toBe(true);
       
       // Note: We can't easily test 'clean' level here since compileWithOwnership

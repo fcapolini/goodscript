@@ -8,7 +8,7 @@ test.describe('Vanilla TypeScript E2E', () => {
     await expect(page.locator('#app')).toBeVisible();
     
     // Check that GoodScript functions executed
-    // (Add assertions based on what your main.gs.ts does in the DOM)
+    // (Add assertions based on what your main-gs.ts does in the DOM)
     await expect(page).toHaveTitle('Vanilla TS Test');
   });
 

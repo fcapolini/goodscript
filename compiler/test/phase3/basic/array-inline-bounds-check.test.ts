@@ -7,7 +7,7 @@ import { join } from 'path';
 describe('Array inline bounds check', () => {
   function compileAndCheck(source: string): string {
     const tmpDir = mkdtempSync(join(tmpdir(), 'gs-test-'));
-    const srcFile = join(tmpDir, 'test.gs.ts');
+    const srcFile = join(tmpDir, 'test-gs.ts');
     writeFileSync(srcFile, source);
     
     const compiler = new Compiler();

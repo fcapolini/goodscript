@@ -1494,7 +1494,7 @@ class Arena {
 
 **Workaround**: Use ownership mode with explicit arena pattern, or compile in GC mode:
 ```bash
-gsc -t cpp -m gc -o dist src/main.gs.ts
+gsc -t cpp -m gc -o dist src/main-gs.ts
 ```
 
 **Planned Fix**: Add explicit `share(value)` or `make_shared(value)` helper for creating shared instances.

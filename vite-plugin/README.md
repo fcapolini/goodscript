@@ -21,7 +21,7 @@ export default defineConfig({
   plugins: [
     goodscript({
       level: 'clean',  // Enforce GoodScript "clean" level (TypeScript good parts)
-      include: ['**/*.gs.ts']
+      include: ['**/*-gs.ts']
     })
   ]
 });
@@ -39,7 +39,7 @@ export default defineConfig({
   plugins: [
     goodscript({
       level: 'clean',
-      include: ['**/*.gs.ts', '**/*.gs.tsx']
+      include: ['**/*-gs.ts', '**/*-gs.tsx']
     }),
     react()
   ]
@@ -58,7 +58,7 @@ export default defineConfig({
   plugins: [
     goodscript({
       level: 'clean',
-      include: ['**/*.gs.ts']
+      include: ['**/*-gs.ts']
     }),
     vue()
   ]
@@ -78,7 +78,7 @@ Language level to enforce:
 
 ### `include`
 - **Type**: `string[]`
-- **Default**: `['**/*.gs.ts', '**/*.gs.tsx']`
+- **Default**: `['**/*-gs.ts', '**/*-gs.tsx']`
 
 Glob patterns for files to process. Only files matching these patterns will be compiled by GoodScript.
 
@@ -96,7 +96,7 @@ Skip ownership analysis (Phase 2 checks). Automatically set based on `level` if 
 
 ## How It Works
 
-1. **Vite intercepts** `.gs.ts` and `.gs.tsx` files during module resolution
+1. **Vite intercepts** `-gs.ts` and `-gs.tsx` files during module resolution
 2. **GoodScript compiler** validates and transforms them on-the-fly
 3. **Generated TypeScript** flows into subsequent plugins (React, Vue, etc.)
 4. **Full HMR support** - changes trigger recompilation and hot reload
@@ -115,10 +115,10 @@ Skip ownership analysis (Phase 2 checks). Automatically set based on `level` if 
 ```
 my-app/
 ├── src/
-│   ├── main.gs.ts          # GoodScript entry point
+│   ├── main-gs.ts          # GoodScript entry point
 │   ├── components/
-│   │   ├── Button.gs.tsx   # React component in GoodScript
-│   │   └── utils.gs.ts     # Utility functions
+│   │   ├── Button-gs.tsx   # React component in GoodScript
+│   │   └── utils-gs.ts     # Utility functions
 │   └── legacy/
 │       └── old-code.ts     # Regular TypeScript (not processed)
 ├── vite.config.ts
@@ -153,7 +153,7 @@ The plugin handles compilation automatically - no more generated `.ts` files clu
 
 ## Troubleshooting
 
-### TypeScript errors in `.gs.ts` files
+### TypeScript errors in `-gs.ts` files
 
 Make sure your `tsconfig.json` includes the GoodScript type definitions:
 
@@ -167,7 +167,7 @@ Make sure your `tsconfig.json` includes the GoodScript type definitions:
 
 ### Plugin not processing files
 
-Check that your file patterns match. The default is `**/*.gs.ts` and `**/*.gs.tsx`. If you're using different extensions, update the `include` option.
+Check that your file patterns match. The default is `**/*-gs.ts` and `**/*-gs.tsx`. If you're using different extensions, update the `include` option.
 
 ### Performance issues with large projects
 

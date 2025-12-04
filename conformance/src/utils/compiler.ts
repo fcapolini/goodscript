@@ -70,7 +70,7 @@ export async function compileGoodScript(
     
     // Create TypeScript program
     const sourceFile = ts.createSourceFile(
-      'test.gs.ts',
+      'test-gs.ts',
       fullCode,
       ts.ScriptTarget.ES2020,
       true,
@@ -86,11 +86,11 @@ export async function compileGoodScript(
 
     const host = ts.createCompilerHost(compilerOptions);
     host.getSourceFile = (fileName) => {
-      if (fileName === 'test.gs.ts') return sourceFile;
+      if (fileName === 'test-gs.ts') return sourceFile;
       return undefined;
     };
 
-    const program = ts.createProgram(['test.gs.ts'], compilerOptions, host);
+    const program = ts.createProgram(['test-gs.ts'], compilerOptions, host);
     const checker = program.getTypeChecker();
 
     // Phase 1: Validate "Good Parts"

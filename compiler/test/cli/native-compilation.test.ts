@@ -39,7 +39,7 @@ describe('CLI: Native Compilation', () => {
 
   describe('C++ source generation', () => {
     it('should generate C++ source with --target native', () => {
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, `
@@ -64,7 +64,7 @@ describe('CLI: Native Compilation', () => {
     });
 
     it('should generate C++ source with -t native shorthand', () => {
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, 'const x: number = 42;');
@@ -83,8 +83,8 @@ describe('CLI: Native Compilation', () => {
       
       fs.mkdirSync(subDir, { recursive: true });
       
-      const mainFile = path.join(srcDir, 'main.gs.ts');
-      const utilFile = path.join(subDir, 'helper.gs.ts');
+      const mainFile = path.join(srcDir, 'main-gs.ts');
+      const utilFile = path.join(subDir, 'helper-gs.ts');
       
       fs.writeFileSync(mainFile, 'const x = 1;');
       fs.writeFileSync(utilFile, 'const y = 2;');
@@ -105,7 +105,7 @@ describe('CLI: Native Compilation', () => {
         return;
       }
 
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, 'const x = 42;');
@@ -129,7 +129,7 @@ describe('CLI: Native Compilation', () => {
         return;
       }
 
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, `
@@ -158,7 +158,7 @@ describe('CLI: Native Compilation', () => {
         return;
       }
 
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, 'const x = 1;');
@@ -176,7 +176,7 @@ describe('CLI: Native Compilation', () => {
         return;
       }
 
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, `
@@ -202,7 +202,7 @@ describe('CLI: Native Compilation', () => {
         return;
       }
 
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, 'const x = 42;');
@@ -227,7 +227,7 @@ describe('CLI: Native Compilation', () => {
         return;
       }
 
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, 'const x = 42;');
@@ -245,7 +245,7 @@ describe('CLI: Native Compilation', () => {
         return;
       }
 
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, 'const x = 42;');
@@ -266,7 +266,7 @@ describe('CLI: Native Compilation', () => {
         return;
       }
 
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, 'const x = 42;');
@@ -287,7 +287,7 @@ describe('CLI: Native Compilation', () => {
         return;
       }
 
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, 'const x = 42;');
@@ -310,7 +310,7 @@ describe('CLI: Native Compilation', () => {
         return;
       }
 
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, `
@@ -341,7 +341,7 @@ describe('CLI: Native Compilation', () => {
         return;
       }
 
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, `
@@ -369,7 +369,7 @@ describe('CLI: Native Compilation', () => {
         return;
       }
 
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, `
@@ -392,7 +392,7 @@ describe('CLI: Native Compilation', () => {
 
   describe('Error handling', () => {
     it('should report errors in source code', () => {
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       // Write code with a syntax error
@@ -410,7 +410,7 @@ describe('CLI: Native Compilation', () => {
     });
 
     it('should report ownership errors when present', () => {
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       // Write code with ownership cycle (should fail DAG check)
@@ -443,7 +443,7 @@ describe('CLI: Native Compilation', () => {
         return;
       }
 
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, `
@@ -464,7 +464,7 @@ describe('CLI: Native Compilation', () => {
     });
 
     it('should work with verbose flag', () => {
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, 'const x = 42;');

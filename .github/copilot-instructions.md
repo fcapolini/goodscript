@@ -542,7 +542,7 @@ if (!value.includes('.')) {
    ```
 
 4. **Compare with TypeScript**:
-   - Look at source `.gs.ts` file
+   - Look at source `-gs.ts` file
    - Check what TypeScript equivalent would be
    - Ensure C++ captures same semantics
 

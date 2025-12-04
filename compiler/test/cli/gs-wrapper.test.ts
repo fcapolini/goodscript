@@ -63,7 +63,7 @@ describe('CLI: gs wrapper', () => {
 
   describe('compile command', () => {
     it('should delegate to gsc for compile command', () => {
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, 'const x = 42;\nexport { x };');
@@ -76,7 +76,7 @@ describe('CLI: gs wrapper', () => {
     });
 
     it('should pass all flags to gsc', () => {
-      const sourceFile = path.join(tmpDir, 'test.gs.ts');
+      const sourceFile = path.join(tmpDir, 'test-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(sourceFile, 'const x = 42;');
@@ -89,8 +89,8 @@ describe('CLI: gs wrapper', () => {
     });
 
     it('should handle multiple files', () => {
-      const file1 = path.join(tmpDir, 'file1.gs.ts');
-      const file2 = path.join(tmpDir, 'file2.gs.ts');
+      const file1 = path.join(tmpDir, 'file1-gs.ts');
+      const file2 = path.join(tmpDir, 'file2-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
       fs.writeFileSync(file1, 'const x = 1;');
@@ -108,7 +108,7 @@ describe('CLI: gs wrapper', () => {
   describe('Future commands', () => {
     it('should show not implemented for run command', () => {
       try {
-        execSync(`node ${GS_BIN} run test.gs.ts`, {
+        execSync(`node ${GS_BIN} run test-gs.ts`, {
           encoding: 'utf-8',
           stdio: 'pipe'
         });

@@ -29,15 +29,15 @@ describe('goodscriptPlugin', () => {
 });
 
 describe('resolveId', () => {
-  it('should resolve .gs imports to .gs.ts', () => {
+  it('should resolve .gs imports to -gs.ts', () => {
     const plugin = goodscriptPlugin();
     const result = plugin.resolveId!('./file.gs', '/src/main.ts');
-    expect(result).toBe('./file.gs.ts');
+    expect(result).toBe('./file-gs.ts');
   });
 
-  it('should not resolve .gs.ts files', () => {
+  it('should not resolve -gs.ts files', () => {
     const plugin = goodscriptPlugin();
-    const result = plugin.resolveId!('./file.gs.ts', '/src/main.ts');
+    const result = plugin.resolveId!('./file-gs.ts', '/src/main.ts');
     expect(result).toBeNull();
   });
 

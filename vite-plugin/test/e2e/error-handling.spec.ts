@@ -30,13 +30,13 @@ test.describe('Error Reporting', () => {
 });
 
 test.describe('HMR (Hot Module Replacement)', () => {
-  test('should reload when .gs.ts file changes', async ({ page }) => {
+  test('should reload when -gs.ts file changes', async ({ page }) => {
     await page.goto('/');
     
     // Get initial content
     const initialContent = await page.textContent('body');
     
-    // Modify a .gs.ts file (requires FS modification)
+    // Modify a -gs.ts file (requires FS modification)
     // This is a placeholder - real implementation would:
     // 1. Modify the source file
     // 2. Wait for HMR to trigger

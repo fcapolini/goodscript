@@ -14,7 +14,7 @@ describe('JSX/TSX Support', () => {
       };
     `;
     
-    const result = compileSource(source, 'test.gs.tsx');
+    const result = compileSource(source, 'test-gs.tsx');
     // Should not have GS errors (level "clean" restrictions pass)
     const gsErrors = result.diagnostics.filter(d => d.code?.startsWith('GS'));
     expect(gsErrors).toHaveLength(0);
@@ -27,7 +27,7 @@ describe('JSX/TSX Support', () => {
       };
     `;
     
-    const result = compileSource(source, 'test.gs.tsx');
+    const result = compileSource(source, 'test-gs.tsx');
     const gsErrors = result.diagnostics.filter(d => d.code?.startsWith('GS'));
     expect(gsErrors).toHaveLength(0);
   });
@@ -42,7 +42,7 @@ describe('JSX/TSX Support', () => {
       };
     `;
     
-    const result = compileSource(source, 'test.gs.tsx');
+    const result = compileSource(source, 'test-gs.tsx');
     const gsErrors = result.diagnostics.filter(d => d.code?.startsWith('GS'));
     expect(gsErrors).toHaveLength(0);
   });
@@ -60,7 +60,7 @@ describe('JSX/TSX Support', () => {
       };
     `;
     
-    const result = compileSource(source, 'test.gs.tsx');
+    const result = compileSource(source, 'test-gs.tsx');
     const gsErrors = result.diagnostics.filter(d => d.code?.startsWith('GS'));
     expect(gsErrors).toHaveLength(0);
   });
@@ -72,7 +72,7 @@ describe('JSX/TSX Support', () => {
       }
     `;
     
-    const result = compileSource(source, 'test.gs.tsx');
+    const result = compileSource(source, 'test-gs.tsx');
     const gsErrors = result.diagnostics.filter(d => d.code === 'GS108');
     expect(gsErrors.length).toBeGreaterThan(0);
   });
@@ -85,7 +85,7 @@ describe('JSX/TSX Support', () => {
       };
     `;
     
-    const result = compileSource(source, 'test.gs.tsx');
+    const result = compileSource(source, 'test-gs.tsx');
     const gsErrors = result.diagnostics.filter(d => d.code === 'GS105');
     expect(gsErrors.length).toBeGreaterThan(0);
   });
@@ -98,7 +98,7 @@ describe('JSX/TSX Support', () => {
       };
     `;
     
-    const result = compileSource(source, 'test.gs.tsx');
+    const result = compileSource(source, 'test-gs.tsx');
     const gsErrors = result.diagnostics.filter(d => d.code === 'GS106');
     expect(gsErrors.length).toBeGreaterThan(0);
   });
@@ -110,7 +110,7 @@ describe('JSX/TSX Support', () => {
       };
     `;
     
-    const result = compileSource(source, 'test.gs.tsx');
+    const result = compileSource(source, 'test-gs.tsx');
     
     // Check that JSX is preserved in output
     expect(result.output).toContain('<h1>');
@@ -132,7 +132,7 @@ describe('JSX/TSX Support', () => {
       };
     `;
     
-    const result = compileSource(source, 'test.gs.tsx');
+    const result = compileSource(source, 'test-gs.tsx');
     const gsErrors = result.diagnostics.filter(d => d.code?.startsWith('GS'));
     expect(gsErrors).toHaveLength(0);
     
@@ -154,7 +154,7 @@ describe('JSX/TSX Support', () => {
       };
     `;
     
-    const result = compileSource(source, 'test.gs.tsx');
+    const result = compileSource(source, 'test-gs.tsx');
     const gsErrors = result.diagnostics.filter(d => d.code?.startsWith('GS'));
     expect(gsErrors).toHaveLength(0);
   });

@@ -69,13 +69,13 @@ GC mode has comprehensive triple-mode testing across all 15 concrete examples (i
 
 ```bash
 # GC mode (automatic memory management)
-gsc -t native -m gc -o dist src/main.gs.ts
+gsc -t native -m gc -o dist src/main-gs.ts
 
 # Ownership mode (manual memory management, default)
-gsc -t native -m ownership -o dist src/main.gs.ts
+gsc -t native -m ownership -o dist src/main-gs.ts
 
 # Shorter version (ownership is default)
-gsc -t native -o dist src/main.gs.ts
+gsc -t native -o dist src/main-gs.ts
 ```
 
 ### Compilation Flags
@@ -92,7 +92,7 @@ gsc -t native -o dist src/main.gs.ts
 ### Phase 1 Code (Works in Both Modes)
 
 ```typescript
-// hello.gs.ts - No ownership annotations needed
+// hello-gs.ts - No ownership annotations needed
 class Greeter {
   name: string;
   
@@ -113,10 +113,10 @@ greeter.greet();
 
 ```bash
 # GC mode - compiles immediately
-gsc -t native -m gc -o dist hello.gs.ts
+gsc -t native -m gc -o dist hello-gs.ts
 
 # Ownership mode - requires ownership annotations for complex types
-gsc -t native -m ownership -o dist hello.gs.ts
+gsc -t native -m ownership -o dist hello-gs.ts
 ```
 
 ### Generated C++ (GC Mode)
@@ -320,7 +320,7 @@ class Cache {
 
 ```bash
 # Now compiles with deterministic memory management
-gsc -t native -m ownership -o dist cache.gs.ts
+gsc -t native -m ownership -o dist cache-gs.ts
 ```
 
 ## Roadmap
@@ -393,8 +393,8 @@ A: Both modes support async/await. GC mode is actually easier because you don't 
 ## Examples
 
 See:
-- `compiler/examples/gc-hello.gs.ts` - Basic GC mode example
-- `compiler/examples/gc-minimal.gs.ts` - Minimal test
+- `compiler/examples/gc-hello-gs.ts` - Basic GC mode example
+- `compiler/examples/gc-minimal-gs.ts` - Minimal test
 - `compiler/test/phase3/concrete-examples/` - 15 examples with full GC mode coverage
 - `compiler/test/gc-bump-test.cpp` - Bump allocator benchmarks
 - `compiler/test/gc-array-bench.cpp` - Array optimization benchmarks

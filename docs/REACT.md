@@ -1,6 +1,6 @@
 # Using GoodScript with React
 
-This guide explains how to use GoodScript (`.gs.tsx` files) in a React project.
+This guide explains how to use GoodScript (`-gs.tsx` files) in a React project.
 
 ## Quick Start
 
@@ -13,7 +13,7 @@ npm install --save-dev goodscript
 ### 2. Create GoodScript React Components
 
 ```tsx
-// src/components/UserCard.gs.tsx
+// src/components/UserCard-gs.tsx
 const UserCard = (props: { name: string; email: string }) => {
   return (
     <div className="user-card">
@@ -43,7 +43,7 @@ export { UserCard };
   "goodscript": {
     "level": "clean"
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.gs.ts", "src/**/*.gs.tsx"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*-gs.ts", "src/**/*-gs.tsx"]
 }
 ```
 
@@ -69,7 +69,7 @@ Compile GoodScript files to TypeScript before your build tool runs.
 ```
 
 **How it works:**
-1. `gsc` compiles `.gs.tsx` → `.tsx` files in the same directory
+1. `gsc` compiles `-gs.tsx` → `.tsx` files in the same directory
 2. Vite/webpack picks up the generated `.tsx` files
 3. Standard React build continues
 
@@ -80,14 +80,14 @@ Compile GoodScript files to TypeScript before your build tool runs.
 
 **Cons:**
 - Manual re-compilation during development
-- No hot reload for `.gs.tsx` files
+- No hot reload for `-gs.tsx` files
 - Generated files clutter source directory
 
-**Tip:** Add `*.tsx` to `.gitignore` if you only write `.gs.tsx`:
+**Tip:** Add `*.tsx` to `.gitignore` if you only write `-gs.tsx`:
 ```gitignore
 # Generated TypeScript files from GoodScript
 src/**/*.tsx
-!src/**/*.gs.tsx
+!src/**/*-gs.tsx
 ```
 
 ### Option 2: Vite Plugin (Recommended) ✅
@@ -112,7 +112,7 @@ export default defineConfig({
   plugins: [
     goodscript({
       level: 'clean',  // Language level
-      include: ['**/*.gs.ts', '**/*.gs.tsx']
+      include: ['**/*-gs.ts', '**/*-gs.tsx']
     }),
     react()
   ]
@@ -120,7 +120,7 @@ export default defineConfig({
 ```
 
 **How it works:**
-1. Vite intercepts `.gs.tsx` files during module resolution
+1. Vite intercepts `-gs.tsx` files during module resolution
 2. GoodScript compiler validates and transforms on-the-fly
 3. Generated TypeScript flows into React plugin
 4. Full HMR support
@@ -188,7 +188,7 @@ export default Button;
 ### After (GoodScript)
 
 ```tsx
-// Button.gs.tsx - GoodScript
+// Button-gs.tsx - GoodScript
 const Button = (props: { label: string; onClick?: () => void }) => {
   const label = props.label;  // ✅ const
   
@@ -284,10 +284,10 @@ const Form = () => {
 
 ## Mixing GoodScript and TypeScript
 
-You can freely mix `.gs.tsx` and `.tsx` files in the same project:
+You can freely mix `-gs.tsx` and `.tsx` files in the same project:
 
 ```tsx
-// UserCard.gs.tsx (GoodScript - strict rules)
+// UserCard-gs.tsx (GoodScript - strict rules)
 const UserCard = (props: { name: string }) => {
   return <div>{props.name}</div>;
 };
@@ -307,7 +307,7 @@ export default App;
 ```
 
 **This enables incremental adoption:**
-- Start with one component in `.gs.tsx`
+- Start with one component in `-gs.tsx`
 - Gradually migrate more files
 - Keep legacy code in `.tsx` until ready
 
@@ -315,23 +315,23 @@ export default App;
 
 ### "Cannot find module './Component.gs'"
 
-TypeScript doesn't recognize `.gs.tsx` extensions by default. Import without extension:
+TypeScript doesn't recognize `-gs.tsx` extensions by default. Import without extension:
 
 ```tsx
 // ❌ Don't do this
-import { Button } from './Button.gs.tsx';
+import { Button } from './Button-gs.tsx';
 
 // ✅ Do this
 import { Button } from './Button.gs';
 ```
 
-And ensure your bundler resolves `.gs.tsx` extensions:
+And ensure your bundler resolves `-gs.tsx` extensions:
 
 ```typescript
 // vite.config.ts
 export default defineConfig({
   resolve: {
-    extensions: ['.gs.tsx', '.gs.ts', '.tsx', '.ts', '.jsx', '.js']
+    extensions: ['-gs.tsx', '-gs.ts', '.tsx', '.ts', '.jsx', '.js']
   }
 });
 ```

@@ -8,11 +8,11 @@ Tests are organized by implementation phase to match the language development ro
 test/
 ├── phase1/          # Phase 1: Strict TypeScript Semantics
 │   ├── fixtures/                  # Phase 1 compliant source files
-│   │   ├── basic-functions.gs.ts  # Arrow functions, rest parameters
-│   │   ├── control-flow.gs.ts     # if/else, for-of, switch
-│   │   ├── classes.gs.ts          # Class declarations and methods
-│   │   ├── types.gs.ts            # Interfaces, generics, type unions
-│   │   └── null-handling.gs.ts    # null/undefined semantics
+│   │   ├── basic-functions-gs.ts  # Arrow functions, rest parameters
+│   │   ├── control-flow-gs.ts     # if/else, for-of, switch
+│   │   ├── classes-gs.ts          # Class declarations and methods
+│   │   ├── types-gs.ts            # Interfaces, generics, type unions
+│   │   └── null-handling-gs.ts    # null/undefined semantics
 │   ├── index.test.ts              # Test suite entry point
 │   ├── test-helpers.ts            # Shared test utilities
 │   ├── codegen-comparison.test.ts # Fixture validation tests
@@ -94,13 +94,13 @@ Phase 1 tests verify that GoodScript correctly enforces the "Good Parts" restric
 
 ### Interoperability
 
-**`interop.test.ts`** - Validates seamless integration between `.gs.ts` and `.ts` files:
+**`interop.test.ts`** - Validates seamless integration between `-gs.ts` and `.ts` files:
 
-- **TypeScript importing from GoodScript** - Import types, functions, and classes from `.gs.ts` using `.gs` extension
+- **TypeScript importing from GoodScript** - Import types, functions, and classes from `-gs.ts` using `.gs` extension
 - **GoodScript importing from TypeScript** - Import from standard `.ts` files without restrictions
 - **Bidirectional imports** - Mixed projects with circular dependencies work correctly
 - **Re-exports** - Both file types can re-export from each other
-- **Restriction isolation** - Phase 1 restrictions only apply to `.gs.ts` files, not imported `.ts` code
+- **Restriction isolation** - Phase 1 restrictions only apply to `-gs.ts` files, not imported `.ts` code
 
 See [docs/GOOD-PARTS.md](../../docs/GOOD-PARTS.md) for detailed rationale and examples.
 
@@ -108,11 +108,11 @@ See [docs/GOOD-PARTS.md](../../docs/GOOD-PARTS.md) for detailed rationale and ex
 
 Phase 1 includes realistic fixture files demonstrating Phase 1 compliant code:
 
-- **`basic-functions.gs.ts`** - Arrow functions, rest parameters, nested functions
-- **`control-flow.gs.ts`** - if/else, for-of loops, switch statements
-- **`classes.gs.ts`** - Class declarations, methods, constructors, private/readonly
-- **`types.gs.ts`** - Interfaces, type aliases, generics, union types
-- **`null-handling.gs.ts`** - null/undefined as synonyms, optional chaining patterns
+- **`basic-functions-gs.ts`** - Arrow functions, rest parameters, nested functions
+- **`control-flow-gs.ts`** - if/else, for-of loops, switch statements
+- **`classes-gs.ts`** - Class declarations, methods, constructors, private/readonly
+- **`types-gs.ts`** - Interfaces, type aliases, generics, union types
+- **`null-handling-gs.ts`** - null/undefined as synonyms, optional chaining patterns
 
 These fixtures are validated to:
 1. Be valid TypeScript (compile without errors)
@@ -126,7 +126,7 @@ The CLI test suite (`test/cli/`) validates that `gsc` can be used as a drop-in r
 
 - **Command-line arguments** - All tsc-compatible flags (--help, --version, --out-dir, --project, etc.)
 - **tsconfig.json handling** - Auto-discovery, respect for settings, CLI overrides
-- **Mixed projects** - Handles both .ts and .gs.ts files correctly
+- **Mixed projects** - Handles both .ts and -gs.ts files correctly
 - **Exit codes** - Returns 0 on success, non-zero on errors
 - **File resolution** - Absolute and relative paths
 

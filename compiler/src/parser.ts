@@ -16,7 +16,7 @@ export class Parser {
    * Check if a file should have JSX enabled
    */
   private isJsxFile(fileName: string): boolean {
-    return fileName.endsWith('.tsx') || fileName.endsWith('.gs.tsx');
+    return fileName.endsWith('.tsx') || fileName.endsWith('-gs.tsx');
   }
 
   /**
@@ -107,12 +107,15 @@ export class Parser {
       ...options,                 // Override with explicit options
       // Enable JSX if needed
       ...(needsJsx ? { jsx: ts.JsxEmit.Preserve } : {}),
+      // Override rootDir to prevent conflicts when compiling files outside compiler's src/
+      // This ensures we can compile files anywhere without rootDir validation errors
+      rootDir: undefined,
       // These must be preserved for GoodScript to work correctly
       allowNonTsExtensions: true,
       skipLibCheck: true,
     };
 
-    // Custom compiler host to handle .gs.ts, .gs.tsx and .gs files
+    // Custom compiler host to handle -gs.ts, -gs.tsx and .gs files
     const compilerHost = ts.createCompilerHost(defaultOptions);
     const originalGetSourceFile = compilerHost.getSourceFile;
     
@@ -150,8 +153,8 @@ declare type use<T> = T | null | undefined;
         return ts.createSourceFile(fileName, goodscriptTypes, languageVersion, true);
       }
       
-      // Treat .gs.ts, .gs.tsx and .gs files as TypeScript files
-      if (fileName.endsWith('.gs.ts') || fileName.endsWith('.gs.tsx') || fileName.endsWith('.gs')) {
+      // Treat -gs.ts, -gs.tsx and .gs files as TypeScript files
+      if (fileName.endsWith('-gs.ts') || fileName.endsWith('-gs.tsx') || fileName.endsWith('.gs')) {
         const fs = require('fs');
         if (fs.existsSync(fileName)) {
           const sourceCode = fs.readFileSync(fileName, 'utf8');

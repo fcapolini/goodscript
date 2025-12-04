@@ -106,7 +106,7 @@ Usage: gsc [options] [files...]
   - Ownership mode (advanced): Zero-GC with ownership types (own<T>, share<T>, use<T>)
 
 ✨ Drop-in replacement for tsc:
-  - Compiles .gs.ts files as GoodScript (enforces "Good Parts")
+  - Compiles -gs.ts files as GoodScript (enforces "Good Parts")
   - Compiles .ts files as regular TypeScript (tsc compatible)
   - Supports mixed projects with both file types
   - Use tsconfig.json when no files specified (like tsc)
@@ -126,26 +126,26 @@ Options:
   -v, --verbose               Verbose output
 
 File Extensions:
-  .gs.ts (recommended)        GoodScript with TypeScript IDE support
+  -gs.ts (recommended)        GoodScript with TypeScript IDE support
   .gs (legacy)                Original GoodScript extension
   .ts                         Regular TypeScript (processed like tsc)
 
 Examples:
   gsc                                 Compile using tsconfig.json (like tsc)
   gsc -p tsconfig.json                Use specific tsconfig.json
-  gsc main.gs.ts                      Compile GoodScript with ownership checks
+  gsc main-gs.ts                      Compile GoodScript with ownership checks
   gsc main.ts                         Compile TypeScript (like tsc)
-  gsc src/**/*.ts                     Compile mixed .ts and .gs.ts files
-  gsc -o dist main.gs.ts              Compile to JavaScript in dist/
-  gsc -e ts -o dist main.gs.ts        Compile to TypeScript only
-  gsc -e both -o dist main.gs.ts        Emit both .ts and .js files
-  gsc --no-ownership-checks -o dist main.gs.ts   Skip ownership checks
-  gsc -t native -o dist main.gs.ts    Compile to C++ (GC mode, default)
-  gsc -t native -b -o dist main.gs.ts Compile to native binary (GC mode, single file)
-  gsc -t native -b -a x86_64-linux -o dist main.gs.ts   Cross-compile for Linux x64
-  gsc -t native -b -a aarch64-macos -o dist main.gs.ts  Cross-compile for macOS ARM64
-  gsc -t native -b -a wasm32-wasi -o dist main.gs.ts    Compile to WebAssembly
-  gsc -t native -m ownership -b -o dist main.gs.ts      Zero-GC ownership mode (advanced)
+  gsc src/**/*.ts                     Compile mixed .ts and -gs.ts files
+  gsc -o dist main-gs.ts              Compile to JavaScript in dist/
+  gsc -e ts -o dist main-gs.ts        Compile to TypeScript only
+  gsc -e both -o dist main-gs.ts        Emit both .ts and .js files
+  gsc --no-ownership-checks -o dist main-gs.ts   Skip ownership checks
+  gsc -t native -o dist main-gs.ts    Compile to C++ (GC mode, default)
+  gsc -t native -b -o dist main-gs.ts Compile to native binary (GC mode, single file)
+  gsc -t native -b -a x86_64-linux -o dist main-gs.ts   Cross-compile for Linux x64
+  gsc -t native -b -a aarch64-macos -o dist main-gs.ts  Cross-compile for macOS ARM64
+  gsc -t native -b -a wasm32-wasi -o dist main-gs.ts    Compile to WebAssembly
+  gsc -t native -m ownership -b -o dist main-gs.ts      Zero-GC ownership mode (advanced)
   `);
 }
 

@@ -72,11 +72,11 @@ const validateWithGoodScript = (filePath: string) => {
 
 describe('Phase 1: Code generation comparison', () => {
   const fixtures = [
-    'basic-functions.gs.ts',
-    'control-flow.gs.ts',
-    'classes.gs.ts',
-    'types.gs.ts',
-    'null-handling.gs.ts',
+    'basic-functions-gs.ts',
+    'control-flow-gs.ts',
+    'classes-gs.ts',
+    'types-gs.ts',
+    'null-handling-gs.ts',
   ];
 
   fixtures.forEach(fixture => {

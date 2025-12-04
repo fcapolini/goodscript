@@ -13,6 +13,6 @@
   "goodscript": {
     "level": "clean"
   },
-  "include": ["src/**/*.gs.ts", "src/**/*.gs.tsx"],
+  "include": ["src/**/*-gs.ts", "src/**/*-gs.tsx"],
   "exclude": ["node_modules", "dist"]
 }

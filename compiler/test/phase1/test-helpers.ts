@@ -24,7 +24,7 @@ export function compileSource(source: string, levelOrFileName: string = 'clean')
   // Determine if second parameter is a level or filename
   const isLevel = levelOrFileName === 'clean' || levelOrFileName === 'dag' || levelOrFileName === 'native';
   const level = isLevel ? levelOrFileName : 'clean';
-  const fileName = isLevel ? 'test.gs.ts' : levelOrFileName;
+  const fileName = isLevel ? 'test-gs.ts' : levelOrFileName;
   
   // Create a temporary file
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goodscript-test-'));
@@ -59,7 +59,7 @@ export function compileSource(source: string, levelOrFileName: string = 'clean')
     
     // Generate TypeScript output for testing
     let output: string | undefined;
-    if (fileName.endsWith('.gs.ts') || fileName.endsWith('.gs.tsx') || fileName.endsWith('.gs')) {
+    if (fileName.endsWith('-gs.ts') || fileName.endsWith('-gs.tsx') || fileName.endsWith('.gs')) {
       const parser = new Parser();
       parser.createProgram([filePath], undefined, tsconfigPath);
       const program = parser.getProgram();

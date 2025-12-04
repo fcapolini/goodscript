@@ -1,10 +1,8 @@
 # GoodScript: Go for TypeScript Developers
 
-> **🚧 Alpha State:** GoodScript is currently in active development. The compiler is 100% complete (1169/1169 tests passing) with all core features working. Phase 3 (C++ code generation) is complete! See [Current Status](#7-current-status-december-2025) for details.
+> **🚧 Alpha State:** GoodScript is currently in active development. The compiler is 100% complete (1169/1169 tests passing) with all core features working. Phase 3 (C++ code generation) is complete! Currently working on conformance testing and API development. See [Current Status](#7-current-status-december-2025) for details.
 
-**For:** TypeScript developers who want Go's deployment benefits without learning a new language
-
-**Value Proposition:** Get everything you love about Go (single binaries, cross-compilation, fast performance) while writing TypeScript. **No new syntax to learn** - just avoid JavaScript's "bad parts" and compile to native.
+Get everything you love about Go (single binaries, cross-compilation, fast performance) while writing TypeScript. **No new syntax to learn** - just avoid JavaScript's "bad parts" and compile to native.
 
 ---
 
@@ -16,7 +14,7 @@
 
 TypeScript developers typically consider Go for:
 - ✅ Single binary deployment
-- ✅ Cross-platform compilation  
+- ✅ Cross-platform native compilation  
 - ✅ Fast startup and performance
 - ✅ Better than Node.js for CLIs and servers
 
@@ -36,8 +34,7 @@ TypeScript developers typically consider Go for:
 ✅ **Fast startup & performance** - Compiled, not JIT  
 ✅ **TypeScript syntax** - Classes, interfaces, async/await you already know  
 ✅ **Familiar patterns** - Object-oriented + functional, your choice
-
-**Yes, you'll learn new libraries** (like you would with Go), but **you skip learning a new language**.
+✅ **Reuse JS knowledge** - Mostly Web APIs with a few Node.js additions
 
 ### Two Compilation Modes
 
@@ -46,8 +43,9 @@ TypeScript developers typically consider Go for:
    - Automatic garbage collection
    - Perfect for CLIs, APIs, data processing
 
-2. **Ownership Mode** (advanced - like Rust, simpler)
+2. **Ownership Mode** (advanced - like Rust, but simpler)
    - Optional: Add ownership types for zero-GC
+   - Fully deterministic memory handling (no random GC latencies)
    - For embedded/real-time systems
 
 > GoodScript's name is inspired by Douglas Crockford's "JavaScript: The Good Parts" - write better code by avoiding the dangerous features.
@@ -136,8 +134,8 @@ GoodScript supports **two modes of execution** and **two memory management strat
 
 ### **2.1 TypeScript Runtime Mode**
 
-* `.gs.ts` files are valid TypeScript.
-* Run directly in Node.js or Deno.
+* `-gs.ts` files are valid TypeScript.
+* Run directly in Node.js, Deno, or Bun.
 * Use standard TS tooling: type checking, linters, editors.
 * Rapid development and testing without transpiling to native code.
 
@@ -156,7 +154,7 @@ GoodScript offers two compilation modes for native C++ targets:
 
 #### **Ownership Mode** (default - deterministic memory management)
 
-* Transpile `.gs.ts` to **C++20** with smart pointer-based ownership.
+* Transpile `-gs.ts` to **C++20** with smart pointer-based ownership.
 * Ownership qualifiers map to optimized C++ smart pointers:
 
   * `own<T>` → `std::unique_ptr<T>`
@@ -174,10 +172,10 @@ GoodScript offers two compilation modes for native C++ targets:
 
 ```bash
 # GC mode (no ownership annotations required)
-gsc -t native -m gc -o dist src/main.gs.ts
+gsc -t native -m gc -o dist src/main-gs.ts
 
 # Ownership mode (requires ownership annotations)
-gsc -t native -m ownership -o dist src/main.gs.ts  # or just -t native
+gsc -t native -m ownership -o dist src/main-gs.ts  # or just -t native
 ```
 * **Runtime Library**: TypeScript-compatible wrapper classes (`gs::String`, `gs::Array<T>`, `gs::Map<K,V>`, etc.)
   - Header-only, zero-overhead wrappers around C++ STL
@@ -274,7 +272,7 @@ console.log(`Files: ${fc.count}`);
 GOOS=linux GOARCH=amd64 go build -o myapp
 
 # GoodScript  
-gsc -t native -b -a x86_64-linux -o myapp src/main.gs.ts
+gsc -t native -b -a x86_64-linux -o myapp src/main-gs.ts
 
 # Both produce single binaries you can deploy anywhere
 scp myapp user@server:/usr/local/bin/
@@ -303,11 +301,11 @@ scp myapp user@server:/usr/local/bin/
 
 ### **VSCode Extension**
 
-* Supports `.gs.ts` files.
+* Supports `-gs.ts` files.
 * Provides:
 
   * **Validation of GoodScript constraints** (no dynamic features, ownership qualifiers).
-  * **Syntax highlighting** and IntelliSense for `.gs.ts` files.
+  * **Syntax highlighting** and IntelliSense for `-gs.ts` files.
   * **Real-time feedback** on memory-safety rules and DAG enforcement.
 * Enables **fast feedback loop** during development while keeping code valid TypeScript.
 
@@ -356,19 +354,19 @@ sudo dnf install pcre2-devel
 
 ```bash
 # Compile to JavaScript (TypeScript mode)
-gsc -o dist src/main.gs.ts
+gsc -o dist src/main-gs.ts
 
 # Generate C++ source
-gsc -t native -o dist src/main.gs.ts
+gsc -t native -o dist src/main-gs.ts
 
 # Compile to native binary
-gsc -t native -b -o dist src/main.gs.ts
+gsc -t native -b -o dist src/main-gs.ts
 
 # Cross-compile to Linux
-gsc -t native -b -a x86_64-linux -o dist src/main.gs.ts
+gsc -t native -b -a x86_64-linux -o dist src/main-gs.ts
 
 # Cross-compile to WebAssembly
-gsc -t native -b -a wasm32-wasi -o dist src/main.gs.ts
+gsc -t native -b -a wasm32-wasi -o dist src/main-gs.ts
 ```
 
 ---
@@ -410,7 +408,7 @@ gsc -t native -b -a wasm32-wasi -o dist src/main.gs.ts
 ### GC Mode (No Annotations Needed)
 
 ```ts
-// cli-tool.gs.ts - A simple file counter
+// cli-tool-gs.ts - A simple file counter
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -438,16 +436,16 @@ console.log(`Total files: ${countFiles(directory)}`);
 
 ```bash
 # Develop in Node.js
-node cli-tool.gs.ts /path/to/project
+node cli-tool-gs.ts /path/to/project
 
 # Compile to standalone binary (5MB)
-gsc -t native -b -o dist/filecount cli-tool.gs.ts
+gsc -t native -b -o dist/filecount cli-tool-gs.ts
 
 # Distribute single file - runs anywhere, no Node.js needed!
 ./dist/filecount /path/to/project
 
 # Cross-compile for Linux from your Mac
-gsc -t native -b -a x86_64-linux -o dist/filecount-linux cli-tool.gs.ts
+gsc -t native -b -a x86_64-linux -o dist/filecount-linux cli-tool-gs.ts
 
 # Now you have a Linux binary - copy and run on any Linux server
 ```
@@ -455,7 +453,7 @@ gsc -t native -b -a x86_64-linux -o dist/filecount-linux cli-tool.gs.ts
 ### Ownership Mode (Advanced)
 
 ```ts
-// tree.gs.ts - zero-GC tree structure
+// tree-gs.ts - zero-GC tree structure
 declare type own<T> = T;
 declare type use<T> = T | null | undefined;
 

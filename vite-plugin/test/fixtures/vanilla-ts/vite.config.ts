@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [
     goodscript({
       level: 'clean',
-      include: ['**/*.gs.ts']
+      include: ['**/*-gs.ts']
     })
   ]
 });

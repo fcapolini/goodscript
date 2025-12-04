@@ -32,7 +32,7 @@ export interface CompileResult {
   success: boolean;
   diagnostics: Diagnostic[];
   fileStats?: {
-    goodscript: number;  // Count of .gs.ts files
+    goodscript: number;  // Count of -gs.ts files
     typescript: number;  // Count of .ts files
     total: number;
   };
@@ -57,7 +57,7 @@ export class Compiler {
    * Determine if a file is a GoodScript file based on extension
    */
   private isGoodScriptFile(fileName: string): boolean {
-    return fileName.endsWith('.gs.ts') || fileName.endsWith('.gs.tsx') || fileName.endsWith('.gs');
+    return fileName.endsWith('-gs.ts') || fileName.endsWith('-gs.tsx') || fileName.endsWith('.gs');
   }
 
   /**
@@ -96,6 +96,11 @@ export class Compiler {
     // - 'native': full validation (Phase 3)
     const shouldAnalyzeOwnership = level === 'dag' || level === 'native';
     const effectiveSkipOwnership = explicitSkipOwnership ?? !shouldAnalyzeOwnership;
+
+    // Determine output directory
+    // Priority: CLI option > tsconfig.json > default 'dist'
+    const compilerOptions = this.parser.getCompilerOptions();
+    const effectiveOutDir = options.outDir || compilerOptions.outDir || 'dist';
 
     // Get TypeScript diagnostics
     const tsDiagnostics = ts.getPreEmitDiagnostics(program);
@@ -190,26 +195,28 @@ export class Compiler {
       if (target === 'native') {
         return d.code === 'TS2307' ||  // Module not found
                d.code === 'TS2792' ||  // Cannot find module (ESM)
-               d.code === 'TS2305';    // Module has no exported member
+               d.code === 'TS2305' ||  // Module has no exported member
+               d.code === 'TS2584' ||  // Cannot find name 'console' (C++ has its own)
+               d.code === 'TS2318';    // Cannot find global type (Array, String, etc. - C++ has its own)
       }
       
       return false;
     };
     
-    const shouldEmit = options.outDir && (!hasErrors || allDiagnostics.every(isAllowedError));
+    const shouldEmit = effectiveOutDir && (!hasErrors || allDiagnostics.every(isAllowedError));
     
-    if (shouldEmit && options.outDir) {
+    if (shouldEmit) {
       const emit = options.emit || 'js';  // Default to JS output
       
       if (target === 'typescript') {
-        const tsDiagnostics = this.emitTypeScript(program, options.outDir, emit);
+        const tsDiagnostics = this.emitTypeScript(program, effectiveOutDir, emit);
         // Add TypeScript→JavaScript compilation errors
         allDiagnostics.push(...tsDiagnostics);
       } else if (target === 'native') {
         try {
           // Automatically use ownership mode when compiling to binary, since GC mode requires MPS
           const mode = options.compileBinary && !options.mode ? 'ownership' : (options.mode || 'gc');
-          this.emitCpp(program, options.outDir, mode, options.compileBinary, options.arch);
+          this.emitCpp(program, effectiveOutDir, mode, options.compileBinary, options.arch);
         } catch (error: any) {
           allDiagnostics.push({
             severity: 'error',
@@ -285,13 +292,9 @@ export class Compiler {
           // Compute relative path from root directory
           const relativePath = path.relative(rootDir, sourceFilePath);
           
-          // Convert .gs.ts or .gs to .ts extension
-          let outputPath = relativePath;
-          if (outputPath.endsWith('.gs.ts')) {
-            outputPath = outputPath.slice(0, -6) + '.ts';  // .gs.ts -> .ts
-          } else if (outputPath.endsWith('.gs')) {
-            outputPath = outputPath.slice(0, -3) + '.ts';  // .gs -> .ts
-          }
+          // For TS emit, keep -gs.ts extension so imports between files work
+          // For JS emit, we'll rename when compiling TS→JS
+          const outputPath = relativePath;
           
           const tsPath = path.join(outDir, outputPath);
           
@@ -403,6 +406,30 @@ export class Compiler {
     const jsProgram = ts.createProgram(tsFiles, compilerOptions, host);
     const emitResult = jsProgram.emit();
 
+    // Rename -gs.js files to .js (remove -gs suffix from compiled JavaScript)
+    for (const tsFile of tsFiles) {
+      if (tsFile.endsWith('-gs.ts')) {
+        // Calculate the relative path from rootDir to the source file
+        const relativePath = path.relative(rootDir, tsFile);
+        const relativeDir = path.dirname(relativePath);
+        const baseName = path.basename(tsFile, '-gs.ts');
+        
+        // Construct paths in the outDir
+        const jsFilePath = path.join(outDir, relativeDir, baseName + '-gs.js');
+        const targetJsPath = path.join(outDir, relativeDir, baseName + '.js');
+        if (fs.existsSync(jsFilePath)) {
+          fs.renameSync(jsFilePath, targetJsPath);
+        }
+        
+        // Also handle .d.ts files if they exist
+        const dtsFilePath = path.join(outDir, relativeDir, baseName + '-gs.d.ts');
+        const targetDtsPath = path.join(outDir, relativeDir, baseName + '.d.ts');
+        if (fs.existsSync(dtsFilePath)) {
+          fs.renameSync(dtsFilePath, targetDtsPath);
+        }
+      }
+    }
+
     // Check for compilation errors
     const jsDiagnostics = ts.getPreEmitDiagnostics(jsProgram).concat(emitResult.diagnostics);
     
@@ -462,14 +489,14 @@ export class Compiler {
     if (isGcMode) {
       throw new Error(
         'GC mode binary compilation is experimental and requires manual MPS library setup.\n' +
-        'The Memory Pool System (MPS) library must be built and linked separately.\n' +
-        '\n' +
-        'For now, please use ownership mode (default) for binary compilation:\n' +
-        '  gsc -t native -b -o dist main.gs.ts\n' +
-        '\n' +
-        'Or generate GC-mode C++ source only (without -b flag):\n' +
-        '  gsc -t native -m gc -o dist main.gs.ts\n' +
-        '\n' +
+        'The Memory Pool System (MPS) library must be built and linked separately.\\n' +
+        '\\n' +
+        'For now, please use ownership mode (default) for binary compilation:\\n' +
+        '  gsc -t native -b -o dist main-gs.ts\\n' +
+        '\\n' +
+        'Or generate GC-mode C++ source only (without -b flag):\\n' +
+        '  gsc -t native -m gc -o dist main-gs.ts\\n' +
+        '\\n' +
         'Full GC mode support with automated MPS integration is coming in a future release.'
       );
     }
@@ -544,12 +571,12 @@ export class Compiler {
         // Compute relative path from root directory
         const relativePath = path.relative(rootDir, sourceFilePath);
         
-        // Convert .gs.ts or .gs to .cpp extension
+        // Convert -gs.ts or .gs to .cpp extension
         let outputPath = relativePath;
-        if (outputPath.endsWith('.gs.ts')) {
-          outputPath = outputPath.slice(0, -6) + '.cpp';  // .gs.ts -> .cpp
-        } else if (outputPath.endsWith('.gs.tsx')) {
-          outputPath = outputPath.slice(0, -7) + '.cpp';  // .gs.tsx -> .cpp
+        if (outputPath.endsWith('-gs.ts')) {
+          outputPath = outputPath.slice(0, -6) + '.cpp';  // -gs.ts -> .cpp
+        } else if (outputPath.endsWith('-gs.tsx')) {
+          outputPath = outputPath.slice(0, -7) + '.cpp';  // -gs.tsx -> .cpp
         } else if (outputPath.endsWith('.gs')) {
           outputPath = outputPath.slice(0, -3) + '.cpp';  // .gs -> .cpp
         }

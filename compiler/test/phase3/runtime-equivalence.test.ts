@@ -28,7 +28,7 @@ describe('Phase 3 - Runtime Equivalence Tests', () => {
     nativeResult: ReturnType<typeof executeGcCpp>;
     equivalent: boolean;
   } => {
-    const srcFile = join(tmpDir, 'test.gs.ts');
+    const srcFile = join(tmpDir, 'test-gs.ts');
     const outDir = join(tmpDir, 'dist');
     
     writeFileSync(srcFile, source, 'utf-8');

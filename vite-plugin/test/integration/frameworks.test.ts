@@ -15,7 +15,7 @@ describe('Integration: React App', () => {
     }
   });
 
-  it('should build React app with .gs.tsx files', async () => {
+  it('should build React app with -gs.tsx files', async () => {
     const config: InlineConfig = {
       root: fixtureDir,
       build: {
@@ -74,7 +74,7 @@ describe('Integration: Vue App', () => {
     }
   });
 
-  it('should build Vue app with .gs.ts utility files', async () => {
+  it('should build Vue app with -gs.ts utility files', async () => {
     const config: InlineConfig = {
       root: fixtureDir,
       build: {
