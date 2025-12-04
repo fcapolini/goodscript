@@ -37,7 +37,7 @@ This document serves as a **defensive publication**. The innovations described h
 ### 1.5 Pragmatic Suffix Strategy
 
 - `-gc.ts` suffix maintains TypeScript tooling compatibility while enabling GoodScript specific tooling.
-- Aligns with conventions (`.[test.ts](https://test.ts/)`, `.[spec.ts](https://spec.ts/)`).
+- Aligns with conventions (`.test.ts`, `.spec.ts`).
 - Cleaner than double extensions.
 
 ---
