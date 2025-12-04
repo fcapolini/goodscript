@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import Button from './Button.gs';
+import Button from './Button-gs';
 
 const App = () => {
   const [count, setCount] = useState(0);

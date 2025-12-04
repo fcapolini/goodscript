@@ -21,8 +21,8 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.languages.registerCodeActionsProvider(
       [
-        { scheme: 'file', pattern: '**/*.gs.ts' },
-        { scheme: 'file', pattern: '**/*.gs.tsx' }
+        { scheme: 'file', pattern: '**/*-gs.ts' },
+        { scheme: 'file', pattern: '**/*-gs.tsx' }
       ],
       new GoodScriptCodeActionProvider(),
       {
@@ -96,7 +96,7 @@ export function deactivate() {
 }
 
 function isGoodScriptFile(document: vscode.TextDocument): boolean {
-  return document.fileName.endsWith('.gs.ts') || document.fileName.endsWith('.gs.tsx');
+  return document.fileName.endsWith('-gs.ts') || document.fileName.endsWith('-gs.tsx');
 }
 
 async function validateDocument(document: vscode.TextDocument): Promise<void> {
@@ -486,8 +486,8 @@ function ensureTypeScriptConfiguration(context: vscode.ExtensionContext) {
       continue;
     }
 
-    // Check if workspace has any .gs.ts files
-    vscode.workspace.findFiles('**/*.gs.ts', '**/node_modules/**', 1).then((files) => {
+    // Check if workspace has any -gs.ts files
+    vscode.workspace.findFiles('**/*-gs.ts', '**/node_modules/**', 1).then((files) => {
       if (files.length > 0) {
         try {
           const config = {
@@ -498,7 +498,7 @@ function ensureTypeScriptConfiguration(context: vscode.ExtensionContext) {
               strict: true,
               skipLibCheck: true
             },
-            include: ['**/*.gs.ts', '**/*.ts']
+            include: ['**/*-gs.ts', '**/*.ts']
           };
           
           fs.writeFileSync(tsconfigPath, JSON.stringify(config, null, 2));

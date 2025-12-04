@@ -151,7 +151,7 @@ module.exports = {
   module: {
     rules: [
       {
-        test: /\.gs\.tsx?$/,
+        test: /-gs\.tsx?$/,
         use: 'goodscript-loader',
         exclude: /node_modules/
       }
