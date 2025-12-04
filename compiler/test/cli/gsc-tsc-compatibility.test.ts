@@ -266,6 +266,20 @@ describe('CLI: gsc as tsc drop-in replacement', () => {
       const gsFile = path.join(tmpDir, 'strict-gs.ts');
       const outDir = path.join(tmpDir, 'dist');
       
+      // Create tsconfig.json with level: 1 to enable validation
+      fs.writeFileSync(
+        path.join(tmpDir, 'tsconfig.json'),
+        JSON.stringify({
+          compilerOptions: {
+            target: 'ES2020',
+            module: 'commonjs'
+          },
+          goodscript: {
+            level: 1  // Enable Phase 1 validation
+          }
+        }, null, 2)
+      );
+      
       fs.writeFileSync(gsFile, `
         var x = 42;  // Should fail with GS105
         export { x };
