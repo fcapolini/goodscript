@@ -1,0 +1,32 @@
+{
+  "name": "@goodscript/stdlib",
+  "version": "0.1.0",
+  "description": "GoodScript Standard Library - Translated from Dart",
+  "private": true,
+  "workspaces": [
+    "collection",
+    "quiver",
+    "crypto",
+    "http"
+  ],
+  "scripts": {
+    "test:triple": "node test-runner.ts",
+    "test:all": "npm run test:triple -- ./collection && npm run test:triple -- ./quiver",
+    "build:all": "npm run build -ws",
+    "clean": "rm -rf */dist */*.tsbuildinfo"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "keywords": [
+    "goodscript",
+    "stdlib",
+    "dart",
+    "collections",
+    "native",
+    "compilation"
+  ],
+  "license": "BSD-3-Clause"
+}

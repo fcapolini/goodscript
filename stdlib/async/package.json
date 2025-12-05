@@ -1,0 +1,21 @@
+{
+  "name": "@goodscript/async",
+  "version": "0.1.0",
+  "description": "GoodScript async utilities",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8",
+    "typescript": "^5.7.2"
+  },
+  "keywords": [
+    "goodscript",
+    "async",
+    "promises"
+  ],
+  "author": "GoodScript Contributors",
+  "license": "MIT"
+}

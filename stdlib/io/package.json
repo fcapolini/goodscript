@@ -1,0 +1,21 @@
+{
+  "name": "@goodscript/io",
+  "version": "0.1.0",
+  "description": "GoodScript I/O libraries",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8",
+    "typescript": "^5.7.2"
+  },
+  "keywords": [
+    "goodscript",
+    "io",
+    "files"
+  ],
+  "author": "GoodScript Contributors",
+  "license": "MIT"
+}

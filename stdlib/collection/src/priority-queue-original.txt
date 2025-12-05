@@ -1,0 +1,474 @@
+// Translated from Dart's collection package
+// Original: https://github.com/dart-lang/collection/blob/master/lib/src/priority_queue.dart
+// Copyright (c) 2014, the Dart project authors. BSD-style license.
+
+/**
+ * A priority queue is a priority based work-list of elements.
+ * 
+ * The queue allows adding elements, and removing them again in priority order.
+ * The same object can be added to the queue more than once.
+ * 
+ * There is no specified ordering for objects with the same priority
+ * (where the comparison function returns zero).
+ */
+export interface PriorityQueue<E> {
+  /** Number of elements in the queue. */
+  readonly length: number;
+  
+  /** Whether the queue is empty. */
+  readonly isEmpty: boolean;
+  
+  /** Whether the queue has any elements. */
+  readonly isNotEmpty: boolean;
+  
+  /**
+   * Checks if object is in the queue.
+   * Returns true if the element is found.
+   */
+  contains(object: E): boolean;
+  
+  /**
+   * Provides efficient access to all the elements currently in the queue.
+   * The elements are iterated in no particular order.
+   */
+  readonly unorderedElements: Iterable<E>;
+  
+  /**
+   * Adds element to the queue.
+   * The element will become the next to be removed by removeFirst()
+   * when all elements with higher priority have been removed.
+   */
+  add(element: E): void;
+  
+  /** Adds all elements to the queue. */
+  addAll(elements: Iterable<E>): void;
+  
+  /**
+   * Returns the next element that will be returned by removeFirst().
+   * The element is not removed from the queue.
+   * The queue must not be empty when this method is called.
+   */
+  readonly first: E;
+  
+  /**
+   * Removes and returns the element with the highest priority.
+   * The queue must not be empty when this method is called.
+   */
+  removeFirst(): E;
+  
+  /**
+   * Removes an element of the queue that compares equal to element.
+   * Returns true if an element is found and removed,
+   * and false if no equal element is found.
+   */
+  remove(element: E): boolean;
+  
+  /** Removes all the elements from this queue and returns them. */
+  removeAll(): Iterable<E>;
+  
+  /** Removes all the elements from this queue. */
+  clear(): void;
+  
+  /**
+   * Returns a list of the elements of this queue in priority order.
+   * The queue is not modified.
+   */
+  toList(): E[];
+  
+  /**
+   * Returns a list of the elements of this queue in no specific order.
+   * The queue is not modified.
+   */
+  toUnorderedList(): E[];
+  
+  /**
+   * Return a set using the comparator of this queue.
+   * The queue is not modified.
+   */
+  toSet(): Set<E>;
+}
+
+/**
+ * Heap based priority queue.
+ * 
+ * The elements are kept in a heap structure,
+ * where the element with the highest priority is immediately accessible,
+ * and modifying a single element takes logarithmic time in the number
+ * of elements on average.
+ * 
+ * - The add() and removeFirst() operations take amortized logarithmic time, O(log(n))
+ * - The first getter takes constant time, O(1)
+ * - The clear() and removeAll() methods also take constant time, O(1)
+ * - The contains() and remove() operations may need to search the entire queue, taking O(n) time
+ * - The toList() operation effectively sorts the elements, taking O(n*log(n)) time
+ */
+export class HeapPriorityQueue<E> implements PriorityQueue<E> {
+  /** Initial capacity of a queue when created, or when added to after a clear. */
+  private static readonly INITIAL_CAPACITY = 7;
+  
+  /** The comparison being used to compare the priority of elements. */
+  private readonly comparison: (a: E, b: E) => number;
+  
+  /** List implementation of a heap. */
+  private queue: (E | null)[];
+  
+  /** Number of elements in queue. */
+  private _length: number = 0;
+  
+  /** Modification count. Used to detect concurrent modifications during iteration. */
+  private modificationCount: number = 0;
+  
+  /**
+   * Create a new priority queue.
+   * 
+   * The comparison is a comparator used to compare the priority of elements.
+   * An element that compares as less than another element has a higher priority.
+   * 
+   * If comparison is omitted, it defaults to natural ordering for numbers/strings.
+   */
+  constructor(comparison?: (a: E, b: E) => number) {
+    this.comparison = comparison ?? HeapPriorityQueue.defaultCompare;
+    this.queue = new Array(HeapPriorityQueue.INITIAL_CAPACITY).fill(null);
+  }
+  
+  /**
+   * Default comparison function for comparable types.
+   */
+  private static defaultCompare<T>(a: T, b: T): number {
+    // For numbers
+    if (typeof a === 'number' && typeof b === 'number') {
+      return a - b;
+    }
+    // For strings
+    if (typeof a === 'string' && typeof b === 'string') {
+      return a < b ? -1 : a > b ? 1 : 0;
+    }
+    // Generic fallback (requires toString or similar)
+    const aStr = String(a);
+    const bStr = String(b);
+    return aStr < bStr ? -1 : aStr > bStr ? 1 : 0;
+  }
+  
+  private elementAt(index: number): E {
+    const elem = this.queue[index];
+    if (elem === null) {
+      throw new Error('Null element in queue');
+    }
+    return elem;
+  }
+  
+  add(element: E): void {
+    this.modificationCount++;
+    this.addInternal(element);
+  }
+  
+  addAll(elements: Iterable<E>): void {
+    let modified = 0;
+    for (const element of elements) {
+      modified = 1;
+      this.addInternal(element);
+    }
+    this.modificationCount += modified;
+  }
+  
+  clear(): void {
+    this.modificationCount++;
+    this.queue = [];
+    this._length = 0;
+  }
+  
+  contains(object: E): boolean {
+    return this.locate(object) >= 0;
+  }
+  
+  get unorderedElements(): Iterable<E> {
+    return new UnorderedElementsIterable(this);
+  }
+  
+  get first(): E {
+    if (this._length === 0) {
+      throw new Error('No element');
+    }
+    return this.elementAt(0);
+  }
+  
+  get isEmpty(): boolean {
+    return this._length === 0;
+  }
+  
+  get isNotEmpty(): boolean {
+    return this._length !== 0;
+  }
+  
+  get length(): number {
+    return this._length;
+  }
+  
+  remove(element: E): boolean {
+    const index = this.locate(element);
+    if (index < 0) return false;
+    
+    this.modificationCount++;
+    const last = this.removeLast();
+    if (index < this._length) {
+      const comp = this.comparison(last, element);
+      if (comp <= 0) {
+        this.bubbleUp(last, index);
+      } else {
+        this.bubbleDown(last, index);
+      }
+    }
+    return true;
+  }
+  
+  removeAll(): Iterable<E> {
+    this.modificationCount++;
+    const result = this.queue;
+    const length = this._length;
+    this.queue = [];
+    this._length = 0;
+    
+    // Return only the valid elements (first 'length' items)
+    const validElements: E[] = [];
+    for (let i = 0; i < length; i++) {
+      const elem = result[i];
+      if (elem !== null) {
+        validElements.push(elem);
+      }
+    }
+    return validElements;
+  }
+  
+  removeFirst(): E {
+    if (this._length === 0) {
+      throw new Error('No element');
+    }
+    this.modificationCount++;
+    const result = this.elementAt(0);
+    const last = this.removeLast();
+    if (this._length > 0) {
+      this.bubbleDown(last, 0);
+    }
+    return result;
+  }
+  
+  toList(): E[] {
+    return this.toUnorderedListInternal().sort(this.comparison);
+  }
+  
+  toSet(): Set<E> {
+    const set = new Set<E>();
+    for (let i = 0; i < this._length; i++) {
+      set.add(this.elementAt(i));
+    }
+    return set;
+  }
+  
+  toUnorderedList(): E[] {
+    return this.toUnorderedListInternal();
+  }
+  
+  private toUnorderedListInternal(): E[] {
+    const result: E[] = [];
+    for (let i = 0; i < this._length; i++) {
+      result.push(this.elementAt(i));
+    }
+    return result;
+  }
+  
+  toString(): string {
+    return `[${this.toUnorderedList().join(', ')}]`;
+  }
+  
+  /**
+   * Add element to the queue.
+   * Grows the capacity if the backing list is full.
+   */
+  private addInternal(element: E): void {
+    if (this._length === this.queue.length) {
+      this.grow();
+    }
+    this.bubbleUp(element, this._length++);
+  }
+  
+  /**
+   * Find the index of an object in the heap.
+   * Returns -1 if the object is not found.
+   */
+  private locate(object: E): number {
+    if (this._length === 0) return -1;
+    
+    // Count positions from one instead of zero. This gives the numbers
+    // some nice properties. For example, all right children are odd,
+    // their left sibling is even, and the parent is found by shifting
+    // right by one.
+    // Valid range for position is [1.._length], inclusive.
+    let position = 1;
+    
+    // Pre-order depth first search, omit child nodes if the current
+    // node has lower priority than [object], because all nodes lower
+    // in the heap will also have lower priority.
+    do {
+      const index = position - 1;
+      const element = this.elementAt(index);
+      const comp = this.comparison(element, object);
+      
+      if (comp <= 0) {
+        if (comp === 0 && element === object) return index;
+        
+        // Element may be in subtree.
+        // Continue with the left child, if it is there.
+        const leftChildPosition = position * 2;
+        if (leftChildPosition <= this._length) {
+          position = leftChildPosition;
+          continue;
+        }
+      }
+      
+      // Find the next right sibling or right ancestor sibling.
+      do {
+        while ((position & 1) === 1) { // position is odd (isOdd)
+          // While position is a right child, go to the parent.
+          position >>= 1;
+        }
+        // Then go to the right sibling of the left-child.
+        position += 1;
+      } while (position > this._length); // Happens if last element is a left child.
+    } while (position !== 1); // At root again. Happens for right-most element.
+    
+    return -1;
+  }
+  
+  private removeLast(): E {
+    const newLength = this._length - 1;
+    const last = this.elementAt(newLength);
+    this.queue[newLength] = null;
+    this._length = newLength;
+    return last;
+  }
+  
+  /**
+   * Place element in heap at index or above.
+   * Put element into the empty cell at index.
+   * While the element has higher priority than the parent, swap it with the parent.
+   */
+  private bubbleUp(element: E, index: number): void {
+    while (index > 0) {
+      const parentIndex = (index - 1) >> 1; // Integer division by 2
+      const parent = this.elementAt(parentIndex);
+      if (this.comparison(element, parent) > 0) break;
+      this.queue[index] = parent;
+      index = parentIndex;
+    }
+    this.queue[index] = element;
+  }
+  
+  /**
+   * Place element in heap at index or below.
+   * Put element into the empty cell at index.
+   * While the element has lower priority than either child,
+   * swap it with the highest priority child.
+   */
+  private bubbleDown(element: E, index: number): void {
+    let rightChildIndex = index * 2 + 2;
+    
+    while (rightChildIndex < this._length) {
+      const leftChildIndex = rightChildIndex - 1;
+      const leftChild = this.elementAt(leftChildIndex);
+      const rightChild = this.elementAt(rightChildIndex);
+      const comp = this.comparison(leftChild, rightChild);
+      
+      let minChildIndex: number;
+      let minChild: E;
+      if (comp < 0) {
+        minChild = leftChild;
+        minChildIndex = leftChildIndex;
+      } else {
+        minChild = rightChild;
+        minChildIndex = rightChildIndex;
+      }
+      
+      const elemComp = this.comparison(element, minChild);
+      if (elemComp <= 0) {
+        this.queue[index] = element;
+        return;
+      }
+      
+      this.queue[index] = minChild;
+      index = minChildIndex;
+      rightChildIndex = index * 2 + 2;
+    }
+    
+    const leftChildIndex = rightChildIndex - 1;
+    if (leftChildIndex < this._length) {
+      const child = this.elementAt(leftChildIndex);
+      const comp = this.comparison(element, child);
+      if (comp > 0) {
+        this.queue[index] = child;
+        index = leftChildIndex;
+      }
+    }
+    this.queue[index] = element;
+  }
+  
+  /**
+   * Grows the capacity of the list holding the heap.
+   * Called when the list is full.
+   */
+  private grow(): void {
+    let newCapacity = this.queue.length * 2 + 1;
+    if (newCapacity < HeapPriorityQueue.INITIAL_CAPACITY) {
+      newCapacity = HeapPriorityQueue.INITIAL_CAPACITY;
+    }
+    const newQueue: (E | null)[] = new Array(newCapacity).fill(null);
+    // Copy existing elements
+    for (let i = 0; i < this._length; i++) {
+      newQueue[i] = this.queue[i];
+    }
+    this.queue = newQueue;
+  }
+}
+
+/**
+ * Implementation of unordered elements iteration.
+ */
+class UnorderedElementsIterable<E> implements Iterable<E> {
+  constructor(private readonly queue: HeapPriorityQueue<E>) {}
+  
+  [Symbol.iterator](): Iterator<E> {
+    return new UnorderedElementsIterator(this.queue);
+  }
+}
+
+/**
+ * Iterator for unordered elements.
+ */
+class UnorderedElementsIterator<E> implements Iterator<E> {
+  private readonly initialModificationCount: number;
+  private current: E | undefined;
+  private index: number = -1;
+  
+  constructor(private readonly queue: HeapPriorityQueue<E>) {
+    this.initialModificationCount = (queue as any).modificationCount;
+  }
+  
+  next(): IteratorResult<E> {
+    if (this.initialModificationCount !== (this.queue as any).modificationCount) {
+      throw new Error('Concurrent modification');
+    }
+    
+    const nextIndex = this.index + 1;
+    if (nextIndex >= 0 && nextIndex < this.queue.length) {
+      const elem = (this.queue as any).queue[nextIndex];
+      if (elem !== null) {
+        this.current = elem;
+        this.index = nextIndex;
+        return { value: elem, done: false };
+      }
+    }
+    
+    this.current = undefined;
+    this.index = -2;
+    return { value: undefined as any, done: true };
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@goodscript/collection",
+  "version": "0.1.0",
+  "description": "Collection utilities for GoodScript (translated from Dart)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest",
+    "test:triple": "node ../test-runner.ts ."
+  },
+  "keywords": [
+    "goodscript",
+    "collections",
+    "priority-queue",
+    "heap",
+    "data-structures"
+  ],
+  "license": "BSD-3-Clause",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

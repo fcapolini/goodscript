@@ -62,10 +62,231 @@ GoodScript is a **TypeScript specialization** for native compilation, positioned
 - **Key files**: `conformance-tsc/src/harness/`, `conformance-tsc/src/suites/`
 - **Documentation**: `conformance-tsc/README.md`, `conformance-tsc/STATUS.md`
 
-### Phase 4: Ecosystem (📋 Planned)
-- Standard library APIs for Node.js/Deno compatibility
-- Module system, package management, deployment
-- **Documentation**: `docs/MINIMAL-STD-LIB.md`, `docs/PHASE-4-ECOSYSTEM.md`
+### Phase 4: Ecosystem (🚀 In Progress - Started Dec 5, 2024)
+- **Standard Library Development**: Porting proven libraries from Dart collection package
+- **Translation Workflow**: AI-assisted translation with triple validation (TypeScript + GoodScript + C++ generation)
+- **Current Progress**: 2 libraries complete (HeapPriorityQueue, QueueList), ~25 more planned
+- **Target**: Complete core stdlib in 1-2 weeks (Dec 5-12, 2024)
+- **Key files**: `stdlib/collection/src/*-gs.ts`, `stdlib/collection/test/*.test.ts`
+- **Documentation**: `stdlib/docs/TRANSLATION-WORKFLOW.md`, `stdlib/docs/reference/*.md`
+
+## Standard Library Translation Workflow
+
+### Overview
+
+GoodScript's stdlib is being built by translating well-tested libraries from Dart's collection package. This provides production-quality data structures with proven algorithms.
+
+**Why Dart?**: Null-safe, well-documented, similar to TypeScript, excellent collection library design.
+
+**Translation Speed**: 5-30 minutes per library with AI assistance and triple validation.
+
+### File Naming Convention
+
+**CRITICAL**: Use `-gs.ts` suffix (NOT `.gs.ts`):
+```
+✅ priority-queue-gs.ts
+❌ priority-queue.gs.ts
+```
+
+This maintains compatibility with TypeScript tooling while clearly marking GoodScript-specific files.
+
+### 8-Step Translation Process
+
+Reference: `stdlib/docs/TRANSLATION-WORKFLOW.md`
+
+1. **Select source**: Choose library from Dart collection package
+2. **Create -gs.ts file**: Translate Dart → TypeScript with GoodScript constraints
+3. **Apply GoodScript constraints**:
+   - No getters/setters → use methods (`getLength()`, `setLength()`)
+   - No iterator protocol → use `toArray()` pattern
+   - No array indexing syntax → use `get(i)`, `set(i, value)`
+   - Explicit null checks (GoodScript is null-safe)
+   - No `any` type
+   - Only `===`/`!==` operators
+   - No type coercion
+4. **Create test file**: Comprehensive tests covering all methods and edge cases
+5. **Run TypeScript tests**: `npm test` - must pass 100%
+6. **Run GoodScript validation**: `node quick-test.js src/library-name-gs.ts`
+   - Phase 1+2 validation
+   - C++ code generation
+7. **Document API**: Create reference doc in `stdlib/docs/reference/ClassName.md`
+8. **Commit**: Clean commit with library + tests + docs
+
+### GoodScript Constraints Reference
+
+When translating, remember these key restrictions:
+
+1. **No getter/setter syntax**: 
+   ```typescript
+   // Dart: queue.length
+   // GoodScript: queue.getLength()
+   ```
+
+2. **No iterator protocol** (Symbol not supported):
+   ```typescript
+   // Dart: for (var item in queue) { ... }
+   // GoodScript: for (const item of queue.toArray()) { ... }
+   ```
+
+3. **No array indexing on custom types**:
+   ```typescript
+   // Dart: queue[i], queue[i] = value
+   // GoodScript: queue.get(i), queue.set(i, value)
+   ```
+
+4. **Explicit null handling**:
+   ```typescript
+   if (value !== null && value !== undefined) { ... }
+   ```
+
+5. **No `any` type**: Use generics or specific types
+
+6. **Only strict equality**: Use `===` and `!==`, never `==` or `!=`
+
+7. **No type coercion**: Explicit conversions only
+
+### Quality Checklist
+
+Before considering a library complete:
+
+- ✅ All TypeScript tests passing
+- ✅ GoodScript Phase 1+2 validation passing
+- ✅ C++ code generation successful (Phase 3)
+- ✅ Reference documentation created
+- ✅ Performance characteristics documented
+- ✅ Edge cases tested (empty, single element, growth)
+- ✅ Differences from Dart original documented
+
+### Testing Strategy
+
+Each library should have comprehensive tests:
+
+```typescript
+describe('ClassName', () => {
+  describe('constructor', () => { /* ... */ });
+  describe('basic operations', () => { /* ... */ });
+  describe('edge cases', () => { 
+    it('handles empty collection', () => { /* ... */ });
+    it('handles single element', () => { /* ... */ });
+    it('handles growth', () => { /* ... */ });
+  });
+  describe('stress test', () => {
+    it('handles 1000+ elements', () => { /* ... */ });
+  });
+});
+```
+
+### Validation Commands
+
+```bash
+# TypeScript tests (from package directory)
+cd stdlib/collection
+npm test
+
+# GoodScript validation (from stdlib directory)
+cd stdlib
+node quick-test.js collection/src/heap-priority-queue-gs.ts
+node quick-test.js collection/src/queue-list-gs.ts
+
+# Both validations (from package directory)
+npm test && cd .. && node quick-test.js collection/src/library-name-gs.ts
+```
+
+### Documentation Structure
+
+```
+stdlib/
+├── collection/                      # @goodscript/collection package
+│   ├── src/
+│   │   ├── heap-priority-queue-gs.ts
+│   │   ├── queue-list-gs.ts
+│   │   └── ...
+│   ├── test/
+│   │   ├── heap-priority-queue.test.ts
+│   │   ├── queue-list.test.ts
+│   │   └── ...
+│   ├── package.json
+│   └── README.md
+├── core/                            # @goodscript/core package (planned)
+├── async/                           # @goodscript/async package (planned)
+├── io/                              # @goodscript/io package (planned)
+├── docs/
+│   ├── TRANSLATION-WORKFLOW.md      # This workflow
+│   ├── FUTURE-IMPROVEMENTS.md       # Deferred features
+│   └── reference/                   # API documentation
+│       ├── collection/              # Collection library docs
+│       │   ├── HeapPriorityQueue.md
+│       │   ├── QueueList.md
+│       │   └── ...
+│       ├── core/                    # Core library docs
+│       ├── async/                   # Async library docs
+│       └── io/                      # I/O library docs
+├── quick-test.js                    # GoodScript validation script
+└── README.md                        # Main stdlib overview
+```
+
+### Common Translation Patterns
+
+**Pattern: Length property → method**
+```typescript
+// Dart
+int get length => _length;
+set length(int value) { ... }
+
+// GoodScript
+getLength(): number { return this._length; }
+setLength(value: number): void { ... }
+```
+
+**Pattern: Iterator → toArray()**
+```typescript
+// Dart
+Iterable<E> get iterator => ...;
+
+// GoodScript
+toArray(): E[] {
+  const result: E[] = [];
+  // ... collect elements
+  return result;
+}
+```
+
+**Pattern: Array indexing → get/set methods**
+```typescript
+// Dart
+E operator[](int index) => ...;
+void operator[]=(int index, E value) { ... }
+
+// GoodScript
+get(index: number): E { ... }
+set(index: number, value: E): void { ... }
+```
+
+### Libraries Completed (as of Dec 5, 2024)
+
+1. ✅ **HeapPriorityQueue** (273 lines, 19 tests) - Min-heap priority queue
+2. ✅ **QueueList** (358 lines, 29 tests) - Double-ended queue with O(1) both ends
+
+### Next Candidate Libraries
+
+From Dart collection package (in priority order):
+
+1. **LinkedHashSet** - Insertion-order hash set
+2. **HashSet** - Standard hash set (if not using built-in Set)
+3. **UnmodifiableListView** - Read-only list wrapper
+4. **ListQueue** - Alternative queue implementation
+5. **LinkedHashMap** - Insertion-order map (Map already built-in)
+6. **SplayTreeSet** - Self-balancing tree set
+7. **SplayTreeMap** - Self-balancing tree map
+
+### Known Limitations (Documented in FUTURE-IMPROVEMENTS.md)
+
+- **Iterator protocol**: Deferred to Phase 4 (Symbol not supported)
+  - **Workaround**: Use `toArray()` pattern
+- **Getter/setter syntax**: Not supported in GoodScript
+  - **Workaround**: Use explicit methods
+- **Array indexing on custom types**: Not supported
+  - **Workaround**: Use `get(i)` and `set(i, value)` methods
 
 ## Critical Design Principles
 
@@ -608,7 +829,7 @@ When implementing new features or fixing bugs:
 7. **Explicit over implicit**: If it can surprise, make it explicit
 8. **Fail early**: Compile-time errors > Runtime errors > Memory corruption
 
-## Current Status (as of Dec 4, 2025)
+## Current Status (as of Dec 5, 2024)
 
 - **Phase 1**: ✅ 100% complete (244/244 tests)
 - **Phase 2**: ✅ 100% complete (425/425 tests)  
@@ -635,19 +856,28 @@ When implementing new features or fixing bugs:
 - **Phase 3.5**: ✅ 100% infrastructure complete (Dec 2, 2024)
   - ✅ TypeScript conformance testing with TSC suite
   - ✅ JavaScript mode: 100% pass rate (17/17 eligible tests)
-  - ✅ Native C++ mode: Infrastructure complete, 1/17 tests passing
+  - ✅ Native C++ mode: 84.4% pass rate (27/32 tests)
   - ✅ MPS library integration (libmps.a)
   - ✅ Method return type inference via TypeChecker API
   - ✅ Type mapping for GC mode (double, bool, gs::String)
   - ✅ Discovered and fixed real codegen bugs
-- **Phase 4**: 📋 Planned
+- **Phase 4**: 🚀 In Progress (Started Dec 5, 2024)
+  - ✅ Translation workflow established and documented
+  - ✅ HeapPriorityQueue (273 lines, 19 tests, all validations passing)
+  - ✅ QueueList (358 lines, 29 tests, all validations passing)
+  - 🚀 **Translation speed**: 5-30 minutes per library with AI assistance
+  - 📋 Target: 20-30 core collection libraries by Dec 12, 2024
 
-**Next priorities**:
-1. **Phase 4 ecosystem development** - Node.js API compatibility (fs, http, path, etc.)
-2. Standard library expansion for GC mode
-3. Package management and build tooling
-4. Migration guides and example projects
-5. Optimize GC performance further (target 2-3x faster than Node.js)
+**Current Focus**:
+1. **Standard library porting sprint** - Translating Dart collection libraries
+   - Proven workflow: Dart source → GoodScript → Triple validation
+   - 2/~25 libraries complete (Day 1)
+   - Target pace: 2-4 libraries per day
+2. Future priorities after stdlib complete:
+   - Node.js API compatibility layers (fs, http, path, etc.)
+   - Package management and build tooling
+   - Migration guides and example projects
+   - GC performance optimization
 
 ---
 
