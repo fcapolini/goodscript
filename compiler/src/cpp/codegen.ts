@@ -27,6 +27,8 @@ export class AstCodegen {
   private interfaceMethods = new Map<string, Set<string>>(); // Map interface name -> set of method names
   private interfaceNames = new Set<string>(); // Track interface/abstract class names
   private hoistedFunctions = new Set<string>(); // Track functions hoisted to namespace scope
+  private hoistedClasses = new Set<string>(); // Track classes hoisted to namespace scope
+  private hoistedConstants = new Map<string, { type: ast.CppType, value: string }>(); // Track module-level constants
   private currentClassName: string | undefined; // Track current class being processed
   private currentTemplateParams: string[] = []; // Track current class template parameters
   private ownershipChecker: OwnershipAwareTypeChecker;
@@ -45,6 +47,33 @@ export class AstCodegen {
     this.interfaceMethods.clear(); // Reset for each file
     this.interfaceNames.clear(); // Reset for each file
     this.hoistedFunctions.clear(); // Reset for each file
+    this.hoistedClasses.clear(); // Reset for each file
+    this.hoistedConstants.clear(); // Reset for each file
+    
+    // FIRST PASS: Collect all top-level declarations (classes, functions, etc.)
+    // This allows forward references to work correctly
+    for (const stmt of sourceFile.statements) {
+      if (ts.isClassDeclaration(stmt) && stmt.name) {
+        this.hoistedClasses.add(cppUtils.escapeName(stmt.name.text));
+      }
+      if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+        this.hoistedFunctions.add(cppUtils.escapeName(stmt.name.text));
+      }
+      // Collect module-level const variables
+      if (ts.isVariableStatement(stmt)) {
+        const declList = stmt.declarationList;
+        if (declList.flags & ts.NodeFlags.Const) {
+          for (const decl of declList.declarations) {
+            if (ts.isIdentifier(decl.name) && decl.initializer) {
+              const name = cppUtils.escapeName(decl.name.text);
+              const type = decl.type ? this.mapType(decl.type) : new ast.CppType('auto');
+              const value = this.visitExpression(decl.initializer);
+              this.hoistedConstants.set(name, { type, value: value.accept({ visitIdentifier: (n: any) => n.name, visitLiteral: (n: any) => n.value } as any) || '0' });
+            }
+          }
+        }
+      }
+    }
     
     // Check if we need cppcoro for async/await
     const hasAsync = this.sourceFileHasAsync(sourceFile);
@@ -57,6 +86,32 @@ export class AstCodegen {
     const declarations: ast.Declaration[] = [];
     const mainStatements: ast.Statement[] = [];
     let gsMainIsAsync = false;
+    
+    // Add module-level constants as namespace-scope const variables
+    for (const [name, {type, value}] of this.hoistedConstants) {
+      const constDecl = `constexpr ${type.toString()} ${name} = ${value};`;
+      declarations.push(new ast.RawDeclaration(constDecl));
+    }
+    
+    // Add forward declarations for all classes (to handle forward references)
+    for (const className of this.hoistedClasses) {
+      // Check if this class has template parameters by finding its declaration
+      const classDecl = sourceFile.statements.find(
+        stmt => ts.isClassDeclaration(stmt) && stmt.name && 
+                cppUtils.escapeName(stmt.name.text) === className
+      ) as ts.ClassDeclaration | undefined;
+      
+      if (classDecl && classDecl.typeParameters) {
+        // Template class forward declaration
+        const templateParams = classDecl.typeParameters.map(tp => tp.name.text);
+        const forwardDecl = `template<${templateParams.map(tp => `typename ${tp}`).join(', ')}>\n  class ${className};`;
+        // Add as a raw declaration
+        declarations.push(new ast.RawDeclaration(forwardDecl));
+      } else {
+        // Non-template class forward declaration
+        declarations.push(new ast.RawDeclaration(`class ${className};`));
+      }
+    }
     
     // Separate declarations from top-level statements
     for (const stmt of sourceFile.statements) {
@@ -105,7 +160,13 @@ export class AstCodegen {
         }
       } else if (ts.isClassDeclaration(stmt)) {
         const cls = this.visitClass(stmt);
-        if (cls) declarations.push(cls);
+        if (cls) {
+          declarations.push(cls);
+          // Track class name for gs:: qualification in references
+          if (stmt.name) {
+            this.hoistedClasses.add(cppUtils.escapeName(stmt.name.text));
+          }
+        }
       } else if (ts.isInterfaceDeclaration(stmt)) {
         const iface = this.visitInterface(stmt);
         if (iface) declarations.push(iface);
@@ -1786,41 +1847,74 @@ export class AstCodegen {
     }
     
     if (ts.isObjectLiteralExpression(node)) {
-      // Object literal: { key: value, ... } → gs::LiteralObject
-      const properties: [ast.Expression, ast.Expression][] = [];
+      // Object literal: { key: value, ... }
+      // Try to infer the target type from context (e.g., Entry<K, V>)
+      let targetTypeName: string | undefined;
+      let isStructInit = false;
+      
+      if (this.checker) {
+        const contextualType = this.checker.getContextualType(node);
+        if (contextualType) {
+          const typeStr = this.checker.typeToString(contextualType);
+          // Check if it's a user-defined interface/struct (not an anonymous type)
+          // Anonymous types look like "{ key: K; value: V; }"
+          // Named types look like "Entry<K, V>"
+          if (!typeStr.startsWith('{') && !typeStr.includes(';')) {
+            // It's a named type - use it for struct initialization
+            targetTypeName = this.mapTypeScriptTypeToCpp(typeStr);
+            isStructInit = true;
+          }
+        }
+      }
+      
+      // Collect property values in order
+      const propertyValues: ast.Expression[] = [];
       
       for (const prop of node.properties) {
         if (ts.isPropertyAssignment(prop)) {
           // Regular property: key: value
-          const keyStr = prop.name.getText();
-          const key = cpp.literal(keyStr);
           const value = this.visitExpression(prop.initializer);
-          // Wrap value in gs::Property
-          const propertyValue = cpp.call(cpp.id('gs::Property'), [value]);
-          properties.push([key, propertyValue]);
+          propertyValues.push(value);
         } else if (ts.isShorthandPropertyAssignment(prop)) {
-          // Shorthand property: { x } → { "x": x }
-          const keyStr = prop.name.getText();
-          const key = cpp.literal(keyStr);
+          // Shorthand property: { x } → use x's value
           const value = this.visitExpression(prop.name);
-          // Wrap value in gs::Property
-          const propertyValue = cpp.call(cpp.id('gs::Property'), [value]);
-          properties.push([key, propertyValue]);
+          propertyValues.push(value);
         }
         // Note: Method declarations, getters, setters not supported yet
       }
       
-      // Generate gs::LiteralObject{ {"key1", Property(val1)}, {"key2", Property(val2)}, ... }
+      if (isStructInit && targetTypeName) {
+        // Generate structured initialization: gs::Entry<K, V>{value1, value2, ...}
+        if (propertyValues.length === 0) {
+          return cpp.id(`${targetTypeName}{}`);
+        }
+        return cpp.call(cpp.id(targetTypeName), [cpp.initList(propertyValues)]);
+      }
+      
+      // Fallback: Use gs::LiteralObject (for untyped object literals)
+      // This is legacy and may not have runtime support
+      const properties: [ast.Expression, ast.Expression][] = [];
+      for (const prop of node.properties) {
+        if (ts.isPropertyAssignment(prop)) {
+          const keyStr = prop.name.getText();
+          const key = cpp.literal(keyStr);
+          const value = this.visitExpression(prop.initializer);
+          const propertyValue = cpp.call(cpp.id('gs::Property'), [value]);
+          properties.push([key, propertyValue]);
+        } else if (ts.isShorthandPropertyAssignment(prop)) {
+          const keyStr = prop.name.getText();
+          const key = cpp.literal(keyStr);
+          const value = this.visitExpression(prop.name);
+          const propertyValue = cpp.call(cpp.id('gs::Property'), [value]);
+          properties.push([key, propertyValue]);
+        }
+      }
+      
       if (properties.length === 0) {
-        // Empty object literal → gs::LiteralObject{}
         return cpp.id('gs::LiteralObject{}');
       }
       
-      // Create nested initializer list for each property
-      const propInits = properties.map(([key, value]) => 
-        cpp.initList([key, value])
-      );
-      
+      const propInits = properties.map(([key, value]) => cpp.initList([key, value]));
       return cpp.call(cpp.id('gs::LiteralObject'), [cpp.initList(propInits)]);
     }
     
@@ -1856,7 +1950,36 @@ export class AstCodegen {
         // Extract element type from type string like "number[]" or "Array<number>"
         if (typeStr.endsWith('[]')) {
           const baseType = typeStr.slice(0, -2);
-          elementType = this.mapTypeScriptTypeToCpp(baseType);
+          // Check if the base type is an anonymous object type { ... }
+          if (baseType.startsWith('{') && baseType.includes(';')) {
+            // Try to get the contextual type which might have the named interface
+            const contextualType = this.checker.getContextualType(node);
+            if (contextualType && (contextualType as any).target) {
+              const typeRef = contextualType as ts.TypeReference;
+              const typeArgs = this.checker.getTypeArguments(typeRef);
+              if (typeArgs && typeArgs.length > 0) {
+                const argStr = this.checker.typeToString(typeArgs[0]);
+                // Check if argStr is a named type (not anonymous)
+                if (!argStr.startsWith('{') && !argStr.includes(';')) {
+                  elementType = this.mapTypeScriptTypeToCpp(argStr);
+                }
+              }
+            }
+            // If we couldn't find a named type, try to infer from first element
+            if (!elementType && elements.length > 0 && node.elements[0] && ts.isObjectLiteralExpression(node.elements[0])) {
+              const firstElem = node.elements[0];
+              const elemContextualType = this.checker.getContextualType(firstElem);
+              if (elemContextualType) {
+                const elemTypeStr = this.checker.typeToString(elemContextualType);
+                if (!elemTypeStr.startsWith('{') && !elemTypeStr.includes(';')) {
+                  elementType = this.mapTypeScriptTypeToCpp(elemTypeStr);
+                }
+              }
+            }
+          } else {
+            // Regular type like "number"
+            elementType = this.mapTypeScriptTypeToCpp(baseType);
+          }
         } else if (typeStr.startsWith('Array<')) {
           const match = typeStr.match(/^Array<(.+)>$/);
           if (match) {
@@ -1888,9 +2011,18 @@ export class AstCodegen {
         }
       }
       
+      // Special case: if element type is 'auto' (from TypeScript 'any'), and we're in a generic class,
+      // use the template parameter with std::optional (common pattern for nullable element arrays)
+      if (elementType === 'auto' && this.templateParameters.size > 0) {
+        // Get the first template parameter (usually 'E' or 'T')
+        const firstParam = Array.from(this.templateParameters)[0];
+        elementType = `std::optional<${firstParam}>`;
+      }
+      
       // Generate gs::Array<T>({...}) with explicit template parameter if we know the type
       // This prevents type inference issues with int vs double literals
-      const arrayType = elementType ? `gs::Array<${elementType}>` : 'gs::Array';
+      // Note: if elementType is still 'auto', omit it (can't use auto as template arg)
+      const arrayType = (elementType && elementType !== 'auto') ? `gs::Array<${elementType}>` : 'gs::Array';
       return cpp.call(cpp.id(arrayType), [cpp.initList(elements)]);
     }
     
@@ -1924,16 +2056,31 @@ export class AstCodegen {
       return this.visitTemplateLiteral(node);
     }
     
+    if (ts.isTypeOfExpression(node)) {
+      // typeof expression: In GoodScript, this is used for runtime type checking
+      // For generic code, we use a helper function gs::type_name<T>()
+      // For template parameters, we use compile-time type traits
+      const expr = this.visitExpression(node.expression);
+      
+      // Generate gs::type_name(expr) which returns a string like "number", "string", etc.
+      return cpp.call(cpp.id('gs::type_name'), [expr]);
+    }
+    
     if (ts.isConditionalExpression(node)) {
       // Ternary operator: condition ? whenTrue : whenFalse
       const condition = this.visitExpression(node.condition);
       let whenTrue = this.visitExpression(node.whenTrue);
       let whenFalse = this.visitExpression(node.whenFalse);
       
+      // Get parent context to check if we're in a return statement
+      const parent = node.parent;
+      const isReturnStatement = parent && ts.isReturnStatement(parent);
+      
       // Special case: For optional parameters, unwrap with .value() when used
       // Pattern: param !== null && param !== undefined ? param : default
       // Should be: param.has_value() ? param.value() : default
-      if (ts.isIdentifier(node.whenTrue)) {
+      // UNLESS we're returning an optional type, then keep it wrapped
+      if (ts.isIdentifier(node.whenTrue) && !isReturnStatement) {
         const varName = cppUtils.escapeName(node.whenTrue.text);
         const varType = this.variableTypes.get(varName);
         if (varType && varType.toString().startsWith('std::optional<')) {
@@ -1941,7 +2088,7 @@ export class AstCodegen {
           whenTrue = cpp.call(cpp.member(whenTrue, 'value'), []);
         }
       }
-      if (ts.isIdentifier(node.whenFalse)) {
+      if (ts.isIdentifier(node.whenFalse) && !isReturnStatement) {
         const varName = cppUtils.escapeName(node.whenFalse.text);
         const varType = this.variableTypes.get(varName);
         if (varType && varType.toString().startsWith('std::optional<')) {
@@ -1975,6 +2122,14 @@ export class AstCodegen {
       
       // C++ has the same ternary syntax
       return cpp.ternary(condition, whenTrue, whenFalse);
+    }
+    
+    if (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node)) {
+      // Type assertion: expr as Type or <Type>expr
+      // In C++, we typically just ignore the type assertion and use the expression
+      // The type system will handle correctness at compile time
+      const expr = ts.isAsExpression(node) ? node.expression : (node as ts.TypeAssertion).expression;
+      return this.visitExpression(expr);
     }
     
     return cpp.id('/* UNSUPPORTED */');
@@ -2293,6 +2448,10 @@ export class AstCodegen {
     // Get the class name
     let className = cppUtils.escapeName(node.expression.getText());
     
+    // Extract base class name (without template parameters) for hoisted class check
+    const baseClassName = className.split('<')[0];
+    const needsGsPrefix = this.hoistedClasses.has(baseClassName);
+    
     // Get constructor arguments
     let args = node.arguments ? node.arguments.map(arg => this.visitExpression(arg)) : [];
     
@@ -2309,7 +2468,16 @@ export class AstCodegen {
           // Map TypeScript type arguments to C++ types
           const cppTypeArgs = typeArgs.map(arg => {
             const argStr = this.checker!.typeToString(arg);
-            return this.mapTypeScriptTypeToCpp(argStr);
+            const mapped = this.mapTypeScriptTypeToCpp(argStr);
+            
+            // Special case: if we got 'auto' (from 'any') and we're in a generic class,
+            // use the template parameter with std::optional
+            if (mapped === 'auto' && this.templateParameters.size > 0) {
+              const firstParam = Array.from(this.templateParameters)[0];
+              return `std::optional<${firstParam}>`;
+            }
+            
+            return mapped;
           });
           
           className = `${className}<${cppTypeArgs.join(', ')}>`;
@@ -2324,9 +2492,16 @@ export class AstCodegen {
           if (match) {
             const baseName = match[1];
             const templateArgs = match[2];
-            const cppTemplateArgs = templateArgs.split(',').map(t => 
-              this.mapTypeScriptTypeToCpp(t.trim())
-            ).join(', ');
+            const cppTemplateArgs = templateArgs.split(',').map(t => {
+              const mapped = this.mapTypeScriptTypeToCpp(t.trim());
+              // Special case: if we got 'auto' (from 'any') and we're in a generic class,
+              // use the template parameter with std::optional
+              if (mapped === 'auto' && this.templateParameters.size > 0) {
+                const firstParam = Array.from(this.templateParameters)[0];
+                return `std::optional<${firstParam}>`;
+              }
+              return mapped;
+            }).join(', ');
             className = `${baseName}<${cppTemplateArgs}>`;
           }
         }
@@ -2380,7 +2555,6 @@ export class AstCodegen {
     // Built-in value types (Map, Array, Set, etc.) are NOT heap-allocated
     // Only user-defined classes and explicit ownership types need smart pointers
     const builtInValueTypes = ['Map', 'Array', 'Set', 'String', 'RegExp', 'Date', 'Promise'];
-    const baseClassName = className.split('<')[0]; // Remove template args for check
     
     if (builtInValueTypes.includes(baseClassName)) {
       // Value types: direct construction (no smart pointer)
@@ -2391,12 +2565,15 @@ export class AstCodegen {
     // Determine ownership type from parent context
     const ownershipType = this.getOwnershipTypeForNew(node);
     
+    // Add gs:: prefix for hoisted classes
+    const qualifiedClassName = needsGsPrefix ? `gs::${className}` : className;
+    
     if (ownershipType === 'unique') {
       // Explicit unique ownership (own<T>)
-      return cpp.call(cpp.id(`std::make_unique<gs::${className}>`), args);
+      return cpp.call(cpp.id(`std::make_unique<${qualifiedClassName}>`), args);
     } else {
       // Default to shared ownership (matches JavaScript reference semantics)
-      return cpp.call(cpp.id(`std::make_shared<gs::${className}>`), args);
+      return cpp.call(cpp.id(`std::make_shared<${qualifiedClassName}>`), args);
     }
   }
   
@@ -2459,6 +2636,7 @@ export class AstCodegen {
       case 'boolean': return 'bool';
       case 'void': return 'void';
       case 'never': return 'gs::String';  // Use gs::String as placeholder for empty arrays
+      case 'any': return 'auto';  // Let C++ infer the type - TypeScript's any comes from API calls
       default:
         // Check if it's a template parameter (don't add gs:: prefix)
         if (this.templateParameters.has(tsType)) {
@@ -2529,7 +2707,38 @@ export class AstCodegen {
     // In C++, use lambdas: [](auto x) { return x * 2; }
     
     const params: ast.Parameter[] = [];
+    const destructuringStatements: ast.Statement[] = [];
+    
     for (const param of node.parameters) {
+      // Check if this parameter uses array destructuring: ([k, v]) => ...
+      if (ts.isArrayBindingPattern(param.name)) {
+        // Generate a temporary parameter name
+        const tempParamName = `__param${params.length}`;
+        const paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
+        
+        // Add the temporary parameter (passed by const reference)
+        params.push(new ast.Parameter(tempParamName, paramType, undefined, true, false));
+        
+        // Generate destructuring statements: const auto& [k, v] = __param0;
+        const elements = param.name.elements;
+        const bindingNames: string[] = [];
+        
+        for (const element of elements) {
+          if (ts.isBindingElement(element) && ts.isIdentifier(element.name)) {
+            const bindingName = cppUtils.escapeName(element.name.text);
+            bindingNames.push(bindingName);
+            // Track these variables for type inference
+            this.variableTypes.set(bindingName, new ast.CppType('auto'));
+          }
+        }
+        
+        // Create structured binding: const auto& [k, v] = tempParam;
+        const destructuringCode = `const auto& [${bindingNames.join(', ')}] = ${tempParamName};`;
+        destructuringStatements.push(new ast.RawStatement(destructuringCode));
+        
+        continue;
+      }
+      
       const paramName = cppUtils.escapeName(param.name.getText());
       // For lambdas, use auto for parameter types unless explicitly typed
       const paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
@@ -2566,12 +2775,22 @@ export class AstCodegen {
     // Arrow function body can be an expression or a block
     let body: ast.Block | ast.Expression;
     if (ts.isBlock(node.body)) {
-      body = this.visitBlock(node.body);
+      const blockBody = this.visitBlock(node.body);
+      // Prepend destructuring statements if any
+      if (destructuringStatements.length > 0) {
+        body = new ast.Block([...destructuringStatements, ...blockBody.statements]);
+      } else {
+        body = blockBody;
+      }
     } else {
       // Expression body: (x) => x * 2
       // Convert to: [](auto x) { return x * 2; }
       const expr = this.visitExpression(node.body);
-      body = new ast.Block([new ast.ReturnStmt(expr)]);
+      // Prepend destructuring statements if any
+      const bodyStatements = destructuringStatements.length > 0 
+        ? [...destructuringStatements, new ast.ReturnStmt(expr)]
+        : [new ast.ReturnStmt(expr)];
+      body = new ast.Block(bodyStatements);
     }
     
     // Create a lambda expression
@@ -3907,6 +4126,25 @@ export class AstCodegen {
               const fieldTypeStr = fieldType.toString();
               if (fieldTypeStr.startsWith('std::optional<')) {
                 value = cpp.id('std::nullopt');
+              }
+            }
+            
+            // Fix up array type if it was inferred as gs::any
+            // When we have: this.field = new Array(n).fill(null)
+            // And field type is gs::Array<T>, use that T instead of inferred 'any'
+            if (fieldType && value instanceof ast.CallExpr) {
+              const valueStr = value.toString();
+              if (valueStr.includes('gs::Array<gs::any>') && fieldType.toString().startsWith('gs::Array<')) {
+                // Extract correct element type from field type
+                const fieldTypeStr = fieldType.toString();
+                const match = fieldTypeStr.match(/gs::Array<(.+)>/);
+                if (match) {
+                  const correctType = match[1];
+                  // Reconstruct the call expression with correct type
+                  // This is a bit hacky, but works for Array constructor calls
+                  const fixedStr = valueStr.replace(/gs::Array<gs::any>/g, `gs::Array<${correctType}>`);
+                  value = new ast.RawExpression(fixedStr);
+                }
               }
             }
             

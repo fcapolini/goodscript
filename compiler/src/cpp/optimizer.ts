@@ -479,6 +479,21 @@ class AstOptimizer implements ast.CppVisitor<ast.CppNode> {
     const expression = this.visitExpression(node.expression);
     return new ast.AwaitExpr(expression);
   }
+
+  visitRawStatement(node: ast.RawStatement): ast.CppNode {
+    // Raw statements pass through unchanged
+    return node;
+  }
+
+  visitRawDeclaration(node: ast.RawDeclaration): ast.CppNode {
+    // Raw declarations pass through unchanged
+    return node;
+  }
+
+  visitRawExpression(node: ast.RawExpression): ast.CppNode {
+    // Raw expressions pass through unchanged
+    return node;
+  }
   
   // ============================================================================
   // Helper methods

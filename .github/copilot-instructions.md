@@ -42,6 +42,8 @@ GoodScript is a **TypeScript specialization** for native compilation, positioned
   - Implemented array auto-resize with IIFE pattern (Dec 1, 2025)
   - Implemented LiteralObject support for object literals (Dec 1, 2025)
   - Implemented optional field syntax (`field?: Type` → `std::optional<T>`) (Dec 1, 2025)
+  - Fixed 'any' type mapping in generic contexts (auto→std::optional<E>) (Dec 5, 2024)
+  - Fixed optional value unwrapping in return statements (Dec 5, 2024)
 
 ### Phase 3.5: Conformance Testing (✅ Infrastructure Complete, 🚀 84.4% Native Pass Rate)
 - TypeScript Compiler (TSC) conformance suite integration
@@ -62,11 +64,19 @@ GoodScript is a **TypeScript specialization** for native compilation, positioned
 - **Key files**: `conformance-tsc/src/harness/`, `conformance-tsc/src/suites/`
 - **Documentation**: `conformance-tsc/README.md`, `conformance-tsc/STATUS.md`
 
-### Phase 4: Ecosystem (🚀 In Progress - Started Dec 5, 2024)
+### Phase 4: Ecosystem (✅ MAJOR MILESTONE - Dec 5, 2024)
 - **Standard Library Development**: Porting proven libraries from Dart collection package
 - **Translation Workflow**: AI-assisted translation with triple validation (TypeScript + GoodScript + C++ generation)
-- **Current Progress**: 2 libraries complete (HeapPriorityQueue, QueueList), ~25 more planned
-- **Target**: Complete core stdlib in 1-2 weeks (Dec 5-12, 2024)
+- **🎉 MILESTONE**: 6 libraries fully validated in triple-mode (TypeScript, C++ GC, C++ native)
+  - ✅ HeapPriorityQueue (273 lines, 19 tests)
+  - ✅ QueueList (358 lines, 29 tests)
+  - ✅ ListQueue (207 lines, 29 tests)
+  - ✅ EqualitySet (251 lines, 26 tests)
+  - ✅ EqualityMap (242 lines, 24 tests)
+  - ✅ UnmodifiableListView (153 lines, 36 tests)
+- **Achievement**: First production-quality Dart-derived libraries compiling TypeScript→C++ and executing natively
+- **Test Results**: 163 TypeScript tests, 100% pass rate across all modes
+- **Target**: 20-30 core collection libraries by Dec 12, 2024
 - **Key files**: `stdlib/collection/src/*-gs.ts`, `stdlib/collection/test/*.test.ts`
 - **Documentation**: `stdlib/docs/TRANSLATION-WORKFLOW.md`, `stdlib/docs/reference/*.md`
 
@@ -266,6 +276,10 @@ set(index: number, value: E): void { ... }
 
 1. ✅ **HeapPriorityQueue** (273 lines, 19 tests) - Min-heap priority queue
 2. ✅ **QueueList** (358 lines, 29 tests) - Double-ended queue with O(1) both ends
+3. ✅ **ListQueue** (207 lines, 29 tests) - Alternative queue implementation using circular buffer
+4. ✅ **EqualitySet** (251 lines, 26 tests) - Hash set with custom equality
+5. ✅ **EqualityMap** (242 lines, 24 tests) - Hash map with custom equality
+6. ✅ **UnmodifiableListView** (153 lines, 36 tests) - Read-only list wrapper
 
 ### Next Candidate Libraries
 

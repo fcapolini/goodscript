@@ -59,6 +59,9 @@ export interface CppVisitor<T> {
   visitConditionalExpr(node: ConditionalExpr): T;
   visitInitializerList(node: InitializerList): T;
   visitAwaitExpr(node: AwaitExpr): T;
+  visitRawStatement(node: RawStatement): T;
+  visitRawDeclaration(node: RawDeclaration): T;
+  visitRawExpression(node: RawExpression): T;
 }
 
 // ============================================================================
@@ -194,7 +197,17 @@ export class Namespace extends CppNode {
 // Declarations
 // ============================================================================
 
-export type Declaration = Class | Enum | Function | VariableDecl | Namespace;
+export type Declaration = Class | Enum | Function | VariableDecl | Namespace | RawDeclaration;
+
+export class RawDeclaration extends CppNode {
+  constructor(public readonly code: string) {
+    super();
+  }
+  
+  accept<T>(visitor: CppVisitor<T>): T {
+    return visitor.visitRawDeclaration(this);
+  }
+}
 
 export enum AccessSpecifier {
   Public = 'public',
@@ -351,8 +364,18 @@ export type Statement =
   | ThrowStmt
   | TryCatch
   | BreakStmt
-  | ContinueStmt;
+  | ContinueStmt
+  | RawStatement;
 
+export class RawStatement extends CppNode {
+  constructor(public readonly code: string) {
+    super();
+  }
+  
+  accept<T>(visitor: CppVisitor<T>): T {
+    return visitor.visitRawStatement(this);
+  }
+}
 export class VariableDecl extends CppNode {
   constructor(
     public readonly name: string,
@@ -532,7 +555,22 @@ export type Expression =
   | ParenExpr
   | ConditionalExpr
   | InitializerList
-  | AwaitExpr;
+  | AwaitExpr
+  | RawExpression;
+
+export class RawExpression extends CppNode {
+  constructor(public readonly code: string) {
+    super();
+  }
+  
+  accept<T>(visitor: CppVisitor<T>): T {
+    return visitor.visitRawExpression(this);
+  }
+  
+  toString(): string {
+    return this.code;
+  }
+}
 
 export class BinaryExpr extends CppNode {
   constructor(

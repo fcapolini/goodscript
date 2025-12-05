@@ -124,4 +124,47 @@ namespace Math {
   inline double random() { return static_cast<double>(rand()) / RAND_MAX; }
 }
 
+// Type name helpers for runtime typeof checks
+template<typename T>
+inline String type_name(const T& value) {
+  // Default: use typeid for class types
+  // This returns "object" for any non-primitive type
+  return String("object");
+}
+
+// Specializations for primitive types
+inline String type_name(double value) {
+  return String("number");
+}
+
+inline String type_name(int value) {
+  return String("number");
+}
+
+inline String type_name(float value) {
+  return String("number");
+}
+
+inline String type_name(bool value) {
+  return String("boolean");
+}
+
+inline String type_name(const String& value) {
+  return String("string");
+}
+
+inline String type_name(const char* value) {
+  return String("string");
+}
+
+// For optionals, unwrap and check inner type
+template<typename T>
+inline String type_name(const std::optional<T>& value) {
+  if (value.has_value()) {
+    return type_name(value.value());
+  }
+  return String("undefined");
+}
+
 } // namespace gs
+

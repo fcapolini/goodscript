@@ -772,6 +772,18 @@ export class CppRenderer implements AST.CppVisitor<string> {
   visitAwaitExpr(node: AST.AwaitExpr): string {
     return `co_await ${node.expression.accept(this)}`;
   }
+
+  visitRawStatement(node: AST.RawStatement): string {
+    return this.line(node.code + ';');
+  }
+
+  visitRawDeclaration(node: AST.RawDeclaration): string {
+    return this.line(node.code);
+  }
+
+  visitRawExpression(node: AST.RawExpression): string {
+    return node.code;
+  }
 }
 
 /**
