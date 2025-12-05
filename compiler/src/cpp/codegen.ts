@@ -2085,6 +2085,9 @@ export class AstCodegen {
     if (op === '===') op = '==';
     if (op === '!==') op = '!=';
     
+    // Check for bitwise operators that require integer operands in C++
+    const isBitwiseOp = ['&', '|', '^', '<<', '>>', '>>>'].includes(op);
+    
     // Check if we're comparing with null/undefined BEFORE visiting expressions
     const isLeftNull = node.left.kind === ts.SyntaxKind.NullKeyword;
     const isRightNull = node.right.kind === ts.SyntaxKind.NullKeyword;
@@ -2173,6 +2176,47 @@ export class AstCodegen {
     // Now visit the expressions
     let left = this.visitExpression(node.left);
     let right = this.visitExpression(node.right);
+    
+    // Handle bitwise operators: Cast double operands to int
+    // TypeScript allows bitwise ops on 'number', which implicitly converts to int32
+    // In C++, we need explicit casting: static_cast<int>(number) & ...
+    if (isBitwiseOp && this.checker) {
+      const leftType = this.checker.getTypeAtLocation(node.left);
+      const rightType = this.checker.getTypeAtLocation(node.right);
+      const leftTypeStr = this.checker.typeToString(leftType);
+      const rightTypeStr = this.checker.typeToString(rightType);
+      
+      // Cast left operand if it's a number (double)
+      if (leftTypeStr === 'number') {
+        left = cpp.cast(new ast.CppType('int'), left);
+      }
+      // Cast right operand if it's a number (double)
+      if (rightTypeStr === 'number') {
+        right = cpp.cast(new ast.CppType('int'), right);
+      }
+    }
+    
+    // Handle arithmetic/comparison with std::optional<T>
+    // If operand is std::optional, unwrap with .value()
+    const isArithmeticOrComparisonOp = ['+', '-', '*', '/', '%', '<', '>', '<=', '>='].includes(op);
+    if (isArithmeticOrComparisonOp && this.checker) {
+      // Check left operand
+      if (ts.isIdentifier(node.left)) {
+        const varName = cppUtils.escapeName(node.left.text);
+        const varType = this.variableTypes.get(varName);
+        if (varType && varType.toString().startsWith('std::optional<')) {
+          left = cpp.call(cpp.member(left, 'value'), []);
+        }
+      }
+      // Check right operand
+      if (ts.isIdentifier(node.right)) {
+        const varName = cppUtils.escapeName(node.right.text);
+        const varType = this.variableTypes.get(varName);
+        if (varType && varType.toString().startsWith('std::optional<')) {
+          right = cpp.call(cpp.member(right, 'value'), []);
+        }
+      }
+    }
     
     // Special case: For optional<T> parameters, x !== null && x !== undefined → x.has_value()
     // This pattern appears when checking optional parameters: param !== null && param !== undefined ? param : default
