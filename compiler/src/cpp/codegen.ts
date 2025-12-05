@@ -656,6 +656,16 @@ export class AstCodegen {
     const name = cppUtils.escapeName(node.name.text);
     const isAsync = node.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ?? false;
     
+    // Handle type parameters for generic functions
+    const templateParams: string[] = [];
+    if (node.typeParameters) {
+      for (const typeParam of node.typeParameters) {
+        const paramName = typeParam.name.text;
+        templateParams.push(paramName);
+        this.templateParameters.add(paramName); // Track as template parameter
+      }
+    }
+    
     // Determine return type: use explicit type annotation if present, otherwise infer from body
     let returnType: ast.CppType;
     if (node.type) {
@@ -754,7 +764,14 @@ export class AstCodegen {
     this.currentFunctionReturnType = previousReturnType;
     this.currentFunctionIsAsync = previousIsAsync;
     
-    return new ast.Function(name, returnType, params, body, [], isAsync);
+    // Clean up template parameters after processing function
+    if (node.typeParameters) {
+      for (const typeParam of node.typeParameters) {
+        this.templateParameters.delete(typeParam.name.text);
+      }
+    }
+    
+    return new ast.Function(name, returnType, params, body, templateParams, isAsync);
   }
   
   private visitClass(node: ts.ClassDeclaration): ast.Class | undefined {
@@ -992,6 +1009,16 @@ export class AstCodegen {
     const methods: ast.Method[] = [];
     const methodNames = new Set<string>(); // Track method names for this interface
     
+    // Handle type parameters for generic interfaces
+    const templateParams: string[] = [];
+    if (node.typeParameters) {
+      for (const typeParam of node.typeParameters) {
+        const paramName = typeParam.name.text;
+        templateParams.push(paramName);
+        this.templateParameters.add(paramName); // Track as template parameter
+      }
+    }
+    
     // Convert interface properties to fields (rare, but possible)
     for (const member of node.members) {
       if (ts.isPropertySignature(member) && member.name) {
@@ -1012,7 +1039,16 @@ export class AstCodegen {
         if (member.parameters) {
           for (const param of member.parameters) {
             const paramName = cppUtils.escapeName(param.name.getText());
-            const paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
+            let paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
+            
+            // Check if parameter is optional (has questionToken: param?: Type)
+            const isOptional = param.questionToken !== undefined;
+            if (isOptional) {
+              // Wrap type in std::optional<T>
+              const innerType = paramType.toString();
+              paramType = new ast.CppType(`std::optional<${innerType}>`);
+            }
+            
             const passByConstRef = tsUtils.shouldPassByConstRef(param.type);
             const passByMutableRef = tsUtils.shouldPassByMutableRef(param.type);
             params.push(new ast.Parameter(paramName, paramType, undefined, passByConstRef, passByMutableRef));
@@ -1060,8 +1096,15 @@ export class AstCodegen {
       true   // isDefault (generates = default)
     ));
     
+    // Clean up template parameters after processing interface
+    if (node.typeParameters) {
+      for (const typeParam of node.typeParameters) {
+        this.templateParameters.delete(typeParam.name.text);
+      }
+    }
+    
     // Interfaces become abstract base classes (not structs)
-    return new ast.Class(name, fields, [], methods, undefined, [], false);
+    return new ast.Class(name, fields, [], methods, undefined, templateParams, false);
   }
   
   private getInterfaceMethodNames(interfaceNames: string[]): Set<string> {
