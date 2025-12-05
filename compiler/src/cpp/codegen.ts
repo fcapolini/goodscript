@@ -1820,8 +1820,31 @@ export class AstCodegen {
     if (ts.isConditionalExpression(node)) {
       // Ternary operator: condition ? whenTrue : whenFalse
       const condition = this.visitExpression(node.condition);
-      const whenTrue = this.visitExpression(node.whenTrue);
-      const whenFalse = this.visitExpression(node.whenFalse);
+      let whenTrue = this.visitExpression(node.whenTrue);
+      let whenFalse = this.visitExpression(node.whenFalse);
+      
+      // Special case: if one branch is null and the other is an identifier/optional,
+      // convert nullptr to std::nullopt for std::optional compatibility
+      const trueIsNull = node.whenTrue.kind === ts.SyntaxKind.NullKeyword;
+      const falseIsNull = node.whenFalse.kind === ts.SyntaxKind.NullKeyword;
+      
+      if (trueIsNull || falseIsNull) {
+        // Check if the non-null branch might be an optional type
+        // This happens when: element === undefined ? null : element
+        // where element is typed as std::optional<T>
+        const nonNullBranch = trueIsNull ? node.whenFalse : node.whenTrue;
+        
+        // If the non-null branch is an identifier, it might be std::optional
+        // To be safe, use std::nullopt instead of nullptr in ternary expressions
+        // std::nullopt works with std::optional, nullptr works with pointers
+        // Since we map T | null to std::optional<T>, use std::nullopt
+        if (trueIsNull) {
+          whenTrue = cpp.id('std::nullopt');
+        }
+        if (falseIsNull) {
+          whenFalse = cpp.id('std::nullopt');
+        }
+      }
       
       // C++ has the same ternary syntax
       return cpp.ternary(condition, whenTrue, whenFalse);
@@ -2244,6 +2267,24 @@ export class AstCodegen {
         // Check if it's a template parameter (don't add gs:: prefix)
         if (this.templateParameters.has(tsType)) {
           return tsType;
+        }
+        
+        // Handle union types with null/undefined: T | null | undefined → std::optional<T>
+        // Remove parentheses if present: (E | undefined) → E | undefined
+        let cleanType = tsType.replace(/^\(|\)$/g, '').trim();
+        
+        if (cleanType.includes(' | ')) {
+          const types = cleanType.split('|').map(t => t.trim());
+          const nonNullTypes = types.filter(t => t !== 'null' && t !== 'undefined');
+          
+          if (nonNullTypes.length === 1) {
+            const innerType = this.mapTypeScriptTypeToCpp(nonNullTypes[0]);
+            return `std::optional<${innerType}>`;
+          }
+          // Multiple non-null types - not supported, fallback to first type
+          if (nonNullTypes.length > 0) {
+            return this.mapTypeScriptTypeToCpp(nonNullTypes[0]);
+          }
         }
         
         // Handle tuple types: [string, number] → std::pair<gs::String, double>
@@ -2856,6 +2897,24 @@ export class AstCodegen {
       return new ast.CppType('auto');
     }
     
+    // Handle parenthesized types: (E | undefined) → unwrap and process inner type
+    if (ts.isParenthesizedTypeNode(typeNode)) {
+      return this.mapType(typeNode.type);
+    }
+    
+    // Handle function types: (a: number, b: string) => boolean
+    // Maps to: std::function<bool(double, gs::String)>
+    if (ts.isFunctionTypeNode(typeNode)) {
+      const returnType = this.mapType(typeNode.type).toString();
+      const paramTypes = typeNode.parameters.map(p => {
+        if (p.type) {
+          return this.mapType(p.type).toString();
+        }
+        return 'auto';
+      });
+      return new ast.CppType(`std::function<${returnType}(${paramTypes.join(', ')})>`);
+    }
+    
     // Handle union types (T | null → std::optional<T>)
     if (ts.isUnionTypeNode(typeNode)) {
       // Check if it's a nullable type (T | null | undefined)
@@ -2870,7 +2929,7 @@ export class AstCodegen {
       });
       
       if (nonNullableTypes.length === 1) {
-        // T | null → std::optional<T>
+        // T | null | undefined → std::optional<T>
         // BUT: If T is a smart pointer (shared_ptr, unique_ptr, weak_ptr), don't wrap in optional
         // because smart pointers can already be null
         // ALSO: If T is a user-defined class, it will be mapped to shared_ptr, so don't wrap
@@ -2885,10 +2944,16 @@ export class AstCodegen {
           return innerType;
         }
         
+        // Check if inner type is a template parameter (e.g., E in E | undefined)
+        // Template parameters should be wrapped in optional
+        const innerTypeText = nonNullableTypes[0].getText?.() || '';
+        const isTemplateParam = this.templateParameters.has(innerTypeText);
+        
         // Also skip optional wrapping for user-defined classes and interfaces
         // They're automatically wrapped in shared_ptr (see lines 1772-1779)
         // Interfaces also need shared_ptr wrapping for polymorphism
-        if (this.checker && ts.isTypeReferenceNode(nonNullableTypes[0])) {
+        // BUT: don't skip for template parameters
+        if (!isTemplateParam && this.checker && ts.isTypeReferenceNode(nonNullableTypes[0])) {
           const typeName = cppUtils.escapeName(nonNullableTypes[0].typeName.getText());
           
           // Check if it's an interface
