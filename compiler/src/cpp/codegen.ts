@@ -730,7 +730,15 @@ export class AstCodegen {
     const params: ast.Parameter[] = [];
     for (const param of node.parameters) {
       const paramName = cppUtils.escapeName(param.name.getText());
-      const paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
+      let paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
+      
+      // Check if parameter is optional (has questionToken: param?: Type)
+      const isOptional = param.questionToken !== undefined;
+      if (isOptional) {
+        // Wrap type in std::optional<T>
+        const innerType = paramType.toString();
+        paramType = new ast.CppType(`std::optional<${innerType}>`);
+      }
       
       // Register parameter with ownership checker
       this.ownershipChecker.registerVariable(paramName, param);
@@ -818,7 +826,16 @@ export class AstCodegen {
         const params: ast.Parameter[] = [];
         for (const param of member.parameters) {
           const paramName = cppUtils.escapeName(param.name.getText());
-          const paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
+          let paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
+          
+          // Check if parameter is optional (has questionToken: param?: Type)
+          const isOptional = param.questionToken !== undefined;
+          if (isOptional) {
+            // Wrap type in std::optional<T>
+            const innerType = paramType.toString();
+            paramType = new ast.CppType(`std::optional<${innerType}>`);
+          }
+          
           // In constructors, arrays should be passed by const ref (they're just assigned to fields)
           const passByConstRef = param.type && ts.isArrayTypeNode(param.type) ? true : tsUtils.shouldPassByConstRef(param.type);
           const passByMutableRef = param.type && ts.isArrayTypeNode(param.type) ? false : tsUtils.shouldPassByMutableRef(param.type);
@@ -912,7 +929,16 @@ export class AstCodegen {
         const params: ast.Parameter[] = [];
         for (const param of member.parameters) {
           const paramName = cppUtils.escapeName(param.name.getText());
-          const paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
+          let paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
+          
+          // Check if parameter is optional (has questionToken: param?: Type)
+          const isOptional = param.questionToken !== undefined;
+          if (isOptional) {
+            // Wrap type in std::optional<T>
+            const innerType = paramType.toString();
+            paramType = new ast.CppType(`std::optional<${innerType}>`);
+          }
+          
           const passByConstRef = tsUtils.shouldPassByConstRef(param.type);
           const passByMutableRef = tsUtils.shouldPassByMutableRef(param.type);
           params.push(new ast.Parameter(paramName, paramType, undefined, passByConstRef, passByMutableRef));
@@ -1823,6 +1849,26 @@ export class AstCodegen {
       let whenTrue = this.visitExpression(node.whenTrue);
       let whenFalse = this.visitExpression(node.whenFalse);
       
+      // Special case: For optional parameters, unwrap with .value() when used
+      // Pattern: param !== null && param !== undefined ? param : default
+      // Should be: param.has_value() ? param.value() : default
+      if (ts.isIdentifier(node.whenTrue)) {
+        const varName = cppUtils.escapeName(node.whenTrue.text);
+        const varType = this.variableTypes.get(varName);
+        if (varType && varType.toString().startsWith('std::optional<')) {
+          // Unwrap optional with .value()
+          whenTrue = cpp.call(cpp.member(whenTrue, 'value'), []);
+        }
+      }
+      if (ts.isIdentifier(node.whenFalse)) {
+        const varName = cppUtils.escapeName(node.whenFalse.text);
+        const varType = this.variableTypes.get(varName);
+        if (varType && varType.toString().startsWith('std::optional<')) {
+          // Unwrap optional with .value()
+          whenFalse = cpp.call(cpp.member(whenFalse, 'value'), []);
+        }
+      }
+      
       // Special case: if one branch is null and the other is an identifier/optional,
       // convert nullptr to std::nullopt for std::optional compatibility
       const trueIsNull = node.whenTrue.kind === ts.SyntaxKind.NullKeyword;
@@ -2046,6 +2092,29 @@ export class AstCodegen {
     // Now visit the expressions
     let left = this.visitExpression(node.left);
     let right = this.visitExpression(node.right);
+    
+    // Special case: For optional<T> parameters, x !== null && x !== undefined → x.has_value()
+    // This pattern appears when checking optional parameters: param !== null && param !== undefined ? param : default
+    if ((op === '==' || op === '!=') && (isLeftNull || isLeftUndefined || isRightNull || isRightUndefined)) {
+      const isNullCheck = isLeftNull || isLeftUndefined || isRightNull || isRightUndefined;
+      const valueExpr = isLeftNull || isLeftUndefined ? node.right : node.left;
+      
+      // Check if the value expression is an identifier with std::optional<T> type
+      if (ts.isIdentifier(valueExpr)) {
+        const varName = cppUtils.escapeName(valueExpr.text);
+        const varType = this.variableTypes.get(varName);
+        
+        if (varType && varType.toString().startsWith('std::optional<')) {
+          // Use .has_value() instead of null comparison
+          const valueIdent = isLeftNull || isLeftUndefined ? right : left;
+          const hasValueCall = cpp.call(cpp.member(valueIdent, 'has_value'), []);
+          
+          // If operator is !== (not equal to null/undefined), keep has_value()
+          // If operator is === (equal to null/undefined), negate it
+          return op === '!=' ? hasValueCall : cpp.unary('!', hasValueCall);
+        }
+      }
+    }
     
     // Dereference pointer variables when used in arithmetic/comparison (except null checks)
     // This handles Map.get() results: `current + 1` → `*current + 1`
