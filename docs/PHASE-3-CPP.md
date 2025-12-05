@@ -62,6 +62,43 @@ The C++ code generation uses an **AST-based approach** with **ownership-aware ty
   - No longer maintained
   - All features migrated to AST-based approach
 
+### Multi-File Compilation (Dec 5, 2025)
+
+**Problem:** GoodScript projects with imports (multi-file) couldn't compile to native binaries because:
+- Each file was compiled independently
+- Library files without `main()` failed to link
+- Entry points couldn't reference symbols from imported modules (no C++ headers)
+
+**Solution:** Automatic file merging for binary compilation:
+1. **Dependency resolution:** Collect all imported files in topological order
+2. **Code merging:** Combine all C++ code into a single translation unit
+   - Single `#include` directive at top
+   - Library code first (dependencies)
+   - Entry point code last (with `main()`)
+3. **Single-file compilation:** Compile merged file to binary
+
+**Benefits:**
+- ✅ Multi-file projects now compile to native binaries
+- ✅ Imports resolved automatically
+- ✅ No manual linking or header management
+- ✅ Works with both GC mode and ownership mode
+
+**Example:**
+```typescript
+// src/library-gs.ts
+export class MyClass { }
+
+// src/main-gs.ts
+import { MyClass } from './library-gs';
+const obj = new MyClass();
+console.log("OK");
+```
+
+```bash
+# Automatically merges both files into single binary
+gsc -t native -b src/main-gs.ts
+```
+
 ### Benefits of AST-Based Approach
 - **Type safety:** Compile-time validation of C++ structure
 - **Composability:** Clean separation of concerns (transform → AST → render)

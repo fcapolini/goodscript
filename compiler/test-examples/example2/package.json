@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "build": "gsc -t native -b"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1"
+  }
+}

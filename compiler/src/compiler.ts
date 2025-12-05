@@ -544,14 +544,23 @@ export class Compiler {
   }
 
   /**
-   * Compile C++ file to native binary using Zig
+   * Compile C++ file(s) to native binary using Zig
+   * @param cppFiles - Single file path or array of file paths to compile and link
+   * @param outFile - Output binary path
+   * @param targetArch - Optional target architecture for cross-compilation
    */
-  private compileCppToBinary(cppFile: string, outFile: string, targetArch?: string): void {
+  private compileCppToBinary(cppFiles: string | string[], outFile: string, targetArch?: string): void {
     // Check Zig availability first with helpful error message
     this.checkZigAvailable();
     
+    // Normalize to array
+    const files = Array.isArray(cppFiles) ? cppFiles : [cppFiles];
+    
     // Check if this is a GC-mode file (contains gs_gc_runtime.hpp)
-    const isGcMode = fs.readFileSync(cppFile, 'utf-8').includes('gs_gc_runtime.hpp');
+    const isGcMode = files.some(file => 
+      fs.readFileSync(file, 'utf-8').includes('gs_gc_runtime.hpp')
+    );
+    
     if (isGcMode) {
       throw new Error(
         'GC mode binary compilation is experimental and requires manual MPS library setup.\n' +
@@ -587,7 +596,12 @@ export class Compiler {
       // Add include path for runtime headers
       cmd += ` -I"${runtimeDir}"`;
       
-      cmd += ` "${cppFile}" -o "${outFile}"`;
+      // Add all C++ files to compile and link
+      for (const file of files) {
+        cmd += ` "${file}"`;
+      }
+      
+      cmd += ` -o "${outFile}"`;
       
       execSync(cmd, { encoding: 'utf-8', stdio: 'inherit' });
     } catch (error: any) {
@@ -613,7 +627,10 @@ export class Compiler {
       ? new GcAstCodegen(checker)  // Direct AST-based GC codegen (fast, efficient)
       : new AstCodegen(checker);
 
-    // Process each GoodScript source file
+    const cppFileMap = new Map<string, { path: string, code: string, sourceFile: ts.SourceFile }>(); // sourceFile -> {cppPath, cppCode, sourceFile}
+    let entryPointFile: string | null = null;
+    
+    // First pass: Generate all C++ files
     for (const sourceFile of program.getSourceFiles()) {
       if (!sourceFile.isDeclarationFile && this.isGoodScriptFile(sourceFile.fileName)) {
         const sourceFilePath = path.resolve(sourceFile.fileName);
@@ -636,21 +653,190 @@ export class Compiler {
         
         const cppPath = path.join(outDir, outputPath);
         
-        // Create directory structure if needed
-        const cppDir = path.dirname(cppPath);
-        if (!fs.existsSync(cppDir)) {
-          fs.mkdirSync(cppDir, { recursive: true });
-        }
+        // Track generated files
+        cppFileMap.set(sourceFilePath, { path: cppPath, code: cppCode, sourceFile });
         
-        // Write C++ file
-        fs.writeFileSync(cppPath, cppCode, 'utf-8');
-
-        // Compile to binary if requested
-        if (compileBinary) {
-          const binPath = cppPath.replace(/\.cpp$/, '');
-          this.compileCppToBinary(cppPath, binPath, arch);
+        // Check if this file has a main() function (entry point)
+        if (cppCode.includes('int main()')) {
+          entryPointFile = sourceFilePath;
         }
       }
     }
+    
+    // For binary compilation with imports, merge all files into one
+    if (compileBinary && entryPointFile && cppFileMap.size > 1) {
+      const entrySourceFile = program.getSourceFile(entryPointFile);
+      if (entrySourceFile) {
+        // Collect all dependent source files in dependency order
+        const dependentFiles = this.collectDependentSourceFiles(entrySourceFile, program, cppFileMap);
+        
+        // Merge C++ code: library files first (no main()), then entry point (with main())
+        const mergedParts: string[] = [];
+        let mainCode = '';
+        const includeLine = mode === 'gc' ? '#include "gs_gc_runtime.hpp"' : '#include "gs_runtime.hpp"';
+        
+        // Add single include
+        mergedParts.push(includeLine);
+        mergedParts.push('');
+        
+        for (const depFile of dependentFiles) {
+          const cppInfo = cppFileMap.get(path.resolve(depFile.fileName));
+          if (cppInfo) {
+            let code = cppInfo.code;
+            // Remove include directive
+            code = code.replace(/#include\s+"gs_(gc_)?runtime\.hpp"\s*\n/, '');
+            
+            // Separate main() from the rest
+            const mainMatch = code.match(/(int\s+main\s*\([^)]*\)\s*\{[\s\S]*\}\s*)$/);
+            if (mainMatch) {
+              mainCode = mainMatch[1];
+              code = code.substring(0, mainMatch.index);
+            }
+            
+            mergedParts.push(code.trim());
+          }
+        }
+        
+        // Add main() at the end
+        if (mainCode) {
+          mergedParts.push('');
+          mergedParts.push(mainCode);
+        }
+        
+        const mergedCode = mergedParts.join('\n');
+        const entryPointCppPath = cppFileMap.get(entryPointFile)!.path;
+        
+        // Write merged file
+        fs.writeFileSync(entryPointCppPath, mergedCode, 'utf-8');
+        
+        // Compile single merged file
+        const binPath = entryPointCppPath.replace(/\.cpp$/, '');
+        this.compileCppToBinary(entryPointCppPath, binPath, arch);
+        
+        return; // Skip normal file writing
+      }
+    }
+    
+    // Second pass: Write C++ files to disk (non-binary or single-file case)
+    for (const [sourceFilePath, { path: cppPath, code: cppCode }] of cppFileMap.entries()) {
+      // Create directory structure if needed
+      const cppDir = path.dirname(cppPath);
+      if (!fs.existsSync(cppDir)) {
+        fs.mkdirSync(cppDir, { recursive: true });
+      }
+      
+      // Write C++ file
+      fs.writeFileSync(cppPath, cppCode, 'utf-8');
+    }
+    
+    // Third pass: If binary compilation requested for single file, compile it
+    if (compileBinary && entryPointFile && cppFileMap.size === 1) {
+      const entryPointCppPath = cppFileMap.get(entryPointFile)!.path;
+      const binPath = entryPointCppPath.replace(/\.cpp$/, '');
+      this.compileCppToBinary(entryPointCppPath, binPath, arch);
+    }
+  }
+  
+  /**
+   * Collect all source files that need to be merged for a given entry point
+   * Returns files in dependency order (dependencies first, entry point last)
+   */
+  private collectDependentSourceFiles(
+    entryPoint: ts.SourceFile,
+    program: ts.Program,
+    cppFileMap: Map<string, { path: string, code: string, sourceFile: ts.SourceFile }>
+  ): ts.SourceFile[] {
+    const visited = new Set<string>();
+    const files: ts.SourceFile[] = [];
+    
+    const visit = (sourceFile: ts.SourceFile) => {
+      const resolvedPath = path.resolve(sourceFile.fileName);
+      
+      if (visited.has(resolvedPath)) {
+        return;
+      }
+      visited.add(resolvedPath);
+      
+      // Visit dependencies first (depth-first)
+      const imports = this.getImportedFiles(sourceFile, program);
+      for (const importedFile of imports) {
+        visit(importedFile);
+      }
+      
+      // Then add this file
+      if (cppFileMap.has(resolvedPath)) {
+        files.push(sourceFile);
+      }
+    };
+    
+    visit(entryPoint);
+    return files;
+  }
+  
+  /**
+   * Collect all C++ files that need to be linked together for a given entry point
+   * This includes the entry point file and all its transitive dependencies
+   */
+  private collectDependentCppFiles(
+    entryPoint: ts.SourceFile,
+    program: ts.Program,
+    cppFileMap: Map<string, { path: string, code: string }>
+  ): string[] {
+    const visited = new Set<string>();
+    const cppFiles: string[] = [];
+    
+    const visit = (sourceFile: ts.SourceFile) => {
+      const resolvedPath = path.resolve(sourceFile.fileName);
+      
+      if (visited.has(resolvedPath)) {
+        return;
+      }
+      visited.add(resolvedPath);
+      
+      // Add this file's C++ output if it exists
+      const cppInfo = cppFileMap.get(resolvedPath);
+      if (cppInfo) {
+        cppFiles.push(cppInfo.path);
+      }
+      
+      // Visit all imports
+      const imports = this.getImportedFiles(sourceFile, program);
+      for (const importedFile of imports) {
+        visit(importedFile);
+      }
+    };
+    
+    visit(entryPoint);
+    return cppFiles;
+  }
+  
+  /**
+   * Get all files imported by a source file
+   */
+  private getImportedFiles(sourceFile: ts.SourceFile, program: ts.Program): ts.SourceFile[] {
+    const imports: ts.SourceFile[] = [];
+    
+    ts.forEachChild(sourceFile, (node) => {
+      if (ts.isImportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+        const importPath = node.moduleSpecifier.text;
+        
+        // Resolve the import to a source file
+        const resolvedModule = ts.resolveModuleName(
+          importPath,
+          sourceFile.fileName,
+          program.getCompilerOptions(),
+          ts.sys
+        );
+        
+        if (resolvedModule.resolvedModule) {
+          const resolvedFile = program.getSourceFile(resolvedModule.resolvedModule.resolvedFileName);
+          if (resolvedFile && this.isGoodScriptFile(resolvedFile.fileName)) {
+            imports.push(resolvedFile);
+          }
+        }
+      }
+    });
+    
+    return imports;
   }
 }

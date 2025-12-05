@@ -406,7 +406,11 @@ gsc -o dist src/main-gs.ts
 # Generate C++ source
 gsc -t native -o dist src/main-gs.ts
 
-# Compile to native binary
+# Compile to native binary (single file)
+gsc -t native -b -o dist src/main-gs.ts
+
+# Compile to native binary (multi-file with imports)
+# Automatically merges all imported files
 gsc -t native -b -o dist src/main-gs.ts
 
 # Cross-compile to Linux
