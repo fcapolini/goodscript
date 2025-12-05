@@ -41,6 +41,8 @@ private:
   
   // Compile the pattern with appropriate flags
   void compile() {
+    // Always enable UTF mode to match JavaScript/TypeScript behavior
+    // JavaScript regex always operates in UTF-16, so we use UTF-8 mode in PCRE2
     uint32_t options = PCRE2_UTF;
     
     if (ignoreCase_) {
@@ -53,6 +55,7 @@ private:
       options |= PCRE2_DOTALL;
     }
     if (unicode_) {
+      // The 'u' flag enables full Unicode property support
       options |= PCRE2_UCP;
     }
     

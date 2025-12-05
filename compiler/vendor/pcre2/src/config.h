@@ -376,13 +376,13 @@ surrounded by #ifndef/#endif lines so that the value can be overridden by -D. */
 /* #undef SUPPORT_PCRE2_32 */
 
 /* Define to any value to enable the 8 bit PCRE2 library. */
-/* #undef SUPPORT_PCRE2_8 */
+#define SUPPORT_PCRE2_8 1
 
 /* Define to any value to enable support for Unicode and UTF encoding. This
    will work even in an EBCDIC environment, but it is incompatible with the
    EBCDIC macro. That is, PCRE2 can support *either* EBCDIC code *or*
    ASCII/Unicode, but not both at once. */
-/* #undef SUPPORT_UNICODE */
+#define SUPPORT_UNICODE 1
 
 /* Define to any value for valgrind support to find invalid memory reads. */
 /* #undef SUPPORT_VALGRIND */

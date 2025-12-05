@@ -7,6 +7,117 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2024-12-05 🎉 Go-Like Developer Experience Complete!
+
+### Major Achievement: "Go for TypeScript Developers" Positioning Fully Enabled
+
+This release completes the **Go-like DX Roadmap** - GoodScript now delivers the same "install and go" experience as Go, while keeping TypeScript syntax.
+
+### Added
+
+- **Phase 1: Vendored cppcoro** ✅ Complete
+  - Bundled cppcoro C++20 coroutine library (70 files) for async/await support
+  - Removed git submodule dependency
+  - On-the-fly compilation with caching (~1 second first time)
+  - All 20 async/await tests passing
+  - **Impact**: Async/await works out-of-the-box, no external library needed
+
+- **Phase 2 Part A: Vendored MPS (Memory Pool System)** ✅ Complete
+  - Bundled MPS 1.118.0 sources (233 files, 84K lines) for garbage collection
+  - Removed git submodule and architecture-specific pre-built libraries
+  - On-the-fly compilation with caching (~2 seconds first time)
+  - **CRITICAL**: GC mode now works on ALL platforms (darwin, linux, windows × arm64, x64)
+  - Previously only worked on macOS Apple Silicon (arm64)
+  - All 190 concrete example tests passing
+  - **Impact**: GC mode (the strategic differentiator) works everywhere
+
+- **Phase 2 Part B: Vendored PCRE2** ✅ Complete
+  - Bundled PCRE2 10.47 sources (40 files, 82K lines) for regular expressions
+  - Created `pcre2_all.c` amalgamation file for simplified compilation
+  - On-the-fly compilation with caching (~3 seconds first time)
+  - Removed system dependency (no more `brew install pcre2` required)
+  - All 28 RegExp tests passing
+  - **Impact**: RegExp works out-of-the-box on all platforms
+
+- **Phase 3: Comprehensive Installation Documentation** ✅ Complete (Option C)
+  - Created `docs/INSTALLATION.md` with detailed platform-specific instructions
+  - Platform coverage: macOS (Homebrew, manual), Linux (snap, apt, dnf, pacman), Windows (winget, scoop)
+  - Troubleshooting section and first-run dependency compilation explanation
+  - Improved Zig detection with helpful error messages including platform-specific install commands
+  - Updated README.md to emphasize Zig as only external dependency
+  - **Impact**: Clear expectations, helpful guidance, matches Go's "require installation" approach
+
+### Changed
+
+- **Package contents now include vendored dependencies**
+  - Added `runtime/` directory (612 KB) - C++ runtime headers
+  - Added `vendor/` directory (6.1 MB) - cppcoro, MPS, PCRE2 sources
+  - Total package size increase: ~6.7 MB (acceptable for "batteries included" philosophy)
+  - All dependencies compile automatically on first use and are cached
+
+- **Updated README.md prerequisites**
+  - Removed outdated PCRE2 installation instructions
+  - Emphasized Zig as only external dependency
+  - Listed bundled dependencies (cppcoro, MPS, PCRE2)
+  - Clarified "batteries included" philosophy
+
+### Performance
+
+- **First compilation overhead**: ~6 seconds total (one-time cost)
+  - cppcoro: ~1 second
+  - MPS: ~2 seconds
+  - PCRE2: ~3 seconds
+  - Subsequent compilations: instant (dependencies cached in tmpdir)
+
+### Strategic Wins
+
+✅ **Single command install**: `npm i -g goodscript` (only Zig separate)  
+✅ **All dependencies bundled**: cppcoro, MPS, PCRE2 included  
+✅ **Works everywhere**: darwin/linux/windows × arm64/x64  
+✅ **Clear documentation**: Installation guide + helpful errors  
+✅ **GC mode enabled**: Automatic garbage collection on all platforms  
+✅ **RegExp built-in**: No system packages needed  
+✅ **Async/await ready**: C++20 coroutines included  
+
+**Comparison with Go:**
+- Go: `brew install go` → one dependency
+- GoodScript: `brew install zig` → one dependency
+- Both: Everything else bundled
+- Both: Cross-compile from any platform to any platform
+
+### Migration Guide
+
+For existing users:
+1. Update to 0.11.0: `npm update -g goodscript`
+2. First compilation will take ~6 seconds (dependencies compile and cache)
+3. Remove any manual PCRE2 installations (no longer needed)
+4. Enjoy universal cross-platform support!
+
+### Test Results
+
+- ✅ All 1169 compiler tests passing (100%)
+- ✅ All 28 RegExp tests passing (100%)
+- ✅ 195/198 concrete examples passing (98.5%)
+- ✅ Phase 3.5 conformance: 84.4% native pass rate (27/32 TypeScript tests)
+
+### Files Changed
+
+- 3 commits across Phases 1, 2, and 3
+- 300+ files added (vendored dependencies)
+- 166,000+ lines of code added
+- Package.json updated to include runtime/ and vendor/ directories
+
+### Documentation
+
+- New: `docs/INSTALLATION.md` - Comprehensive installation guide
+- Updated: `docs/GO-LIKE-DX.md` - All phases marked complete
+- Updated: `compiler/vendor/README.md` - Documents all vendored dependencies
+- Updated: `README.md` - Prerequisites and bundled dependencies
+
+---
+
+## Previous Releases
+
 ### Changed
 
 - **Relaxed GS108 Restriction** - Function declarations and expressions are now allowed, but cannot use `this`

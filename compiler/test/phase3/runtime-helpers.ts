@@ -96,7 +96,7 @@ function getPcre2ObjectFiles(): string[] {
   
   // Compile pcre2_all.c if not cached
   if (!existsSync(pcre2AllObj)) {
-    const compileCmd = `zig cc -O2 -DPCRE2_CODE_UNIT_WIDTH=8 -DHAVE_CONFIG_H -DPCRE2_STATIC -I${PCRE2_SRC_DIR} -c ${join(PCRE2_SRC_DIR, 'pcre2_all.c')} -o ${pcre2AllObj}`;
+    const compileCmd = `zig cc -O2 -DPCRE2_CODE_UNIT_WIDTH=8 -DHAVE_CONFIG_H -DPCRE2_STATIC -DSUPPORT_UNICODE -DSUPPORT_PCRE2_8 -I${PCRE2_SRC_DIR} -c ${join(PCRE2_SRC_DIR, 'pcre2_all.c')} -o ${pcre2AllObj}`;
     execSync(compileCmd, { 
       encoding: 'utf-8', 
       timeout: 30000,  // First compile may take longer
@@ -106,7 +106,7 @@ function getPcre2ObjectFiles(): string[] {
   
   // Compile pcre2_chartables.c if not cached
   if (!existsSync(pcre2ChartablesObj)) {
-    const compileCmd = `zig cc -O2 -DPCRE2_CODE_UNIT_WIDTH=8 -DHAVE_CONFIG_H -DPCRE2_STATIC -I${PCRE2_SRC_DIR} -c ${join(PCRE2_SRC_DIR, 'pcre2_chartables.c')} -o ${pcre2ChartablesObj}`;
+    const compileCmd = `zig cc -O2 -DPCRE2_CODE_UNIT_WIDTH=8 -DHAVE_CONFIG_H -DPCRE2_STATIC -DSUPPORT_UNICODE -DSUPPORT_PCRE2_8 -I${PCRE2_SRC_DIR} -c ${join(PCRE2_SRC_DIR, 'pcre2_chartables.c')} -o ${pcre2ChartablesObj}`;
     execSync(compileCmd, { 
       encoding: 'utf-8', 
       timeout: 10000,

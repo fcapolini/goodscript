@@ -289,7 +289,7 @@ export function compileAndExecuteNative(
   if (needsRegExp) {
     // Use vendored PCRE2 with caching
     const pcre2Objs = getPcre2ObjectFiles();
-    compileCmd += ` -DGS_ENABLE_REGEXP -I${PCRE2_SRC_DIR} ${pcre2Objs.join(' ')}`;
+    compileCmd += ` -DGS_ENABLE_REGEXP -DSUPPORT_UNICODE -DSUPPORT_PCRE2_8 -I${PCRE2_SRC_DIR} ${pcre2Objs.join(' ')}`;
   }
 
   // Compile C++ to binary (with O2 optimization)

@@ -1,6 +1,6 @@
 {
   "name": "goodscript",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Go for TypeScript developers - compile TypeScript to single-file native executables",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,6 +11,8 @@
   "files": [
     "dist",
     "lib",
+    "runtime",
+    "vendor",
     "README.md",
     "LICENSE"
   ],
