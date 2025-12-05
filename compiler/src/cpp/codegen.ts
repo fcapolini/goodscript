@@ -2044,7 +2044,9 @@ export class AstCodegen {
       // This is an assignment to .length property - use resize() for arrays
       const obj = this.visitExpression(node.left.expression);
       const newSize = this.visitExpression(node.right);
-      return cpp.call(cpp.member(obj, 'resize'), [newSize]);
+      // Check if object is 'this' (a pointer in C++)
+      const isThisPointer = node.left.expression.kind === ts.SyntaxKind.ThisKeyword;
+      return cpp.call(cpp.member(obj, 'resize', isThisPointer), [newSize]);
     }
     
     // Handle instanceof specially
