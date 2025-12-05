@@ -80,6 +80,7 @@ export class Compiler {
     // CLI options take precedence over tsconfig.json
     const goodscriptConfig = this.parser.getGoodScriptConfig();
     const target = options.target || 'typescript';
+    const mode = options.mode || 'gc';
     
     // Determine validation level
     // Level can be a number (0-3) or a string ('clean', 'dag', 'native')
@@ -88,10 +89,11 @@ export class Compiler {
     // - Level 2 ('dag'): Phase 1 + Phase 2 (ownership + DAG)
     // - Level 3 ('native'): Full validation (all phases)
     //
-    // Default level depends on target:
+    // Default level depends on target AND mode:
     // - typescript target: default level 0 (no validation unless explicitly requested)
-    // - native target: default level 1 (at minimum "clean" TypeScript)
-    const defaultLevel = target === 'native' ? 1 : 0;
+    // - native target + GC mode: default level 1 (at minimum "clean" TypeScript)
+    // - native target + ownership mode: default level 2 (MUST run DAG analysis)
+    const defaultLevel = target === 'native' ? (mode === 'ownership' ? 2 : 1) : 0;
     
     let numericLevel: number;
     const configLevel = goodscriptConfig?.level;
@@ -110,13 +112,20 @@ export class Compiler {
       numericLevel = levelMap[configLevel] ?? defaultLevel;
     }
     
+    // CRITICAL: Ownership mode REQUIRES DAG analysis (minimum level 2)
+    // Without DAG analysis, ownership cycles can cause memory leaks
+    if (target === 'native' && mode === 'ownership' && numericLevel < 2) {
+      numericLevel = 2;
+    }
+    
     // Determine what validation to perform
     const shouldValidatePhase1 = numericLevel >= 1;  // "The Good Parts"
     const shouldValidatePhase2 = numericLevel >= 2;  // Ownership + DAG
     
     // For backwards compatibility, check deprecated skipOwnership flag
+    // NOTE: Cannot skip ownership analysis when in ownership mode
     const explicitSkipOwnership = options.skipOwnershipChecks ?? goodscriptConfig?.skipOwnership;
-    const effectiveSkipOwnership = explicitSkipOwnership ?? !shouldValidatePhase2;
+    const effectiveSkipOwnership = (mode === 'ownership') ? false : (explicitSkipOwnership ?? !shouldValidatePhase2);
 
     // Determine output directory
     // Priority: CLI option > tsconfig.json > default 'dist'
