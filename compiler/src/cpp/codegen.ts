@@ -27,6 +27,8 @@ export class AstCodegen {
   private interfaceMethods = new Map<string, Set<string>>(); // Map interface name -> set of method names
   private interfaceNames = new Set<string>(); // Track interface/abstract class names
   private hoistedFunctions = new Set<string>(); // Track functions hoisted to namespace scope
+  private currentClassName: string | undefined; // Track current class being processed
+  private currentTemplateParams: string[] = []; // Track current class template parameters
   private ownershipChecker: OwnershipAwareTypeChecker;
   
   constructor(private checker?: ts.TypeChecker, optimizationOptions?: OptimizationOptions) {
@@ -782,6 +784,11 @@ export class AstCodegen {
     const constructors: ast.Constructor[] = [];
     const methods: ast.Method[] = [];
     
+    // Track current class context for static member access
+    const previousClassName = this.currentClassName;
+    const previousTemplateParams = this.currentTemplateParams;
+    this.currentClassName = name;
+    
     // Handle type parameters for generic classes
     const templateParams: string[] = [];
     if (node.typeParameters) {
@@ -791,6 +798,7 @@ export class AstCodegen {
         this.templateParameters.add(paramName); // Track as template parameter
       }
     }
+    this.currentTemplateParams = templateParams;
     
     // Handle extends clause
     let baseClass: string | undefined;
@@ -1022,6 +1030,10 @@ export class AstCodegen {
       baseClass = 'std::exception';
     }
     
+    // Restore previous class context
+    this.currentClassName = previousClassName;
+    this.currentTemplateParams = previousTemplateParams;
+    
     return new ast.Class(name, fields, constructors, methods, baseClass, templateParams, false, baseClasses);
   }
   
@@ -1141,6 +1153,10 @@ export class AstCodegen {
     }
     
     return methodNames;
+  }
+  
+  private getCurrentClassName(): string | undefined {
+    return this.currentClassName;
   }
   
   private visitEnum(node: ts.EnumDeclaration): ast.Enum | undefined {
@@ -2735,7 +2751,16 @@ export class AstCodegen {
           const symbol = this.checker.getSymbolAtLocation(objNode);
           if (symbol && symbol.flags & ts.SymbolFlags.Class) {
             // This is a class, so it's a static method call
-            return cpp.call(cpp.id(`gs::${objName}::${methodName}`), args);
+            // Check if we're inside this class (use template params) or outside (explicit instantiation)
+            const currentClass = this.getCurrentClassName();
+            if (currentClass === objName && this.currentTemplateParams.length > 0) {
+              // Inside the template class, use template params: ClassName<T>::method
+              const templateArgs = this.currentTemplateParams.join(', ');
+              return cpp.call(cpp.id(`gs::${objName}<${templateArgs}>::${methodName}`), args);
+            } else {
+              // Outside or non-template class: ClassName::method
+              return cpp.call(cpp.id(`gs::${objName}::${methodName}`), args);
+            }
           }
         }
       }
@@ -2865,6 +2890,24 @@ export class AstCodegen {
       // Check if it's an enum access
       if (this.enumNames.has(objName)) {
         return cpp.id(`gs::${objName}::${cppUtils.escapeName(prop)}`);
+      }
+      
+      // Check if it's a static class member access
+      // For generic classes, we need ClassName<T>::member syntax
+      if (this.checker) {
+        const symbol = this.checker.getSymbolAtLocation(node.expression);
+        if (symbol && (symbol.flags & ts.SymbolFlags.Class)) {
+          // Get the current class context to determine template parameters
+          const currentClass = this.getCurrentClassName();
+          // If accessing a static member from within the same class, include template params
+          if (currentClass === objName && this.currentTemplateParams.length > 0) {
+            const templateArgs = this.currentTemplateParams.join(', ');
+            return cpp.id(`${objName}<${templateArgs}>::${cppUtils.escapeName(prop)}`);
+          }
+          // For access from outside, we'd need to infer the template arguments
+          // For now, just use the class name without template params for non-matching context
+          return cpp.id(`${objName}::${cppUtils.escapeName(prop)}`);
+        }
       }
       
       if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON' || objName === 'Date' || objName === 'String') {
@@ -3692,6 +3735,37 @@ export class AstCodegen {
   }
   
   /**
+   * Inline local variable references in an expression with their initializers.
+   * This is used in constructor member initializers to avoid using variables
+   * that are defined in the constructor body (which comes after the init list in C++).
+   */
+  private inlineLocalVars(expr: ts.Expression, localVars: Map<string, ts.Expression>): ts.Expression {
+    const transformer = <T extends ts.Node>(context: ts.TransformationContext) => {
+      const visit = (node: ts.Node): ts.Node => {
+        // If this is an identifier that references a local variable, replace it
+        if (ts.isIdentifier(node)) {
+          const varName = node.text;
+          const initializer = localVars.get(varName);
+          if (initializer) {
+            // Recursively inline in case the initializer also references other locals
+            return this.inlineLocalVars(initializer, localVars);
+          }
+        }
+        
+        // Recursively visit children
+        return ts.visitEachChild(node, visit, context);
+      };
+      
+      return (node: T) => ts.visitNode(node, visit) as T;
+    };
+    
+    const result = ts.transform(expr, [transformer]);
+    const transformed = result.transformed[0];
+    result.dispose();
+    return transformed as ts.Expression;
+  }
+  
+  /**
    * Process constructor body to extract super() calls and convert them to initializer list.
    * Returns the initializer list and the modified body (without super() call).
    */
@@ -3710,8 +3784,21 @@ export class AstCodegen {
     const remainingStatements: ast.Statement[] = [];
     let foundSuper = false;
     
+    // Track local variables defined in constructor that might be used in member initializers
+    const localVars = new Map<string, ts.Expression>();
+    
     for (let i = 0; i < statements.length; i++) {
       const stmt = statements[i];
+      
+      // Track const variable declarations for potential inlining in member initializers
+      if (ts.isVariableStatement(stmt)) {
+        for (const decl of stmt.declarationList.declarations) {
+          if (ts.isIdentifier(decl.name) && decl.initializer) {
+            const varName = decl.name.text;
+            localVars.set(varName, decl.initializer);
+          }
+        }
+      }
       
       // Check if this is a super() call
       if (ts.isExpressionStatement(stmt) && ts.isCallExpression(stmt.expression)) {
@@ -3761,7 +3848,10 @@ export class AstCodegen {
               // Empty array literal [] → {}
               value = cpp.initList([]);
             } else {
-              value = this.visitExpression(binExpr.right);
+              // Check if the right side references a local variable that should be inlined
+              // For example: this.table = new Array(capacity) where capacity was just defined
+              const exprWithInlining = this.inlineLocalVars(binExpr.right, localVars);
+              value = this.visitExpression(exprWithInlining);
             }
             
             // Check if field type is optional and value is nullptr - use std::nullopt
