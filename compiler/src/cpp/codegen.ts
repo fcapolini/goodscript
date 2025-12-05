@@ -819,6 +819,28 @@ export class AstCodegen {
         const fieldName = cppUtils.escapeName(member.name.getText());
         let fieldType = member.type ? this.mapType(member.type) : new ast.CppType('auto');
         
+        // Check if property is static
+        const isStatic = member.modifiers?.some(m => m.kind === ts.SyntaxKind.StaticKeyword) ?? false;
+        
+        // For static properties with numeric initializers, use static constexpr
+        if (isStatic && member.initializer) {
+          // Check if initializer is a numeric literal
+          if (ts.isNumericLiteral(member.initializer)) {
+            const value = member.initializer.text;
+            // For numeric constants, use static constexpr with inline initialization
+            // In C++, static constexpr members can be initialized inline
+            const initValue = cpp.literal(parseFloat(value));
+            fieldType = new ast.CppType('static constexpr double');
+            fields.push(new ast.Field(fieldName, fieldType, ast.AccessSpecifier.Public, initValue));
+            continue;
+          }
+        }
+        
+        // Skip static properties that aren't numeric constants (not supported yet)
+        if (isStatic) {
+          continue;
+        }
+        
         // Check if field is optional (has questionToken: field?: Type)
         const isOptional = member.questionToken !== undefined;
         if (isOptional) {
