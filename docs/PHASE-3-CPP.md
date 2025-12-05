@@ -11,18 +11,19 @@ The C++ code generation uses an **AST-based approach** with **ownership-aware ty
 ### Current Implementation (Dec 6, 2025 - 100% Test Pass Rate + Refactoring)
 
 **New AST-Based Codegen:**
-- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~3,783 lines)
+- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~3,686 lines)
   - Pure AST transformation from TypeScript AST → C++ AST
   - No string concatenation during generation
   - Type-safe, composable, easily testable
   - **Currently passing 1252/1252 tests (100%)** ✅ 🎉
   - **CORE FUNCTIONALITY COMPLETE**
-  - **Refactored architecture (Dec 6, 2025 Phase 2)** - Further improved maintainability
+  - **Refactored architecture (Dec 6, 2025 Phase 3)** - Further improved maintainability
     - **`src/cpp/type-mapper.ts`** (260 lines) - Centralized TypeScript → C++ type mapping
     - **`src/cpp/type-inference.ts`** (310 lines) - Strategy pattern for variable type inference
     - **`src/cpp/main-builder.ts`** (100 lines) - Main function generation logic
     - **`src/cpp/transform-context.ts`** (250 lines) - Consolidated state tracking
-    - **`src/cpp/expression-analyzer.ts`** (341 lines) - Expression analysis utilities (NEW)
+    - **`src/cpp/expression-analyzer.ts`** (341 lines) - Expression analysis utilities
+    - **`src/cpp/lambda-analyzer.ts`** (147 lines) - Lambda/closure analysis utilities (NEW)
   - **use<T> array handling** - Proper weak_ptr conversion for non-owning references
   - **GC mode Map.get() fixes** - Proper pointer handling in garbage-collected mode
   - **Nested template support** - Handle make_shared<Stack<String>> correctly
@@ -141,6 +142,26 @@ See `src/cpp/README.md` for usage examples.
 - 7 super() call tests (100% passing) ✅
 - 10 inheritance tests (100% passing) ✅
 - 5 runtime-equivalence tests (100% passing) ✅
+
+**Recent Additions (Dec 6, 2025 - Codegen Refactoring Phase 3)** 🎉:
+1. ✅ **LambdaAnalyzer Service** - Extracted lambda and closure analysis utilities
+   - **Problem**: codegen.ts contained ~150 lines of lambda/closure analysis logic scattered across methods
+   - **Solution**: Extract static analysis methods into dedicated LambdaAnalyzer service
+   - **Created Service**:
+     - **LambdaAnalyzer** (147 lines) - Static utility class for lambda/closure analysis
+       - `doesLambdaModifyParameter()` - Detects if lambda modifies parameters (determines capture mode)
+       - `sourceFileHasAsync()` - Detects if file needs cppcoro support
+       - `arrowFunctionUsesClosure()` - Determines if function can be hoisted or needs inline lambda
+   - **Impact**: 
+     - codegen.ts reduced from 3783 → 3686 lines (-97 lines, -2.6%)
+     - Total reduction from original: 4372 → 3686 (-686 lines, -15.7%)
+     - Reusable static utilities for lambda analysis
+     - Cleaner separation between analysis and code generation
+   - **Test Results**: 338/338 tests passing (100%) ✅
+   - **Files**: 
+     - `src/cpp/lambda-analyzer.ts` (new)
+     - `src/cpp/codegen.ts` (refactored - replaced 3 methods with delegations)
+   - **Documentation**: This session
 
 **Recent Additions (Dec 6, 2025 - Codegen Refactoring Phase 2)** 🎉:
 1. ✅ **ExpressionAnalyzer Service** - Extracted expression analysis utilities

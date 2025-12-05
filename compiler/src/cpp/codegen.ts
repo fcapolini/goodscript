@@ -17,6 +17,7 @@ import { CppTypeMapper } from './type-mapper';
 import { TypeInferenceService } from './type-inference';
 import { MainFunctionBuilder } from './main-builder';
 import { ExpressionAnalyzer } from './expression-analyzer';
+import { LambdaAnalyzer } from './lambda-analyzer';
 
 export class AstCodegen {
   protected readonly ctx = new TransformContext();
@@ -3593,24 +3594,7 @@ export class AstCodegen {
    * Check if a lambda function modifies a parameter (e.g., assigns to array elements)
    */
   private doesLambdaModifyParameter(node: ts.ArrowFunction, paramName: string): boolean {
-    const checkNode = (n: ts.Node): boolean => {
-      // Check for assignments to array elements: arr[i] = value
-      if (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
-        const left = n.left;
-        // Check if left side is an element access on the parameter
-        if (ts.isElementAccessExpression(left)) {
-          const objName = left.expression.getText();
-          if (objName === paramName) {
-            return true; // Found assignment to parameter array element
-          }
-        }
-      }
-      
-      // Recursively check children
-      return ts.forEachChild(n, checkNode) || false;
-    };
-    
-    return checkNode(node.body);
+    return LambdaAnalyzer.doesLambdaModifyParameter(node, paramName);
   }
   
   /**
@@ -3618,24 +3602,7 @@ export class AstCodegen {
    * Returns true if cppcoro support is needed
    */
   private sourceFileHasAsync(sourceFile: ts.SourceFile): boolean {
-    const checkNode = (node: ts.Node): boolean => {
-      // Check for async keyword on functions/methods
-      if ((ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node) || 
-           ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
-          node.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword)) {
-        return true;
-      }
-      
-      // Check for await expressions
-      if (ts.isAwaitExpression(node)) {
-        return true;
-      }
-      
-      // Recursively check children
-      return ts.forEachChild(node, checkNode) ?? false;
-    };
-    
-    return checkNode(sourceFile);
+    return LambdaAnalyzer.sourceFileHasAsync(sourceFile);
   }
   
   /**
@@ -3643,73 +3610,9 @@ export class AstCodegen {
    * Returns true if the function captures external variables, false otherwise
    */
   private arrowFunctionUsesClosure(node: ts.ArrowFunction, sourceFile: ts.SourceFile, functionName?: string): boolean {
-    // Collect parameter names to exclude from closure check
-    const paramNames = new Set<string>();
-    for (const param of node.parameters) {
-      paramNames.add(param.name.getText());
-    }
-    
-    // Collect all top-level declarations in the source file
-    const topLevelNames = new Set<string>();
-    for (const stmt of sourceFile.statements) {
-      if (ts.isFunctionDeclaration(stmt) && stmt.name) {
-        topLevelNames.add(stmt.name.text);
-      } else if (ts.isVariableStatement(stmt)) {
-        for (const decl of stmt.declarationList.declarations) {
-          topLevelNames.add(decl.name.getText());
-        }
-      } else if (ts.isClassDeclaration(stmt) && stmt.name) {
-        topLevelNames.add(stmt.name.text);
-      } else if (ts.isInterfaceDeclaration(stmt)) {
-        topLevelNames.add(stmt.name.text);
-      } else if (ts.isEnumDeclaration(stmt)) {
-        topLevelNames.add(stmt.name.text);
-      }
-    }
-    
-    // Check if function body references any external variables
-    const checkNode = (n: ts.Node): boolean => {
-      // Skip parameter declarations
-      if (node.parameters.some(p => p === n)) {
-        return false;
-      }
-      
-      // Check for identifier references
-      if (ts.isIdentifier(n)) {
-        const name = n.text;
-        
-        // Skip if it's a parameter
-        if (paramNames.has(name)) {
-          return false;
-        }
-        
-        // Skip if it's a self-reference (recursive call)
-        if (functionName && name === functionName) {
-          return false;
-        }
-        
-        // Skip built-in types and globals
-        const builtIns = ['console', 'Date', 'Array', 'Map', 'Set', 'String', 'Number', 
-                          'Math', 'JSON', 'Promise', 'undefined', 'null', 'true', 'false'];
-        if (builtIns.includes(name)) {
-          return false;
-        }
-        
-        // If it references a top-level name, it's using closure
-        // But only if it's a variable, not a class/interface/enum (those are types)
-        const parent = n.parent;
-        if (topLevelNames.has(name) && !ts.isTypeReferenceNode(parent)) {
-          return true; // References another top-level variable - closure detected
-        }
-      }
-      
-      // Recursively check children
-      return ts.forEachChild(n, checkNode) || false;
-    };
-    
-    return checkNode(node.body);
+    return LambdaAnalyzer.arrowFunctionUsesClosure(node, sourceFile, functionName);
   }
-  
+
   /**
    * Visit a non-closure arrow function and convert to a regular function declaration
    * This avoids the overhead of std::function wrapper for functions that don't capture variables
