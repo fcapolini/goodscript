@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "build": "gsc -t native -b"
+    "build": "node ../../dist/gsc.js -t native -b"
   },
   "devDependencies": {
     "@types/node": "^24.10.1"

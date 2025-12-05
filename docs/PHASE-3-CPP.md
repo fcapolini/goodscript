@@ -23,6 +23,7 @@ The C++ code generation uses an **AST-based approach** with **ownership-aware ty
   - Constructor ownership detection - Correctly generates `std::make_unique<T>()` for `own<T>` fields
   - Performance optimizations enabled by default (level 1)
   - Function hoisting for non-closure functions
+  - **Auto-main() generation** - Generates empty `main()` for declaration-only files
 
 **GC Mode Infrastructure:**
 - **`src/cpp/gc-ast-codegen.ts`** - GC mode code generator (~267 lines) ⭐ **ENHANCED**
@@ -132,6 +133,19 @@ See `src/cpp/README.md` for usage examples.
 - 7 super() call tests (100% passing) ✅
 - 10 inheritance tests (100% passing) ✅
 - 5 runtime-equivalence tests (100% passing) ✅
+
+**Recent Additions (Dec 5, 2025 - Auto-main() Generation)** 🎉:
+1. ✅ **Auto-main() Generation** - Always generate main() for standalone compilation
+   - **Problem**: Declaration-only files (e.g., files with only `export class`) failed to link with "undefined symbol: _main"
+   - **Root Cause**: Codegen only created `main()` when there were top-level statements or async main
+   - **Solution**: Always generate an empty `main()` function for files without top-level statements
+     - If no statements and no async main: `int main() { return 0; }`
+     - Ensures every compiled C++ file can be linked as a standalone binary
+   - **Implementation**: Added else clause in codegen.ts to handle the declaration-only case
+   - **Impact**: Multi-file projects now compile successfully (e.g., example2)
+   - **Test case**: `test-examples/example2` (first-gs.ts with only exports)
+   - **Files changed**: `src/cpp/codegen.ts`
+   - **Documentation**: This session, `notes/SESSION-20251205-AUTO-MAIN.md`
 
 **Recent Additions (Dec 3, 2025 - 100% Test Pass Rate Achieved)** 🎉:
 1. ✅ **use<T> Array Handling** - Fixed weak_ptr array push operations

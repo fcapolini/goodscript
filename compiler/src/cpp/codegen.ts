@@ -199,6 +199,15 @@ export class AstCodegen {
           new ast.ReturnStmt(cpp.id('0'))
         ])
       );
+    } else {
+      // No top-level statements and no async main - generate empty main()
+      // This handles declaration-only files (e.g., only exports)
+      mainFunction = new ast.Function(
+        'main',
+        new ast.CppType('int'),
+        [],
+        new ast.Block([new ast.ReturnStmt(cpp.id('0'))])
+      );
     }
     
     let tu = new ast.TranslationUnit(includes, [ns], mainFunction);
