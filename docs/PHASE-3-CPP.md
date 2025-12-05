@@ -8,15 +8,20 @@
 
 The C++ code generation uses an **AST-based approach** with **ownership-aware type tracking**, **performance optimization**, and **function hoisting**:
 
-### Current Implementation (Dec 3, 2025 - 100% Test Pass Rate)
+### Current Implementation (Dec 6, 2025 - 100% Test Pass Rate + Refactoring)
 
 **New AST-Based Codegen:**
-- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~3,534 lines)
+- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~4,101 lines)
   - Pure AST transformation from TypeScript AST → C++ AST
   - No string concatenation during generation
   - Type-safe, composable, easily testable
   - **Currently passing 1252/1252 tests (100%)** ✅ 🎉
   - **CORE FUNCTIONALITY COMPLETE**
+  - **Refactored architecture (Dec 6, 2025)** - Improved maintainability
+    - **`src/cpp/type-mapper.ts`** (260 lines) - Centralized TypeScript → C++ type mapping
+    - **`src/cpp/type-inference.ts`** (310 lines) - Strategy pattern for variable type inference
+    - **`src/cpp/main-builder.ts`** (100 lines) - Main function generation logic
+    - **`src/cpp/transform-context.ts`** (250 lines) - Consolidated state tracking
   - **use<T> array handling** - Proper weak_ptr conversion for non-owning references
   - **GC mode Map.get() fixes** - Proper pointer handling in garbage-collected mode
   - **Nested template support** - Handle make_shared<Stack<String>> correctly
@@ -135,6 +140,40 @@ See `src/cpp/README.md` for usage examples.
 - 7 super() call tests (100% passing) ✅
 - 10 inheritance tests (100% passing) ✅
 - 5 runtime-equivalence tests (100% passing) ✅
+
+**Recent Additions (Dec 6, 2025 - Codegen Refactoring)** 🎉:
+1. ✅ **Service Extraction Pattern** - Improved maintainability and testability
+   - **Problem**: codegen.ts was 4372 lines with complex type mapping and inference logic scattered throughout
+   - **Solution**: Extract reusable services with clear responsibilities
+   - **Created Services**:
+     - **CppTypeMapper** (260 lines) - Centralized TypeScript → C++ type mapping
+       - Maps primitives, generics, ownership types (own/share/use)
+       - Handles nested templates, built-in value types
+       - Consistent type conversion throughout codegen
+     - **TypeInferenceService** (310 lines) - Strategy pattern for type inference
+       - 5 specialized strategies: NewExpression, ElementAccess, CallExpression, ObjectLiteral, ArrowFunction
+       - Each strategy encapsulates one inference case with canHandle()/inferType()
+       - Extracted 200+ lines of complex conditional logic
+     - **MainFunctionBuilder** (100 lines) - Main function generation
+       - Handles empty statements, async wrapper, sync main
+       - Simplified generate() method from 80+ lines to single call
+     - **TransformContext** (250 lines) - Consolidated state tracking (already existed)
+   - **Impact**: 
+     - codegen.ts reduced from 4372 → 4101 lines (-271 lines, -6.2%)
+     - Better separation of concerns, easier to test individual components
+     - More maintainable for future enhancements
+   - **Bugs Fixed During Refactoring**:
+     - Double namespace prefix (`gs::gs::Node` → `gs::Node`)
+     - Async function return type inference (`gs::unknown*` → proper types)
+     - Empty object type handling (`{}` → `auto`)
+   - **Test Results**: 338/338 tests passing (100%) ✅
+   - **Files**: 
+     - `src/cpp/type-mapper.ts` (new)
+     - `src/cpp/type-inference.ts` (new)
+     - `src/cpp/main-builder.ts` (new)
+     - `src/cpp/codegen.ts` (refactored)
+     - `test/phase3/basic/async-await.test.ts` (updated to expect namespace-qualified calls)
+   - **Documentation**: This session
 
 **Recent Additions (Dec 5, 2025 - Auto-main() Generation)** 🎉:
 1. ✅ **Auto-main() Generation** - Always generate main() for standalone compilation

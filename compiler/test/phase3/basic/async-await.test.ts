@@ -68,7 +68,7 @@ describe('Async/Await Code Generation', () => {
     `;
     
     const result = compile(code);
-    expect(result).toContain('co_await fetchValue()');
+    expect(result).toContain('co_await gs::fetchValue()');
     expect(result).toContain('co_return value');
   });
   
@@ -112,7 +112,7 @@ describe('Async/Await Code Generation', () => {
     `;
     
     const result = compile(code);
-    expect(result).toContain('co_await fetchValue()');
+    expect(result).toContain('co_await gs::fetchValue()');
     expect(result).toContain('co_return a + b');
   });
   
