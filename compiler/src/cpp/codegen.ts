@@ -92,6 +92,10 @@ export class AstCodegen {
         const func = this.visitFunction(stmt);
         if (func) {
           declarations.push(func);
+          // Track function name for gs:: qualification in calls
+          if (stmt.name) {
+            this.hoistedFunctions.add(cppUtils.escapeName(stmt.name.text));
+          }
           // Check if this is the main function and if it's async
           if (stmt.name?.text === 'main') {
             gsMainIsAsync = stmt.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ?? false;
