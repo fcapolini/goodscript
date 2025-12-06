@@ -21,6 +21,10 @@ import { LambdaAnalyzer } from './lambda-analyzer';
 import { CallExpressionHandler } from './expressions/call-expression-handler';
 import { BinaryExpressionHandler } from './expressions/binary-expression-handler';
 import { ElementAccessHandler } from './expressions/element-access-handler';
+import { ArrayLiteralHandler } from './expressions/array-literal-handler';
+import { ObjectLiteralHandler } from './expressions/object-literal-handler';
+import { LiteralHandler } from './expressions/literal-handler';
+import { IdentifierHandler } from './expressions/identifier-handler';
 import { ClassDeclarationHandler } from './class-declaration-handler';
 import { StatementHandler } from './statement-handler';
 
@@ -34,6 +38,10 @@ export class AstCodegen {
   private callHandler: CallExpressionHandler;
   private binaryHandler: BinaryExpressionHandler;
   private elementAccessHandler: ElementAccessHandler;
+  private arrayLiteralHandler: ArrayLiteralHandler;
+  private objectLiteralHandler: ObjectLiteralHandler;
+  private literalHandler: LiteralHandler;
+  private identifierHandler: IdentifierHandler;
   private classHandler: ClassDeclarationHandler;
   private statementHandler: StatementHandler;
   
@@ -69,6 +77,21 @@ export class AstCodegen {
       this.visitExpression.bind(this),
       this.isArrayAccessUsedAsLValue.bind(this)
     );
+    this.arrayLiteralHandler = new ArrayLiteralHandler(
+      checker,
+      this.ctx,
+      this.typeMapper,
+      this.visitExpression.bind(this),
+      this.mapTypeScriptTypeToCpp.bind(this),
+      this.getOwnershipTypeForNew.bind(this)
+    );
+    this.objectLiteralHandler = new ObjectLiteralHandler(
+      checker,
+      this.typeMapper,
+      this.visitExpression.bind(this)
+    );
+    this.literalHandler = new LiteralHandler();
+    this.identifierHandler = new IdentifierHandler(this.ctx);
     this.classHandler = new ClassDeclarationHandler(
       checker,
       this.ctx,
@@ -982,112 +1005,14 @@ export class AstCodegen {
   }
   
   private visitExpression(node: ts.Expression): ast.Expression {
-    if (ts.isNumericLiteral(node)) {
-      // For numeric literals, create a raw identifier with the number value
-      return cpp.id(node.text);
-    }
-    
-    if (ts.isStringLiteral(node)) {
-      // String literal already contains the text without quotes
-      // We need to add quotes and escape
-      const escaped = cppUtils.escapeString(node.text);
-      return cpp.call(
-        cpp.id('gs::String'),
-        [cpp.id(`"${escaped}"`)] // Use id() not literal() to avoid double-quoting
-      );
-    }
-    
-    // Handle regular expression literals: /pattern/flags
-    if (node.kind === ts.SyntaxKind.RegularExpressionLiteral) {
-      const regexText = node.getText();
-      // Parse /pattern/flags
-      const lastSlash = regexText.lastIndexOf('/');
-      const pattern = regexText.substring(1, lastSlash);
-      const flags = regexText.substring(lastSlash + 1);
-      
-      // Use raw string literal for pattern to avoid escaping issues
-      // R"(pattern)" syntax handles most regex patterns without escaping
-      const args: ast.Expression[] = [cpp.id(`R"(${pattern})"`)];
-      
-      // Add flags if present
-      if (flags) {
-        args.push(cpp.id(`"${flags}"`));
-      }
-      
-      return cpp.call(cpp.id('gs::RegExp'), args);
-    }
-    
-    if (node.kind === ts.SyntaxKind.TrueKeyword) {
-      return cpp.id('true');
-    }
-    
-    if (node.kind === ts.SyntaxKind.FalseKeyword) {
-      return cpp.id('false');
-    }
-    
-    if (node.kind === ts.SyntaxKind.NullKeyword) {
-      return cpp.id('nullptr');
-    }
-    
-    if (node.kind === ts.SyntaxKind.ThisKeyword) {
-      return cpp.id('this');
+    // Try literal handler first
+    const literal = this.literalHandler.handleLiteral(node);
+    if (literal) {
+      return literal;
     }
     
     if (ts.isIdentifier(node)) {
-      const varName = node.text;
-      
-      // Handle special identifiers
-      if (varName === 'undefined') {
-        return cpp.id('std::nullopt');
-      }
-      
-      // Handle global constants
-      if (varName === 'NaN') {
-        return cpp.id('gs::Number::NaN');
-      }
-      if (varName === 'Infinity') {
-        return cpp.id('gs::Number::Infinity');
-      }
-      
-      // Handle global types/objects
-      if (varName === 'String') {
-        return cpp.id('gs::String');
-      }
-      
-      const escapedName = cppUtils.escapeName(varName);
-      
-      // If this is a hoisted function, qualify with gs::
-      if (this.ctx.hoistedFunctions.has(escapedName)) {
-        return cpp.id(`gs::${escapedName}`);
-      }
-      
-      // If this identifier is tracked as unwrapped
-      if (this.ctx.unwrappedOptionals.has(escapedName)) {
-        // Check if it's a smart pointer null check (compared with nullptr)
-        // Smart pointers don't need unwrapping - they're already usable
-        if (this.ctx.smartPointerNullChecks.has(escapedName)) {
-          return cpp.id(escapedName);
-        }
-        
-        // Check if it's a smart pointer type (shared_ptr, unique_ptr, weak_ptr)
-        const varType = this.ctx.variableTypes.get(escapedName);
-        if (varType && cppUtils.isSmartPointerType(varType)) {
-          // Smart pointers don't need unwrapping - they're already usable
-          // Just return the identifier (nullptr check passed, so it's safe to use)
-          return cpp.id(escapedName);
-        }
-        
-        // For raw pointers (from Map.get() on non-smart-pointer values)
-        if (this.ctx.pointerVariables.has(escapedName)) {
-          // Dereference the pointer
-          return cpp.unary('*', cpp.id(escapedName));
-        }
-        
-        // For std::optional types
-        return cpp.id(`${escapedName}.value()`);
-      }
-      
-      return cpp.id(escapedName);
+      return this.identifierHandler.handleIdentifier(node);
     }
     
     if (ts.isBinaryExpression(node)) {
@@ -1127,183 +1052,11 @@ export class AstCodegen {
     }
     
     if (ts.isObjectLiteralExpression(node)) {
-      // Object literal: { key: value, ... }
-      // Try to infer the target type from context (e.g., Entry<K, V>)
-      let targetTypeName: string | undefined;
-      let isStructInit = false;
-      
-      if (this.checker) {
-        const contextualType = this.checker.getContextualType(node);
-        if (contextualType) {
-          const typeStr = this.checker.typeToString(contextualType);
-          // Check if it's a user-defined interface/struct (not an anonymous type)
-          // Anonymous types look like "{ key: K; value: V; }"
-          // Named types look like "Entry<K, V>"
-          if (!typeStr.startsWith('{') && !typeStr.includes(';')) {
-            // It's a named type - use it for struct initialization
-            targetTypeName = this.typeMapper.mapTypeScriptTypeToCpp(typeStr);
-            isStructInit = true;
-          }
-        }
-      }
-      
-      // Collect property values in order
-      const propertyValues: ast.Expression[] = [];
-      
-      for (const prop of node.properties) {
-        if (ts.isPropertyAssignment(prop)) {
-          // Regular property: key: value
-          const value = this.visitExpression(prop.initializer);
-          propertyValues.push(value);
-        } else if (ts.isShorthandPropertyAssignment(prop)) {
-          // Shorthand property: { x } → use x's value
-          const value = this.visitExpression(prop.name);
-          propertyValues.push(value);
-        }
-        // Note: Method declarations, getters, setters not supported yet
-      }
-      
-      if (isStructInit && targetTypeName) {
-        // Generate structured initialization: gs::Entry<K, V>{value1, value2, ...}
-        if (propertyValues.length === 0) {
-          return cpp.id(`${targetTypeName}{}`);
-        }
-        return cpp.call(cpp.id(targetTypeName), [cpp.initList(propertyValues)]);
-      }
-      
-      // Fallback: Use gs::LiteralObject (for untyped object literals)
-      // This is legacy and may not have runtime support
-      const properties: [ast.Expression, ast.Expression][] = [];
-      for (const prop of node.properties) {
-        if (ts.isPropertyAssignment(prop)) {
-          const keyStr = prop.name.getText();
-          const key = cpp.literal(keyStr);
-          const value = this.visitExpression(prop.initializer);
-          const propertyValue = cpp.call(cpp.id('gs::Property'), [value]);
-          properties.push([key, propertyValue]);
-        } else if (ts.isShorthandPropertyAssignment(prop)) {
-          const keyStr = prop.name.getText();
-          const key = cpp.literal(keyStr);
-          const value = this.visitExpression(prop.name);
-          const propertyValue = cpp.call(cpp.id('gs::Property'), [value]);
-          properties.push([key, propertyValue]);
-        }
-      }
-      
-      if (properties.length === 0) {
-        return cpp.id('gs::LiteralObject{}');
-      }
-      
-      const propInits = properties.map(([key, value]) => cpp.initList([key, value]));
-      return cpp.call(cpp.id('gs::LiteralObject'), [cpp.initList(propInits)]);
+      return this.objectLiteralHandler.handleObjectLiteral(node);
     }
     
     if (ts.isArrayLiteralExpression(node)) {
-      const elements = node.elements.map(el => this.visitExpression(el));
-      
-      // Check if this is a tuple literal based on context
-      if (this.checker) {
-        const type = this.checker.getTypeAtLocation(node);
-        const typeStr = this.checker.typeToString(type);
-        
-        // Detect tuple type: [string, number] or [T, U, V, ...]
-        // TypeChecker represents tuples as "[string, number]" in typeToString
-        if (typeStr.startsWith('[') && typeStr.endsWith(']') && !typeStr.endsWith('[]')) {
-          // It's a tuple!
-          if (elements.length === 2) {
-            // Use std::make_pair for 2-element tuples
-            return cpp.call(cpp.id('std::make_pair'), elements);
-          } else {
-            // Use std::make_tuple for other sizes
-            return cpp.call(cpp.id('std::make_tuple'), elements);
-          }
-        }
-      }
-      
-      // Not a tuple - handle as regular array
-      // Try to determine element type from context using TypeChecker
-      let elementType: string | undefined;
-      if (this.checker) {
-        const type = this.checker.getTypeAtLocation(node);
-        const typeStr = this.checker.typeToString(type);
-        
-        // Extract element type from type string like "number[]" or "Array<number>"
-        if (typeStr.endsWith('[]')) {
-          const baseType = typeStr.slice(0, -2);
-          // Check if the base type is an anonymous object type { ... }
-          if (baseType.startsWith('{') && baseType.includes(';')) {
-            // Try to get the contextual type which might have the named interface
-            const contextualType = this.checker.getContextualType(node);
-            if (contextualType && (contextualType as any).target) {
-              const typeRef = contextualType as ts.TypeReference;
-              const typeArgs = this.checker.getTypeArguments(typeRef);
-              if (typeArgs && typeArgs.length > 0) {
-                const argStr = this.checker.typeToString(typeArgs[0]);
-                // Check if argStr is a named type (not anonymous)
-                if (!argStr.startsWith('{') && !argStr.includes(';')) {
-                  elementType = this.typeMapper.mapTypeScriptTypeToCpp(argStr);
-                }
-              }
-            }
-            // If we couldn't find a named type, try to infer from first element
-            if (!elementType && elements.length > 0 && node.elements[0] && ts.isObjectLiteralExpression(node.elements[0])) {
-              const firstElem = node.elements[0];
-              const elemContextualType = this.checker.getContextualType(firstElem);
-              if (elemContextualType) {
-                const elemTypeStr = this.checker.typeToString(elemContextualType);
-                if (!elemTypeStr.startsWith('{') && !elemTypeStr.includes(';')) {
-                  elementType = this.typeMapper.mapTypeScriptTypeToCpp(elemTypeStr);
-                }
-              }
-            }
-          } else {
-            // Regular type like "number"
-            elementType = this.typeMapper.mapTypeScriptTypeToCpp(baseType);
-          }
-        } else if (typeStr.startsWith('Array<')) {
-          const match = typeStr.match(/^Array<(.+)>$/);
-          if (match) {
-            elementType = this.typeMapper.mapTypeScriptTypeToCpp(match[1]);
-          }
-        }
-        
-        // Also try to get type arguments from type reference
-        if (!elementType && (type as any).target) {
-          const typeRef = type as ts.TypeReference;
-          const typeArgs = this.checker.getTypeArguments(typeRef);
-          if (typeArgs && typeArgs.length > 0) {
-            const argStr = this.checker.typeToString(typeArgs[0]);
-            elementType = this.mapTypeScriptTypeToCpp(argStr);
-          }
-        }
-        
-        // NEW: If elements are new expressions creating class instances,
-        // the element type should be the smart pointer type (unique_ptr or shared_ptr)
-        if (elements.length > 0 && node.elements[0] && ts.isNewExpression(node.elements[0])) {
-          const firstNew = node.elements[0];
-          const className = firstNew.expression.getText();
-          const ownershipType = this.getOwnershipTypeForNew(firstNew);
-          if (ownershipType === 'unique') {
-            elementType = `std::unique_ptr<gs::${className}>`;
-          } else {
-            elementType = `std::shared_ptr<gs::${className}>`;
-          }
-        }
-      }
-      
-      // Special case: if element type is 'auto' (from TypeScript 'any'), and we're in a generic class,
-      // use the template parameter with std::optional (common pattern for nullable element arrays)
-      if (elementType === 'auto' && this.ctx.templateParameters.size > 0) {
-        // Get the first template parameter (usually 'E' or 'T')
-        const firstParam = Array.from(this.ctx.templateParameters)[0];
-        elementType = `std::optional<${firstParam}>`;
-      }
-      
-      // Generate gs::Array<T>({...}) with explicit template parameter if we know the type
-      // This prevents type inference issues with int vs double literals
-      // Note: if elementType is still 'auto', omit it (can't use auto as template arg)
-      const arrayType = (elementType && elementType !== 'auto') ? `gs::Array<${elementType}>` : 'gs::Array';
-      return cpp.call(cpp.id(arrayType), [cpp.initList(elements)]);
+      return this.arrayLiteralHandler.handleArrayLiteral(node);
     }
     
     if (ts.isParenthesizedExpression(node)) {
