@@ -241,7 +241,15 @@ class ArrowFunctionInference extends TypeInferenceStrategy {
       p.type ? this.ctx.typeMapper.mapTsNodeType(p.type) : new ast.CppType('double')
     );
     
-    const paramTypeStrs = paramTypes.map(t => t.toString()).join(', ');
+    // Adjust parameter types for std::function template
+    // Interfaces must be passed by const reference
+    const paramTypeStrs = paramTypes.map(t => {
+      const typeStr = t.toString();
+      const baseTypeName = typeStr.replace(/^gs::/, '').replace(/<.*$/, '').trim();
+      const isInterface = this.ctx.interfaceNames.has(baseTypeName);
+      return isInterface ? `const ${typeStr}&` : typeStr;
+    }).join(', ');
+    
     return new ast.CppType(`std::function<${returnType.toString()}(${paramTypeStrs})>`);
   }
 }

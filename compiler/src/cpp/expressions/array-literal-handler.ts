@@ -72,8 +72,17 @@ export class ArrayLiteralHandler {
       return undefined;
     }
 
-    const type = this.checker.getTypeAtLocation(node);
-    const typeStr = this.checker.typeToString(type);
+    // First try contextual type (e.g., from assignment target)
+    // This is crucial for empty arrays: const items: T[] = []
+    let type = this.checker.getContextualType(node);
+    let typeStr = type ? this.checker.typeToString(type) : undefined;
+    
+    // If no contextual type, use the literal's own type
+    if (!type || !typeStr) {
+      type = this.checker.getTypeAtLocation(node);
+      typeStr = this.checker.typeToString(type);
+    }
+    
     let elementType: string | undefined;
     
     // Extract element type from type string like "number[]" or "Array<number>"
@@ -141,8 +150,33 @@ export class ArrayLiteralHandler {
       
       return undefined;
     } else {
-      // Regular type like "number"
-      return this.typeMapper.mapTypeScriptTypeToCpp(baseType);
+      // Regular type like "number" or "Person"
+      // Check if the base type is a class - if so, wrap in shared_ptr
+      // because all class instances in GoodScript are shared_ptr by default
+      let elementType = this.typeMapper.mapTypeScriptTypeToCpp(baseType);
+      
+      // If element type is a class (starts with gs:: and isn't a built-in like gs::String/Array/Map/Set),
+      // it needs to be wrapped in shared_ptr
+      if (this.checker && elementType.startsWith('gs::')) {
+        const className = baseType;
+        // Check if it's a built-in value type (String, Array, Map, Set, RegExp, Date, Promise)
+        const builtInValueTypes = ['String', 'Array', 'Map', 'Set', 'RegExp', 'Date', 'Promise'];
+        if (!builtInValueTypes.includes(className)) {
+          // Try to find the type symbol to check if it's a class
+          const sourceFile = node.getSourceFile();
+          const classDecl = sourceFile.statements.find(stmt => 
+            ts.isClassDeclaration(stmt) && stmt.name?.text === className
+          );
+          // Also check if it's in interface names (interfaces also need shared_ptr)
+          const isInterface = this.ctx.interfaceNames.has(className);
+          
+          if (classDecl || isInterface) {
+            elementType = `std::shared_ptr<${elementType}>`;
+          }
+        }
+      }
+      
+      return elementType;
     }
   }
 

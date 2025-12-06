@@ -347,13 +347,37 @@ export class CppTypeMapper {
     if (ts.isFunctionTypeNode(node)) {
       const returnType = node.type ? this.mapTsNodeType(node.type) : new ast.CppType('void');
       const paramTypes = node.parameters.map(p => 
-        p.type ? this.mapTsNodeType(p.type).toString() : 'double'
+        p.type ? this.adjustFunctionParameterType(this.mapTsNodeType(p.type)) : 'double'
       );
       return new ast.CppType(`std::function<${returnType.toString()}(${paramTypes.join(', ')})>`);
     }
 
     // Default: auto
     return new ast.CppType('auto');
+  }
+
+  /**
+   * Adjust parameter type for std::function template
+   * Interfaces and abstract classes must be passed by const reference
+   */
+  private adjustFunctionParameterType(cppType: ast.CppType): string {
+    const typeStr = cppType.toString();
+    
+    // Extract base type name (strip gs:: prefix, template args, etc.)
+    const baseTypeName = typeStr
+      .replace(/^gs::/, '')
+      .replace(/<.*$/, '')
+      .trim();
+    
+    // Check if this is an interface type
+    const isInterface = this.interfaceNames?.has(baseTypeName) ?? false;
+    
+    // Interfaces must be passed by const reference
+    if (isInterface) {
+      return `const ${typeStr}&`;
+    }
+    
+    return typeStr;
   }
 
   /**
@@ -376,6 +400,22 @@ export class CppTypeMapper {
       return tsType;
     }
 
+    // Handle tuple types: [string, number] → std::pair<gs::String, double>
+    // Or [T, U, V] → std::tuple<T, U, V> for 3+ elements
+    if (tsType.startsWith('[') && tsType.endsWith(']')) {
+      const inner = tsType.slice(1, -1);
+      const elements = this.splitTypeArguments(inner);
+      const mappedElements = elements.map(el => this.mapTypeScriptTypeToCpp(el.trim()));
+      
+      if (mappedElements.length === 2) {
+        return `std::pair<${mappedElements[0]}, ${mappedElements[1]}>`;
+      } else if (mappedElements.length > 0) {
+        return `std::tuple<${mappedElements.join(', ')}>`;
+      }
+      // Empty tuple is treated as void
+      return 'void';
+    }
+
     // Handle generic types
     if (tsType.includes('<')) {
       const match = tsType.match(/^([^<]+)<(.+)>$/);
@@ -395,6 +435,24 @@ export class CppTypeMapper {
         }
         if (baseType === 'Promise') {
           return `cppcoro::task<${mappedArgs[0]}>`;
+        }
+        
+        // Ownership types: own<T>, share<T>, use<T>
+        if (baseType === 'own' && mappedArgs.length === 1) {
+          const innerType = mappedArgs[0];
+          // Don't add gs:: if already present
+          const fullType = innerType.startsWith('gs::') ? innerType : `gs::${innerType}`;
+          return `std::unique_ptr<${fullType}>`;
+        }
+        if (baseType === 'share' && mappedArgs.length === 1) {
+          const innerType = mappedArgs[0];
+          const fullType = innerType.startsWith('gs::') ? innerType : `gs::${innerType}`;
+          return `std::shared_ptr<${fullType}>`;
+        }
+        if (baseType === 'use' && mappedArgs.length === 1) {
+          const innerType = mappedArgs[0];
+          const fullType = innerType.startsWith('gs::') ? innerType : `gs::${innerType}`;
+          return `std::weak_ptr<${fullType}>`;
         }
         
         // Custom generic type

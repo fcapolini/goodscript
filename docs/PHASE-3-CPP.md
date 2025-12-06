@@ -2,7 +2,9 @@
 
 **Status:** ✅ 100% Complete (1252/1252 tests passing) - All Tests Passing! 🎉
 
-**Major Milestone (Dec 5, 2024):** 🎉 **6 production-quality Dart-derived stdlib libraries successfully compiling TypeScript→C++ and executing natively!** All libraries pass triple-mode validation (TypeScript tests, C++ GC compilation, native execution).
+**Major Milestone (Dec 6, 2024):** 🎉 **All 190 concrete-examples tests passing (100%)!** All 15 test files validate TypeScript→C++ compilation with runtime equivalence across JavaScript, C++ native, and C++ GC modes.
+
+**Previous Milestone (Dec 5, 2024):** 🎉 **6 production-quality Dart-derived stdlib libraries successfully compiling TypeScript→C++ and executing natively!** All libraries pass triple-mode validation (TypeScript tests, C++ GC compilation, native execution).
 
 ## Architecture
 
@@ -243,7 +245,49 @@ See `src/cpp/README.md` for usage examples.
      - `test/phase3/basic/async-await.test.ts` (updated to expect namespace-qualified calls)
    - **Documentation**: This session
 
-**Recent Additions (Dec 5, 2025 - Auto-main() Generation)** 🎉:
+**Recent Additions (Dec 6, 2024 - Concrete Examples 100% Pass Rate)** 🎉:
+1. ✅ **Lambda Capture Fix** - Changed default lambda capture from `[]` to `[&]`
+   - **Problem**: Lambdas with empty capture list couldn't reference other lambdas in same scope
+   - **Solution**: Use `[&]` (capture by reference) as default for all arrow functions
+   - **Files**: `src/cpp/codegen.ts` line 1457
+   - **Tests Fixed**: error-handling, fibonacci, n-queens (39 tests)
+
+2. ✅ **Ownership Type Mapping** - Proper handling of `own<T>`, `share<T>`, `use<T>` in type mapper
+   - **Problem**: `use<JsonValue>` generated as `gs::use<JsonValue>` instead of `std::weak_ptr<JsonValue>`
+   - **Solution**: Added explicit pattern matching for ownership qualifiers in `mapTypeScriptTypeToCpp`
+   - **Files**: `src/cpp/type-mapper.ts` lines 392-418
+   - **Tests Fixed**: json-parser (13 tests)
+
+3. ✅ **Array Element Type Wrapping** - Class types in arrays wrapped in `shared_ptr`
+   - **Problem**: `Person[]` generated as `Array<Person>` instead of `Array<shared_ptr<Person>>`
+   - **Solution**: Detect class types in array element inference and wrap in `shared_ptr`
+   - **Files**: `src/cpp/expressions/array-literal-handler.ts` lines 146-173
+   - **Tests Fixed**: array-methods (13 tests)
+
+4. ✅ **Empty Array Contextual Types** - Use contextual type for empty array literals
+   - **Problem**: `[]` in generic class like `Stack<T>` generated `Array<void>` instead of `Array<T>`
+   - **Solution**: Check contextual type first before falling back to literal type inference
+   - **Files**: `src/cpp/expressions/array-literal-handler.ts` lines 70-100
+   - **Tests Fixed**: generic-stack (13 tests)
+
+5. ✅ **Tuple Type Parsing** - Support for TypeScript tuple syntax
+   - **Problem**: `[string, number]` generated as `gs::[string, number]` instead of `std::pair<gs::String, double>`
+   - **Solution**: Added regex pattern to detect tuple syntax and map to `std::pair`/`std::tuple`
+   - **Files**: `src/cpp/type-mapper.ts` lines 378-392
+   - **Tests Fixed**: hash-map (13 tests)
+
+6. ✅ **Interface Function Parameters** - Pass interfaces by const reference in `std::function` templates
+   - **Problem**: `std::function<void(Shape)>` caused "abstract class cannot be passed by value" errors
+   - **Solution**: Detect interface types and generate `std::function<void(const Shape&)>` instead
+   - **Files**: `src/cpp/type-mapper.ts` line 349, `src/cpp/type-inference.ts` lines 241-244
+   - **Tests Fixed**: interface-shapes, regex-validator (22 tests)
+
+7. ✅ **Concrete Examples Test Suite** - All 190 tests passing (100%)
+   - **Test Files**: 15 concrete examples (async-await, array-methods, binary-search-tree, cli-args, error-handling, fibonacci, generic-stack, hash-map, interface-shapes, json-parser, linked-list, lru-cache, n-queens, regex-validator, string-pool)
+   - **Test Coverage**: JavaScript execution, C++ native compilation/execution, C++ GC compilation/execution, cross-mode output equivalence
+   - **Duration**: ~2 minutes (124.84s for full suite)
+
+**Recent Additions (Dec 5, 2024 - Auto-main() Generation)** 🎉:
 1. ✅ **Auto-main() Generation** - Always generate main() for standalone compilation
    - **Problem**: Declaration-only files (e.g., files with only `export class`) failed to link with "undefined symbol: _main"
    - **Root Cause**: Codegen only created `main()` when there were top-level statements or async main

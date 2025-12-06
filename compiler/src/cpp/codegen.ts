@@ -1453,9 +1453,10 @@ export class AstCodegen {
     }
     
     // Create a lambda expression
-    // Use [] (no capture) for lambdas since most are pure functions passed to array methods
-    // If we need to capture variables, we would need to analyze which ones are referenced
-    return new ast.Lambda(params, body, returnType, '[]');
+    // Use [&] (capture by reference) to allow lambdas to access variables from enclosing scope
+    // This is necessary for cases like const f1 = () => {...}; const f2 = () => { f1(); };
+    // where later lambdas need to call earlier ones defined in the same scope
+    return new ast.Lambda(params, body, returnType, '[&]');
   }
   
   /**
