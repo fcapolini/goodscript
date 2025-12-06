@@ -52,6 +52,7 @@ describe('RegExp End-to-End C++ Tests', () => {
       'gs_array.hpp',
       'gs_array_impl.hpp',
       'gs_map.hpp',
+      'gs_iterator.hpp',
       'gs_property.hpp',
       'gs_json.hpp',
       'gs_console.hpp',

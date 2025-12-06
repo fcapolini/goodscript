@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **GC mode Map.get() dereference handling** (Dec 6, 2024)
+  - Fixed incorrect pointer dereference for Map with pointer value types in GC mode
+  - GC codegen now correctly handles both `auto` and `const auto` variable declarations
+  - Fixed `return *existing` → `return existing` for `Map<K, V*>` where V is a pointer type
+  - Resolves string-pool example GC compilation failures (4 tests)
+  - All 1309 tests passing (100%)
+
+- **RegExp runtime header dependencies** (Dec 6, 2024)
+  - Added missing `gs_iterator.hpp` to RegExp E2E test runtime headers
+  - Fixes C++ compilation errors in regexp-e2e tests (6 tests)
+  - All RegExp functionality now properly tested
+
 - **Lambda/std::function signature matching for array parameters** (Dec 6, 2024)
   - Fixed type inference for arrow functions with array parameters
   - `std::function` type now correctly includes `&` reference qualifier for array parameters

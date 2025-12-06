@@ -145,12 +145,13 @@ export class GcAstCodegen extends AstCodegen {
     
     // For each map field with object pointers, fix return statements
     for (const fieldName of mapFieldsWithObjPtrs) {
-      // Pattern: const auto VAR = this->FIELD.get(...); ... return *VAR;
+      // Pattern: (const )?auto VAR = this->FIELD.get(...); ... return *VAR;
+      // Handles both "auto" and "const auto"
       const getPattern = new RegExp(
-        `(const auto (\\w+) = this->${fieldName}\\.get\\([^)]+\\);[\\s\\S]*?)return \\*\\2;`,
+        `((const )?auto (\\w+) = this->${fieldName}\\.get\\([^)]+\\);[\\s\\S]*?)return \\*\\3;`,
         'g'
       );
-      code = code.replace(getPattern, (fullMatch, prefix, varName) => {
+      code = code.replace(getPattern, (fullMatch, prefix, constKeyword, varName) => {
         return `${prefix}return ${varName};`;
       });
     }
