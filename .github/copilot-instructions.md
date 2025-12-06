@@ -67,29 +67,37 @@ GoodScript is a **TypeScript specialization** for native compilation, positioned
 ### Phase 4: Ecosystem (✅ MAJOR MILESTONE - Dec 6, 2024)
 - **Standard Library Development**: Porting proven libraries from Dart collection package
 - **Translation Workflow**: AI-assisted translation with triple validation (TypeScript + GoodScript + C++ generation)
-- **🎉 MILESTONE**: 14 libraries fully validated in triple-mode (TypeScript, C++ GC, C++ native)
-  - ✅ HeapPriorityQueue (273 lines, 19 tests)
+- **🎉 MILESTONE**: 16 libraries fully validated in triple-mode (TypeScript, C++ GC, C++ native)
+  - ✅ HeapPriorityQueue (273 lines, 22 tests)
   - ✅ QueueList (358 lines, 29 tests)
   - ✅ ListQueue (207 lines, 29 tests)
   - ✅ EqualitySet (251 lines, 26 tests)
-  - ✅ EqualityMap (242 lines, 24 tests)
-  - ✅ UnmodifiableListView (153 lines, 36 tests)
+  - ✅ EqualityMap (242 lines, 27 tests)
+  - ✅ UnmodifiableListView (153 lines, 39 tests)
+  - ✅ UnmodifiableSetView (29 tests)
+  - ✅ UnmodifiableMapView (24 tests)
   - ✅ Range (155 lines, 18 tests) - **Iterator protocol**
   - ✅ Zip (165 lines, 25 tests) - **Iterator protocol**
   - ✅ Partition (218 lines, 32 tests)
-  - ✅ CombinedListView (11 stdlib libraries total)
-  - ✅ UnionSet
-  - ✅ BoolList
-  - ✅ Algorithms
-  - ✅ Collection Utils
+  - ✅ CombinedListView (36 tests)
+  - ✅ UnionSet (30 tests)
+  - ✅ BoolList (47 tests)
+  - ✅ Algorithms (47 tests)
+  - ✅ Collection Utils (36 tests)
+  - ✅ groupBy/lastBy (23 tests) - **Utility functions**
+  - ✅ mergeMaps/mapMap (31 tests) - **Map transformation utilities**
 - **Iterator Protocol**: ✅ Fully implemented (Dec 6, 2024)
   - Symbol.iterator → __iterator() method
   - Iterator.next() is non-const (allows state mutation)
   - IteratorResult<T> is stack-allocated value type
   - C-style cast for incomplete type upcasts in inline methods
   - for...of loops work automatically
+- **Interface Support**: ✅ Interfaces with optional fields (Dec 6, 2024)
+  - Forward declarations for template interfaces
+  - Optional function fields map to std::function
+  - Proper ordering: interface forward decls → function forward decls → interface defs → function defs
 - **Achievement**: First production-quality Dart-derived libraries compiling TypeScript→C++ and executing natively
-- **Test Results**: 496 TypeScript tests, 100% pass rate across all modes
+- **Test Results**: 550 TypeScript tests, 100% pass rate across all modes
 - **Target**: 20-25 core collection libraries by mid-December 2024
 - **Key files**: `stdlib/collection/src/*-gs.ts`, `stdlib/collection/test/*.test.ts`
 - **Documentation**: `stdlib/docs/TRANSLATION-WORKFLOW.md`, `stdlib/docs/reference/*.md`

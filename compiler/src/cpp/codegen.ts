@@ -192,7 +192,7 @@ export class AstCodegen {
       declarations.push(new ast.RawDeclaration(constDecl));
     }
     
-    // Add forward declarations for all classes (to handle forward references)
+    // Add forward declarations for all classes and interfaces (to handle forward references)
     for (const className of this.ctx.hoistedClasses) {
       // Check if this class has template parameters by finding its declaration
       const classDecl = sourceFile.statements.find(
@@ -209,6 +209,23 @@ export class AstCodegen {
       } else {
         // Non-template class forward declaration
         declarations.push(new ast.RawDeclaration(`class ${className};`));
+      }
+    }
+    
+    // Add forward declarations for all interfaces
+    for (const stmt of sourceFile.statements) {
+      if (ts.isInterfaceDeclaration(stmt) && stmt.name) {
+        const interfaceName = cppUtils.escapeName(stmt.name.text);
+        
+        if (stmt.typeParameters) {
+          // Template interface forward declaration
+          const templateParams = stmt.typeParameters.map(tp => tp.name.text);
+          const forwardDecl = `template<${templateParams.map(tp => `typename ${tp}`).join(', ')}>\n  class ${interfaceName};`;
+          declarations.push(new ast.RawDeclaration(forwardDecl));
+        } else {
+          // Non-template interface forward declaration
+          declarations.push(new ast.RawDeclaration(`class ${interfaceName};`));
+        }
       }
     }
     
