@@ -1,5 +1,686 @@
 # GoodScript Copilot Instructions
 
+## Session: December 6, 2024 - LRUCache Library + Type Alias Codegen
+
+**Focus**: Adding async/await-based LRUCache + fixing type alias codegen  
+**Date**: December 6, 2024
+
+## Summary
+
+Successfully added the 23rd library to stdlib collection package: **LRUCache** - Least Recently Used cache with automatic eviction using async/await. **Major codegen improvement**: Added support for type aliases (exported type declarations), which are now properly generated as C++ `using` declarations.
+
+## Codegen Improvements
+
+### Type Alias Support
+
+Added full support for TypeScript type aliases in C++ codegen:
+
+```typescript
+// TypeScript
+export type Loader<K, V> = (key: K) => Promise<V>;
+
+// Generated C++
+template<typename K, typename V>
+using Loader = std::function<cppcoro::task<V>(K)>;
+```
+
+**Implementation:**
+1. Added `visitTypeAlias()` method in `codegen.ts`
+2. Hooked into main generation loop alongside classes, functions, enums
+3. Handles template parameters properly
+4. Generates `using` declarations in namespace scope
+
+**Files Modified:**
+- `compiler/src/cpp/codegen.ts` - Added type alias handling (~35 lines)
+
+### cppcoro Support in stdlib Testing
+
+Enhanced `stdlib/quick-test.js` to support async/await libraries:
+
+1. Auto-detects cppcoro usage in generated C++ (`cppcoro/task.hpp`)
+2. Compiles cppcoro library (with caching for performance)
+3. Adds cppcoro include path and object file to compilation
+
+**Pattern:** Mirrors compiler test infrastructure for consistency
+
+## Libraries Added
+
+### LRUCache (335 lines, 26 tests)
+
+Inspired by [Quiver's cache package](https://github.com/google/quiver-dart)
+
+**Purpose**: Least Recently Used cache with automatic eviction. Limits memory usage while maintaining frequently accessed data.
+
+**Features:**
+- O(1) get, set, invalidate operations
+- Automatic eviction when full
+- Optional async loader function
+- Doubly-linked list + Map for efficient access tracking
+- **First stdlib library using async/await**
+
+**Key Methods:**
+- `async get(key, ifAbsent?)` - Get with optional async loader
+- `async set(key, value)` - Set with automatic LRU eviction
+- `has(key)` - Check existence (sync)
+- `async invalidate(key)` - Remove entry
+- `async clear()` - Remove all
+- `getKeys()`, `getValues()`, `getEntries()` - MRU-ordered iteration
+- `getSize()`, `getMaxSize()`, `isEmpty()`, `isFull()` - Status queries
+
+**Type Alias:**
+```typescript
+export type Loader<K, V> = (key: K) => Promise<V>
+```
+
+## Validation Results
+
+### TypeScript Tests
+```
+✓ test/lru-cache.test.ts (26 tests) 189ms
+Test Files  1 passed (1)
+      Tests  26 passed (26)
+```
+
+### GoodScript Validation
+```
+[1/4] Phase 1+2: Validation (restrictions + ownership)...
+✅ Phase 1+2: PASS
+
+[2/4] Phase 3: C++ code generation...
+✅ Phase 3: PASS (4619 bytes generated)
+
+[3/4] Native compilation (C++ → binary)...
+  Compiling MPS GC...
+  Compiling cppcoro library...
+  Compiling C++ code with zig...
+✅ Compilation: PASS
+
+[4/4] Native execution...
+✅ Execution: PASS
+
+🎉 All phases passed!
+```
+
+## Files Changed
+
+### New Files
+1. `stdlib/collection/src/lru-cache-gs.ts` (335 lines)
+2. `stdlib/collection/test/lru-cache.test.ts` (347 lines, 26 tests)
+3. `stdlib/docs/reference/collection/LRUCache.md` (comprehensive API docs)
+
+### Modified Files
+1. `compiler/src/cpp/codegen.ts` - Added type alias support
+2. `stdlib/quick-test.js` - Added cppcoro compilation support
+3. `stdlib/collection/README.md` - Added LRUCache to maps section
+4. `stdlib/docs/reference/collection/README.md` - Added LRUCache, updated total (23 libraries, 765 tests)
+5. `.github/copilot-instructions.md` - Updated milestone
+
+## Testing Strategy
+
+### Test Categories
+1. **Constructor**: Valid size, invalid size error
+2. **Basic Operations**: set/get, null returns, updates, has()
+3. **LRU Eviction**: Evict on full, get updates order, set updates order
+4. **Invalidation**: Remove entries, missing keys, re-add after invalidate
+5. **Clear**: Remove all, add after clear
+6. **Loader Function**: Load on miss, don't load on hit, async operations
+7. **Iteration**: Keys/values/entries in MRU order, empty cache
+8. **Size Tracking**: isEmpty, isFull, getSize accuracy
+9. **Edge Cases**: Single-entry cache, complex types, number keys, large cache (1000 entries)
+
+**Test Coverage:** 26 tests, 100% passing (Note: Some tests consolidated during implementation)
+
+## Key Design Decisions
+
+### 1. Async by Default
+- All mutating operations return Promises
+- Enables natural async loader integration
+- Matches real-world use cases (DB, API, file system)
+
+### 2. Type Alias for Loader
+- `Loader<K, V>` improves API clarity
+- Demonstrates type alias codegen capability
+- Previously would have required inline function types
+
+### 3. Doubly-Linked List Implementation
+- Custom `LRUNode<K, V>` class for access order tracking
+- Map for O(1) lookups
+- Head = most recently used, Tail = least recently used
+
+### 4. MRU Iteration Order
+- `getKeys()`, `getValues()`, `getEntries()` return MRU order
+- Most useful for debugging and monitoring
+- Consistent with access patterns
+
+## Documentation
+
+Created comprehensive API documentation (`LRUCache.md`) with:
+- Type parameters and type alias documentation
+- All method signatures with detailed parameters
+- Performance characteristics table (all O(1) except iteration/clear)
+- Multiple use case examples (API caching, memoization, session storage, image thumbnails)
+- Async/await patterns and composition
+- Implementation details (data structures used)
+- Differences from source
+
+## Stdlib Progress
+
+**Total Libraries:** 23  
+**Total Tests:** 765
+**Pass Rate:** 100%
+
+**Milestones:**
+- ✅ 23/25 target libraries (92% complete)
+- ✅ **Type alias codegen support** 
+- ✅ **cppcoro integration in stdlib testing**
+- ✅ **First async/await stdlib library**
+- ✅ All libraries compile TypeScript → C++ → native binary
+- ✅ All tests passing in triple-mode validation
+- ✅ Iterator protocol fully implemented
+- ✅ Interface support with optional fields
+- ✅ Codegen improvements for JS features
+
+**Next Candidates:**
+1. IterableNumberExtension - Number-specific iterable utilities
+2. LinkedHashSet - Insertion-order hash set
+3. SplayTreeSet/SplayTreeMap - Self-balancing tree structures
+
+## Lessons Learned
+
+1. **Compiler maturation**: New features (type aliases) now take minutes, not hours
+2. **Infrastructure reuse**: cppcoro pattern from compiler tests → stdlib tests seamlessly
+3. **Async is production-ready**: Full async/await support validated in stdlib
+4. **Type aliases unlock clarity**: Semantic names (`Loader<K,V>`) vs inline types
+5. **Incremental validation**: Each piece validates independently (codegen, compilation, execution)
+
+**Stats:**
+- Library size: 335 lines + 347 test lines
+- Documentation: ~450 lines
+- Codegen additions: ~35 lines (type alias support)
+- Session duration: ~25 minutes (library + codegen fix + triple validation + docs)
+
+---
+
+## Previous Session: December 6, 2024 - ListExtensions Library
+
+**Focus**: Adding ListExtensions to stdlib collection package  
+**Date**: December 6, 2024
+
+## Summary
+
+Successfully added the 22nd library to stdlib collection package: **ListExtensions** - comprehensive list utility functions including binary search, range operations, and list slicing.
+
+## Libraries Added
+
+### ListExtensions (558 lines, 47 tests)
+
+Translated from [Dart's collection/list_extensions.dart](https://github.com/dart-lang/collection/blob/master/lib/src/list_extensions.dart)
+
+**Purpose**: Utility functions for list operations. Provides efficient algorithms for searching, sorting, and manipulating arrays.
+
+**Functions (12 total):**
+- **Binary Search**: binarySearch, binarySearchBy (O(log n) lookups)
+- **Insertion Point**: lowerBound, lowerBoundBy (find where to insert)
+- **Range Sorting**: sortRange, sortByCompare (sort subarrays)
+- **Range Manipulation**: shuffleRange, reverseRange, swap
+- **Comparison**: equals (deep equality with custom comparator)
+- **Safe Access**: elementAtOrNull
+- **Slicing**: slice (read-only view of subarray)
+
+**Key Features:**
+- Binary search for O(log n) lookups in sorted lists
+- Range operations work on subarrays without affecting rest of list
+- ListSlice class provides memory-efficient views
+- Custom equality support via Equality interface
+- All range functions validate bounds
+
+## Validation Results
+
+### TypeScript Tests
+```
+✓ test/list-extensions.test.ts (47 tests) 7ms
+Test Files  1 passed (1)
+      Tests  47 passed (47)
+```
+
+### GoodScript Validation
+```
+[1/4] Phase 1+2: Validation (restrictions + ownership)...
+✅ Phase 1+2: PASS
+
+[2/4] Phase 3: C++ code generation...
+✅ Phase 3: PASS (9834 bytes generated)
+
+[3/4] Native compilation (C++ → binary)...
+✅ Compilation: PASS
+
+[4/4] Native execution...
+✅ Execution: PASS
+
+🎉 All phases passed!
+```
+
+## Files Changed
+
+### New Files
+1. `stdlib/collection/src/list-extensions-gs.ts` (558 lines, 12 functions + ListSlice class)
+2. `stdlib/collection/test/list-extensions.test.ts` (363 lines, 47 tests)
+3. `stdlib/docs/reference/collection/ListExtensions.md` (comprehensive API docs)
+
+### Modified Files
+1. `stdlib/collection/README.md` - Added ListExtensions to utilities list
+2. `stdlib/docs/reference/collection/README.md` - Added ListExtensions, updated total (22 libraries, 739 tests)
+3. `.github/copilot-instructions.md` - Updated milestone
+
+## Testing Strategy
+
+### Test Categories
+1. **Binary Search**: finds elements, returns -1 for missing, edge cases
+2. **Lower Bound**: insertion points, duplicates, empty lists
+3. **Range Sorting**: partial sorts, full sorts, invalid ranges
+4. **Range Manipulation**: shuffle, reverse, swap
+5. **Comparison**: equals with default and custom equality
+6. **Safe Access**: elementAtOrNull with valid/invalid indices
+7. **Slicing**: views, nested slicing, concurrent modification detection
+8. **Edge Cases**: large lists (10000 elements), strings, objects
+
+**Test Coverage:** 47 tests, 100% passing
+
+## Key Design Decisions
+
+### 1. No `readonly` Modifier
+- GoodScript doesn't support `readonly` on class fields
+- Removed from ListSlice private fields
+- TypeScript tests still pass - `readonly` is compile-time only
+
+### 2. Standalone Functions
+- Original Dart uses extension methods (`list.binarySearch(...)`)
+- GoodScript uses standalone functions (`binarySearch(list, ...)`)
+- More explicit, easier to tree-shake, works with GoodScript constraints
+
+### 3. ListSlice Class
+- Custom class instead of native array view
+- Detects concurrent modifications (source list length changes)
+- Provides fixed-length view semantics
+- Supports nested slicing
+
+### 4. Range Validation
+- All range functions validate `start`/`end` bounds
+- Throw `RangeError` for invalid ranges
+- Consistent error handling across all functions
+
+## Documentation
+
+Created comprehensive API documentation (`ListExtensions.md`) with:
+- Function signatures and detailed parameter descriptions
+- Performance characteristics table
+- Multiple usage examples for each function
+- Use cases and real-world applications
+- Differences from Dart implementation
+- Cross-references to related libraries
+
+## Stdlib Progress
+
+**Total Libraries:** 22  
+**Total Tests:** 739
+**Pass Rate:** 100%
+
+**Milestones:**
+- ✅ 22/25 target libraries (88% complete)
+- ✅ All libraries compile TypeScript → C++ → native binary
+- ✅ All tests passing in triple-mode validation
+- ✅ Iterator protocol fully implemented
+- ✅ Interface support with optional fields
+- ✅ Codegen improvements for JS features
+- ✅ Identifier shadowing bug fixed
+
+**Next Candidates:**
+1. IterableNumberExtension - Number-specific iterable utilities
+2. LinkedHashSet - Insertion-order hash set
+3. SplayTreeSet/SplayTreeMap - Self-balancing tree structures
+
+## Lessons Learned
+
+1. **Remove unsupported modifiers early**: Check for `readonly` before validation
+2. **Standalone functions work well**: Clear, explicit, tree-shakeable
+3. **Range operations are versatile**: Single pattern supports many use cases
+4. **Custom classes for views**: ListSlice provides better semantics than raw arrays
+5. **Binary search is powerful**: O(log n) lookups essential for sorted data
+
+**Stats:**
+- Library size: 558 lines + 363 test lines
+- Documentation: ~450 lines
+- Session duration: ~20 minutes (AI-assisted translation + triple validation)
+
+---
+
+## Session: December 6, 2024 - IterableExtensions Library + Codegen Bug Fix
+
+**Focus**: Adding IterableExtensions to stdlib + fixing identifier shadowing bug in codegen  
+**Date**: December 6, 2024
+
+## Summary
+
+Successfully added the 21st library to stdlib collection package: **IterableExtensions** - 29 utility functions for filtering, mapping, finding, grouping, slicing, and statistical operations on iterables.
+
+**Critical Bug Fixed**: Identifier handler was checking global functions before local variables, causing local variables to be incorrectly qualified with `gs::` namespace prefix. Fixed by reordering checks to respect proper scoping rules (local variables shadow global identifiers).
+
+## Libraries Added
+
+### IterableExtensions (512 lines, 59 tests)
+
+Translated from [Dart's collection/iterable_extensions.dart](https://github.com/dart-lang/collection/blob/master/lib/src/iterable_extensions.dart)
+
+**Purpose**: Comprehensive utility functions for iterable operations. Provides filtering, mapping, searching, grouping, slicing, and statistical operations.
+
+**Functions (29 total):**
+- **Filtering**: whereNot, whereIndexed, whereNotIndexed, none
+- **Mapping**: mapIndexed, forEachIndexed
+- **Finding**: firstWhereOrNull, firstWhereIndexedOrNull, firstOrNull, lastWhereOrNull, lastWhereIndexedOrNull, lastOrNull, elementAtOrNull
+- **Grouping**: groupListsBy, groupSetsBy
+- **Slicing**: slices, flattened
+- **Statistics**: minOrNull, min, maxOrNull, max, sum, average, count
+
+**Key Features:**
+- All functions return arrays (no lazy iterables)
+- Index-aware variants for filtering and mapping
+- Null-safe element finding
+- Numerically stable average calculation (Welford's algorithm)
+- Generic type support throughout
+
+## Codegen Bug Fix
+
+### Problem
+The identifier handler in `compiler/src/cpp/expressions/identifier-handler.ts` was checking `hoistedFunctions` (global exports) BEFORE checking `variableTypes` (local variables), causing local variables to be incorrectly namespace-qualified.
+
+**Manifestation:**
+```cpp
+// WRONG (before fix):
+auto count = 0.0;
+gs::count++;  // Local variable incorrectly qualified!
+
+// CORRECT (after fix):
+auto count = 0.0;
+count++;  // Local variable properly shadows global function
+```
+
+### Solution
+Reordered checks to respect scoping rules:
+1. Check local variables FIRST (`variableTypes` map)
+2. Then check global functions (`hoistedFunctions` set)
+
+This ensures local variables properly shadow global identifiers, as required by C++ scoping rules.
+
+### Files Modified
+- `compiler/src/cpp/expressions/identifier-handler.ts` - Fixed lookup order in `handleIdentifier()`
+
+## Validation Results
+
+### TypeScript Tests
+```
+✓ test/iterable-extensions.test.ts (59 tests) 169ms
+Test Files  21 passed (21)
+      Tests  692 passed (692)
+```
+
+### GoodScript Validation
+```
+[1/4] Phase 1+2: Validation (restrictions + ownership)...
+✅ Phase 1+2: PASS
+
+[2/4] Phase 3: C++ code generation...
+✅ Phase 3: PASS (9158 bytes generated)
+
+[3/4] Native compilation (C++ → binary)...
+✅ Compilation: PASS
+
+[4/4] Native execution...
+✅ Execution: PASS
+
+🎉 All phases passed!
+```
+
+## Files Changed
+
+### New Files
+1. `stdlib/collection/src/iterable-extensions-gs.ts` (512 lines, 29 functions)
+2. `stdlib/collection/test/iterable-extensions.test.ts` (363 lines, 59 tests)
+3. `stdlib/docs/reference/collection/IterableExtensions.md` (comprehensive API docs)
+
+### Modified Files
+1. `compiler/src/cpp/expressions/identifier-handler.ts` - Fixed identifier lookup order
+2. `stdlib/collection/README.md` - Added IterableExtensions to library list
+3. `.github/copilot-instructions.md` - Updated milestone (21 libraries, 692 tests)
+
+## Testing Strategy
+
+### Test Categories
+1. **Filtering**: whereNot, whereIndexed, whereNotIndexed, none
+2. **Mapping**: mapIndexed, forEachIndexed
+3. **Element Finding**: All variants (first/last, indexed, orNull)
+4. **Grouping**: groupListsBy, groupSetsBy with various key functions
+5. **Slicing**: slices with different lengths, edge cases
+6. **Flattening**: Nested arrays, empty arrays
+7. **Statistics**: min/max (with and without OrNull), sum, average, count
+8. **Edge Cases**: Empty iterables, single element, large datasets (1000+ elements)
+
+**Test Coverage:** 59 tests, 100% passing
+
+## Key Design Decisions
+
+### 1. Return Arrays, Not Lazy Iterables
+- GoodScript doesn't support `sync*` generators
+- All functions eagerly evaluate and return arrays
+- Trade-off: Memory vs simplicity and GoodScript compatibility
+
+### 2. Variable Naming
+- Originally used `elementCount` and `matchCount` to avoid shadowing
+- After bug fix, reverted to original Dart names (`count`, `result`)
+- Demonstrates that proper scoping now works correctly
+
+### 3. Statistical Functions
+- `average` uses Welford's algorithm for numerical stability
+- Separate `OrNull` variants avoid exceptions for empty iterables
+- `min`/`max` throw for empty iterables (consistent with Dart)
+
+## Stdlib Progress
+
+**Total Libraries:** 21  
+**Total Tests:** 692
+**Pass Rate:** 100%
+
+**Milestones:**
+- ✅ 21/25 target libraries (84% complete)
+- ✅ All libraries compile TypeScript → C++ → native binary
+- ✅ All tests passing in triple-mode validation
+- ✅ Iterator protocol fully implemented
+- ✅ Interface support with optional fields
+- ✅ Codegen improvements for JS features
+- ✅ **Identifier shadowing bug fixed**
+
+**Next Candidates:**
+1. LinkedHashSet - Insertion-order hash set
+2. IterableNumberExtension - Number-specific utilities
+3. ListExtensions - Additional list utilities
+
+## Next Steps
+
+1. Continue adding collection libraries (target 25 total)
+2. Monitor for additional codegen edge cases
+3. Document patterns for future library translations
+
+## Lessons Learned
+
+1. **Scoping matters**: Codegen must respect lexical scoping rules (local shadows global)
+2. **Test-driven debugging**: Creating minimal test cases helps isolate bugs
+3. **Trust but verify**: Even "obvious" shadowing behavior needs codegen support
+4. **Incremental validation**: Triple-mode validation catches issues early
+5. **Variable naming freedom**: With proper scoping, can use idiomatic names
+
+**Stats:**
+- Library size: 512 lines + 363 test lines
+- Documentation: ~550 lines
+- Codegen fix: ~10 lines changed
+- Bug discovery to fix: ~15 minutes
+- Session duration: ~45 minutes (library translation + bug discovery + fix + validation)
+
+---
+
+## Session: December 6, 2024 - CanonicalizedMap Library
+
+**Focus**: Adding CanonicalizedMap to stdlib collection package  
+**Date**: December 6, 2024
+
+## Summary
+
+Successfully added the 20th library to stdlib collection package: **CanonicalizedMap** - a map with canonical key transformation for case-insensitive lookups and other key normalization use cases.
+
+## Libraries Added
+
+### CanonicalizedMap (454 lines, 40 tests)
+
+Translated from [Dart's collection/canonicalized_map.dart](https://github.com/dart-lang/collection/blob/master/lib/src/canonicalized_map.dart)
+
+**Purpose**: A map whose keys are converted to canonical values. More efficient than custom equality because canonicalization happens once per key, not per comparison.
+
+**Use Cases:**
+- Case-insensitive string keys: `(key) => key.toLowerCase()`
+- Trimmed whitespace: `(key) => key.trim()`
+- Path normalization: `(path) => path.split('/').filter(p => p).join('/')`
+- Numeric string normalization: `(key) => parseInt(key, 10)`
+
+**Key Features:**
+- Generic over canonical type (C), key type (K), and value type (V)
+- Preserves original key casing (last set wins)
+- Optional key validation function
+- Efficient O(1) operations with single canonicalization per operation
+- Full Map interface compatibility
+
+## Validation Results
+
+### TypeScript Tests
+```
+✓ test/canonicalized-map.test.ts (40 tests) 13ms
+Test Files  1 passed (1)
+      Tests  40 passed (40)
+```
+
+### GoodScript Validation
+```
+[1/4] Phase 1+2: Validation (restrictions + ownership)...
+✅ Phase 1+2: PASS
+
+[2/4] Phase 3: C++ code generation...
+✅ Phase 3: PASS (8490 bytes generated)
+
+[3/4] Native compilation (C++ → binary)...
+✅ Compilation: PASS
+
+[4/4] Native execution...
+✅ Execution: PASS
+
+🎉 All phases passed!
+```
+
+## Files Changed
+
+### New Files
+1. `stdlib/collection/src/canonicalized-map-gs.ts` (454 lines)
+2. `stdlib/collection/test/canonicalized-map.test.ts` (363 lines, 40 tests)
+3. `stdlib/docs/reference/collection/CanonicalizedMap.md` (comprehensive API docs)
+
+### Modified Files
+1. `stdlib/collection/README.md` - Added CanonicalizedMap to library list
+2. `.github/copilot-instructions.md` - Updated milestone (20 libraries, 633 tests)
+
+## Testing Strategy
+
+### Test Categories
+1. **Constructor**: Empty map, custom validation
+2. **Factory Methods**: from(), fromEntries()
+3. **Case-Insensitive Keys**: Main use case validation
+4. **Basic Operations**: get, set, containsKey, containsValue, remove
+5. **Bulk Operations**: addAll, removeWhere, updateAll
+6. **Update Operations**: putIfAbsent, update
+7. **Transformations**: copy, toMap, toMapOfCanonicalKeys, mapEntries
+8. **Iteration**: forEach, getKeys, getValues, getEntries
+9. **Advanced Canonicalization**: whitespace trimming, numeric normalization, path normalization
+10. **Edge Cases**: Empty, single element, many elements (1000+)
+
+**Test Coverage:** 40 tests, 100% passing
+
+## Key Design Decisions
+
+### 1. No `readonly` Modifier
+- GoodScript doesn't support `readonly` on class fields
+- Removed from both CanonicalizedMap and MapEntry classes
+- TypeScript tests still pass - `readonly` is compile-time only
+
+### 2. MapEntry Helper Class
+- Included in same file for simplicity
+- Simple pair of key + value
+- Used internally to store original key alongside value
+
+### 3. Internal Storage Pattern
+```typescript
+private _base: Map<C, MapEntry<K, V>>;
+```
+- Canonical key → Entry with original key and value
+- Single canonicalization per operation
+- Efficient O(1) lookups
+
+## Documentation
+
+Created comprehensive API documentation (`CanonicalizedMap.md`) with:
+- Type parameter explanations
+- Constructor and factory method signatures
+- Detailed method documentation with parameters and return values
+- Multiple usage examples for each use case
+- Performance characteristics
+- Comparison with EqualityMap
+- Implementation notes
+
+## Stdlib Progress
+
+**Total Libraries:** 20  
+**Total Tests:** 633
+**Pass Rate:** 100%
+
+**Milestones:**
+- ✅ 20/25 target libraries (80% complete)
+- ✅ All libraries compile TypeScript → C++ → native binary
+- ✅ All tests passing in triple-mode validation
+- ✅ Iterator protocol fully implemented
+- ✅ Interface support with optional fields
+- ✅ Codegen improvements for JS features
+
+**Next Candidates:**
+1. LinkedHashSet - Insertion-order hash set
+2. IterableExtensions - Additional iterable utilities
+3. ListExtensions - Additional list utilities
+
+## Next Steps
+
+1. Continue adding collection libraries (target 25 total)
+2. Monitor for any additional GoodScript constraints discovered
+3. Document patterns for future library translations
+
+## Lessons Learned
+
+1. **Remove readonly early**: Check for unsupported features before validation
+2. **Helper classes work well**: MapEntry pattern is clean and effective
+3. **Generic canonicalization is powerful**: Single pattern supports many use cases
+4. **Documentation clarity matters**: Real-world examples make API approachable
+
+**Stats:**
+- Library size: 454 lines + 363 test lines
+- Documentation: ~400 lines
+- Session duration: ~15 minutes (AI-assisted translation + triple validation)
+
+---
+
+## Session: December 6, 2024 - Comparators Library
+
 
 
 

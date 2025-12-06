@@ -377,6 +377,10 @@ export class AstCodegen {
       } else if (ts.isEnumDeclaration(stmt)) {
         const enumDecl = this.visitEnum(stmt);
         if (enumDecl) declarations.push(enumDecl);
+      } else if (ts.isTypeAliasDeclaration(stmt)) {
+        // Handle type aliases (e.g., export type Loader<K, V> = (key: K) => Promise<V>)
+        const typeAlias = this.visitTypeAlias(stmt);
+        if (typeAlias) declarations.push(typeAlias);
       } else if (ts.isExpressionStatement(stmt)) {
         // Top-level expressions go into main()
         mainStatements.push(new ast.ExpressionStmt(this.visitExpression(stmt.expression)));
@@ -905,6 +909,35 @@ export class AstCodegen {
     }
     
     return new ast.Enum(name, members);
+  }
+  
+  private visitTypeAlias(node: ts.TypeAliasDeclaration): ast.RawDeclaration | undefined {
+    const name = cppUtils.escapeName(node.name.text);
+    
+    // Build template parameters if present
+    let templateDecl = '';
+    if (node.typeParameters && node.typeParameters.length > 0) {
+      const params = node.typeParameters.map(tp => `typename ${tp.name.text}`).join(', ');
+      templateDecl = `template<${params}>\n  `;
+      // Register template parameters temporarily
+      for (const tp of node.typeParameters) {
+        this.ctx.registerTemplateParameter(tp.name.text);
+      }
+    }
+    
+    // Map the TypeScript type to C++
+    const cppType = this.mapType(node.type);
+    
+    // Unregister template parameters
+    if (node.typeParameters) {
+      for (const tp of node.typeParameters) {
+        this.ctx.unregisterTemplateParameter(tp.name.text);
+      }
+    }
+    
+    // Generate using declaration (C++ type alias)
+    const alias = `${templateDecl}using ${name} = ${cppType.toString()};`;
+    return new ast.RawDeclaration(alias);
   }
   
   private visitBlock(node: ts.Block): ast.Block {

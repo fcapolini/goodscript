@@ -151,6 +151,11 @@ const pq = new HeapPriorityQueue<number>();
 pq.addAll([5, 2, 8]);
 pq.clear();
 console.log(pq.isEmpty()); // true
+
+// Iterate over elements (heap order, not priority order)
+for (const item of pq) {
+  console.log(item);
+}
 ```
 
 ### `getLength(): number`
@@ -239,12 +244,16 @@ This implementation is a simplified adaptation of Dart's HeapPriorityQueue with 
    - `.isNotEmpty` → `.isNotEmpty()`
    - `.unorderedElements` → `.getUnorderedElements()`
 
-2. **Removed features**:
+2. **Iterator Support**: Full `Symbol.iterator` protocol support
+   - Can use `for...of` loops directly
+   - Returns elements in heap order (not priority order)
+   - Use `toArray()` or drain queue for priority-ordered iteration
+
+3. **Removed features**:
    - `toList()` - Use `removeAll()` instead (destructive) or manually drain and rebuild
    - `toSet()` - Use `new Set(queue.toArray())` if needed
-   - Iterator protocol (`Symbol.iterator`) - Use `toArray()` for iteration
 
-3. **Implementation**: Uses compact array instead of sparse array for simpler C++ translation
+4. **Implementation**: Uses compact array instead of sparse array for simpler C++ translation
 
 All core algorithmic guarantees and behavior are preserved from the Dart original.
 

@@ -45,7 +45,18 @@ export class IdentifierHandler {
     
     const escapedName = cppUtils.escapeName(varName);
     
-    // If this is a hoisted function, qualify with gs::
+    // Check local variables FIRST (shadowing takes precedence)
+    // If this is a local variable (parameter, local declaration, etc.), use it as-is
+    if (this.ctx.variableTypes.has(escapedName) || 
+        this.ctx.variableTypes.has(`this.${escapedName}`)) {
+      // If this identifier is tracked as unwrapped
+      if (this.ctx.unwrappedOptionals.has(escapedName)) {
+        return this.handleUnwrappedOptional(escapedName);
+      }
+      return cpp.id(escapedName);
+    }
+    
+    // If this is a hoisted function (and NOT a local variable), qualify with gs::
     if (this.ctx.hoistedFunctions.has(escapedName)) {
       return cpp.id(`gs::${escapedName}`);
     }

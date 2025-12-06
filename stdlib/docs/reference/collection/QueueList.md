@@ -314,11 +314,12 @@ This implementation preserves all core functionality with these adaptations:
    - Array assignment `queue[i] = x` → `queue.set(i, x)`
    - `.length` → `.getLength()` / `.setLength()`
 
-2. **No Iterator Protocol**: Use `toArray()` to iterate:
+2. **Iterator Support**: Full `Symbol.iterator` protocol support
    ```typescript
-   // Dart: for (var item in queue) { ... }
-   // GoodScript:
-   for (const item of queue.toArray()) { ... }
+   // Can now use for...of directly
+   for (const item of queue) {
+     console.log(item);
+   }
    ```
 
 3. **Removed Methods**:

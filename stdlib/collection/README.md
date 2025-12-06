@@ -21,9 +21,13 @@ Collection data structures and utilities for GoodScript, translated from Dart's 
 
 ### Maps
 - **EqualityMap** - Hash map with custom equality function
+- **CanonicalizedMap** - Map with canonical keys (case-insensitive strings, etc.)
+- **LRUCache** - Least Recently Used cache with automatic eviction (async/await)
 - **UnmodifiableMapView** - Read-only map wrapper
 
 ### Utilities
+- **IterableExtensions** - 29 utility functions for filtering, mapping, finding, grouping, and statistics
+- **ListExtensions** - List utility functions (binary search, range operations, slicing)
 - **Comparators** - String comparison functions (case-insensitive, natural sort)
 - **Algorithms** - Sorting and searching utilities
 - **Collection Utils** - Higher-order collection functions

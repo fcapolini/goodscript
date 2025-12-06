@@ -14,6 +14,10 @@ import { tmpdir } from 'os';
 const file = process.argv[2];
 const skipNative = process.argv.includes('--skip-native');
 
+// Path to cppcoro (vendored)
+const CPPCORO_DIR = resolve(new URL('.', import.meta.url).pathname, '../compiler/vendor/cppcoro/include');
+let CPPCORO_CACHED_OBJ = null;
+
 if (!file) {
   console.error('Usage: node quick-test.js <file> [--skip-native]');
   process.exit(1);
@@ -77,6 +81,9 @@ try {
   const cppCode = readFileSync(cppFile, 'utf-8');
   console.log(`✅ Phase 3: PASS (${cppCode.length} bytes generated)\n`);
   
+  // Check if code uses async/await (needs cppcoro)
+  const needsCppcoro = cppCode.includes('cppcoro/task.hpp');
+  
   if (skipNative) {
     console.log('⏭️  Skipping native compilation (--skip-native)\n');
     console.log('🎉 Validation complete!\n');
@@ -110,13 +117,41 @@ try {
       throw new Error(`MPS compilation failed: ${error.message}`);
     }
     
+    // Compile cppcoro if needed
+    let cppcoroObj = '';
+    if (needsCppcoro) {
+      if (!CPPCORO_CACHED_OBJ || !existsSync(CPPCORO_CACHED_OBJ)) {
+        const cacheDir = join(tmpdir(), 'goodscript-cppcoro-cache');
+        mkdirSync(cacheDir, { recursive: true });
+        CPPCORO_CACHED_OBJ = join(cacheDir, 'cppcoro.o');
+        
+        if (!existsSync(CPPCORO_CACHED_OBJ)) {
+          console.log(`  Compiling cppcoro library...`);
+          const cppcoroSrcDir = join(projectRoot, 'compiler/vendor/cppcoro/lib');
+          try {
+            execSync(
+              `zig c++ -std=c++20 -O2 -I${CPPCORO_DIR} -c ${join(cppcoroSrcDir, 'lightweight_manual_reset_event.cpp')} -o ${CPPCORO_CACHED_OBJ}`,
+              { stdio: 'pipe', cwd: cacheDir }
+            );
+          } catch (error) {
+            const stderr = error.stderr ? error.stderr.toString() : error.message;
+            throw new Error(`cppcoro compilation failed:\n${stderr}`);
+          }
+        }
+      }
+      cppcoroObj = CPPCORO_CACHED_OBJ;
+    }
+    
     // Compile C++ code
     console.log(`  Compiling C++ code with zig...`);
     try {
-      execSync(
-        `zig c++ -std=c++20 -O2 -I${runtimePath} -I${mpsSourcePath} ${cppFile} ${mpsObj} -o ${exePath}`,
-        { stdio: 'pipe', cwd: testDir }
-      );
+      let compileCmd = `zig c++ -std=c++20 -O2 -I${runtimePath} -I${mpsSourcePath}`;
+      if (needsCppcoro) {
+        compileCmd += ` -I${CPPCORO_DIR} ${cppcoroObj}`;
+      }
+      compileCmd += ` ${cppFile} ${mpsObj} -o ${exePath}`;
+      
+      execSync(compileCmd, { stdio: 'pipe', cwd: testDir });
     } catch (error) {
       // Try to extract useful error message
       const stderr = error.stderr ? error.stderr.toString() : error.message;
