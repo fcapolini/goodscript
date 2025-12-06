@@ -11,19 +11,25 @@ The C++ code generation uses an **AST-based approach** with **ownership-aware ty
 ### Current Implementation (Dec 6, 2025 - 100% Test Pass Rate + Refactoring)
 
 **New AST-Based Codegen:**
-- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~3,686 lines)
+- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~3,617 lines)
   - Pure AST transformation from TypeScript AST → C++ AST
   - No string concatenation during generation
   - Type-safe, composable, easily testable
   - **Currently passing 1252/1252 tests (100%)** ✅ 🎉
   - **CORE FUNCTIONALITY COMPLETE**
-  - **Refactored architecture (Dec 6, 2025 Phase 3)** - Further improved maintainability
-    - **`src/cpp/type-mapper.ts`** (260 lines) - Centralized TypeScript → C++ type mapping
+  - **Refactored architecture (Dec 6, 2025)** - Continuous maintainability improvements
+    - **Phase 1**: TypeMapper (260), TypeInference (310), MainBuilder (100), TransformContext (250) - 4,372 → 3,783 lines (-589)
+    - **Phase 2**: ExpressionAnalyzer (341) - 3,783 → 3,686 lines (-97)
+    - **Phase 3**: LambdaAnalyzer (147) - 3,686 → 3,617 lines (-69)
+    - **Phase 4**: Eliminated type mapping duplication - 3,617 lines (stable, removed ~70 lines of duplicate code)
+    - **Total reduction**: 4,372 → 3,617 lines (-755, -17.3%)
+  - **Extracted services:**
+    - **`src/cpp/type-mapper.ts`** (260 lines) - Centralized TypeScript → C++ type mapping (primitives, ownership, unions, tuples)
     - **`src/cpp/type-inference.ts`** (310 lines) - Strategy pattern for variable type inference
     - **`src/cpp/main-builder.ts`** (100 lines) - Main function generation logic
     - **`src/cpp/transform-context.ts`** (250 lines) - Consolidated state tracking
-    - **`src/cpp/expression-analyzer.ts`** (341 lines) - Expression analysis utilities
-    - **`src/cpp/lambda-analyzer.ts`** (147 lines) - Lambda/closure analysis utilities (NEW)
+    - **`src/cpp/expression-analyzer.ts`** (341 lines) - Expression analysis utilities (bounds checking, type checks)
+    - **`src/cpp/lambda-analyzer.ts`** (147 lines) - Lambda/closure analysis utilities (hoisting, async detection)
   - **use<T> array handling** - Proper weak_ptr conversion for non-owning references
   - **GC mode Map.get() fixes** - Proper pointer handling in garbage-collected mode
   - **Nested template support** - Handle make_shared<Stack<String>> correctly

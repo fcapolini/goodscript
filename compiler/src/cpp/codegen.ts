@@ -1567,7 +1567,7 @@ export class AstCodegen {
           // Named types look like "Entry<K, V>"
           if (!typeStr.startsWith('{') && !typeStr.includes(';')) {
             // It's a named type - use it for struct initialization
-            targetTypeName = this.mapTypeScriptTypeToCpp(typeStr);
+            targetTypeName = this.typeMapper.mapTypeScriptTypeToCpp(typeStr);
             isStructInit = true;
           }
         }
@@ -1667,7 +1667,7 @@ export class AstCodegen {
                 const argStr = this.checker.typeToString(typeArgs[0]);
                 // Check if argStr is a named type (not anonymous)
                 if (!argStr.startsWith('{') && !argStr.includes(';')) {
-                  elementType = this.mapTypeScriptTypeToCpp(argStr);
+                  elementType = this.typeMapper.mapTypeScriptTypeToCpp(argStr);
                 }
               }
             }
@@ -1678,18 +1678,18 @@ export class AstCodegen {
               if (elemContextualType) {
                 const elemTypeStr = this.checker.typeToString(elemContextualType);
                 if (!elemTypeStr.startsWith('{') && !elemTypeStr.includes(';')) {
-                  elementType = this.mapTypeScriptTypeToCpp(elemTypeStr);
+                  elementType = this.typeMapper.mapTypeScriptTypeToCpp(elemTypeStr);
                 }
               }
             }
           } else {
             // Regular type like "number"
-            elementType = this.mapTypeScriptTypeToCpp(baseType);
+            elementType = this.typeMapper.mapTypeScriptTypeToCpp(baseType);
           }
         } else if (typeStr.startsWith('Array<')) {
           const match = typeStr.match(/^Array<(.+)>$/);
           if (match) {
-            elementType = this.mapTypeScriptTypeToCpp(match[1]);
+            elementType = this.typeMapper.mapTypeScriptTypeToCpp(match[1]);
           }
         }
         
@@ -2333,81 +2333,12 @@ export class AstCodegen {
   }
   
   /**
-   * Map TypeScript type string to C++ type string
+   * Delegate type mapping to CppTypeMapper service
    */
   private mapTypeScriptTypeToCpp(tsType: string): string {
-    switch (tsType) {
-      case 'string': return 'gs::String';
-      case 'number': return 'double';
-      case 'boolean': return 'bool';
-      case 'void': return 'void';
-      case 'never': return 'gs::String';  // Use gs::String as placeholder for empty arrays
-      case 'any': return 'auto';  // Let C++ infer the type - TypeScript's any comes from API calls
-      default:
-        // Check if it's a template parameter (don't add gs:: prefix)
-        if (this.ctx.isTemplateParameter(tsType)) {
-          return tsType;
-        }
-        
-        // Handle union types with null/undefined: T | null | undefined → std::optional<T>
-        // Remove parentheses if present: (E | undefined) → E | undefined
-        let cleanType = tsType.replace(/^\(|\)$/g, '').trim();
-        
-        if (cleanType.includes(' | ')) {
-          const types = cleanType.split('|').map(t => t.trim());
-          const nonNullTypes = types.filter(t => t !== 'null' && t !== 'undefined');
-          
-          if (nonNullTypes.length === 1) {
-            const innerType = this.mapTypeScriptTypeToCpp(nonNullTypes[0]);
-            return `std::optional<${innerType}>`;
-          }
-          // Multiple non-null types - not supported, fallback to first type
-          if (nonNullTypes.length > 0) {
-            return this.mapTypeScriptTypeToCpp(nonNullTypes[0]);
-          }
-        }
-        
-        // Handle tuple types: [string, number] → std::pair<gs::String, double>
-        // TypeChecker represents tuples as "[T, U, V, ...]" in typeToString
-        if (tsType.startsWith('[') && tsType.endsWith(']') && !tsType.endsWith('[]')) {
-          const inner = tsType.slice(1, -1).trim();
-          const types = inner.split(',').map(t => this.mapTypeScriptTypeToCpp(t.trim()));
-          
-          if (types.length === 2) {
-            return `std::pair<${types[0]}, ${types[1]}>`;
-          } else {
-            return `std::tuple<${types.join(', ')}>`;
-          }
-        }
-        
-        // Handle ownership types: own<T>, share<T>, use<T>
-        const ownMatch = tsType.match(/^own<(.+)>$/);
-        if (ownMatch) {
-          const innerType = this.mapTypeScriptTypeToCpp(ownMatch[1]);
-          return `std::unique_ptr<${innerType}>`;
-        }
-        const shareMatch = tsType.match(/^share<(.+)>$/);
-        if (shareMatch) {
-          const innerType = this.mapTypeScriptTypeToCpp(shareMatch[1]);
-          return `std::shared_ptr<${innerType}>`;
-        }
-        const useMatch = tsType.match(/^use<(.+)>$/);
-        if (useMatch) {
-          const innerType = this.mapTypeScriptTypeToCpp(useMatch[1]);
-          return `std::weak_ptr<${innerType}>`;
-        }
-        
-        // For custom types, check if it's an interface (needs shared_ptr wrapping)
-        // Interfaces are polymorphic and must be accessed through pointers
-        const escapedType = cppUtils.escapeName(tsType);
-        if (this.ctx.interfaceNames.has(escapedType)) {
-          return `std::shared_ptr<gs::${escapedType}>`;
-        }
-        
-        return tsType.startsWith('gs::') ? tsType : `gs::${tsType}`;
-    }
+    return this.typeMapper.mapTypeScriptTypeToCpp(tsType);
   }
-  
+
   private visitArrowFunction(node: ts.ArrowFunction): ast.Expression {
     // Arrow functions in TypeScript: (x) => x * 2
     // In C++, use lambdas: [](auto x) { return x * 2; }
