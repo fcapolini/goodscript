@@ -16,7 +16,7 @@ export interface Equality<E> {
   hash(e: E): number;
 }
 
-export class EqualitySet<E> {
+export class EqualitySet<E> implements Iterable<E> {
   private equality: Equality<E>;
   private map: Map<number, E[]>;
   private count: number;
@@ -177,10 +177,17 @@ export class EqualitySet<E> {
     const result: E[] = [];
     for (const bucket of this.map.values()) {
       for (const element of bucket) {
-        result.push(element);
+        result[result.length] = element;
       }
     }
     return result;
+  }
+  
+  /**
+   * Returns an iterator over elements.
+   */
+  [Symbol.iterator](): Iterator<E> {
+    return new EqualitySetIterator(this);
   }
 
   /**
@@ -260,5 +267,44 @@ class DefaultEquality<E> implements Equality<E> {
       hash = (hash | 0); // Convert to 32-bit integer
     }
     return hash;
+  }
+}
+
+/**
+ * Concrete implementation of IteratorResult
+ */
+class IteratorResultImpl<T> {
+  done: boolean;
+  value: T;
+  
+  constructor(done: boolean, value: T) {
+    this.done = done;
+    this.value = value;
+  }
+}
+
+/**
+ * Iterator for EqualitySet - iterates over all elements
+ */
+class EqualitySetIterator<E> implements Iterator<E> {
+  private set: EqualitySet<E>;
+  private elements: E[];
+  private index: number;
+  
+  constructor(set: EqualitySet<E>) {
+    this.set = set;
+    this.elements = set.toArray();
+    this.index = 0;
+  }
+  
+  next(): IteratorResult<E> {
+    if (this.index < this.elements.length) {
+      const value = this.elements[this.index];
+      this.index++;
+      return new IteratorResultImpl(false, value);
+    }
+    // When done, return first element as dummy (it won't be used)
+    const dummyValue = this.elements[0];
+    return new IteratorResultImpl(true, dummyValue);
   }
 }

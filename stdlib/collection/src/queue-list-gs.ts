@@ -9,7 +9,7 @@
  * Provides O(1) addition and removal at both ends, and O(1) indexed access.
  * Uses a circular buffer internally for efficient operations.
  */
-export class QueueList<E> {
+export class QueueList<E> implements Iterable<E> {
   private static INITIAL_CAPACITY = 8;
   
   private table: (E | null)[];
@@ -283,6 +283,13 @@ export class QueueList<E> {
   }
   
   /**
+   * Returns an iterator over elements in order.
+   */
+  [Symbol.iterator](): Iterator<E> {
+    return new QueueListIterator(this);
+  }
+  
+  /**
    * Removes all elements from the queue.
    */
   clear(): void {
@@ -361,5 +368,44 @@ export class QueueList<E> {
       
       return this.tail + firstPartSize;
     }
+  }
+}
+
+/**
+ * Concrete implementation of IteratorResult
+ */
+class IteratorResultImpl<T> {
+  done: boolean;
+  value: T;
+  
+  constructor(done: boolean, value: T) {
+    this.done = done;
+    this.value = value;
+  }
+}
+
+/**
+ * Iterator for QueueList - iterates in order from head to tail
+ */
+class QueueListIterator<E> implements Iterator<E> {
+  private queue: QueueList<E>;
+  private index: number;
+  private length: number;
+  
+  constructor(queue: QueueList<E>) {
+    this.queue = queue;
+    this.index = 0;
+    this.length = queue.getLength();
+  }
+  
+  next(): IteratorResult<E> {
+    if (this.index < this.length) {
+      const value = this.queue.get(this.index);
+      this.index++;
+      return new IteratorResultImpl(false, value);
+    }
+    // When done, return first element as dummy (it won't be used)
+    const dummyValue = this.queue.get(0);
+    return new IteratorResultImpl(true, dummyValue);
   }
 }

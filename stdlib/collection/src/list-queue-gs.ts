@@ -11,7 +11,7 @@
 
 const _INITIAL_CAPACITY = 8;
 
-export class ListQueue<E> {
+export class ListQueue<E> implements Iterable<E> {
   private table: (E | null)[];
   private head: number;
   private tail: number;
@@ -185,6 +185,13 @@ export class ListQueue<E> {
     
     return result;
   }
+  
+  /**
+   * Returns an iterator over elements in order.
+   */
+  [Symbol.iterator](): Iterator<E> {
+    return new ListQueueIterator(this);
+  }
 
   /**
    * Returns a string representation of the queue.
@@ -230,5 +237,44 @@ export class ListQueue<E> {
     n = n | (n >> 8);
     n = n | (n >> 16);
     return n + 1;
+  }
+}
+
+/**
+ * Concrete implementation of IteratorResult
+ */
+class IteratorResultImpl<T> {
+  done: boolean;
+  value: T;
+  
+  constructor(done: boolean, value: T) {
+    this.done = done;
+    this.value = value;
+  }
+}
+
+/**
+ * Iterator for ListQueue - iterates in order from head to tail
+ */
+class ListQueueIterator<E> implements Iterator<E> {
+  private queue: ListQueue<E>;
+  private index: number;
+  private length: number;
+  
+  constructor(queue: ListQueue<E>) {
+    this.queue = queue;
+    this.index = 0;
+    this.length = queue.getLength();
+  }
+  
+  next(): IteratorResult<E> {
+    if (this.index < this.length) {
+      const value = this.queue.elementAt(this.index);
+      this.index++;
+      return new IteratorResultImpl(false, value);
+    }
+    // When done, return first element as dummy (it won't be used)
+    const dummyValue = this.queue.elementAt(0);
+    return new IteratorResultImpl(true, dummyValue);
   }
 }
