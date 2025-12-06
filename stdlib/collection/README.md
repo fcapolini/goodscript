@@ -1,6 +1,6 @@
 # @goodscript/collection
 
-Collection data structures for GoodScript, translated from Dart's `collection` package.
+Collection data structures and utilities for GoodScript, translated from Dart's `collection` package.
 
 ## Included Data Structures
 
@@ -9,6 +9,29 @@ Collection data structures for GoodScript, translated from Dart's `collection` p
 
 ### Queues & Lists  
 - **QueueList** - Double-ended queue with O(1) operations at both ends and O(1) indexed access
+- **ListQueue** - Alternative queue implementation using circular buffer
+- **UnmodifiableListView** - Read-only list wrapper
+- **CombinedListView** - Lazy concatenated view of multiple lists
+
+### Sets
+- **EqualitySet** - Hash set with custom equality function
+- **UnmodifiableSetView** - Read-only set wrapper
+- **UnionSet** - Lazy union view of multiple sets
+- **BoolList** - Space-efficient boolean list
+
+### Maps
+- **EqualityMap** - Hash map with custom equality function
+- **UnmodifiableMapView** - Read-only map wrapper
+
+### Utilities
+- **Comparators** - String comparison functions (case-insensitive, natural sort)
+- **Algorithms** - Sorting and searching utilities
+- **Collection Utils** - Higher-order collection functions
+- **Range** - Numeric sequence generation with iterator support
+- **Zip** - Combine multiple iterables with iterator support
+- **Partition** - Split and group collections
+- **groupBy/lastBy** - Group elements by key
+- **mergeMaps/mapMap** - Map transformation utilities
 
 ## Installation
 
@@ -81,6 +104,8 @@ deque.set(1, 99);
 See [stdlib/docs/reference/collection/](../../docs/reference/collection/) for detailed API documentation:
 - [HeapPriorityQueue](../../docs/reference/collection/HeapPriorityQueue.md)
 - [QueueList](../../docs/reference/collection/QueueList.md)
+- [Comparators](../../docs/reference/collection/Comparators.md)
+- And many more...
 
 ## License
 

@@ -1,6 +1,344 @@
 # GoodScript Copilot Instructions
 
-## Project Overview
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+- Bugs found: 0 (all tests passed first time after codegen fix)- Documentation: ~350 lines- Codegen additions: ~30 lines (>>> support, Math.sign())- Library size: 545 lines + 320 test lines- Session duration: ~45 minutes**Stats:**---5. **Branchless algorithms**: Modern C++ patterns often beat explicit branching4. **Triple validation catches everything**: TypeScript + GoodScript + C++ native3. **Documentation is valuable**: Comprehensive API docs prevent confusion2. **Test-driven translation**: Dart's test suite catches issues early1. **Compiler-first approach pays off**: Improving codegen benefits all future code## Lessons Learned4. Potentially add comprehensive bitwise operator tests3. Monitor for other JavaScript features that need codegen support2. Consider adding more Math functions as needed1. Continue adding collection libraries (LinkedHashSet, CanonicalizedMap)## Next Steps```Stdlib progress: 19/25 libraries (76%), 593 tests, 100% pass rateTriple validation: TypeScript ✓, GoodScript ✓, C++ native ✓Files: 545 lines library code, 320 lines tests, full API docs- Add Math.sign() to runtime (branchless implementation)- Support >>> (unsigned right shift) operatorCodegen improvements:- 43 tests, all passing- Case-insensitive natural sort variants- Natural sort ordering (compareNatural) for strings with embedded numbers- Case-insensitive ASCII comparison (equalsIgnoreAsciiCase, hashIgnoreAsciiCase)Add comprehensive string comparison utilities:feat(stdlib): add Comparators library + codegen improvements```## Commit Message- Limitations (ASCII-only case handling)- Performance characteristics- Real-world use cases (file sorting, case-insensitive maps, version sorting)- Multiple usage examples- Parameter and return value documentation- Function signatures and detailed descriptionsCreated comprehensive API documentation (`Comparators.md`) with:## DocumentationThis validates the entire natural sort order in one test.```});  }    expect(compareNatural(sorted[i], sorted[i + 1])).toBe(-1);  for (let i = 0; i < sorted.length - 1; i++) {    ];    'a', 'a0', 'a0b', 'a1', 'a01', 'a9', 'a10', 'a100', 'a100b', 'aa'  const sorted = [it('handles the documented example order', () => {```typescript### Example Test Pattern6. **Real-World**: File names, version numbers, special characters5. **Integration**: Array.sort() with various comparators4. **Natural Sort**: Numbers at various positions, leading zeros3. **Case Sensitivity**: ASCII vs non-ASCII characters2. **Edge Cases**: Empty strings, length differences, very long numbers1. **Basic Functionality**: Identical strings, basic comparisons### Test Categories## Testing Strategy- Ensures strings equal by `equalsIgnoreAsciiCase` have same hash- Case normalization happens before hashing- Uses bitwise operations and masking- Designed for JavaScript's SMI (Small Integer) optimizationJenkins hash in `hashIgnoreAsciiCase`:### 3. Hash Function DesignC++ requires explicit casts at each step to achieve the same semantics.- Converts result back to signed 32-bit integer- Performs right shift (zero-fill)- Converts to 32-bit unsigned integerJavaScript's `>>>` operator is surprisingly complex:### 2. Unsigned Right Shift Complexity- Standard C++ pattern for sign function- Compiles to efficient assembly (conditional moves)- Two comparisons, one subtraction- No if/else statementsThis is branchless and efficient:```inline int sign(double x) { return (x > 0) - (x < 0); }```cppThe `Math.sign()` implementation is elegant:### 1. Branchless sign() Implementation## Key Insights4. IterableExtensions - Additional iterable utilities3. ListExtensions - Additional list utilities2. CanonicalizedMap - Map with canonical keys (case-insensitive strings)1. LinkedHashSet - Insertion-order hash set**Next Candidates:**- ✅ Codegen improvements for JS features- ✅ Interface support with optional fields- ✅ Iterator protocol fully implemented- ✅ All tests passing in triple-mode validation- ✅ All libraries compile TypeScript → C++ → native binary- ✅ 19/25 target libraries (76% complete)**Milestones:****Pass Rate:** 100%**Total Tests:** 593  **Total Libraries:** 19  ## Stdlib Progress- Natural comparisons: O(n) with additional overhead for number parsing- `compareNatural`: O(n) worst case, typically better with early differences- `hashIgnoreAsciiCase`: O(n) using Jenkins hash- `equalsIgnoreAsciiCase`: O(n) with early termination on mismatchAll comparison functions are O(n) where n is the length of the shorter string:## Performance Characteristics5. Support multiple number sequences in one string4. Handle leading zeros (more zeros = greater for tie-breaking)3. Compare non-numeric parts lexically2. Compare numbers numerically1. Parse embedded numbers as single units**Algorithm:**```// NOT: ['a1', 'a10', 'a100', 'a2', 'a20'] (lexical)// Result: ['a1', 'a2', 'a10', 'a20', 'a100']files.sort(compareNatural);const files = ['a1', 'a2', 'a10', 'a20', 'a100'];```typescript**Example:**The comparators library includes sophisticated natural sort ordering:### Natural Sort Algorithm4. **Future-proofing**: These are standard JavaScript features that should be supported3. **Developer Experience**: TypeScript developers expect `>>>` and `Math.sign()` to work2. **Maintainability**: Library code stays close to Dart original1. **Consistency**: Other stdlib libraries may need these features**Rationale:**- Keep library code natural and idiomatic- Add `Math.sign()` to runtime- Implement `>>>` properly in codegen**Better Approach (Chosen):**```hash = (hash >> 6) & 0x1fffffff;  // Adapting to work around missing >>>// Replace >>> with regular >> and mask```typescript**Initial Approach (Rejected):**### Why Improve Codegen Instead of Adapting Code?## Design Decisions```🎉 All phases passed!✅ Execution: PASS[4/4] Native execution...✅ Compilation: PASS[3/4] Native compilation (C++ → binary)...✅ Phase 3: PASS (9909 bytes generated)[2/4] Phase 3: C++ code generation...✅ Phase 1+2: PASS[1/4] Phase 1+2: Validation (restrictions + ownership)...```### GoodScript Validation```Tests  43 passed (43)Test Files  1 passed (1)  ✓ edge cases (4)  ✓ comparators with array sort (3)  ✓ compareAsciiUpperCaseNatural (3)  ✓ compareAsciiLowerCaseNatural (3)  ✓ compareNatural (10)  ✓ compareAsciiLowerCase (4)  ✓ compareAsciiUpperCase (5)  ✓ hashIgnoreAsciiCase (5)  ✓ equalsIgnoreAsciiCase (6)✓ test/comparators.test.ts (43 tests) 6ms```### TypeScript Tests## Validation Results4. `.github/copilot-instructions.md` - Updated milestone (19 libraries, 593 tests)3. `stdlib/collection/README.md` - Updated library list2. `compiler/src/cpp/expressions/binary-expression-handler.ts` - Added `>>>` support1. `compiler/runtime/gs_gc_runtime.hpp` - Added `Math.sign()`### Modified Files3. `stdlib/docs/reference/collection/Comparators.md` (comprehensive API docs)2. `stdlib/collection/test/comparators.test.ts` (320 lines, 43 tests)1. `stdlib/collection/src/comparators-gs.ts` (545 lines)### New Files## Files Changed- Both return `int` (-1, 0, or 1)- `int` version for integers- `double` version for floating-point numbers**Overloads:**- Clever branchless implementation from standard C++ patterns- Result: `-1` for negative, `0` for zero, `1` for positive- `(x < 0)` → `1` if negative, `0` otherwise- `(x > 0)` → `1` if positive, `0` otherwise**How It Works:**```}  inline int sign(int x) { return (x > 0) - (x < 0); }  inline int sign(double x) { return (x > 0) - (x < 0); }  // ... existing functions ...namespace Math {```cpp**Implementation:****File**: `compiler/runtime/gs_gc_runtime.hpp`#### 2. Math.sign() Function- Cast back to `int` to match JavaScript's 32-bit signed result- C++ requires explicit casting to `unsigned int` for unsigned semantics- JavaScript `>>>` treats operands as 32-bit unsigned integers**Why This Works:**```// C++: hash = static_cast<int>(static_cast<unsigned int>(hash) >> 6);// JavaScript: hash >>>= 6;```cpp**Generated C++:**```}  return cpp.cast(new ast.CppType('int'), shiftExpr);  const shiftExpr = cpp.binary(unsignedLeft, '>>', right);  const unsignedLeft = cpp.cast(new ast.CppType('unsigned int'), left);  // C++: static_cast<int>(static_cast<unsigned int>(a) >> b)  // JavaScript: a >>> bif (isUnsignedRightShift) {// Handle unsigned right shift >>> with proper casting// ... later in the function ...}  op = '>>';  // Will be wrapped in static_cast<unsigned> laterif (isUnsignedRightShift) {const isUnsignedRightShift = op === '>>>';// Detect >>> operator```typescript**Implementation:****File**: `compiler/src/cpp/expressions/binary-expression-handler.ts`#### 1. Unsigned Right Shift (`>>>`) SupportFollowing GoodScript philosophy of "improve the compiler, not the code", we enhanced codegen:### Solution: Improve Codegen Instead of Adapting Library2. `Math.sign()` not in C++ runtime1. `>>>` operator (unsigned right shift) not recognized by C++Initial GoodScript validation failed with C++ compilation errors:### Problem Encountered## Codegen Improvements- Edge cases (very long numbers, special characters, alternating digits)- Array.sort() integration- Natural sort ordering- Case comparison edge cases- Hash function verification- Equality checks**Test Coverage:** 43 tests, 100% passing- Natural UI sorting with embedded numbers- Case-insensitive hash maps- Version numbers: `['v1.0', 'v1.2', 'v1.10', 'v2.0']`- File name sorting: `['file1.txt', 'file2.txt', 'file10.txt', 'file20.txt']`**Use Cases:**7. `compareAsciiUpperCaseNatural(a, b)` - Case-insensitive natural sort (uppercase)6. `compareAsciiLowerCaseNatural(a, b)` - Case-insensitive natural sort5. `compareNatural(a, b)` - Natural sort ordering (numbers within strings)4. `compareAsciiLowerCase(a, b)` - Compare with lowercase normalization3. `compareAsciiUpperCase(a, b)` - Compare with uppercase normalization2. `hashIgnoreAsciiCase(str)` - Hash function compatible with case-insensitive equality1. `equalsIgnoreAsciiCase(a, b)` - Case-insensitive ASCII equality**Functions:**Translated from [Dart's collection/comparators.dart](https://github.com/dart-lang/collection/blob/master/lib/src/comparators.dart)### Comparators (545 lines, 43 tests)## Libraries AddedSuccessfully added the 19th library to stdlib collection package: **Comparators** - a comprehensive string comparison utility library with case-insensitive comparison and natural sort ordering. Instead of adapting the library to work around missing JavaScript features, we improved the C++ code generator to properly handle `>>>` (unsigned right shift) and `Math.sign()`.## Summary**Focus**: Adding Comparators library to stdlib + improving codegen for `>>>` and `Math.sign()`**Date**: December 6, 2024  ## Project Overview
 
 GoodScript is a **TypeScript specialization** for native compilation, positioned as **"Go for TypeScript developers"**. It compiles TypeScript code to C++ for deployment as single binaries.
 
@@ -67,7 +405,7 @@ GoodScript is a **TypeScript specialization** for native compilation, positioned
 ### Phase 4: Ecosystem (✅ MAJOR MILESTONE - Dec 6, 2024)
 - **Standard Library Development**: Porting proven libraries from Dart collection package
 - **Translation Workflow**: AI-assisted translation with triple validation (TypeScript + GoodScript + C++ generation)
-- **🎉 MILESTONE**: 16 libraries fully validated in triple-mode (TypeScript, C++ GC, C++ native)
+- **🎉 MILESTONE**: 19 libraries fully validated in triple-mode (TypeScript, C++ GC, C++ native)
   - ✅ HeapPriorityQueue (273 lines, 22 tests)
   - ✅ QueueList (358 lines, 29 tests)
   - ✅ ListQueue (207 lines, 29 tests)
@@ -86,6 +424,7 @@ GoodScript is a **TypeScript specialization** for native compilation, positioned
   - ✅ Collection Utils (36 tests)
   - ✅ groupBy/lastBy (23 tests) - **Utility functions**
   - ✅ mergeMaps/mapMap (31 tests) - **Map transformation utilities**
+  - ✅ Comparators (545 lines, 43 tests) - **String comparison & natural sort** (Dec 6, 2024)
 - **Iterator Protocol**: ✅ Fully implemented (Dec 6, 2024)
   - Symbol.iterator → __iterator() method
   - Iterator.next() is non-const (allows state mutation)
@@ -96,8 +435,11 @@ GoodScript is a **TypeScript specialization** for native compilation, positioned
   - Forward declarations for template interfaces
   - Optional function fields map to std::function
   - Proper ordering: interface forward decls → function forward decls → interface defs → function defs
+- **Codegen Improvements** (Dec 6, 2024):
+  - ✅ `>>>` operator (unsigned right shift) → `static_cast<int>(static_cast<unsigned int>(a) >> b)`
+  - ✅ `Math.sign()` function added to runtime
 - **Achievement**: First production-quality Dart-derived libraries compiling TypeScript→C++ and executing natively
-- **Test Results**: 550 TypeScript tests, 100% pass rate across all modes
+- **Test Results**: 593 TypeScript tests, 100% pass rate across all modes
 - **Target**: 20-25 core collection libraries by mid-December 2024
 - **Key files**: `stdlib/collection/src/*-gs.ts`, `stdlib/collection/test/*.test.ts`
 - **Documentation**: `stdlib/docs/TRANSLATION-WORKFLOW.md`, `stdlib/docs/reference/*.md`

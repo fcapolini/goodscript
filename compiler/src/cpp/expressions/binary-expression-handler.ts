@@ -62,8 +62,14 @@ export class BinaryExpressionHandler {
     if (op === '===') op = '==';
     if (op === '!==') op = '!=';
     
+    // Handle >>> (unsigned right shift) - needs special C++ handling
+    const isUnsignedRightShift = op === '>>>';
+    if (isUnsignedRightShift) {
+      op = '>>';  // Will be wrapped in static_cast<unsigned> later
+    }
+    
     // Check for bitwise operators
-    const isBitwiseOp = ['&', '|', '^', '<<', '>>', '>>>'].includes(op);
+    const isBitwiseOp = ['&', '|', '^', '<<', '>>', '>>>'].includes(node.operatorToken.getText());
     
     // Analyze null/undefined checks BEFORE visiting expressions
     const nullCheck = this.analyzeNullComparison(node);
@@ -98,6 +104,15 @@ export class BinaryExpressionHandler {
     // Handle pointer comparisons with null/undefined
     if (nullCheck.isNullCheck) {
       ({ left, right } = this.handlePointerNullComparison(node, nullCheck, left, right));
+    }
+    
+    // Handle unsigned right shift >>> with proper casting
+    if (isUnsignedRightShift) {
+      // JavaScript: a >>> b
+      // C++: static_cast<int>(static_cast<unsigned int>(a) >> b)
+      const unsignedLeft = cpp.cast(new ast.CppType('unsigned int'), left);
+      const shiftExpr = cpp.binary(unsignedLeft, '>>', right);
+      return cpp.cast(new ast.CppType('int'), shiftExpr);
     }
     
     return cpp.binary(left, op, right);

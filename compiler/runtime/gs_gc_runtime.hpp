@@ -123,6 +123,8 @@ namespace Math {
   inline double max(double a, double b) { return std::max(a, b); }
   inline double min(double a, double b) { return std::min(a, b); }
   inline double random() { return static_cast<double>(rand()) / RAND_MAX; }
+  inline int sign(double x) { return (x > 0) - (x < 0); }
+  inline int sign(int x) { return (x > 0) - (x < 0); }
 }
 
 // Type name helpers for runtime typeof checks
