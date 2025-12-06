@@ -165,6 +165,8 @@ export class AstCodegen {
     const hasAsync = this.sourceFileHasAsync(sourceFile);
     const includes = [new ast.Include('gs_runtime.hpp', false)];
     if (hasAsync) {
+      // Note: promise.hpp is included via gs_runtime.hpp for ownership mode
+      // and via gs_gc_runtime.hpp for GC mode, so we don't need to include it here
       includes.push(new ast.Include('cppcoro/task.hpp', true));
       includes.push(new ast.Include('cppcoro/sync_wait.hpp', true));
     }
@@ -259,7 +261,16 @@ export class AstCodegen {
         if (stmt.type) {
           const typeText = stmt.type.getText();
           if (typeText.startsWith('Promise<')) {
-            returnTypeStr = this.mapType(stmt.type).toString();
+            // For async functions, unwrap Promise<T> to get T, then wrap in cppcoro::task<T>
+            const innerMatch = typeText.match(/Promise<(.+)>/);
+            if (innerMatch && isAsync) {
+              const innerTypeStr = innerMatch[1];
+              const innerType = this.typeMapper.mapTypeScriptTypeToCpp(innerTypeStr);
+              returnTypeStr = `cppcoro::task<${innerType}>`;
+            } else {
+              // Not async - use gs::Promise<T> for storage
+              returnTypeStr = this.mapType(stmt.type).toString();
+            }
           } else {
             const baseType = this.mapType(stmt.type);
             returnTypeStr = isAsync ? `cppcoro::task<${baseType.toString()}>` : baseType.toString();
@@ -660,8 +671,16 @@ export class AstCodegen {
       // Check if the type annotation is Promise<T> (for async functions)
       const typeText = node.type.getText();
       if (typeText.startsWith('Promise<')) {
-        // Promise<T> will be mapped to cppcoro::task<T> by mapType, don't wrap again
-        returnType = this.mapType(node.type);
+        // For async functions, unwrap Promise<T> to get T, then wrap in cppcoro::task<T>
+        const innerMatch = typeText.match(/Promise<(.+)>/);
+        if (innerMatch && isAsync) {
+          const innerTypeStr = innerMatch[1];
+          const innerType = new ast.CppType(this.typeMapper.mapTypeScriptTypeToCpp(innerTypeStr));
+          returnType = cpp.task(innerType);
+        } else {
+          // Not async or couldn't parse - use gs::Promise<T> for storage
+          returnType = this.mapType(node.type);
+        }
       } else {
         const baseType = this.mapType(node.type);
         // If async but no Promise annotation, wrap return type in cppcoro::task<T>

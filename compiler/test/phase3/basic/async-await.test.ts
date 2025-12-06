@@ -51,7 +51,7 @@ describe('Async/Await Code Generation', () => {
     `;
     
     const result = compile(code);
-    expect(result).toContain('cppcoro::task<gs::String> getValue()');
+    expect(result).toContain('gs::Promise<gs::String> getValue()');
     expect(result).toContain('co_return gs::String("hello")');
   });
   

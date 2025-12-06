@@ -275,7 +275,9 @@ export function compileAndExecuteNative(
                       execution.cppCode.includes('gs::RegExp');
   
   // Check if code uses async/await (needs cppcoro)
-  const needsCppcoro = execution.cppCode.includes('cppcoro/task.hpp');
+  // gs::Promise is a wrapper around cppcoro::task, so check for it too
+  const needsCppcoro = execution.cppCode.includes('cppcoro/task.hpp') ||
+                       execution.cppCode.includes('gs::Promise');
   
   let compileCmd = `zig c++ -std=c++20 -O3 -I${RUNTIME_DIR} ${cppFile} -o ${binFile}`;
   

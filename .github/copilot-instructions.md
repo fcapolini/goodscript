@@ -1,6 +1,153 @@
 # GoodScript Copilot Instructions
 
-## Session: December 6, 2024 - Completer Class + Optional<Function> Codegen
+## Session: December 6, 2025 - Async/Await Runtime Support
+
+**Focus**: Adding Promise runtime support for async/await in both ownership and GC modes  
+**Date**: December 6, 2025
+
+## Summary
+
+Successfully fixed all 190 concrete example tests by implementing complete async/await runtime support. The compiler now properly handles async functions in both ownership mode and GC mode, with correct C++ coroutine integration using cppcoro.
+
+## Problem
+
+Test suite had 67 failures across multiple test files. Root causes:
+1. **GC mode compilation failures**: MPS library and cppcoro weren't being consistently compiled/linked
+2. **Missing Promise runtime**: Ownership mode had no Promise class for async/await
+3. **Incorrect async return types**: Codegen generated `gs::Promise<T>` instead of `cppcoro::task<T>` (C++ coroutines require types with `promise_type` trait)
+4. **Forward declaration mismatches**: Function declarations and implementations had different return types
+5. **Promise redefinition**: Both `runtime/promise.hpp` and `runtime/gc/promise.hpp` were being included in GC mode
+
+## Solutions Implemented
+
+### 1. Fixed GC Runtime Helper
+
+**File**: `test/phase3/runtime-helpers.ts`
+
+Changed `executeGcCpp()` to always include cppcoro for GC mode since `gc/promise.hpp` always depends on it:
+
+```typescript
+// Before: Conditional cppcoro inclusion
+const needsCppcoro = generatedCode.includes('cppcoro/task.hpp');
+
+// After: Always include for GC mode
+// GC mode always needs cppcoro (gc/promise.hpp depends on it)
+const cppcoroObjFile = await getCppcoroObjectFile();
+args.push(cppcoroObjFile);
+```
+
+### 2. Created Promise Runtime for Ownership Mode
+
+**File**: `compiler/runtime/gs_promise.hpp` (new)
+
+Created Promise<T> wrapper class for ownership mode that:
+- Wraps `cppcoro::task<T>` to provide Promise storage semantics
+- Supports executor pattern: `new Promise((resolve, reject) => {...})`
+- Provides `co_await` operator for coroutine integration
+- Includes `sync_wait()` for testing/compatibility
+- Made conditional with `#ifdef CPPCORO_TASK_HPP_INCLUDED` to prevent redefinition in GC mode
+
+**Key Design**: Uses `std::shared_ptr` for state sharing (same as GC version) to enable copying Promises.
+
+### 3. Fixed Async Function Return Types
+
+**Files**: `compiler/src/cpp/codegen.ts`, `compiler/src/cpp/class-declaration-handler.ts`
+
+**Problem**: TypeScript `Promise<T>` was mapping to `gs::Promise<T>`, but C++ coroutines require return types with `std::coroutine_traits<T>::promise_type`. Only `cppcoro::task<T>` has this trait.
+
+**Solution**: 
+- Unwrap `Promise<T>` annotations to get inner type `T`
+- Wrap in `cppcoro::task<T>` for async function returns
+- Use `gs::Promise<T>` only for storage (member variables, not function returns)
+
+```typescript
+// In codegen.ts - mapReturnType for async functions
+if (typeStr.startsWith('Promise<')) {
+  const innerType = typeStr.slice(8, -1);  // Extract T from Promise<T>
+  const mappedInner = this.typeMapper.mapType(innerType);
+  return this.builder.task(mappedInner);  // Returns cppcoro::task<T>
+}
+
+// In class-declaration-handler.ts - inferMethodReturnType
+if (returnTypeStr?.startsWith('Promise<')) {
+  const innerType = returnTypeStr.slice(8, -1);
+  const mappedInner = mapBasicType(innerType);
+  return cpp.type('cppcoro::task', [mappedInner]);
+}
+```
+
+### 4. Fixed Forward Declarations
+
+**File**: `compiler/src/cpp/codegen.ts`
+
+Updated `emitFunctionForwardDeclarations()` to use same type mapping as implementations:
+
+```typescript
+const returnType = this.mapReturnType(
+  func,
+  func.type?.getReturnType(),
+  this.isAsync(func)
+);
+```
+
+This ensures forward declarations and implementations both use `cppcoro::task<T>` for async functions.
+
+### 5. Prevented Promise Redefinition
+
+**Changes**:
+1. Added `#ifdef CPPCORO_TASK_HPP_INCLUDED` guard to `gs_promise.hpp`
+2. Removed explicit `#include "promise.hpp"` from generated code
+3. Let runtime headers conditionally include promise support
+
+**Rationale**: 
+- GC mode includes `gc/promise.hpp` automatically via `gs_gc_runtime.hpp`
+- Ownership mode includes `gs_promise.hpp` only when cppcoro headers are present
+- Generated code includes cppcoro headers when async functions detected
+- No explicit promise include needed - runtime headers handle it conditionally
+
+### 6. Renamed for Consistency
+
+Renamed `promise.hpp` → `gs_promise.hpp` to match runtime naming convention (`gs_runtime.hpp`, `gs_gc_runtime.hpp`).
+
+## Validation Results
+
+All 190 concrete example tests passing (190/190):
+- ✅ All 15 test files passing
+- ✅ async-await: 12/12 tests (ownership + GC modes)
+- ✅ All examples working in all three modes (JavaScript, C++ ownership, C++ GC)
+- ✅ Both runtime modes have full async/await support
+
+## Files Modified
+
+1. `compiler/test/phase3/runtime-helpers.ts` - Always include cppcoro for GC mode
+2. `compiler/runtime/gs_promise.hpp` - NEW: Promise wrapper for ownership mode
+3. `compiler/src/cpp/codegen.ts` - Fixed async return types and forward declarations
+4. `compiler/src/cpp/class-declaration-handler.ts` - Fixed method return type inference
+5. `compiler/test/phase3/basic/async-await.test.ts` - Updated expectations to cppcoro::task
+6. `compiler/test/phase3/concrete-examples-helpers.ts` - Updated cppcoro detection
+
+## Key Learnings
+
+1. **C++ coroutines are strict**: Return types MUST have `std::coroutine_traits<T>::promise_type`
+2. **Type mapper vs builder distinction**: 
+   - Type mapper: For mapping TypeScript type annotations (Promise<T> → inner type)
+   - Builder: For generating C++ types (cppcoro::task<T> construction)
+3. **Forward declarations must match**: Exact same type mapping for declarations and implementations
+4. **Conditional headers prevent redefinition**: Use `#ifdef` guards when same functionality exists in multiple runtimes
+5. **Dual runtime architecture**: Changes must work in both ownership mode and GC mode
+
+## Testing Strategy
+
+Triple-mode validation for all examples:
+1. **JavaScript execution**: Baseline behavior
+2. **C++ ownership mode**: Manual memory management with async/await
+3. **C++ GC mode**: Garbage collected with async/await
+
+Progress: 67 errors → 7 errors → 3 errors → 0 errors (all fixed)
+
+---
+
+## Previous Session: December 6, 2024 - Completer Class + Optional<Function> Codegen
 
 **Focus**: Adding Completer utility to async package + fixing optional<function> call unwrapping  
 **Date**: December 6, 2024

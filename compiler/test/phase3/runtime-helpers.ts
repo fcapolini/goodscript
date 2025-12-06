@@ -228,23 +228,18 @@ export const executeGcCpp = (gcCppCode: string, outDir: string): ExecutionResult
   writeFileSync(cppFile, gcCppCode, 'utf-8');
   
   try {
-    // Check if code uses cppcoro (async/await)
-    const needsCppcoro = gcCppCode.includes('cppcoro/task.hpp');
+    // GC runtime always needs cppcoro (for promise.hpp)
     const CPPCORO_DIR = join(RUNTIME_DIR, '../vendor/cppcoro/include');
     const CPPCORO_LIB_DIR = join(RUNTIME_DIR, '../vendor/cppcoro/lib');
     
     // Get cached MPS object file (compiled once, reused across all tests)
     const mpsObj = getMpsObjectFile();
     
-    let compileCmd = `zig c++ -std=c++20 -O3 -I${RUNTIME_DIR} -I${MPS_SRC_DIR} ${cppFile} ${mpsObj}`;
+    // Get cached cppcoro object file (always needed for GC runtime)
+    const cppcoroObj = getCppcoroObjectFile();
     
-    if (needsCppcoro) {
-      // Get cached cppcoro object file
-      const cppcoroObj = getCppcoroObjectFile();
-      compileCmd += ` -I${CPPCORO_DIR} ${cppcoroObj}`;
-    }
-    
-    compileCmd += ` -o ${binFile}`;
+    // Build compile command with all necessary includes and object files
+    const compileCmd = `zig c++ -std=c++20 -O3 -I${RUNTIME_DIR} -I${MPS_SRC_DIR} -I${CPPCORO_DIR} ${cppFile} ${mpsObj} ${cppcoroObj} -o ${binFile}`;
     
     // Compile the GC C++ code using Zig's C++ compiler (C++20 for runtime library features)
     // Link with MPS (Memory Pool System) statically for garbage collection

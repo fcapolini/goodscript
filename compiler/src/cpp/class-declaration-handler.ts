@@ -337,8 +337,16 @@ export class ClassDeclarationHandler {
     if (member.type) {
       const typeText = member.type.getText();
       if (typeText.startsWith('Promise<')) {
-        // Promise<T> will be mapped to cppcoro::task<T>
-        return this.mapType(member.type);
+        // For async methods, unwrap Promise<T> to get T, then wrap in cppcoro::task<T>
+        const innerMatch = typeText.match(/Promise<(.+)>/);
+        if (innerMatch && isAsync) {
+          const innerTypeStr = innerMatch[1];
+          const innerType = this.mapBasicType(innerTypeStr);
+          return cpp.task(innerType);
+        } else {
+          // Not async or couldn't parse - use gs::Promise<T> for storage
+          return this.mapType(member.type);
+        }
       } else {
         const baseType = this.mapType(member.type);
         return isAsync ? cpp.task(baseType) : baseType;
