@@ -212,6 +212,94 @@ export class AstCodegen {
       }
     }
     
+    // Add forward declarations for all functions (to handle forward references)
+    for (const stmt of sourceFile.statements) {
+      if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+        const funcName = cppUtils.escapeName(stmt.name.text);
+        
+        // Build function signature for forward declaration
+        const isAsync = stmt.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ?? false;
+        
+        // Register template parameters temporarily
+        const templateParamNames: string[] = [];
+        if (stmt.typeParameters && stmt.typeParameters.length > 0) {
+          for (const tp of stmt.typeParameters) {
+            const paramName = tp.name.text;
+            templateParamNames.push(paramName);
+            this.ctx.registerTemplateParameter(paramName);
+          }
+        }
+        
+        // Template parameters
+        let templateDecl = '';
+        if (templateParamNames.length > 0) {
+          const templateParams = templateParamNames.map(tp => `typename ${tp}`).join(', ');
+          templateDecl = `template<${templateParams}>\n  `;
+        }
+        
+        // Return type
+        let returnTypeStr: string;
+        if (stmt.type) {
+          const typeText = stmt.type.getText();
+          if (typeText.startsWith('Promise<')) {
+            returnTypeStr = this.mapType(stmt.type).toString();
+          } else {
+            const baseType = this.mapType(stmt.type);
+            returnTypeStr = isAsync ? `cppcoro::task<${baseType.toString()}>` : baseType.toString();
+          }
+        } else if (this.checker) {
+          const signature = this.checker.getSignatureFromDeclaration(stmt);
+          if (signature) {
+            const tsReturnType = signature.getReturnType();
+            const returnTypeStr2 = this.checker.typeToString(tsReturnType);
+            
+            if (isAsync && returnTypeStr2.startsWith('Promise<')) {
+              const innerMatch = returnTypeStr2.match(/Promise<(.+)>/);
+              if (innerMatch) {
+                const innerTypeStr = innerMatch[1];
+                returnTypeStr = `cppcoro::task<${this.typeMapper.mapTypeScriptTypeToCpp(innerTypeStr)}>`;
+              } else {
+                returnTypeStr = 'cppcoro::task<void>';
+              }
+            } else {
+              const baseType = this.typeMapper.mapTypeScriptTypeToCpp(returnTypeStr2);
+              returnTypeStr = isAsync ? `cppcoro::task<${baseType}>` : baseType;
+            }
+          } else {
+            returnTypeStr = isAsync ? 'cppcoro::task<void>' : 'void';
+          }
+        } else {
+          returnTypeStr = isAsync ? 'cppcoro::task<void>' : 'void';
+        }
+        
+        // Parameters
+        const params: string[] = [];
+        for (const param of stmt.parameters) {
+          if (ts.isIdentifier(param.name)) {
+            const paramName = cppUtils.escapeName(param.name.text);
+            const paramType = param.type ? this.mapType(param.type).toString() : 'auto';
+            
+            // Check if parameter is passed by reference (arrays and objects typically are)
+            const needsRef = paramType.startsWith('gs::Array<') || 
+                           paramType.startsWith('gs::Map<') || 
+                           paramType.startsWith('gs::Set<') ||
+                           paramType.startsWith('std::function<');
+            const refQualifier = needsRef ? '&' : '';
+            
+            params.push(`${paramType}${refQualifier} ${paramName}`);
+          }
+        }
+        
+        const forwardDecl = `${templateDecl}${returnTypeStr} ${funcName}(${params.join(', ')});`;
+        declarations.push(new ast.RawDeclaration(forwardDecl));
+        
+        // Unregister template parameters
+        for (const paramName of templateParamNames) {
+          this.ctx.unregisterTemplateParameter(paramName);
+        }
+      }
+    }
+    
     // Separate declarations from top-level statements
     for (const stmt of sourceFile.statements) {
       if (ts.isVariableStatement(stmt)) {
