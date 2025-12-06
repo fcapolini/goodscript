@@ -9,7 +9,7 @@
  * Modifying the original list will also change the view.
  */
 
-export class UnmodifiableListView<E> {
+export class UnmodifiableListView<E> implements Iterable<E> {
   private source: E[];
 
   constructor(source: E[]) {
@@ -137,6 +137,13 @@ export class UnmodifiableListView<E> {
   toString(): string {
     return '[' + this.source.join(', ') + ']';
   }
+  
+  /**
+   * Returns an iterator over the elements.
+   */
+  [Symbol.iterator](): Iterator<E> {
+    return new UnmodifiableListViewIterator(this);
+  }
 
   // Mutation methods that throw errors
 
@@ -194,5 +201,45 @@ export class UnmodifiableListView<E> {
    */
   clear(): void {
     throw new Error('Cannot modify an unmodifiable list');
+  }
+}
+
+/**
+ * Concrete implementation of IteratorResult
+ */
+class IteratorResultImpl<T> {
+  done: boolean;
+  value: T;
+  
+  constructor(done: boolean, value: T) {
+    this.done = done;
+    this.value = value;
+  }
+}
+
+/**
+ * Iterator for UnmodifiableListView
+ */
+class UnmodifiableListViewIterator<E> implements Iterator<E> {
+  private view: UnmodifiableListView<E>;
+  private index: number;
+  private cachedFirst: E | undefined;
+  
+  constructor(view: UnmodifiableListView<E>) {
+    this.view = view;
+    this.index = 0;
+    // Cache first element for use as dummy value when done (undefined if empty)
+    this.cachedFirst = view.getLength() > 0 ? view.get(0) : undefined;
+  }
+  
+  next(): IteratorResult<E> {
+    if (this.index < this.view.getLength()) {
+      const value = this.view.get(this.index);
+      this.index++;
+      return new IteratorResultImpl(false, value);
+    }
+    // When done, value is required but won't be used
+    // Use cached first element as dummy (safe since done=true means value is ignored)
+    return new IteratorResultImpl(true, this.cachedFirst as E);
   }
 }

@@ -288,4 +288,57 @@ describe('EqualityMap', () => {
       expect(map.getLength()).toBe(n / 2);
     });
   });
+
+  describe('iterator protocol', () => {
+    it('iterates over entries in a map', () => {
+      const map = new EqualityMap<string, number>();
+      map.set('a', 1);
+      map.set('b', 2);
+      map.set('c', 3);
+
+      const entries: Array<[string, number]> = [];
+      for (const entry of map) {
+        entries.push(entry);
+      }
+
+      expect(entries.length).toBe(3);
+      // Convert to object for comparison (order may vary)
+      const obj: Record<string, number> = {};
+      for (const [key, value] of entries) {
+        obj[key] = value;
+      }
+      expect(obj['a']).toBe(1);
+      expect(obj['b']).toBe(2);
+      expect(obj['c']).toBe(3);
+    });
+
+    it('iterates over empty map', () => {
+      const map = new EqualityMap<string, number>();
+      const entries: Array<[string, number]> = [];
+      for (const entry of map) {
+        entries.push(entry);
+      }
+      expect(entries.length).toBe(0);
+    });
+
+    it('iterates over map with custom equality', () => {
+      const map = new EqualityMap<Point, string>(new PointEquality());
+      const p1 = new Point(1, 2);
+      const p2 = new Point(3, 4);
+      map.set(p1, 'first');
+      map.set(p2, 'second');
+
+      const entries: Array<[Point, string]> = [];
+      for (const entry of map) {
+        entries.push(entry);
+      }
+
+      expect(entries.length).toBe(2);
+      // Verify both points appear
+      const hasP1 = entries.some(([k, v]) => k.x === 1 && k.y === 2 && v === 'first');
+      const hasP2 = entries.some(([k, v]) => k.x === 3 && k.y === 4 && v === 'second');
+      expect(hasP1).toBe(true);
+      expect(hasP2).toBe(true);
+    });
+  });
 });

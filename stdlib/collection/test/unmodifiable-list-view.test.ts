@@ -240,4 +240,33 @@ describe('UnmodifiableListView', () => {
       expect(view.contains('c')).toBe(true);
     });
   });
+
+  describe('iterator protocol', () => {
+    it('iterates over elements', () => {
+      const view = new UnmodifiableListView([1, 2, 3, 4, 5]);
+      const elements: number[] = [];
+      for (const elem of view) {
+        elements.push(elem);
+      }
+      expect(elements).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    it('iterates over empty list', () => {
+      const view = new UnmodifiableListView<number>([]);
+      const elements: number[] = [];
+      for (const elem of view) {
+        elements.push(elem);
+      }
+      expect(elements).toEqual([]);
+    });
+
+    it('iterates over strings', () => {
+      const view = new UnmodifiableListView(['a', 'b', 'c']);
+      const elements: string[] = [];
+      for (const elem of view) {
+        elements.push(elem);
+      }
+      expect(elements).toEqual(['a', 'b', 'c']);
+    });
+  });
 });

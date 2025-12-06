@@ -18,7 +18,7 @@ interface Entry<K, V> {
   value: V;
 }
 
-export class EqualityMap<K, V> {
+export class EqualityMap<K, V> implements Iterable<[K, V]> {
   private equality: Equality<K>;
   private map: Map<number, Entry<K, V>[]>;
   private count: number;
@@ -189,6 +189,13 @@ export class EqualityMap<K, V> {
     }
     return result;
   }
+  
+  /**
+   * Returns an iterator over entries (key-value pairs).
+   */
+  [Symbol.iterator](): Iterator<[K, V]> {
+    return new EqualityMapIterator(this);
+  }
 
   /**
    * Calls a function for each entry in the map.
@@ -243,5 +250,44 @@ class DefaultEquality<K> implements Equality<K> {
       hash = (hash | 0); // Convert to 32-bit integer
     }
     return hash;
+  }
+}
+
+/**
+ * Concrete implementation of IteratorResult
+ */
+class IteratorResultImpl<T> {
+  done: boolean;
+  value: T;
+  
+  constructor(done: boolean, value: T) {
+    this.done = done;
+    this.value = value;
+  }
+}
+
+/**
+ * Iterator for EqualityMap - iterates over entries (key-value pairs)
+ */
+class EqualityMapIterator<K, V> implements Iterator<[K, V]> {
+  private map: EqualityMap<K, V>;
+  private entries: Array<[K, V]>;
+  private index: number;
+  
+  constructor(map: EqualityMap<K, V>) {
+    this.map = map;
+    this.entries = map.entries();
+    this.index = 0;
+  }
+  
+  next(): IteratorResult<[K, V]> {
+    if (this.index < this.entries.length) {
+      const value = this.entries[this.index];
+      this.index++;
+      return new IteratorResultImpl(false, value);
+    }
+    // When done, return first entry as dummy (it won't be used)
+    const dummyValue = this.entries[0];
+    return new IteratorResultImpl(true, dummyValue);
   }
 }
