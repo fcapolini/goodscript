@@ -19,7 +19,7 @@ import { cpp } from '../builder';
 import * as cppUtils from '../cpp-utils';
 import * as tsUtils from '../ts-utils';
 import { TransformContext } from '../transform-context';
-import { ExpressionAnalyzer } from './expression-analyzer';
+import { ExpressionAnalyzer } from '../expression-analyzer';
 
 export class BinaryExpressionHandler {
   constructor(

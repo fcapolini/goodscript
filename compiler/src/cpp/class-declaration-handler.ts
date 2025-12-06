@@ -30,7 +30,7 @@ export class ClassDeclarationHandler {
     private readonly processConstructorBody: (
       body: ts.Block | undefined,
       baseClass: string | undefined
-    ) => { initList: ast.FieldInitializer[]; body: ast.Block },
+    ) => { initList: ast.MemberInitializer[]; body: ast.Block },
     private readonly getInterfaceMethodNames: (interfaceNames: string[]) => Set<string>
   ) {}
 
