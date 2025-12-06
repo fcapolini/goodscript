@@ -175,6 +175,15 @@ export function shouldMethodBeConst(method: ts.MethodDeclaration): boolean {
           node.left.expression.expression.kind === ts.SyntaxKind.ThisKeyword) {
         hasMutation = true;
       }
+      // Check for array element assignments: this.field[index] = value
+      if (ts.isElementAccessExpression(node.left)) {
+        const arrayExpr = node.left.expression;
+        // Check if it's this.field[...]
+        if (ts.isPropertyAccessExpression(arrayExpr) &&
+            arrayExpr.expression.kind === ts.SyntaxKind.ThisKeyword) {
+          hasMutation = true;
+        }
+      }
     }
     
     // Check for increment/decrement operators on this.field (e.g., this.size++)

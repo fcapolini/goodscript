@@ -140,6 +140,34 @@ export function isConstableType(type: ast.CppType, initializer?: ts.Expression):
     return false;
   }
   
+  // If type is 'auto', infer constability from initializer
+  if (name === 'auto' && initializer) {
+    // Function calls that return mutable containers should not be const
+    if (ts.isCallExpression(initializer)) {
+      // Conservatively assume function calls return mutable values
+      // unless we know they return primitives/strings
+      return false;
+    }
+    // Array literals are mutable
+    if (ts.isArrayLiteralExpression(initializer)) {
+      return false;
+    }
+    // Object literals are mutable
+    if (ts.isObjectLiteralExpression(initializer)) {
+      return false;
+    }
+    // Literals (numbers, strings, booleans, null) are constable
+    if (ts.isNumericLiteral(initializer) || 
+        ts.isStringLiteral(initializer) || 
+        initializer.kind === ts.SyntaxKind.TrueKeyword ||
+        initializer.kind === ts.SyntaxKind.FalseKeyword ||
+        initializer.kind === ts.SyntaxKind.NullKeyword) {
+      return true;
+    }
+    // Default for auto: not constable
+    return false;
+  }
+  
   // Other cases: default to constable
   return true;
 }
