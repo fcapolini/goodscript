@@ -148,7 +148,7 @@ export function compileExample(
   let jsCode = existsSync(jsFile) ? readFileSync(jsFile, "utf-8") : "";
   
   // Debug compilation result
-  console.error(`\n[${exampleName}] JS: success=${jsResult.success}, diagnostics=${jsResult.diagnostics.length}, fileStats=${JSON.stringify(jsResult.fileStats)}`);
+  // console.error(`\n[${exampleName}] JS: success=${jsResult.success}, diagnostics=${jsResult.diagnostics.length}, fileStats=${JSON.stringify(jsResult.fileStats)}`);
   if (jsResult.diagnostics.length > 0) {
     jsResult.diagnostics.slice(0, 3).forEach(d => {
       console.error(`  - [${d.severity}] [${d.code}] ${d.message.substring(0, 80)}`);
@@ -168,7 +168,7 @@ export function compileExample(
   let cppCode = existsSync(cppFile) ? readFileSync(cppFile, "utf-8") : "";
   
   // Debug compilation result
-  console.error(`[${exampleName}] C++: success=${cppResult.success}, diagnostics=${cppResult.diagnostics.length}, file exists at main.cpp: ${existsSync(cppFile)}`);
+  // console.error(`[${exampleName}] C++: success=${cppResult.success}, diagnostics=${cppResult.diagnostics.length}, file exists at main.cpp: ${existsSync(cppFile)}`);
   if (cppResult.diagnostics.length > 0) {
     cppResult.diagnostics.slice(0, 3).forEach(d => {
       console.error(`  - [${d.severity}] [${d.code}] ${d.message.substring(0, 80)}`);
@@ -207,7 +207,7 @@ export function compileExample(
   let gcCppCode = existsSync(gcCppFile) ? readFileSync(gcCppFile, "utf-8") : "";
   
   // Debug compilation result
-  console.error(`[${exampleName}] GC C++: success=${gcCppResult.success}, diagnostics=${gcCppResult.diagnostics.length}, file exists: ${existsSync(gcCppFile)}`);
+  // console.error(`[${exampleName}] GC C++: success=${gcCppResult.success}, diagnostics=${gcCppResult.diagnostics.length}, file exists: ${existsSync(gcCppFile)}`);
   if (gcCppResult.diagnostics.length > 0) {
     gcCppResult.diagnostics.slice(0, 3).forEach(d => {
       console.error(`  - [${d.severity}] [${d.code}] ${d.message.substring(0, 80)}`);
