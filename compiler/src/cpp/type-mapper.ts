@@ -191,6 +191,22 @@ export class CppTypeMapper {
         return new ast.CppType(`cppcoro::task<${typeArgs[0]}>`);
       }
       
+      // Iterator<T> maps to std::shared_ptr<gs::Iterator<T>>
+      // These are returned from [Symbol.iterator] methods
+      if (baseName === 'Iterator') {
+        return new ast.CppType(`std::shared_ptr<gs::Iterator<${typeArgs[0]}>>`);
+      }
+      
+      // Iterable<T> is a marker interface - in C++, it means the class has __iterator() method
+      // For type references (e.g., function parameters), we can use const reference to the actual class
+      // But for implements clauses, we don't emit it in C++ (it's implicit)
+      if (baseName === 'Iterable') {
+        // When used as a parameter type, accept the actual iterable object
+        // The compiler will ensure it has __iterator() method
+        // For now, use auto to accept any iterable type
+        return new ast.CppType('auto');
+      }
+      
       return new ast.CppType(`gs::${baseName}<${typeArgs.join(', ')}>`);
     }
 

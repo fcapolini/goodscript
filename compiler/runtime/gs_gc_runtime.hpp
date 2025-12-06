@@ -20,6 +20,7 @@
 #include "gc/number.hpp"
 #include "gc/date.hpp"
 #include "gc/error.hpp"
+#include "gs_iterator.hpp"  // Iterator protocol support
 
 #include <iostream>
 #include <sstream>

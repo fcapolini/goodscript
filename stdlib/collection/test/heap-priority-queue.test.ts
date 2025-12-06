@@ -217,4 +217,39 @@ describe('HeapPriorityQueue', () => {
       }
     });
   });
+  
+  describe('iterator', () => {
+    it('should iterate over all elements', () => {
+      const pq = new HeapPriorityQueue<number>();
+      pq.add(5);
+      pq.add(2);
+      pq.add(8);
+      pq.add(1);
+      
+      const elements: number[] = [];
+      for (const element of pq) {
+        elements.push(element);
+      }
+      
+      expect(elements.length).toBe(4);
+      expect(elements.sort()).toEqual([1, 2, 5, 8]);
+    });
+    
+    it('should work with spread operator', () => {
+      const pq = new HeapPriorityQueue<number>();
+      pq.add(3);
+      pq.add(1);
+      pq.add(2);
+      
+      const elements = [...pq];
+      expect(elements.length).toBe(3);
+      expect(elements.sort()).toEqual([1, 2, 3]);
+    });
+    
+    it('should iterate over empty queue', () => {
+      const pq = new HeapPriorityQueue<number>();
+      const elements = [...pq];
+      expect(elements).toEqual([]);
+    });
+  });
 });

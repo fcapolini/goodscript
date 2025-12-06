@@ -64,6 +64,9 @@ export interface PriorityQueue<E> {
   
   /** Returns all elements as an array. */
   toArray(): E[];
+  
+  /** Returns an iterator over elements in no particular order. */
+  [Symbol.iterator](): Iterator<E>;
 }
 
 /**
@@ -79,7 +82,7 @@ function defaultCompare<T>(a: T, b: T): number {
  * Min-heap based priority queue.
  * Elements with smaller comparison values have higher priority.
  */
-export class HeapPriorityQueue<E> implements PriorityQueue<E> {
+export class HeapPriorityQueue<E> implements PriorityQueue<E>, Iterable<E> {
   private queue: E[];
   private length: number;
   private comparison: (a: E, b: E) => number;
@@ -105,8 +108,8 @@ export class HeapPriorityQueue<E> implements PriorityQueue<E> {
   }
   
   addAll(elements: E[]): void {
-    for (let i = 0; i < elements.length; i++) {
-      this.add(elements[i]);
+    for (const element of elements) {
+      this.add(element);
     }
   }
   
@@ -196,6 +199,10 @@ export class HeapPriorityQueue<E> implements PriorityQueue<E> {
     return this.getUnorderedElements();
   }
   
+  [Symbol.iterator](): Iterator<E> {
+    return new HeapPriorityQueueIterator(this);
+  }
+  
   toString(): string {
     const arr = this.toArray();
     let result = "";
@@ -269,5 +276,46 @@ export class HeapPriorityQueue<E> implements PriorityQueue<E> {
     }
     
     this.queue[index] = element;
+  }
+}
+
+/**
+ * Concrete implementation of IteratorResult
+ */
+class IteratorResultImpl<T> {
+  done: boolean;
+  value: T;
+  
+  constructor(done: boolean, value: T) {
+    this.done = done;
+    this.value = value;
+  }
+}
+
+/**
+ * Iterator for HeapPriorityQueue - iterates in no particular order
+ */
+class HeapPriorityQueueIterator<E> implements Iterator<E> {
+  private queue: HeapPriorityQueue<E>;
+  private index: number;
+  private length: number;
+  
+  constructor(queue: HeapPriorityQueue<E>) {
+    this.queue = queue;
+    this.index = 0;
+    this.length = queue.getLength();
+  }
+  
+  next(): IteratorResult<E> {
+    if (this.index < this.length) {
+      const elements = this.queue.getUnorderedElements();
+      const value = elements[this.index];
+      this.index++;
+      return new IteratorResultImpl(false, value);
+    }
+    // When done, return first element as dummy (it won't be used)
+    const elements = this.queue.getUnorderedElements();
+    const dummyValue = elements[0];
+    return new IteratorResultImpl(true, dummyValue);
   }
 }

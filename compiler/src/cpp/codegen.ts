@@ -747,7 +747,24 @@ export class AstCodegen {
     // Convert interface method signatures to pure virtual methods
     for (const member of node.members) {
       if (ts.isMethodSignature(member) && member.name) {
-        const methodName = cppUtils.escapeName(member.name.getText());
+        // Handle computed property names like [Symbol.iterator]
+        let methodName: string;
+        if (ts.isComputedPropertyName(member.name)) {
+          const expr = member.name.expression;
+          // Check for Symbol.iterator
+          if (ts.isPropertyAccessExpression(expr) &&
+              ts.isIdentifier(expr.expression) &&
+              expr.expression.text === 'Symbol' &&
+              ts.isIdentifier(expr.name) &&
+              expr.name.text === 'iterator') {
+            methodName = '__iterator';  // Map [Symbol.iterator] → __iterator
+          } else {
+            // Other computed names not supported yet
+            methodName = cppUtils.escapeName(member.name.getText());
+          }
+        } else {
+          methodName = cppUtils.escapeName(member.name.getText());
+        }
         methodNames.add(methodName); // Cache method name
         const returnType = member.type ? this.mapType(member.type) : new ast.CppType('void');
         

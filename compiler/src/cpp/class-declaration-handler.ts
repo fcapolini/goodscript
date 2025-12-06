@@ -114,7 +114,12 @@ export class ClassDeclarationHandler {
         } else if (clause.token === ts.SyntaxKind.ImplementsKeyword) {
           // implements - multiple interfaces
           for (const type of clause.types) {
-            baseClasses.push(this.mapHeritageType(type));
+            const baseTypeName = type.expression.getText();
+            // Skip Iterable<T> - it's a marker interface in TypeScript
+            // In C++, classes just need to have __iterator() method
+            if (baseTypeName !== 'Iterable') {
+              baseClasses.push(this.mapHeritageType(type));
+            }
           }
         }
       }
