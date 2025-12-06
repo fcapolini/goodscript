@@ -45,6 +45,13 @@ export class ArrayLiteralHandler {
     // This prevents type inference issues with int vs double literals
     // Note: if elementType is still 'auto', omit it (can't use auto as template arg)
     const arrayType = (elementType && elementType !== 'auto') ? `gs::Array<${elementType}>` : 'gs::Array';
+    
+    // Special case: empty array → gs::Array<T>() instead of gs::Array<T>({})
+    // The latter can't deduce template types in C++
+    if (elements.length === 0) {
+      return cpp.call(cpp.id(arrayType), []);
+    }
+    
     return cpp.call(cpp.id(arrayType), [cpp.initList(elements)]);
   }
 
@@ -70,6 +77,16 @@ export class ArrayLiteralHandler {
   ): string | undefined {
     if (!this.checker) {
       return undefined;
+    }
+
+    // NEW: For empty arrays in assignment context, try to get type from variable
+    // This handles: let list = map.get(k); if (...) { list = []; }
+    // where contextual type might not propagate correctly
+    if (elements.length === 0) {
+      const elementTypeFromAssignment = this.tryInferFromAssignmentTarget(node);
+      if (elementTypeFromAssignment) {
+        return elementTypeFromAssignment;
+      }
     }
 
     // First try contextual type (e.g., from assignment target)
@@ -201,6 +218,57 @@ export class ArrayLiteralHandler {
       const argStr = this.checker!.typeToString(typeArgs[0]);
       return this.mapTypeScriptTypeToCpp(argStr);
     }
+    return undefined;
+  }
+
+  /**
+   * For empty arrays, try to infer element type from assignment target variable
+   * Handles: let list = map.get(k); if (...) { list = []; }
+   */
+  private tryInferFromAssignmentTarget(node: ts.ArrayLiteralExpression): string | undefined {
+    // Check if parent is a binary expression (assignment)
+    const parent = node.parent;
+    if (!parent || !ts.isBinaryExpression(parent) || 
+        parent.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+        parent.right !== node) {
+      return undefined;
+    }
+
+    // Get the left-hand side (variable being assigned to)
+    const leftSide = parent.left;
+    if (!ts.isIdentifier(leftSide)) {
+      return undefined;
+    }
+
+    // Look up the variable's type from TypeChecker
+    const variableSymbol = this.checker!.getSymbolAtLocation(leftSide);
+    if (!variableSymbol || !variableSymbol.valueDeclaration) {
+      return undefined;
+    }
+
+    // Get the declared type
+    const varType = this.checker!.getTypeAtLocation(variableSymbol.valueDeclaration);
+    const varTypeStr = this.checker!.typeToString(varType);
+
+    // Extract element type: S[] | undefined → S, Array<S> | undefined → S
+    // Handle union types with undefined/null
+    const parts = varTypeStr.split(' | ').map(p => p.trim());
+    const arrayPart = parts.find(p => p.endsWith('[]') || p.startsWith('Array<'));
+    
+    if (!arrayPart) {
+      return undefined;
+    }
+
+    if (arrayPart.endsWith('[]')) {
+      const elementTypeStr = arrayPart.slice(0, -2);
+      return this.mapTypeScriptTypeToCpp(elementTypeStr);
+    } else if (arrayPart.startsWith('Array<')) {
+      const match = arrayPart.match(/^Array<(.+)>$/);
+      if (match) {
+        return this.mapTypeScriptTypeToCpp(match[1]);
+      }
+    }
+
     return undefined;
   }
 

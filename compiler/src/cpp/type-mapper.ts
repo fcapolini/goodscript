@@ -391,6 +391,14 @@ export class CppTypeMapper {
       return 'auto';  // Use auto for type inference
     }
 
+    // Handle array syntax: S[] → gs::Array<S>
+    // This must come before union type handling to avoid splitting "S[]" as "S[" and "]"
+    if (tsType.endsWith('[]') && !tsType.includes(' | ')) {
+      const elementType = tsType.slice(0, -2).trim();
+      const mappedElement = this.mapTypeScriptTypeToCpp(elementType);
+      return `gs::Array<${mappedElement}>`;
+    }
+
     // Handle union types (T | null, T | undefined, T | null | undefined)
     if (tsType.includes(' | ')) {
       const parts = tsType.split(' | ').map(p => p.trim());
