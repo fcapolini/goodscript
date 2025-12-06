@@ -242,12 +242,24 @@ class ArrowFunctionInference extends TypeInferenceStrategy {
     );
     
     // Adjust parameter types for std::function template
-    // Interfaces must be passed by const reference
-    const paramTypeStrs = paramTypes.map(t => {
-      const typeStr = t.toString();
+    // Interfaces and arrays must be passed by reference to match lambda signature
+    const paramTypeStrs = arrowFunc.parameters.map((p, index) => {
+      const typeStr = paramTypes[index].toString();
       const baseTypeName = typeStr.replace(/^gs::/, '').replace(/<.*$/, '').trim();
       const isInterface = this.ctx.interfaceNames.has(baseTypeName);
-      return isInterface ? `const ${typeStr}&` : typeStr;
+      const isArray = p.type && ts.isArrayTypeNode(p.type);
+      
+      // Check if the parameter type is gs::Array<T>
+      const isGsArray = typeStr.startsWith('gs::Array<');
+      
+      if (isInterface) {
+        return `const ${typeStr}&`;
+      } else if (isArray || isGsArray) {
+        // Arrays are passed by reference (mutable) to match lambda signature
+        return `${typeStr}&`;
+      }
+      
+      return typeStr;
     }).join(', ');
     
     return new ast.CppType(`std::function<${returnType.toString()}(${paramTypeStrs})>`);

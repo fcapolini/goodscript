@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Lambda/std::function signature matching for array parameters** (Dec 6, 2024)
+  - Fixed type inference for arrow functions with array parameters
+  - `std::function` type now correctly includes `&` reference qualifier for array parameters
+  - Lambda signature: `(gs::Array<T>& arr) -> void` now matches `std::function<void(gs::Array<T>&)>`
+  - Resolves C++ compilation errors in performance benchmarks
+  - All 1301 tests passing, including 8 performance benchmark tests
+  - Performance results: Ownership C++ 2.96x faster than Node.js, GC C++ 2.65x faster
+
 ## [0.11.0] - 2024-12-05 🎉 Go-Like Developer Experience Complete!
 
 ### Major Achievement: "Go for TypeScript Developers" Positioning Fully Enabled
