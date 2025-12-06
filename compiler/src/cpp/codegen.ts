@@ -19,6 +19,7 @@ import { MainFunctionBuilder } from './main-builder';
 import { ExpressionAnalyzer } from './expression-analyzer';
 import { LambdaAnalyzer } from './lambda-analyzer';
 import { CallExpressionHandler } from './call-expression-handler';
+import { BinaryExpressionHandler } from './binary-expression-handler';
 
 export class AstCodegen {
   protected readonly ctx = new TransformContext();
@@ -28,6 +29,7 @@ export class AstCodegen {
   private typeInference: TypeInferenceService;
   private mainBuilder: MainFunctionBuilder;
   private callHandler: CallExpressionHandler;
+  private binaryHandler: BinaryExpressionHandler;
   
   constructor(private checker?: ts.TypeChecker, optimizationOptions?: OptimizationOptions) {
     this.ownershipChecker = new OwnershipAwareTypeChecker(checker!);
@@ -47,6 +49,12 @@ export class AstCodegen {
       this.visitExpression.bind(this),
       this.getCurrentClassName.bind(this),
       this.isSmartPointerAccess.bind(this)
+    );
+    this.binaryHandler = new BinaryExpressionHandler(
+      checker,
+      this.ctx,
+      this.visitExpression.bind(this),
+      this.isArrayAccessInSafeBounds.bind(this)
     );
   }
   
@@ -1852,312 +1860,7 @@ export class AstCodegen {
   }
   
   private visitBinaryExpression(node: ts.BinaryExpression): ast.Expression {
-    // Special case: arr[idx] = value → optimize based on context
-    if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-        ts.isElementAccessExpression(node.left)) {
-      
-      // Check if we're in a tight loop with known bounds (optimization opportunity)
-      // Pattern: for (let i = 0; i < arr.length; i++) { arr[i] = value; }
-      const isInSafeBoundsContext = this.isArrayAccessInSafeBounds(node.left);
-      
-      if (isInSafeBoundsContext) {
-        // Use optimized set_unchecked - no resize checks needed
-        const arrExpr = this.visitExpression(node.left.expression);
-        const indexExpr = this.visitExpression(node.left.argumentExpression!);
-        const valueExpr = this.visitExpression(node.right);
-        
-        // Cast index to int if needed
-        let finalIndex = indexExpr;
-        if (this.checker) {
-          const indexType = this.checker.getTypeAtLocation(node.left.argumentExpression!);
-          const indexTypeStr = this.checker.typeToString(indexType);
-          if (indexTypeStr === 'number') {
-            finalIndex = cpp.cast(new ast.CppType('int'), indexExpr);
-          }
-        }
-        
-        return cpp.call(cpp.member(arrExpr, 'set_unchecked', false), [finalIndex, valueExpr]);
-      }
-    }
-    
-    // Regular array assignment with resize check
-    if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-        ts.isElementAccessExpression(node.left)) {
-      const arrayExpr = node.left.expression;
-      const indexExpr = node.left.argumentExpression;
-      const valueExpr = node.right;
-      
-      if (indexExpr) {
-        // Use inline bounds-checking set() method instead of IIFE
-        // arr.set(idx, value) - much more efficient than lambda
-        const arr = this.visitExpression(arrayExpr);
-        const idx = this.visitExpression(indexExpr);
-        const value = this.visitExpression(valueExpr);
-        
-        // Cast index to int if needed
-        let finalIndex = idx;
-        if (this.checker) {
-          const indexType = this.checker.getTypeAtLocation(indexExpr);
-          const indexTypeStr = this.checker.typeToString(indexType);
-          if (indexTypeStr === 'number') {
-            finalIndex = cpp.cast(new ast.CppType('int'), idx);
-          }
-        }
-        
-        return cpp.call(cpp.member(arr, 'set', false), [finalIndex, value]);
-      }
-    }
-    
-    // Special case: array.length = n → array.resize(n)
-    if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-        ts.isPropertyAccessExpression(node.left) &&
-        node.left.name.text === 'length') {
-      // This is an assignment to .length property - use resize() for arrays
-      const obj = this.visitExpression(node.left.expression);
-      const newSize = this.visitExpression(node.right);
-      // Check if object is 'this' (a pointer in C++)
-      const isThisPointer = node.left.expression.kind === ts.SyntaxKind.ThisKeyword;
-      return cpp.call(cpp.member(obj, 'resize', isThisPointer), [newSize]);
-    }
-    
-    // Handle instanceof specially
-    if (node.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword) {
-      const obj = this.visitExpression(node.left);
-      const typeName = node.right.getText();
-      
-      // For exception objects caught as shared_ptr, use dynamic_pointer_cast
-      // e instanceof Type → std::dynamic_pointer_cast<gs::Type>(e) != nullptr
-      return cpp.binary(
-        cpp.call(
-          cpp.id('std::dynamic_pointer_cast'),
-          [obj],
-          [new ast.CppType(`gs::${typeName}`)] // Type without pointer decoration
-        ),
-        '!=',
-        cpp.id('nullptr')
-      );
-    }
-    
-    // Handle modulo operator specially for floating point
-    if (node.operatorToken.kind === ts.SyntaxKind.PercentToken && this.checker) {
-      const leftType = this.checker.getTypeAtLocation(node.left);
-      const rightType = this.checker.getTypeAtLocation(node.right);
-      const leftTypeStr = this.checker.typeToString(leftType);
-      const rightTypeStr = this.checker.typeToString(rightType);
-      
-      // If either operand is 'number' (maps to double), use std::fmod
-      if (leftTypeStr === 'number' || rightTypeStr === 'number') {
-        const left = this.visitExpression(node.left);
-        const right = this.visitExpression(node.right);
-        return cpp.call(cpp.id('std::fmod'), [left, right]);
-      }
-    }
-    
-    // Map operators
-    let op = node.operatorToken.getText();
-    if (op === '===') op = '==';
-    if (op === '!==') op = '!=';
-    
-    // Check for bitwise operators that require integer operands in C++
-    const isBitwiseOp = ['&', '|', '^', '<<', '>>', '>>>'].includes(op);
-    
-    // Check if we're comparing with null/undefined BEFORE visiting expressions
-    const isLeftNull = node.left.kind === ts.SyntaxKind.NullKeyword;
-    const isRightNull = node.right.kind === ts.SyntaxKind.NullKeyword;
-    const isLeftUndefined = ts.isIdentifier(node.left) && node.left.text === 'undefined';
-    const isRightUndefined = ts.isIdentifier(node.right) && node.right.text === 'undefined';
-    
-    // Check if either side is a Map.get() call which returns a pointer
-    const isLeftMapGet = tsUtils.isMapGetCall(node.left);
-    const isRightMapGet = tsUtils.isMapGetCall(node.right);
-    
-    // Check if either side is an identifier that holds a pointer value
-    const isLeftPointer = ts.isIdentifier(node.left) && this.ctx.pointerVariables.has(cppUtils.escapeName(node.left.text));
-    const isRightPointer = ts.isIdentifier(node.right) && this.ctx.pointerVariables.has(cppUtils.escapeName(node.right.text));
-    
-    // Check if either side is a shared_ptr type (share<T>)
-    // NOTE: Check the actual C++ type, not just TypeScript ownership
-    // For example, Array.find() returns optional<T>, not T directly
-    let isLeftSharedPtr = false;
-    let isRightSharedPtr = false;
-    if (this.checker) {
-      // Check if left side has a C++ smart pointer type
-      if (!isLeftNull && !isLeftUndefined && ts.isIdentifier(node.left)) {
-        const varName = cppUtils.escapeName(node.left.text);
-        const varType = this.ctx.variableTypes.get(varName);
-        if (varType) {
-          const typeStr = varType.toString();
-          // Check if the DIRECT type is a smart pointer (not optional<smart_ptr>)
-          isLeftSharedPtr = typeStr.startsWith('std::shared_ptr<') || 
-                           typeStr.startsWith('std::unique_ptr<') ||
-                           typeStr.startsWith('std::weak_ptr<');
-        }
-        
-        // Also check TypeScript type for nullable class patterns (T | null, not T | undefined)
-        // This handles auto variables from methods returning nullable classes
-        if (!isLeftSharedPtr && varType && varType.toString() === 'auto') {
-          const tsType = this.checker.getTypeAtLocation(node.left);
-          if (tsType.isUnion && tsType.isUnion()) {
-            const types = tsType.types;
-            const hasNull = types.some(t => (t.flags & ts.TypeFlags.Null) !== 0);
-            const hasUndefined = types.some(t => (t.flags & ts.TypeFlags.Undefined) !== 0);
-            const classType = types.find(t => 
-              (t.flags & ts.TypeFlags.Object) !== 0 &&
-              (t as any).symbol &&
-              !(t as any).symbol.getName().match(/Array|Map|Set|String|RegExp|Date|Promise/)
-            );
-            // T | null (without undefined) indicates a nullable reference, not optional
-            if (hasNull && !hasUndefined && classType) {
-              isLeftSharedPtr = true;
-            }
-          }
-        }
-      }
-      
-      // Check if right side has a C++ smart pointer type
-      if (!isRightNull && !isRightUndefined && ts.isIdentifier(node.right)) {
-        const varName = cppUtils.escapeName(node.right.text);
-        const varType = this.ctx.variableTypes.get(varName);
-        if (varType) {
-          const typeStr = varType.toString();
-          isRightSharedPtr = typeStr.startsWith('std::shared_ptr<') || 
-                            typeStr.startsWith('std::unique_ptr<') ||
-                            typeStr.startsWith('std::weak_ptr<');
-        }
-        
-        // Also check TypeScript type for nullable class patterns (T | null, not T | undefined)
-        if (!isRightSharedPtr && varType && varType.toString() === 'auto') {
-          const tsType = this.checker.getTypeAtLocation(node.right);
-          if (tsType.isUnion && tsType.isUnion()) {
-            const types = tsType.types;
-            const hasNull = types.some(t => (t.flags & ts.TypeFlags.Null) !== 0);
-            const hasUndefined = types.some(t => (t.flags & ts.TypeFlags.Undefined) !== 0);
-            const classType = types.find(t => 
-              (t.flags & ts.TypeFlags.Object) !== 0 &&
-              (t as any).symbol &&
-              !(t as any).symbol.getName().match(/Array|Map|Set|String|RegExp|Date|Promise/)
-            );
-            // T | null (without undefined) indicates a nullable reference, not optional
-            if (hasNull && !hasUndefined && classType) {
-              isRightSharedPtr = true;
-            }
-          }
-        }
-      }
-    }
-    
-    // Now visit the expressions
-    let left = this.visitExpression(node.left);
-    let right = this.visitExpression(node.right);
-    
-    // Handle bitwise operators: Cast double operands to int
-    // TypeScript allows bitwise ops on 'number', which implicitly converts to int32
-    // In C++, we need explicit casting: static_cast<int>(number) & ...
-    if (isBitwiseOp && this.checker) {
-      const leftType = this.checker.getTypeAtLocation(node.left);
-      const rightType = this.checker.getTypeAtLocation(node.right);
-      const leftTypeStr = this.checker.typeToString(leftType);
-      const rightTypeStr = this.checker.typeToString(rightType);
-      
-      // Cast left operand if it's a number (double)
-      if (leftTypeStr === 'number') {
-        left = cpp.cast(new ast.CppType('int'), left);
-      }
-      // Cast right operand if it's a number (double)
-      if (rightTypeStr === 'number') {
-        right = cpp.cast(new ast.CppType('int'), right);
-      }
-    }
-    
-    // Handle arithmetic/comparison with std::optional<T>
-    // If operand is std::optional, unwrap with .value()
-    const isArithmeticOrComparisonOp = ['+', '-', '*', '/', '%', '<', '>', '<=', '>='].includes(op);
-    if (isArithmeticOrComparisonOp && this.checker) {
-      // Check left operand
-      if (ts.isIdentifier(node.left)) {
-        const varName = cppUtils.escapeName(node.left.text);
-        const varType = this.ctx.variableTypes.get(varName);
-        if (varType && varType.toString().startsWith('std::optional<')) {
-          left = cpp.call(cpp.member(left, 'value'), []);
-        }
-      }
-      // Check right operand
-      if (ts.isIdentifier(node.right)) {
-        const varName = cppUtils.escapeName(node.right.text);
-        const varType = this.ctx.variableTypes.get(varName);
-        if (varType && varType.toString().startsWith('std::optional<')) {
-          right = cpp.call(cpp.member(right, 'value'), []);
-        }
-      }
-    }
-    
-    // Special case: For optional<T> parameters, x !== null && x !== undefined → x.has_value()
-    // This pattern appears when checking optional parameters: param !== null && param !== undefined ? param : default
-    if ((op === '==' || op === '!=') && (isLeftNull || isLeftUndefined || isRightNull || isRightUndefined)) {
-      const isNullCheck = isLeftNull || isLeftUndefined || isRightNull || isRightUndefined;
-      const valueExpr = isLeftNull || isLeftUndefined ? node.right : node.left;
-      
-      // Check if the value expression is an identifier with std::optional<T> type
-      if (ts.isIdentifier(valueExpr)) {
-        const varName = cppUtils.escapeName(valueExpr.text);
-        const varType = this.ctx.variableTypes.get(varName);
-        
-        if (varType && varType.toString().startsWith('std::optional<')) {
-          // Use .has_value() instead of null comparison
-          const valueIdent = isLeftNull || isLeftUndefined ? right : left;
-          const hasValueCall = cpp.call(cpp.member(valueIdent, 'has_value'), []);
-          
-          // If operator is !== (not equal to null/undefined), keep has_value()
-          // If operator is === (equal to null/undefined), negate it
-          return op === '!=' ? hasValueCall : cpp.unary('!', hasValueCall);
-        }
-      }
-    }
-    
-    // Dereference pointer variables when used in arithmetic/comparison (except null checks)
-    // This handles Map.get() results: `current + 1` → `*current + 1`
-    // BUT: Don't dereference structured binding variables (they're already references)
-    // AND: Don't dereference if already unwrapped (unwrappedOptionals logic already dereferenced)
-    const isArithmeticOp = ['+', '-', '*', '/', '%', '<', '>', '<=', '>='].includes(op);
-    if (isArithmeticOp) {
-      // Dereference left if it's a pointer variable (but not already dereferenced or structured binding)
-      if (ts.isIdentifier(node.left)) {
-        const varName = cppUtils.escapeName(node.left.text);
-        const alreadyDereferenced = this.ctx.unwrappedOptionals.has(varName) && this.ctx.pointerVariables.has(varName);
-        if (this.ctx.pointerVariables.has(varName) && 
-            !this.ctx.structuredBindingVariables.has(varName) &&
-            !alreadyDereferenced) {
-          left = cpp.unary('*', left);
-        }
-      }
-      // Dereference right if it's a pointer variable (but not already dereferenced or structured binding)
-      if (ts.isIdentifier(node.right)) {
-        const varName = cppUtils.escapeName(node.right.text);
-        const alreadyDereferenced = this.ctx.unwrappedOptionals.has(varName) && this.ctx.pointerVariables.has(varName);
-        if (this.ctx.pointerVariables.has(varName) && 
-            !this.ctx.structuredBindingVariables.has(varName) &&
-            !alreadyDereferenced) {
-          right = cpp.unary('*', right);
-        }
-      }
-    }
-    
-    // If comparing a pointer/shared_ptr with undefined/null, replace with nullptr
-    if ((isLeftMapGet || isLeftPointer || isLeftSharedPtr) && (isRightNull || isRightUndefined)) {
-      right = cpp.id('nullptr');
-    } else if ((isRightMapGet || isRightPointer || isRightSharedPtr) && (isLeftNull || isLeftUndefined)) {
-      left = cpp.id('nullptr');
-    } else {
-      // For other optional comparisons, use std::nullopt for null (undefined already mapped)
-      if (isLeftNull && left instanceof ast.Identifier && left.name === 'nullptr') {
-        left = cpp.id('std::nullopt');
-      }
-      if (isRightNull && right instanceof ast.Identifier && right.name === 'nullptr') {
-        right = cpp.id('std::nullopt');
-      }
-    }
-    
-    return cpp.binary(left, op, right);
+    return this.binaryHandler.handleBinary(node);
   }
   
   private visitNewExpression(node: ts.NewExpression): ast.Expression {

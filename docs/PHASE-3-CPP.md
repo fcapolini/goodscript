@@ -11,7 +11,7 @@ The C++ code generation uses an **AST-based approach** with **ownership-aware ty
 ### Current Implementation (Dec 6, 2025 - 100% Test Pass Rate + Refactoring)
 
 **New AST-Based Codegen:**
-- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~3,185 lines)
+- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~2,888 lines)
   - Pure AST transformation from TypeScript AST → C++ AST
   - No string concatenation during generation
   - Type-safe, composable, easily testable
@@ -23,8 +23,9 @@ The C++ code generation uses an **AST-based approach** with **ownership-aware ty
     - **Phase 3**: LambdaAnalyzer (147) - 3,686 → 3,617 lines (-69)
     - **Phase 4**: Eliminated type mapping duplication - 3,617 → 3,617 lines (stable)
     - **Phase 5**: Enhanced TypeMapper with comprehensive mapType - 3,617 → 3,404 lines (-213)
-    - **Phase 6**: Extracted CallExpressionHandler - 3,404 → 3,185 lines (-219)
-    - **Total reduction**: 4,372 → 3,185 lines (-1,187, -27.2%)
+    - **Phase 6**: Extracted CallExpressionHandler - 3,404 → 3,194 lines (-210)
+    - **Phase 7**: Extracted BinaryExpressionHandler - 3,194 → 2,888 lines (-306)
+    - **Total reduction**: 4,372 → 2,888 lines (-1,484, -33.9%)
   - **Extracted services:**
     - **`src/cpp/type-mapper.ts`** (489 lines) - Comprehensive TypeScript → C++ type mapping (AST nodes, primitives, ownership, unions, tuples, interfaces, auto-wrapping)
     - **`src/cpp/type-inference.ts`** (310 lines) - Strategy pattern for variable type inference
@@ -33,6 +34,7 @@ The C++ code generation uses an **AST-based approach** with **ownership-aware ty
     - **`src/cpp/expression-analyzer.ts`** (341 lines) - Expression analysis utilities (bounds checking, type checks)
     - **`src/cpp/lambda-analyzer.ts`** (147 lines) - Lambda/closure analysis utilities (hoisting, async detection)
     - **`src/cpp/call-expression-handler.ts`** (395 lines) - Call expression handling (method calls, built-in functions, smart pointer wrapping)
+    - **`src/cpp/binary-expression-handler.ts`** (443 lines) - Binary expression handling (arithmetic, comparison, assignment, instanceof, bitwise ops, null checks)
   - **use<T> array handling** - Proper weak_ptr conversion for non-owning references
   - **GC mode Map.get() fixes** - Proper pointer handling in garbage-collected mode
   - **Nested template support** - Handle make_shared<Stack<String>> correctly
