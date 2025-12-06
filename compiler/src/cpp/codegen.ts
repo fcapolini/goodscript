@@ -270,7 +270,7 @@ export class AstCodegen {
             const tsReturnType = signature.getReturnType();
             const returnTypeStr2 = this.checker.typeToString(tsReturnType);
             
-            if (isAsync && returnTypeStr2.startsWith('Promise<')) {
+            if (isAsync && (returnTypeStr2.startsWith('Promise<') || returnTypeStr2.startsWith('gs::Promise<'))) {
               const innerMatch = returnTypeStr2.match(/Promise<(.+)>/);
               if (innerMatch) {
                 const innerTypeStr = innerMatch[1];
@@ -676,7 +676,7 @@ export class AstCodegen {
         
         let baseType: ast.CppType;
         // For async functions, unwrap Promise<T> to get T
-        if (isAsync && returnTypeStr.startsWith('Promise<')) {
+        if (isAsync && (returnTypeStr.startsWith('Promise<') || returnTypeStr.startsWith('gs::Promise<'))) {
           const innerMatch = returnTypeStr.match(/Promise<(.+)>/);
           if (innerMatch) {
             const innerTypeStr = innerMatch[1];

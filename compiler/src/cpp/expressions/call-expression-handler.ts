@@ -174,8 +174,23 @@ export class CallExpressionHandler {
       if (numberMethod) return numberMethod;
     }
     
-    // For 'this', use this->method() directly
+    // For 'this', check if calling optional<function> field
     if (objNode.kind === ts.SyntaxKind.ThisKeyword) {
+      const fieldName = `this.${methodName}`;
+      const fieldType = this.ctx.variableTypes.get(fieldName);
+      
+      if (fieldType) {
+        const typeStr = fieldType.toString();
+        // If field is std::optional<std::function<...>>, unwrap with .value()
+        if (typeStr.startsWith('std::optional<std::function<')) {
+          // this->_field.value()(args)
+          const fieldAccess = cpp.member(cpp.id('this'), methodName, true); // this->_field
+          const valueCall = cpp.call(cpp.member(fieldAccess, 'value'), []); // .value()
+          return cpp.call(valueCall, args); // (args)
+        }
+      }
+      
+      // Regular method call
       return cpp.call(cpp.id(`this->${methodName}`), args);
     }
     
@@ -345,7 +360,7 @@ export class CallExpressionHandler {
    * Handle regular function calls (non-method)
    */
   private handleRegularCall(node: ts.CallExpression, args: ast.Expression[]): ast.Expression {
-    const func = this.visitExpression(node.expression);
+    let func = this.visitExpression(node.expression);
     
     // For interface parameters, automatically dereference smart pointers
     const processedArgs = args.map((arg, index) => {

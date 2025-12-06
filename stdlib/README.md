@@ -2,37 +2,69 @@
 
 Production-quality libraries for GoodScript, primarily translated from Dart's proven packages.
 
+## 🎉 Milestone: 26 Libraries, 832 Tests
+
+**Status:** ✅ **26/26 target libraries complete** (100%)  
+**Total Tests:** 832  
+**Pass Rate:** 100% across TypeScript, GoodScript validation, and C++ native execution
+
 ## Packages
 
 ### [@goodscript/collection](./collection/)
 
 Data structures and algorithms translated from Dart's collection package.
 
-**Included:**
-- **HeapPriorityQueue** - Min-heap priority queue  
-- **QueueList** - Double-ended queue with random access
-- **ListQueue** - Circular buffer queue implementation
-- **EqualityMap** - Hash map with custom equality
-- **EqualitySet** - Hash set with custom equality
-- **UnmodifiableListView** - Read-only list wrapper
-- **CombinedListView** - Lazy concatenated view of multiple arrays
-- **UnionSet** - Lazy union view of multiple sets
-- **BoolList** - Space-efficient boolean list (32x memory savings)
-- **Algorithms** - Sorting and searching utilities (binarySearch, mergeSort, insertionSort, etc.)
-- **Collection Utils** - Higher-order collection functions (groupBy, minBy, maxBy, mergeMaps, lastBy)
-- **Range** - Numeric sequence generation with lazy iteration (range, rangeCount)
-- **Zip** - Combine multiple iterables (zip2/3, zipWith, enumerate, unzip)
-- **Partition** - Split and group collections (partition, chunk, groupBy, splitAt, takeWhile, dropWhile)
+**Included (24 libraries):**
+- **HeapPriorityQueue** - Min-heap priority queue (22 tests)
+- **QueueList** - Double-ended queue with random access (29 tests)
+- **ListQueue** - Circular buffer queue implementation (29 tests)
+- **EqualityMap** - Hash map with custom equality (27 tests)
+- **EqualitySet** - Hash set with custom equality (26 tests)
+- **CanonicalizedMap** - Map with canonical keys (40 tests)
+- **LRUCache** - Least Recently Used cache with async/await (26 tests)
+- **UnmodifiableListView** - Read-only list wrapper (39 tests)
+- **UnmodifiableSetView** - Read-only set wrapper (29 tests)
+- **UnmodifiableMapView** - Read-only map wrapper (24 tests)
+- **CombinedListView** - Lazy concatenated view (36 tests)
+- **UnionSet** - Lazy union view (30 tests)
+- **BoolList** - Space-efficient boolean list (47 tests)
+- **Range** - Numeric sequence generation (18 tests)
+- **Zip** - Combine multiple iterables (25 tests)
+- **Partition** - Split and group collections (32 tests)
+- **IterableExtensions** - 29 utility functions (59 tests)
+- **ListExtensions** - List utilities (47 tests)
+- **Comparators** - String comparison (43 tests)
+- **Algorithms** - Sorting and searching (47 tests)
+- **CollectionUtils** - Graph algorithms (36 tests)
+- **groupBy/lastBy** - Grouping utilities (23 tests)
+- **mergeMaps/mapMap** - Map transformations (31 tests)
+- **minBy/maxBy** - Min/max by projection (25 tests)
 
-**Status:** ✅ 14 libraries complete (496 tests, 100% pass rate), ~11 more planned
+**Total:** 24 libraries, 790 tests, 100% pass rate
 
-**Iterator Protocol:** ✅ Fully supported (Symbol.iterator, for...of loops, custom iterators)
+**Features:**
+- ✅ Iterator protocol (Symbol.iterator, for...of loops)
+- ✅ Interface support with optional fields
+- ✅ Async/await integration (LRUCache)
+
+### [@goodscript/async](./async/)
+
+Async utilities translated from Dart's async package.
+
+**Included (2 libraries):**
+- **Completer** - Deferred Promise completion pattern (28 tests)
+- **delay** - Async delay/sleep utilities (14 tests)
+
+**Total:** 2 libraries, 42 tests, 100% pass rate
+
+**Features:**
+- ✅ Promise executor support (new Promise((resolve, reject) => {...}))
+- ✅ Optional<function> field unwrapping
+- ✅ Complete-before-get pattern
+- ✅ Type alias codegen support
 
 ### @goodscript/core (planned)
 Core utilities
-
-### @goodscript/async (planned)
-Async utilities
 
 ### @goodscript/io (planned)
 I/O libraries

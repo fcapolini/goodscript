@@ -364,9 +364,9 @@ export class ClassDeclarationHandler {
    * Map return type string to C++ type
    */
   private mapReturnTypeString(returnTypeStr: string, isAsync: boolean): ast.CppType {
-    // For async methods, unwrap Promise<T> to get T
-    if (isAsync && returnTypeStr.startsWith('Promise<')) {
-      const innerMatch = returnTypeStr.match(/Promise<(.+)>/);
+    // For async methods, unwrap Promise<T> or gs::Promise<T> to get T
+    if (isAsync && (returnTypeStr.startsWith('Promise<') || returnTypeStr.startsWith('gs::Promise<'))) {
+      const innerMatch = returnTypeStr.match(/(?:gs::)?Promise<(.+)>/);
       if (innerMatch) {
         const innerTypeStr = innerMatch[1];
         return this.mapBasicType(innerTypeStr);

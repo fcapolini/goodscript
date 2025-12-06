@@ -81,8 +81,8 @@ try {
   const cppCode = readFileSync(cppFile, 'utf-8');
   console.log(`✅ Phase 3: PASS (${cppCode.length} bytes generated)\n`);
   
-  // Check if code uses async/await (needs cppcoro)
-  const needsCppcoro = cppCode.includes('cppcoro/task.hpp');
+  // Always include cppcoro since Promise<T> wrapper needs it
+  const needsCppcoro = true;
   
   if (skipNative) {
     console.log('⏭️  Skipping native compilation (--skip-native)\n');

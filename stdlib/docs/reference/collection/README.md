@@ -75,3 +75,7 @@ All collection classes follow these patterns:
 Translated from [Dart's collection package](https://pub.dev/packages/collection) with adaptations for GoodScript constraints.
 
 **Total:** 24 libraries, 790 tests, 100% pass rate across TypeScript, GoodScript validation, and C++ native execution.
+
+## See Also
+
+- [@goodscript/async](../async/README.md) - Async utilities (Completer, delay)

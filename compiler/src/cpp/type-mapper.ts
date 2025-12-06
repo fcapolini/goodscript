@@ -185,10 +185,10 @@ export class CppTypeMapper {
         return new ast.CppType(`std::weak_ptr<${typeArgs[0]}>`);
       }
       
-      // Promise<T> maps to cppcoro::task<T> (return type of async functions)
-      // This should only appear in return type position
+      // Promise<T> maps to gs::Promise<T> (can be stored, passed around)
+      // Note: In async function return types, the codegen will unwrap this to cppcoro::task<T>
       if (baseName === 'Promise') {
-        return new ast.CppType(`cppcoro::task<${typeArgs[0]}>`);
+        return new ast.CppType(`gs::Promise<${typeArgs[0]}>`);
       }
       
       // Iterator<T> maps to std::shared_ptr<gs::Iterator<T>>
