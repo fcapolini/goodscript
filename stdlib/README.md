@@ -15,10 +15,11 @@ Data structures and algorithms translated from Dart's collection package.
 - **EqualityMap** - Hash map with custom equality
 - **EqualitySet** - Hash set with custom equality
 - **UnmodifiableListView** - Read-only list wrapper
+- **CombinedListView** - Lazy concatenated view of multiple arrays
 - **Algorithms** - Sorting and searching utilities (binarySearch, mergeSort, insertionSort, etc.)
 - **Collection Utils** - Higher-order collection functions (groupBy, minBy, maxBy, mergeMaps, lastBy)
 
-**Status:** ✅ 8 libraries complete (246 tests, 100% pass rate), ~17 more planned
+**Status:** ✅ 9 libraries complete (278 tests, 100% pass rate), ~16 more planned
 
 ### @goodscript/core (planned)
 Core utilities
