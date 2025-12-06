@@ -259,7 +259,14 @@ export class ClassDeclarationHandler {
     const templateParams: string[] = [];
     if (member.typeParameters) {
       for (const typeParam of member.typeParameters) {
-        templateParams.push(typeParam.name.text);
+        const paramName = typeParam.name.text;
+        // For static methods in templated classes, skip template parameters that shadow class parameters
+        // In C++, static methods in template classes already have access to class template parameters
+        if (isStatic && this.ctx.templateParameters.has(paramName)) {
+          // Skip this template parameter - it shadows a class template parameter
+          continue;
+        }
+        templateParams.push(paramName);
       }
     }
     
