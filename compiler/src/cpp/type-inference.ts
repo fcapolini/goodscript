@@ -121,8 +121,14 @@ class ElementAccessInference extends TypeInferenceStrategy {
       const arrayMatch = arrayTypeStr.match(/^(?:Array<(.+)>|(.+)\[\])$/);
       
       if (arrayMatch) {
-        const elementTypeStr = arrayMatch[1] || arrayMatch[2];
-        const cppElementType = this.ctx.typeMapper.mapTypeScriptTypeToCpp(elementTypeStr.trim());
+        let elementTypeStr = (arrayMatch[1] || arrayMatch[2]).trim();
+        
+        // Strip parentheses if present (e.g., "(E | null)" → "E | null")
+        if (elementTypeStr.startsWith('(') && elementTypeStr.endsWith(')')) {
+          elementTypeStr = elementTypeStr.slice(1, -1).trim();
+        }
+        
+        const cppElementType = this.ctx.typeMapper.mapTypeScriptTypeToCpp(elementTypeStr);
         return new ast.CppType(cppElementType);
       }
     }

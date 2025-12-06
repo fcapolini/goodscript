@@ -391,6 +391,32 @@ export class CppTypeMapper {
       return 'auto';  // Use auto for type inference
     }
 
+    // Handle union types (T | null, T | undefined, T | null | undefined)
+    if (tsType.includes(' | ')) {
+      const parts = tsType.split(' | ').map(p => p.trim());
+      const nonNullParts = parts.filter(p => p !== 'null' && p !== 'undefined');
+      
+      if (nonNullParts.length === 1) {
+        // T | null → std::optional<T>
+        const baseType = this.mapTypeScriptTypeToCpp(nonNullParts[0]);
+        
+        // If baseType is already a smart pointer, don't wrap in optional
+        if (baseType.startsWith('std::shared_ptr<') || 
+            baseType.startsWith('std::unique_ptr<') ||
+            baseType.startsWith('std::weak_ptr<')) {
+          return baseType;
+        }
+        
+        return `std::optional<${baseType}>`;
+      } else if (nonNullParts.length > 1) {
+        // Union of multiple non-null types - use std::variant
+        const mappedTypes = nonNullParts.map(p => this.mapTypeScriptTypeToCpp(p));
+        return `std::variant<${mappedTypes.join(', ')}>`;
+      }
+      // All parts are null/undefined - use void* or std::nullptr_t
+      return 'std::nullptr_t';
+    }
+
     // Handle primitive types
     const primitive = this.primitiveTypeMap.get(tsType);
     if (primitive) return primitive;

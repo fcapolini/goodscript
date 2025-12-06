@@ -12,8 +12,8 @@
  */
 
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'fs';
-import { join, dirname } from 'path';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync } from 'fs';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -36,9 +36,12 @@ interface TestSuite {
 class TripleTestRunner {
   private suites: TestSuite[] = [];
   private distDir: string;
+  private libPath: string;
   
-  constructor(private libPath: string) {
-    this.distDir = join(libPath, 'dist');
+  constructor(libPath: string) {
+    // Resolve to absolute path
+    this.libPath = resolve(libPath);
+    this.distDir = join(this.libPath, 'dist');
   }
   
   async runAllTests(): Promise<void> {
@@ -63,7 +66,6 @@ class TripleTestRunner {
     }
     
     // For now, just find .test.ts files
-    const { readdirSync } = require('fs');
     return readdirSync(testDir)
       .filter((f: string) => f.endsWith('.test.ts'))
       .map((f: string) => join(testDir, f));
@@ -99,7 +101,9 @@ class TripleTestRunner {
   private async runTypeScriptTest(testFile: string): Promise<TestResult> {
     const start = Date.now();
     try {
-      const output = execSync(`npx vitest run ${testFile}`, {
+      // Use relative path from libPath
+      const relativeTestFile = testFile.replace(this.libPath + '/', '');
+      const output = execSync(`npx vitest run ${relativeTestFile}`, {
         cwd: this.libPath,
         encoding: 'utf-8',
         stdio: 'pipe'
@@ -229,6 +233,12 @@ class TripleTestRunner {
     
     if (!tsResult?.passed) {
       console.log('  ❌ TypeScript tests failed - skipping comparison');
+      if (tsResult?.error) {
+        console.log('     Error:', tsResult.error.substring(0, 200));
+      }
+      if (tsResult?.output) {
+        console.log('     Output:', tsResult.output.substring(0, 200));
+      }
       return;
     }
     

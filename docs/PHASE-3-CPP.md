@@ -4,6 +4,8 @@
 
 **Major Milestone (Dec 6, 2024):** 🎉 **All 198 concrete-examples tests passing (100%)!** All test files validate TypeScript→C++ compilation with runtime equivalence across JavaScript, C++ native, and C++ GC modes, including 8 performance benchmark tests showing 2.96x average speedup for native C++ vs Node.js.
 
+**Stdlib Milestone (Dec 6, 2024):** 🎉 **All 6 stdlib collection libraries now fully validated!** Fixed union type codegen bugs - all libraries pass triple-mode validation (TypeScript tests + C++ GC compilation + native execution).
+
 **Previous Milestone (Dec 5, 2024):** 🎉 **6 production-quality Dart-derived stdlib libraries successfully compiling TypeScript→C++ and executing natively!** All libraries pass triple-mode validation (TypeScript tests, C++ GC compilation, native execution).
 
 ## Architecture
@@ -167,6 +169,57 @@ See `src/cpp/README.md` for usage examples.
 - 7 super() call tests (100% passing) ✅
 - 10 inheritance tests (100% passing) ✅
 - 5 runtime-equivalence tests (100% passing) ✅
+
+**Recent Additions (Dec 6, 2025 - Union Type Codegen Fixes)** 🎉:
+1. ✅ **Union Type String Handling** - Fixed `mapTypeScriptTypeToCpp()` to handle union types in string form
+   - **Problem**: When TypeChecker returns type strings like `"E | null"`, they weren't being converted to C++
+   - **Solution**: Added union type detection and conversion in `mapTypeScriptTypeToCpp()`
+     - `"T | null"` → `std::optional<T>`
+     - `"T | undefined"` → `std::optional<T>`
+     - Multi-type unions → `std::variant<T1, T2, ...>`
+   - **Implementation**: Pattern matching on `" | "` separator in type strings
+   - **Files**: `compiler/src/cpp/type-mapper.ts`
+
+2. ✅ **Parenthesized Union Types** - Strip parentheses from union types before mapping
+   - **Problem**: TypeChecker returns `"(E | null)[]"` for array types with union elements
+   - **Solution**: Strip outer parentheses from element types before calling `mapTypeScriptTypeToCpp()`
+   - **Implementation**: Pattern detection in both:
+     - `ElementAccessInference` for reading array elements
+     - `visitVariableStatement` for array literal declarations
+   - **Files**: `compiler/src/cpp/type-inference.ts`, `compiler/src/cpp/codegen.ts`
+
+3. ✅ **Array Literal Type Inference** - Preserve explicit union type annotations
+   - **Problem**: `const arr: (E | undefined)[] = []` generated invalid C++ with literal parentheses
+   - **Solution**: Extract element type and strip parentheses before mapping
+   - **Impact**: Empty arrays with union type annotations now generate correct C++ types
+   - **Files**: `compiler/src/cpp/codegen.ts`
+
+4. ✅ **Test Runner Fixes** - Made stdlib test runner compatible with Node.js
+   - **Problem**: TypeScript parameter properties not supported in strip-only mode
+   - **Solution**: Converted `constructor(private libPath: string)` to explicit property
+   - **Problem**: ES module `require()` syntax errors
+   - **Solution**: Import `readdirSync` at top level
+   - **Problem**: Path resolution issues
+   - **Solution**: Use `resolve()` to convert relative to absolute paths
+   - **Files**: `stdlib/test-runner.ts`
+
+5. ✅ **Stdlib Validation Complete** - All 6 collection libraries now fully validated! 🎉
+   - **Before**: 4/6 libraries passing C++ compilation (list-queue, queue-list-native-test failing)
+   - **After**: 6/6 libraries passing all phases (TypeScript + GoodScript + C++ compilation + execution)
+   - **Test Results**:
+     - TypeScript tests: 163/163 passing (100%)
+     - GoodScript Phase 1+2: 6/6 passing
+     - C++ code generation: 6/6 passing
+     - C++ compilation: 6/6 passing
+     - Compiler tests: 1301/1301 passing (no regressions)
+   - **Libraries**:
+     - ✅ equality-map
+     - ✅ equality-set
+     - ✅ heap-priority-queue
+     - ✅ **list-queue** (fixed - was generating `gs::(E | null)`)
+     - ✅ queue-list
+     - ✅ unmodifiable-list-view
+   - **Documentation**: This session, `stdlib/README.md` updated
 
 **Recent Additions (Dec 6, 2025 - Codegen Refactoring Phase 3)** 🎉:
 1. ✅ **LambdaAnalyzer Service** - Extracted lambda and closure analysis utilities

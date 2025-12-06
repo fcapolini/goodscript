@@ -11,8 +11,12 @@ Data structures and algorithms translated from Dart's collection package.
 **Included:**
 - **HeapPriorityQueue** - Min-heap priority queue  
 - **QueueList** - Double-ended queue with random access
+- **ListQueue** - Circular buffer queue implementation
+- **EqualityMap** - Hash map with custom equality
+- **EqualitySet** - Hash set with custom equality
+- **UnmodifiableListView** - Read-only list wrapper
 
-**Status:** 2 libraries complete, ~25 more planned
+**Status:** ✅ 6 libraries complete (163 tests, 100% pass rate), ~20 more planned
 
 ### @goodscript/core (planned)
 Core utilities
@@ -75,9 +79,17 @@ This will:
 
 A library is considered "complete" when:
 
-- [ ] All Dart functionality translated
-- [ ] TypeScript tests pass (vitest)
-- [ ] GoodScript Phase 1+2 validation passes
+- [x] All Dart functionality translated
+- [x] TypeScript tests pass (vitest)
+- [x] GoodScript Phase 1+2 validation passes
+- [x] C++ code generation succeeds
+- [x] C++ compilation and execution succeeds
+
+**Current Status (Dec 6, 2024):**
+- ✅ 6/6 libraries: All quality gates passed
+- ✅ 163 TypeScript tests passing (100%)
+- ✅ 6/6 libraries: C++ compilation successful
+- ✅ 6/6 libraries: Native execution successful
 - [ ] GC mode compiles with g++/clang++
 - [ ] Ownership mode compiles with g++/clang++
 - [ ] All three modes produce identical output

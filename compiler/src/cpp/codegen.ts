@@ -377,11 +377,23 @@ export class AstCodegen {
           
           if (varTypeStr.endsWith('[]')) {
             tsElementType = varTypeStr.slice(0, -2);
+            
+            // Strip parentheses if present (e.g., "(E | null)[]" → "E | null")
+            if (tsElementType.startsWith('(') && tsElementType.endsWith(')')) {
+              tsElementType = tsElementType.slice(1, -1);
+            }
+            
             elementType = this.mapTypeScriptTypeToCpp(tsElementType);
           } else {
             const match = varTypeStr.match(/Array<(.+)>/);
             if (match) {
               tsElementType = match[1];
+              
+              // Strip parentheses if present
+              if (tsElementType.startsWith('(') && tsElementType.endsWith(')')) {
+                tsElementType = tsElementType.slice(1, -1);
+              }
+              
               elementType = this.mapTypeScriptTypeToCpp(tsElementType);
             }
           }
