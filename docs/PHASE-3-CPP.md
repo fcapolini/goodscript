@@ -11,7 +11,7 @@ The C++ code generation uses an **AST-based approach** with **ownership-aware ty
 ### Current Implementation (Dec 6, 2025 - 100% Test Pass Rate + Refactoring)
 
 **New AST-Based Codegen:**
-- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~3,617 lines)
+- **`src/cpp/codegen.ts`** - Clean-room AST-based code generator (~3,404 lines)
   - Pure AST transformation from TypeScript AST → C++ AST
   - No string concatenation during generation
   - Type-safe, composable, easily testable
@@ -21,10 +21,11 @@ The C++ code generation uses an **AST-based approach** with **ownership-aware ty
     - **Phase 1**: TypeMapper (260), TypeInference (310), MainBuilder (100), TransformContext (250) - 4,372 → 3,783 lines (-589)
     - **Phase 2**: ExpressionAnalyzer (341) - 3,783 → 3,686 lines (-97)
     - **Phase 3**: LambdaAnalyzer (147) - 3,686 → 3,617 lines (-69)
-    - **Phase 4**: Eliminated type mapping duplication - 3,617 lines (stable, removed ~70 lines of duplicate code)
-    - **Total reduction**: 4,372 → 3,617 lines (-755, -17.3%)
+    - **Phase 4**: Eliminated type mapping duplication - 3,617 → 3,617 lines (stable)
+    - **Phase 5**: Enhanced TypeMapper with comprehensive mapType - 3,617 → 3,404 lines (-213)
+    - **Total reduction**: 4,372 → 3,404 lines (-968, -22.1%)
   - **Extracted services:**
-    - **`src/cpp/type-mapper.ts`** (260 lines) - Centralized TypeScript → C++ type mapping (primitives, ownership, unions, tuples)
+    - **`src/cpp/type-mapper.ts`** (489 lines) - Comprehensive TypeScript → C++ type mapping (AST nodes, primitives, ownership, unions, tuples, interfaces, auto-wrapping)
     - **`src/cpp/type-inference.ts`** (310 lines) - Strategy pattern for variable type inference
     - **`src/cpp/main-builder.ts`** (100 lines) - Main function generation logic
     - **`src/cpp/transform-context.ts`** (250 lines) - Consolidated state tracking

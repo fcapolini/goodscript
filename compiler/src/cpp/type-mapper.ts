@@ -30,6 +30,232 @@ export class CppTypeMapper {
    * Map a TypeScript type node to C++ type
    */
   mapTsNodeType(node: ts.TypeNode): ast.CppType {
+    return this.mapTypeNode(node);
+  }
+
+  /**
+   * Comprehensive type node mapping (handles undefined, unions, tuples, auto-wrapping, etc.)
+   */
+  mapTypeNode(node: ts.TypeNode | undefined): ast.CppType {
+    // Handle undefined type (use auto)
+    if (!node) {
+      return new ast.CppType('auto');
+    }
+
+    // Handle parenthesized types: (E | undefined) → unwrap and process inner type
+    if (ts.isParenthesizedTypeNode(node)) {
+      return this.mapTypeNode(node.type);
+    }
+
+    // Handle function types: (a: number, b: string) => boolean
+    // Maps to: std::function<bool(double, gs::String)>
+    if (ts.isFunctionTypeNode(node)) {
+      const returnType = this.mapTypeNode(node.type).toString();
+      const paramTypes = node.parameters.map(p => {
+        if (p.type) {
+          return this.mapTypeNode(p.type).toString();
+        }
+        return 'auto';
+      });
+      return new ast.CppType(`std::function<${returnType}(${paramTypes.join(', ')})>`);
+    }
+
+    // Handle union types (T | null → std::optional<T>)
+    if (ts.isUnionTypeNode(node)) {
+      // Check if it's a nullable type (T | null | undefined)
+      const nonNullableTypes = node.types.filter(t => {
+        // Check for null keyword
+        if (t.kind === ts.SyntaxKind.NullKeyword) return false;
+        // Check for undefined keyword
+        if (t.kind === ts.SyntaxKind.UndefinedKeyword) return false;
+        // Check for literal null type
+        if (ts.isLiteralTypeNode(t) && t.literal.kind === ts.SyntaxKind.NullKeyword) return false;
+        return true;
+      });
+      
+      if (nonNullableTypes.length === 1) {
+        // T | null | undefined → std::optional<T>
+        // BUT: If T is a smart pointer (shared_ptr, unique_ptr, weak_ptr), don't wrap in optional
+        // because smart pointers can already be null
+        // ALSO: If T is a user-defined class, it will be mapped to shared_ptr, so don't wrap
+        const innerType = this.mapTypeNode(nonNullableTypes[0]);
+        const innerTypeStr = innerType.toString();
+        
+        // Skip optional wrapping for smart pointers - they're already nullable
+        // Check if the type STARTS with a smart pointer (not just contains one as a type argument)
+        if (innerTypeStr.startsWith('std::shared_ptr<') || 
+            innerTypeStr.startsWith('std::unique_ptr<') ||
+            innerTypeStr.startsWith('std::weak_ptr<')) {
+          return innerType;
+        }
+        
+        // Check if inner type is a template parameter (e.g., E in E | undefined)
+        // Template parameters should be wrapped in optional
+        const innerTypeText = nonNullableTypes[0].getText?.() || '';
+        const isTemplateParam = this.templateParameters?.has(innerTypeText);
+        
+        // Also skip optional wrapping for user-defined classes and interfaces
+        // They're automatically wrapped in shared_ptr
+        // BUT: don't skip for template parameters
+        if (!isTemplateParam && this.checker && ts.isTypeReferenceNode(nonNullableTypes[0])) {
+          const typeName = cppUtils.escapeName(nonNullableTypes[0].typeName.getText());
+          
+          // Check if it's an interface
+          if (this.interfaceNames?.has(typeName)) {
+            // Interface: return std::shared_ptr<gs::InterfaceName> (already nullable)
+            return new ast.CppType(`std::shared_ptr<gs::${typeName}>`);
+          }
+          
+          const type = this.checker.getTypeAtLocation(nonNullableTypes[0]);
+          const symbol = type.getSymbol();
+          if (symbol && (symbol.flags & ts.SymbolFlags.Class)) {
+            // It's a class, so mapTypeNode will return std::shared_ptr<gs::T>
+            // Return it unwrapped (already nullable)
+            return innerType;
+          }
+        }
+        
+        return new ast.CppType('std::optional', [innerType]);
+      }
+      
+      // Multiple non-null types - not supported, use auto
+      return new ast.CppType('auto');
+    }
+
+    // Tuple types: [string, number] → std::pair<gs::String, double>
+    // Or [T, U, V] → std::tuple<T, U, V> for 3+ elements
+    if (ts.isTupleTypeNode(node)) {
+      const elementTypes = node.elements.map(el => {
+        // Named tuple elements have type member
+        const elemType = (el as any).type || el;
+        return this.mapTypeNode(elemType).toString();
+      });
+      
+      if (elementTypes.length === 2) {
+        // Use std::pair for 2-element tuples
+        return new ast.CppType(`std::pair<${elementTypes[0]}, ${elementTypes[1]}>`);
+      } else {
+        // Use std::tuple for other sizes
+        return new ast.CppType(`std::tuple<${elementTypes.join(', ')}>`);
+      }
+    }
+
+    // Array types: number[] → gs::Array<double>
+    // If element type is an interface, wrap in shared_ptr
+    if (ts.isArrayTypeNode(node)) {
+      const elementType = this.mapTypeNode(node.elementType);
+      const elementTypeStr = elementType.toString();
+      
+      // Check if element type is an interface (need to use shared_ptr for polymorphism)
+      const isInterface = ts.isTypeReferenceNode(node.elementType) && 
+                          this.interfaceNames?.has(cppUtils.escapeName(node.elementType.typeName.getText()));
+      
+      if (isInterface) {
+        return new ast.CppType(`gs::Array<std::shared_ptr<${elementTypeStr}>>`);
+      }
+      
+      return new ast.CppType(`gs::Array<${elementTypeStr}>`);
+    }
+
+    // typeof expression (e.g., typeof A where A is a class)
+    // This gets the constructor type, which for our purposes is just a template parameter
+    // typeof A as a parameter type means "any type compatible with A's constructor"
+    // In C++, we can use a template parameter or just ignore it (use auto)
+    if (ts.isTypeQueryNode(node)) {
+      // For conformance tests, typeof A in parameter position can just be auto
+      // The actual value passed will be the class itself (not an instance)
+      // In C++, this doesn't have a direct equivalent - we'll use a template
+      return new ast.CppType('auto');
+    }
+
+    // Generic types: Map<K, V> → gs::Map<K, V>
+    // Also handle ownership types: own<T>, share<T>, use<T>
+    if (ts.isTypeReferenceNode(node) && node.typeArguments) {
+      const baseName = node.typeName.getText();
+      const typeArgs = node.typeArguments.map(arg => this.mapTypeNode(arg).toString());
+      
+      // Ownership types map to smart pointers
+      if (baseName === 'own') {
+        return new ast.CppType(`std::unique_ptr<${typeArgs[0]}>`);
+      }
+      if (baseName === 'share') {
+        return new ast.CppType(`std::shared_ptr<${typeArgs[0]}>`);
+      }
+      if (baseName === 'use') {
+        return new ast.CppType(`std::weak_ptr<${typeArgs[0]}>`);
+      }
+      
+      // Promise<T> maps to cppcoro::task<T> (return type of async functions)
+      // This should only appear in return type position
+      if (baseName === 'Promise') {
+        return new ast.CppType(`cppcoro::task<${typeArgs[0]}>`);
+      }
+      
+      return new ast.CppType(`gs::${baseName}<${typeArgs.join(', ')}>`);
+    }
+
+    const text = node.getText();
+    
+    if (text === 'number') {
+      return new ast.CppType('double');
+    }
+    
+    if (text === 'string') {
+      return new ast.CppType('gs::String');
+    }
+    
+    if (text === 'boolean') {
+      return new ast.CppType('bool');
+    }
+    
+    if (text === 'void') {
+      return new ast.CppType('void');
+    }
+    
+    // TypeScript's 'never' type - represents impossible values
+    // For array types, use gs::String as a safe placeholder (empty array will work with any type)
+    if (text === 'never') {
+      return new ast.CppType('gs::String');  // Safe placeholder for empty arrays
+    }
+    
+    // User-defined types need gs:: prefix (unless they are template parameters)
+    if (ts.isTypeReferenceNode(node)) {
+      // Don't add gs:: prefix to template parameters like T, K, V
+      if (this.templateParameters?.has(text)) {
+        return new ast.CppType(text);
+      }
+      
+      // If the type reference has NO type arguments (plain class name),
+      // and it's a class, wrap in shared_ptr (default ownership)
+      // BUT: don't do this if we're being called recursively from ownership type processing
+      // We can detect this by checking if the parent is own<T>/share<T>/use<T>
+      // ALSO: Don't wrap built-in value types (Array, Map, Set, String, etc.)
+      const builtInValueTypes = ['Array', 'Map', 'Set', 'String', 'RegExp', 'Date', 'Promise'];
+      const parent = node.parent;
+      const shouldAutoWrap = !node.typeArguments && 
+                             !builtInValueTypes.includes(text) &&  // Don't wrap value types
+                             !(parent && ts.isTypeReferenceNode(parent) && 
+                               ['own', 'share', 'use'].includes(parent.typeName.getText()));
+      
+      if (shouldAutoWrap && this.checker) {
+        const type = this.checker.getTypeAtLocation(node);
+        const symbol = type.getSymbol();
+        // Check if it's a class (not a primitive or built-in type)
+        if (symbol && (symbol.flags & ts.SymbolFlags.Class)) {
+          return new ast.CppType(`std::shared_ptr<gs::${text}>`);
+        }
+      }
+      
+      return new ast.CppType(`gs::${text}`);
+    }
+    
+    return new ast.CppType(text);
+  }
+
+  /**
+   * Map a TypeScript type node to C++ type
+   */
+  mapTsNodeTypeOld(node: ts.TypeNode): ast.CppType {
     // Handle primitive types
     if (ts.isToken(node)) {
       const kind = node.kind;
