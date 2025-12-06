@@ -356,6 +356,11 @@ export class CppRenderer implements AST.CppVisitor<string> {
   visitMethod(node: AST.Method): string {
     const parts: string[] = [];
 
+    // Template declaration for generic methods
+    if (node.templateParams.length > 0) {
+      parts.push(this.line(`template<${node.templateParams.map(p => `typename ${p}`).join(', ')}>`));
+    }
+
     // Method signature
     let signature = '';
     if (node.isStatic) signature += 'static ';

@@ -159,7 +159,9 @@ class AstOptimizer implements ast.CppVisitor<ast.CppNode> {
       node.isVirtual,
       node.isPureVirtual,
       node.isOverride,
-      node.isDefault
+      node.isDefault,
+      node.isAsync,
+      node.templateParams
     );
   }
   

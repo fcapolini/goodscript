@@ -232,6 +232,20 @@ export class ClassDeclarationHandler {
     const isAsync = member.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ?? false;
     const isStatic = member.modifiers?.some(m => m.kind === ts.SyntaxKind.StaticKeyword) ?? false;
     
+    // Extract method-level type parameters
+    const templateParams: string[] = [];
+    if (member.typeParameters) {
+      for (const typeParam of member.typeParameters) {
+        templateParams.push(typeParam.name.text);
+      }
+    }
+    
+    // Register template parameters in context
+    const previousTemplateParams = new Set(this.ctx.templateParameters);
+    for (const param of templateParams) {
+      this.ctx.templateParameters.add(param);
+    }
+    
     // Get return type
     const returnType = this.inferMethodReturnType(member, isAsync);
     
@@ -250,9 +264,10 @@ export class ClassDeclarationHandler {
     // Clean up parameter tracking
     this.cleanupParameters(member.parameters);
     
-    // Restore previous return type
+    // Restore previous return type and template params
     this.ctx.currentFunctionReturnType = previousReturnType;
     this.ctx.currentFunctionIsAsync = previousIsAsync;
+    this.ctx.templateParameters = previousTemplateParams;
     
     // Determine method attributes
     const interfaceMethodNames = this.getInterfaceMethodNames(baseClasses);
@@ -272,7 +287,8 @@ export class ClassDeclarationHandler {
       false,
       isOverride,
       false,
-      isAsync
+      isAsync,
+      templateParams
     );
   }
 

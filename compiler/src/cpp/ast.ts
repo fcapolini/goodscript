@@ -304,9 +304,12 @@ export class Method extends CppNode {
     public readonly isPureVirtual: boolean = false,
     public readonly isOverride: boolean = false,
     public readonly isDefault: boolean = false,
-    public readonly isAsync: boolean = false
+    public readonly isAsync: boolean = false,
+    public readonly templateParams: string[] = []
   ) {
     super();
+    // Freeze templateParams to prevent accidental mutation (readonly only prevents reassignment)
+    Object.freeze(this.templateParams);
   }
 
   accept<T>(visitor: CppVisitor<T>): T {
