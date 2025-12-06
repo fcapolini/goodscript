@@ -18,6 +18,7 @@ import { TypeInferenceService } from './type-inference';
 import { MainFunctionBuilder } from './main-builder';
 import { ExpressionAnalyzer } from './expression-analyzer';
 import { LambdaAnalyzer } from './lambda-analyzer';
+import { CallExpressionHandler } from './call-expression-handler';
 
 export class AstCodegen {
   protected readonly ctx = new TransformContext();
@@ -26,6 +27,7 @@ export class AstCodegen {
   private typeMapper: CppTypeMapper;
   private typeInference: TypeInferenceService;
   private mainBuilder: MainFunctionBuilder;
+  private callHandler: CallExpressionHandler;
   
   constructor(private checker?: ts.TypeChecker, optimizationOptions?: OptimizationOptions) {
     this.ownershipChecker = new OwnershipAwareTypeChecker(checker!);
@@ -38,6 +40,14 @@ export class AstCodegen {
       interfaceNames: this.ctx.interfaceNames
     });
     this.mainBuilder = new MainFunctionBuilder();
+    this.callHandler = new CallExpressionHandler(
+      checker,
+      this.ctx,
+      this.ownershipChecker,
+      this.visitExpression.bind(this),
+      this.getCurrentClassName.bind(this),
+      this.isSmartPointerAccess.bind(this)
+    );
   }
   
   generate(sourceFile: ts.SourceFile): string {
@@ -2551,236 +2561,7 @@ export class AstCodegen {
   }
   
   private visitCallExpression(node: ts.CallExpression): ast.Expression {
-    // Handle property access: obj.method(args) first to get method name
-    let methodName: string | undefined;
-    let objNode: ts.Expression | undefined;
-    
-    if (ts.isPropertyAccessExpression(node.expression)) {
-      methodName = cppUtils.escapeName(node.expression.name.text);
-      objNode = node.expression.expression;
-    }
-    
-    // Visit arguments and apply special handling
-    const args = node.arguments.map((arg, index) => {
-      let argExpr = this.visitExpression(arg);
-      
-      // Special handling for .push() on Array<share<T>> and Array<use<T>>
-      // If pushing to an array of shared_ptrs, wrap the argument
-      // If pushing to an array of weak_ptrs, don't wrap (shared_ptr implicitly converts to weak_ptr)
-      if (methodName === 'push' && index === 0 && objNode && this.checker) {
-        // Use OwnershipAwareTypeChecker to check if array has smart pointer elements
-        const arrayHasSharedElements = this.ownershipChecker.hasSmartPointerElements(objNode, this.ctx.interfaceNames);
-        
-        if (arrayHasSharedElements) {
-          // Get the element type from the array type
-          const arrayType = this.ownershipChecker.getTypeOfExpression(objNode);
-          const elementType = arrayType?.elementType?.baseType;
-          const elementOwnership = arrayType?.elementType?.ownership;
-          
-          if (elementType && elementOwnership) {
-            // Check if the argument is already a smart pointer using OwnershipAwareTypeChecker
-            const argOwnership = this.ownershipChecker.getTypeOfExpression(arg);
-            const isAlreadyShared = argOwnership?.ownership === 'share';
-            
-            // If array element is use<T> (weak_ptr), don't wrap - shared_ptr converts to weak_ptr
-            // If array element is share<T> and arg is not already shared, wrap it
-            if (elementOwnership === 'share' && !isAlreadyShared) {
-              argExpr = cpp.call(cpp.id(`std::make_shared<gs::${elementType}>`), [argExpr]);
-            }
-            // For use<T> arrays, don't wrap - shared_ptr implicitly converts to weak_ptr
-          }
-        }
-      }
-      
-      // Special handling for .reduce() initial value
-      // If the initial value is a numeric literal (like 0) but the lambda expects double,
-      // ensure we emit 0.0 not 0 for correct C++ template deduction
-      if (methodName === 'reduce' && index === 1 && ts.isNumericLiteral(arg) && this.checker) {
-        // Check if the first argument (lambda) has a number (double) accumulator
-        const lambdaArg = node.arguments[0];
-        if (ts.isArrowFunction(lambdaArg) || ts.isFunctionExpression(lambdaArg)) {
-          const params = lambdaArg.parameters;
-          if (params.length > 0) {
-            const accParam = params[0];
-            if (accParam.type) {
-              const accTypeStr = accParam.type.getText();
-              // If accumulator is 'number' (which maps to double in C++), ensure .0 suffix
-              if (accTypeStr === 'number') {
-                const numText = arg.text;
-                // If it's an integer literal (no decimal point), add .0
-                if (!numText.includes('.')) {
-                  argExpr = cpp.id(numText + '.0');
-                }
-              }
-            }
-          }
-        }
-      }
-      
-      return argExpr;
-    });
-    
-    // Handle property access: obj.method(args)
-    if (ts.isPropertyAccessExpression(node.expression) && objNode && methodName) {
-      // Special case: console.log, Math.max, JSON.stringify, String.fromCharCode, etc.
-      if (ts.isIdentifier(objNode)) {
-        const objName = objNode.text;
-        if (objName === 'console' || objName === 'Math' || objName === 'Number' || objName === 'JSON' || objName === 'Date' || objName === 'String' || objName === 'Array') {
-          // Special case: Array.from(iterable) → just use the iterable directly
-          // In GoodScript, map.keys() and map.values() return arrays directly
-          // but in JavaScript they return iterators, so we need Array.from()
-          // In C++, we just use the value directly since it's already an array
-          if (objName === 'Array' && methodName === 'from') {
-            return args[0];
-          }
-          
-          // For console.log specifically, dereference pointers from Map.get() calls
-          const processedArgs = (objName === 'console' && methodName === 'log') ? 
-            args.map((arg, index) => {
-              const argNode = node.arguments[index];
-              // If argument is map.get() which returns V*, dereference it
-              if (tsUtils.isMapGetCall(argNode)) {
-                return cpp.unary('*', arg);
-              }
-              return arg;
-            }) : args;
-          
-          return cpp.call(cpp.id(`gs::${objName}::${methodName}`), processedArgs);
-        }
-        
-        // Check if this is a static method call on a user-defined class
-        // e.g., JsonValue.fromString(value)
-        if (this.checker) {
-          const symbol = this.checker.getSymbolAtLocation(objNode);
-          if (symbol && symbol.flags & ts.SymbolFlags.Class) {
-            // This is a class, so it's a static method call
-            // Check if we're inside this class (use template params) or outside (explicit instantiation)
-            const currentClass = this.getCurrentClassName();
-            if (currentClass === objName && this.ctx.currentTemplateParams.length > 0) {
-              // Inside the template class, use template params: ClassName<T>::method
-              const templateArgs = this.ctx.currentTemplateParams.join(', ');
-              return cpp.call(cpp.id(`gs::${objName}<${templateArgs}>::${methodName}`), args);
-            } else {
-              // Outside or non-template class: ClassName::method
-              return cpp.call(cpp.id(`gs::${objName}::${methodName}`), args);
-            }
-          }
-        }
-      }
-      
-      // Special case: number instance methods (toFixed, toExponential, toPrecision, toString)
-      // value.toFixed(2) → gs::Number::toFixed(value, 2)
-      // value.toString() → gs::Number::toString(value)
-      // arr[i].toString() → gs::Number::toString(arr.at_ref(i))
-      if (this.checker && (methodName === 'toFixed' || methodName === 'toExponential' || methodName === 'toPrecision' || methodName === 'toString')) {
-        const objType = this.checker.getTypeAtLocation(objNode);
-        const objTypeStr = this.checker.typeToString(objType);
-        if (objTypeStr === 'number') {
-          const objExpr = this.visitExpression(objNode);
-          // Note: at_ref() returns T& (reference), so no dereferencing needed
-          
-          // Call static method with object as first argument
-          return cpp.call(cpp.id(`gs::Number::${methodName}`), [objExpr, ...args]);
-        }
-      }
-      
-      // For 'this', use this->method() directly
-      if (objNode.kind === ts.SyntaxKind.ThisKeyword) {
-        return cpp.call(cpp.id(`this->${methodName}`), args);
-      }
-      
-      // Regular method call: obj.method(args) or obj->method(args)
-      const objExpr = this.visitExpression(objNode);
-      
-      // Check if obj is an array subscript or smart pointer - needs ->
-      // For array subscripts: at_ref() returns T& where T is the element type
-      //   - If elements are smart pointers (Array<share<T>>), at_ref() returns shared_ptr<T>& → use ->
-      //   - If elements are values (Array<string>), at_ref() returns gs::String& → use .
-      const isArraySubscript = ts.isElementAccessExpression(objNode);
-      let isPointer = false;
-      
-      if (isArraySubscript) {
-        // Check if array has smart pointer elements
-        const arrayExpr = (objNode as ts.ElementAccessExpression).expression;
-        const hasSmartPtrElements = this.ownershipChecker.hasSmartPointerElements(
-          arrayExpr,
-          this.ctx.interfaceNames
-        );
-        isPointer = hasSmartPtrElements;
-      } else {
-        // For non-array access, check if it's a smart pointer type
-        isPointer = this.isSmartPointerAccess(objNode);
-      }
-      
-      // If objExpr is a unary expression (like *arr[i]) and we're using ->, wrap in parens
-      // Because *a->b is parsed as *(a->b), but we want (*a)->b
-      let memberObj: ast.Expression = objExpr;
-      if (objExpr instanceof ast.UnaryExpr && isPointer) {
-        memberObj = cpp.paren(objExpr);
-      }
-      
-      // Optimization: str.charAt(i) when used in comparisons → charCodeAt(i) for performance
-      // Pattern: str.charAt(i) === 'x' → str.charCodeAt(i) == 'x'.charCodeAt(0)
-      // This avoids allocating a new String object per character
-      if (methodName === 'charAt' && this.checker) {
-        const objType = this.checker.getTypeAtLocation(objNode);
-        const objTypeStr = this.checker.typeToString(objType);
-        if (objTypeStr === 'string') {
-          // Check if parent is a comparison (===, !==, ==, !=)
-          const parent = node.parent;
-          if (parent && ts.isBinaryExpression(parent) &&
-              (parent.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
-               parent.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken ||
-               parent.operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken ||
-               parent.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken)) {
-            // Use charCodeAt instead for integer comparison (faster)
-            return cpp.call(cpp.member(memberObj, 'charCodeAt', isPointer), args);
-          }
-        }
-      }
-      
-      return cpp.call(cpp.member(memberObj, methodName, isPointer), args);
-    }
-    
-    // Regular function call
-    const func = this.visitExpression(node.expression);
-    
-    // For interface parameters, automatically dereference smart pointers
-    // If function expects const InterfaceName& and we're passing shared_ptr<ConcreteClass>,
-    // we need to dereference: func(*arg) instead of func(arg)
-    const processedArgs = args.map((arg, index) => {
-      const argNode = node.arguments[index];
-      
-      // Check if argument is an identifier (variable)
-      if (ts.isIdentifier(argNode)) {
-        const varName = cppUtils.escapeName(argNode.text);
-        const varType = this.ctx.variableTypes.get(varName);
-        
-        // Check if it's a shared_ptr to a class that might implement an interface
-        if (varType && varType.toString().startsWith('std::shared_ptr<gs::')) {
-          // Extract the class name from std::shared_ptr<gs::ClassName>
-          const match = varType.toString().match(/std::shared_ptr<gs::(.+)>/);
-          if (match) {
-            // Dereference the smart pointer to get the object reference
-            return cpp.unary('*', arg);
-          }
-        }
-      }
-      
-      // Check if argument is an element access (arr[i]) that returns a smart pointer
-      if (ts.isElementAccessExpression(argNode)) {
-        // Check if the array has smart pointer elements (interface or ownership types)
-        if (this.ownershipChecker.hasSmartPointerElements(argNode.expression, this.ctx.interfaceNames)) {
-          // visitExpression already dereferenced once to get the shared_ptr
-          // Now we need to dereference again to pass the object reference
-          return cpp.unary('*', arg);
-        }
-      }
-      
-      return arg;
-    });
-    
-    return cpp.call(func, processedArgs);
+    return this.callHandler.handleCall(node);
   }
   
   private visitPropertyAccess(node: ts.PropertyAccessExpression): ast.Expression {
