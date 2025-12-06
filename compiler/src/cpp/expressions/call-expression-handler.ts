@@ -13,12 +13,12 @@
  */
 
 import ts from 'typescript';
-import * as ast from './ast';
-import { cpp } from './builder';
-import * as cppUtils from './cpp-utils';
-import * as tsUtils from './ts-utils';
-import { TransformContext } from './transform-context';
-import { OwnershipAwareTypeChecker } from './ownership-aware-type-checker';
+import * as ast from '../ast';
+import { cpp } from '../builder';
+import * as cppUtils from '../cpp-utils';
+import * as tsUtils from '../ts-utils';
+import { TransformContext } from '../transform-context';
+import { OwnershipAwareTypeChecker } from '../ownership-aware-type-checker';
 
 export class CallExpressionHandler {
   constructor(

@@ -13,12 +13,12 @@
  * - Pointer dereferencing in arithmetic contexts
  */
 
-import ts from 'typescript';
-import * as ast from './ast';
-import { cpp } from './builder';
-import * as cppUtils from './cpp-utils';
-import * as tsUtils from './ts-utils';
-import { TransformContext } from './transform-context';
+import * as ts from 'typescript';
+import * as ast from '../ast';
+import { cpp } from '../builder';
+import * as cppUtils from '../cpp-utils';
+import * as tsUtils from '../ts-utils';
+import { TransformContext } from '../transform-context';
 import { ExpressionAnalyzer } from './expression-analyzer';
 
 export class BinaryExpressionHandler {
