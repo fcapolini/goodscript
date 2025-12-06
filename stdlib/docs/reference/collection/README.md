@@ -43,6 +43,7 @@ Complete API documentation for [@goodscript/collection](../../../collection/).
 ### Map & Collection Utilities
 - [groupBy](./groupBy.md) - Group elements by key function
 - [lastBy](./lastBy.md) - Get last element by key function
+- [minBy/maxBy](./minBy-maxBy.md) - Find min/max elements by projection function
 - [mergeMaps](./mergeMaps.md) - Merge multiple maps
 - [mapMap](./mapMap.md) - Transform map keys and values
 - [CollectionUtils](./CollectionUtils.md) - Graph algorithms (SCC, transitive closure)
@@ -73,4 +74,4 @@ All collection classes follow these patterns:
 
 Translated from [Dart's collection package](https://pub.dev/packages/collection) with adaptations for GoodScript constraints.
 
-**Total:** 23 libraries, 765 tests, 100% pass rate across TypeScript, GoodScript validation, and C++ native execution.
+**Total:** 24 libraries, 790 tests, 100% pass rate across TypeScript, GoodScript validation, and C++ native execution.

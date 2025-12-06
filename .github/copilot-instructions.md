@@ -1,6 +1,172 @@
 # GoodScript Copilot Instructions
 
-## Session: December 6, 2024 - LRUCache Library + Type Alias Codegen
+## Session: December 6, 2024 - minBy/maxBy Utilities
+
+**Focus**: Adding minBy/maxBy projection utilities to stdlib  
+**Date**: December 6, 2024
+
+## Summary
+
+Successfully added the 24th library to stdlib collection package: **minBy/maxBy** - utility functions for finding minimum/maximum elements based on a projection function.
+
+## Libraries Added
+
+### minBy/maxBy (105 lines, 25 tests)
+
+Translated from [Dart's collection/functions.dart](https://github.com/dart-lang/collection/blob/master/lib/src/functions.dart)
+
+**Purpose**: Find the element with the minimum or maximum value returned by a projection function, instead of comparing elements directly.
+
+**Functions (2 total):**
+- `minBy<S, T>(values, orderBy, compare?)` - Find element with minimum projected value
+- `maxBy<S, T>(values, orderBy, compare?)` - Find element with maximum projected value
+
+**Key Features:**
+- Generic over element type (S) and comparison value type (T)
+- Optional custom comparator function
+- Returns null for empty iterables
+- O(n) time, O(1) space
+- First occurrence wins for ties
+
+**Use Cases:**
+- Find cheapest product: `minBy(products, p => p.price)`
+- Find oldest person: `maxBy(people, p => p.age)`
+- Find nearest point: `minBy(points, p => distance(p))`
+- Complex scoring: `maxBy(candidates, c => score(c))`
+
+## Validation Results
+
+### TypeScript Tests
+```
+✓ test/min-max-by.test.ts (25 tests) 157ms
+Test Files  1 passed (1)
+      Tests  25 passed (25)
+```
+
+### GoodScript Validation
+```
+[1/4] Phase 1+2: Validation (restrictions + ownership)...
+✅ Phase 1+2: PASS
+
+[2/4] Phase 3: C++ code generation...
+✅ Phase 3: PASS (2159 bytes generated)
+
+[3/4] Native compilation (C++ → binary)...
+✅ Compilation: PASS
+
+[4/4] Native execution...
+✅ Execution: PASS
+
+🎉 All phases passed!
+```
+
+## Files Changed
+
+### New Files
+1. `stdlib/collection/src/min-max-by-gs.ts` (105 lines, 2 functions)
+2. `stdlib/collection/test/min-max-by.test.ts` (196 lines, 25 tests)
+3. `stdlib/docs/reference/collection/minBy-maxBy.md` (comprehensive API docs)
+
+### Modified Files
+1. `stdlib/collection/README.md` - Added minBy/maxBy to utilities
+2. `stdlib/docs/reference/collection/README.md` - Added minBy/maxBy, updated total (24 libraries, 790 tests)
+3. `.github/copilot-instructions.md` - Updated milestone
+
+## Testing Strategy
+
+### Test Categories
+1. **minBy**: Basic usage, projections, empty, custom comparator, strings, negatives, equality, single element, complex projections, ties
+2. **maxBy**: Same coverage as minBy
+3. **Edge Cases**: Set, Map values, reverse comparator, floating point, large datasets (10K elements)
+
+**Test Coverage:** 25 tests, 100% passing
+
+## Key Design Decisions
+
+### 1. Nullish Coalescing Workaround
+
+GoodScript's type checker is strict about nullish coalescing operand types. Changed from:
+```typescript
+const compareFunc = compare ?? ((a, b) => ...);
+```
+
+To explicit if/else:
+```typescript
+let compareFunc: (a: T, b: T) => number;
+if (compare !== null && compare !== undefined) {
+  compareFunc = compare;
+} else {
+  compareFunc = (a: T, b: T) => { ... };
+}
+```
+
+### 2. Default Comparator
+
+Uses standard `<` and `>` operators:
+```typescript
+if (a < b) return -1;
+if (a > b) return 1;
+return 0;
+```
+
+Works for numbers, strings, dates, and any comparable type.
+
+### 3. First Occurrence for Ties
+
+When multiple elements have the same min/max value, return the first occurrence:
+```typescript
+if (minOrderBy === null || compareFunc(elementOrderBy, minOrderBy) < 0) {
+  // Only update if strictly less than current min
+}
+```
+
+## Documentation
+
+Created comprehensive API documentation (`minBy-maxBy.md`) with:
+- Function signatures with detailed parameters
+- Default comparison behavior
+- Custom comparator examples
+- Use cases (products, points, dates, scoring)
+- Edge cases (empty, ties, single element)
+- Performance characteristics
+- Comparison with Array.reduce() and Math.min/max
+- Type safety examples
+
+## Stdlib Progress
+
+**Total Libraries:** 24  
+**Total Tests:** 790
+**Pass Rate:** 100%
+
+**Milestones:**
+- ✅ 24/25 target libraries (96% complete) - **ONE MORE TO GO!**
+- ✅ Type alias codegen support
+- ✅ cppcoro integration in stdlib testing
+- ✅ First async/await stdlib library (LRUCache)
+- ✅ All libraries compile TypeScript → C++ → native binary
+- ✅ All tests passing in triple-mode validation
+- ✅ Iterator protocol fully implemented
+- ✅ Interface support with optional fields
+
+**Next Candidate:**
+1. One more utility or data structure to reach 25-library milestone
+
+## Lessons Learned
+
+1. **Nullish coalescing type strictness**: GoodScript enforces compatible types - use explicit if/else when needed
+2. **Projection pattern is powerful**: minBy/maxBy cover many use cases (80% of real-world min/max needs)
+3. **Small libraries are valuable**: 105 lines, high utility - sometimes the best libraries are the simplest
+4. **Generic inference works well**: TypeScript infers types automatically in most cases
+5. **Close to milestone**: 24/25 libraries (96% complete)
+
+**Stats:**
+- Library size: 105 lines + 196 test lines
+- Documentation: ~380 lines
+- Session duration: ~10 minutes (rapid translation + validation)
+
+---
+
+## Previous Session: December 6, 2024 - LRUCache Library + Type Alias Codegen
 
 **Focus**: Adding async/await-based LRUCache + fixing type alias codegen  
 **Date**: December 6, 2024

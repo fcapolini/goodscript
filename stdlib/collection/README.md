@@ -31,6 +31,7 @@ Collection data structures and utilities for GoodScript, translated from Dart's 
 - **Comparators** - String comparison functions (case-insensitive, natural sort)
 - **Algorithms** - Sorting and searching utilities
 - **Collection Utils** - Higher-order collection functions
+- **minBy/maxBy** - Find min/max elements by projection function
 - **Range** - Numeric sequence generation with iterator support
 - **Zip** - Combine multiple iterables with iterator support
 - **Partition** - Split and group collections
