@@ -20,6 +20,7 @@ import { ExpressionAnalyzer } from './expression-analyzer';
 import { LambdaAnalyzer } from './lambda-analyzer';
 import { CallExpressionHandler } from './call-expression-handler';
 import { BinaryExpressionHandler } from './binary-expression-handler';
+import { ClassDeclarationHandler } from './class-declaration-handler';
 
 export class AstCodegen {
   protected readonly ctx = new TransformContext();
@@ -30,6 +31,7 @@ export class AstCodegen {
   private mainBuilder: MainFunctionBuilder;
   private callHandler: CallExpressionHandler;
   private binaryHandler: BinaryExpressionHandler;
+  private classHandler: ClassDeclarationHandler;
   
   constructor(private checker?: ts.TypeChecker, optimizationOptions?: OptimizationOptions) {
     this.ownershipChecker = new OwnershipAwareTypeChecker(checker!);
@@ -55,6 +57,16 @@ export class AstCodegen {
       this.ctx,
       this.visitExpression.bind(this),
       this.isArrayAccessInSafeBounds.bind(this)
+    );
+    this.classHandler = new ClassDeclarationHandler(
+      checker,
+      this.ctx,
+      this.ownershipChecker,
+      this.mapType.bind(this),
+      this.mapHeritageType.bind(this),
+      this.visitBlock.bind(this),
+      this.processConstructorBody.bind(this),
+      this.getInterfaceMethodNames.bind(this)
     );
   }
   
@@ -559,267 +571,7 @@ export class AstCodegen {
   }
   
   private visitClass(node: ts.ClassDeclaration): ast.Class | undefined {
-    if (!node.name) return undefined;
-    
-    const name = cppUtils.escapeName(node.name.text);
-    const fields: ast.Field[] = [];
-    const constructors: ast.Constructor[] = [];
-    const methods: ast.Method[] = [];
-    
-    // Handle type parameters for generic classes
-    const templateParams: string[] = [];
-    if (node.typeParameters) {
-      for (const typeParam of node.typeParameters) {
-        const paramName = typeParam.name.text;
-        templateParams.push(paramName);
-        this.ctx.registerTemplateParameter(paramName);
-      }
-    }
-    
-    // Enter class scope (tracks class name and template params)
-    this.ctx.enterClass(name, templateParams);
-    
-    // Handle extends clause
-    let baseClass: string | undefined;
-    const baseClasses: string[] = [];
-    
-    if (node.heritageClauses) {
-      for (const clause of node.heritageClauses) {
-        if (clause.token === ts.SyntaxKind.ExtendsKeyword) {
-          // extends - single base class
-          if (clause.types.length > 0) {
-            // Map type arguments (e.g., Container<string> → Container<gs::String>)
-            baseClass = this.mapHeritageType(clause.types[0]);
-          }
-        } else if (clause.token === ts.SyntaxKind.ImplementsKeyword) {
-          // implements - multiple interfaces (treated as base classes in C++)
-          for (const type of clause.types) {
-            baseClasses.push(this.mapHeritageType(type));
-          }
-        }
-      }
-    }
-    
-    // Collect fields
-    for (const member of node.members) {
-      if (ts.isPropertyDeclaration(member)) {
-        const fieldName = cppUtils.escapeName(member.name.getText());
-        let fieldType = member.type ? this.mapType(member.type) : new ast.CppType('auto');
-        
-        // Check if property is static
-        const isStatic = member.modifiers?.some(m => m.kind === ts.SyntaxKind.StaticKeyword) ?? false;
-        
-        // For static properties with numeric initializers, use static constexpr
-        if (isStatic && member.initializer) {
-          // Check if initializer is a numeric literal
-          if (ts.isNumericLiteral(member.initializer)) {
-            const value = member.initializer.text;
-            // For numeric constants, use static constexpr with inline initialization
-            // In C++, static constexpr members can be initialized inline
-            const initValue = cpp.literal(parseFloat(value));
-            fieldType = new ast.CppType('static constexpr double');
-            fields.push(new ast.Field(fieldName, fieldType, ast.AccessSpecifier.Public, initValue));
-            continue;
-          }
-        }
-        
-        // Skip static properties that aren't numeric constants (not supported yet)
-        if (isStatic) {
-          continue;
-        }
-        
-        // Check if field is optional (has questionToken: field?: Type)
-        const isOptional = member.questionToken !== undefined;
-        if (isOptional) {
-          // Wrap type in std::optional<T>
-          const innerType = fieldType.toString();
-          fieldType = new ast.CppType(`std::optional<${innerType}>`);
-        }
-        
-        fields.push(new ast.Field(fieldName, fieldType));
-        
-        // Register property with ownership checker
-        this.ownershipChecker.registerProperty(name, fieldName, member);
-        
-        // Track field types (prefixed with this. for class members)
-        this.ctx.variableTypes.set(`this.${fieldName}`, fieldType);
-      }
-    }
-    
-    // Collect constructors
-    for (const member of node.members) {
-      if (ts.isConstructorDeclaration(member)) {
-        const params: ast.Parameter[] = [];
-        for (const param of member.parameters) {
-          const paramName = cppUtils.escapeName(param.name.getText());
-          let paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
-          
-          // Check if parameter is optional (has questionToken: param?: Type)
-          const isOptional = param.questionToken !== undefined;
-          if (isOptional) {
-            // Wrap type in std::optional<T>
-            const innerType = paramType.toString();
-            paramType = new ast.CppType(`std::optional<${innerType}>`);
-          }
-          
-          // In constructors, arrays should be passed by const ref (they're just assigned to fields)
-          const passByConstRef = param.type && ts.isArrayTypeNode(param.type) ? true : tsUtils.shouldPassByConstRef(param.type);
-          const passByMutableRef = param.type && ts.isArrayTypeNode(param.type) ? false : tsUtils.shouldPassByMutableRef(param.type);
-          params.push(new ast.Parameter(paramName, paramType, undefined, passByConstRef, passByMutableRef));
-        }
-        
-        // Extract super() call and generate initializer list
-        const { initList, body } = this.processConstructorBody(member.body, baseClass);
-        
-        constructors.push(new ast.Constructor(params, initList, body));
-      }
-    }
-    
-    // Collect methods
-    for (const member of node.members) {
-      if (ts.isMethodDeclaration(member)) {
-        const methodName = cppUtils.escapeName(member.name.getText());
-        const isAsync = member.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ?? false;
-        
-        // Get return type: use explicit annotation if present, otherwise infer from TypeChecker
-        let returnType: ast.CppType;
-        if (member.type) {
-          // Check if the type annotation is Promise<T> (for async methods)
-          const typeText = member.type.getText();
-          if (typeText.startsWith('Promise<')) {
-            // Promise<T> will be mapped to cppcoro::task<T> by mapType, don't wrap again
-            returnType = this.mapType(member.type);
-          } else {
-            const baseType = this.mapType(member.type);
-            // If async but no Promise annotation, wrap return type in cppcoro::task<T>
-            returnType = isAsync ? cpp.task(baseType) : baseType;
-          }
-        } else if (this.checker) {
-          // Use TypeChecker to infer return type
-          const signature = this.checker.getSignatureFromDeclaration(member);
-          if (signature) {
-            const tsReturnType = signature.getReturnType();
-            const returnTypeStr = this.checker.typeToString(tsReturnType);
-            
-            let baseType: ast.CppType;
-            // For async methods, unwrap Promise<T> to get T
-            if (isAsync && returnTypeStr.startsWith('Promise<')) {
-              const innerMatch = returnTypeStr.match(/Promise<(.+)>/);
-              if (innerMatch) {
-                const innerTypeStr = innerMatch[1];
-                // Map the inner type
-                if (innerTypeStr === 'number') {
-                  baseType = new ast.CppType('double');
-                } else if (innerTypeStr === 'string') {
-                  baseType = new ast.CppType('gs::String');
-                } else if (innerTypeStr === 'boolean') {
-                  baseType = new ast.CppType('bool');
-                } else if (innerTypeStr === 'void') {
-                  baseType = new ast.CppType('void');
-                } else {
-                  // For complex types, use auto for now
-                  baseType = new ast.CppType('auto');
-                }
-              } else {
-                baseType = new ast.CppType('void');
-              }
-            } else {
-              // Map TypeScript type string to C++ type
-              if (returnTypeStr === 'number') {
-                baseType = new ast.CppType('double');
-              } else if (returnTypeStr === 'string') {
-                baseType = new ast.CppType('gs::String');
-              } else if (returnTypeStr === 'boolean') {
-                baseType = new ast.CppType('bool');
-              } else if (returnTypeStr === 'void') {
-                baseType = new ast.CppType('void');
-              } else {
-                // For complex types, use auto for now
-                baseType = new ast.CppType('auto');
-              }
-            }
-            returnType = isAsync ? cpp.task(baseType) : baseType;
-          } else {
-            returnType = isAsync ? cpp.task(new ast.CppType('void')) : new ast.CppType('void');
-          }
-        } else {
-          returnType = isAsync ? cpp.task(new ast.CppType('void')) : new ast.CppType('void');
-        }
-        
-        // Track return type for null handling in return statements
-        const previousReturnType = this.ctx.currentFunctionReturnType;
-        const previousIsAsync = this.ctx.currentFunctionIsAsync;
-        this.ctx.currentFunctionReturnType = returnType;
-        this.ctx.currentFunctionIsAsync = isAsync;
-        
-        const params: ast.Parameter[] = [];
-        for (const param of member.parameters) {
-          const paramName = cppUtils.escapeName(param.name.getText());
-          let paramType = param.type ? this.mapType(param.type) : new ast.CppType('auto');
-          
-          // Check if parameter is optional (has questionToken: param?: Type)
-          const isOptional = param.questionToken !== undefined;
-          if (isOptional) {
-            // Wrap type in std::optional<T>
-            const innerType = paramType.toString();
-            paramType = new ast.CppType(`std::optional<${innerType}>`);
-          }
-          
-          const passByConstRef = tsUtils.shouldPassByConstRef(param.type);
-          const passByMutableRef = tsUtils.shouldPassByMutableRef(param.type);
-          params.push(new ast.Parameter(paramName, paramType, undefined, passByConstRef, passByMutableRef));
-          // Track parameter types for length() detection
-          this.ctx.variableTypes.set(paramName, paramType);
-          // Register with OwnershipChecker
-          this.ownershipChecker.registerVariable(paramName, param);
-        }
-        
-        const body = member.body ? this.visitBlock(member.body) : new ast.Block([]);
-        
-        // Clear parameter types after processing method body
-        for (const param of member.parameters) {
-          const paramName = cppUtils.escapeName(param.name.getText());
-          this.ctx.variableTypes.delete(paramName);
-        }
-        
-        // Restore previous return type
-        this.ctx.currentFunctionReturnType = previousReturnType;
-        this.ctx.currentFunctionIsAsync = previousIsAsync;
-        
-        // Check if method should be const (doesn't modify 'this') and if it's static
-        // Static methods cannot be const in C++
-        const isStatic = member.modifiers?.some(mod => mod.kind === ts.SyntaxKind.StaticKeyword) ?? false;
-        
-        // Check if method overrides an interface method
-        // Only mark as virtual/override if method actually exists in one of the implemented interfaces
-        const interfaceMethodNames = this.getInterfaceMethodNames(baseClasses);
-        const isVirtual = interfaceMethodNames.has(methodName);
-        const isOverride = interfaceMethodNames.has(methodName);
-        
-        // If overriding an interface method, use const=true to match interface signature
-        // Otherwise, check if method mutates this
-        const isConst = isOverride ? true : (!isStatic && tsUtils.shouldMethodBeConst(member));
-        
-        methods.push(new ast.Method(methodName, returnType, params, body, ast.AccessSpecifier.Public, isConst, isStatic, isVirtual, false, isOverride, false, isAsync));
-      }
-    }
-    
-    // If this is an error class (name ends with "Error"), make it inherit from std::exception
-    if (name.endsWith('Error') && !baseClass) {
-      baseClass = 'std::exception';
-    }
-    
-    // Exit class scope
-    this.ctx.exitClass();
-    
-    // Clean up template parameters
-    if (node.typeParameters) {
-      for (const typeParam of node.typeParameters) {
-        this.ctx.unregisterTemplateParameter(typeParam.name.text);
-      }
-    }
-    
-    return new ast.Class(name, fields, constructors, methods, baseClass, templateParams, false, baseClasses);
+    return this.classHandler.handleClass(node);
   }
   
   private visitInterface(node: ts.InterfaceDeclaration): ast.Class | undefined {
