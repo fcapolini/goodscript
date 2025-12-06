@@ -487,6 +487,11 @@ export class CppTypeMapper {
           return `cppcoro::task<${mappedArgs[0]}>`;
         }
         
+        // Iterator protocol: IteratorResultImpl<T> → IteratorResult<T> (use runtime struct)
+        if (baseType === 'IteratorResultImpl' && mappedArgs.length === 1) {
+          return `gs::IteratorResult<${mappedArgs[0]}>`;
+        }
+        
         // Ownership types: own<T>, share<T>, use<T>
         if (baseType === 'own' && mappedArgs.length === 1) {
           const innerType = mappedArgs[0];

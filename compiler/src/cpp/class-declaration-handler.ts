@@ -307,7 +307,10 @@ export class ClassDeclarationHandler {
     const interfaceMethodNames = this.getInterfaceMethodNames(baseClasses);
     const isVirtual = interfaceMethodNames.has(methodName);
     const isOverride = interfaceMethodNames.has(methodName);
-    const isConst = isOverride ? true : (!isStatic && tsUtils.shouldMethodBeConst(member));
+    
+    // Special case: Iterator<T>.next() is NOT const (mutates internal state)
+    const isIteratorNext = (methodName === 'next' && baseClasses.some(bc => bc.startsWith('Iterator<')));
+    const isConst = isIteratorNext ? false : (isOverride ? true : (!isStatic && tsUtils.shouldMethodBeConst(member)));
     
     return new ast.Method(
       methodName,

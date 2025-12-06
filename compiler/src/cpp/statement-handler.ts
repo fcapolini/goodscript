@@ -10,6 +10,7 @@ import { cpp } from './builder';
 import * as cppUtils from './cpp-utils';
 import * as tsUtils from './ts-utils';
 import { TransformContext } from './transform-context';
+import { render } from './renderer';
 
 export class StatementHandler {
   constructor(
@@ -114,6 +115,19 @@ export class StatementHandler {
     }
     
     let expr = node.expression ? this.visitExpression(node.expression) : undefined;
+    
+    // Special case: __iterator() method returning Iterator<T>* needs explicit upcast
+    // from derived iterator class (e.g., RangeIterator*) to base Iterator<T>*
+    // Note: We use C-style cast instead of static_cast because the derived class
+    // may not be fully defined at this point (forward declaration only), but we
+    // know the inheritance relationship exists (we generated it).
+    const returnType = this.ctx.currentFunctionReturnType;
+    const returnTypeStr = returnType?.toString() || '';
+    if (expr && returnType && (returnTypeStr.includes('Iterator<') && (returnTypeStr.endsWith('*') || returnTypeStr.includes('shared_ptr')))) {
+      // Use C-style cast which works with incomplete types: (Iterator<T>*)(alloc<DerivedIterator>(...))
+      const renderedExpr = render(expr);
+      expr = new ast.RawExpression(`(${returnTypeStr})(${renderedExpr})`);
+    }
     
     // If returning a ternary with pointer branches and function returns optional, convert
     if (expr instanceof ast.ConditionalExpr && 

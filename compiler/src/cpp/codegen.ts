@@ -716,6 +716,10 @@ export class AstCodegen {
   }
   
   private visitClass(node: ts.ClassDeclaration): ast.Class | undefined {
+    // Skip IteratorResultImpl class - use runtime's IteratorResult<T> struct instead
+    if (node.name && node.name.text === 'IteratorResultImpl') {
+      return undefined;
+    }
     return this.classHandler.handleClass(node);
   }
   
@@ -790,6 +794,9 @@ export class AstCodegen {
         
         // Pure virtual method - no body, marked as virtual and pure virtual
         // Interface methods are const by default (they're typically accessors/getters)
+        // Exception: Iterator<T>.next() must be non-const (mutates internal state)
+        const isIteratorNext = (name === 'Iterator' && methodName === 'next');
+        const isMethodConst = !isIteratorNext;  // Iterator.next() is NOT const
         const emptyBody = new ast.Block([]);
         methods.push(new ast.Method(
           methodName, 
@@ -797,7 +804,7 @@ export class AstCodegen {
           params, 
           emptyBody, 
           ast.AccessSpecifier.Public, 
-          true,  // isConst - interface methods are const by default
+          isMethodConst,  // isConst - false for Iterator.next(), true for others
           false, // isStatic
           true,  // isVirtual
           true,  // isPureVirtual
@@ -1320,8 +1327,15 @@ export class AstCodegen {
     // Get the class name
     let className = cppUtils.escapeName(node.expression.getText());
     
-    // Extract base class name (without template parameters) for hoisted class check
-    const baseClassName = className.split('<')[0];
+    // Extract base class name (without template parameters) for check
+    let baseClassName = className.split('<')[0];
+    
+    // Special case: Map IteratorResultImpl<T> → IteratorResult<T> (use runtime struct)
+    if (baseClassName === 'IteratorResultImpl') {
+      className = className.replace('IteratorResultImpl', 'IteratorResult');
+      baseClassName = 'IteratorResult';
+    }
+    
     const needsGsPrefix = this.ctx.hoistedClasses.has(baseClassName);
     
     // Get constructor arguments
@@ -1426,7 +1440,8 @@ export class AstCodegen {
     
     // Built-in value types (Map, Array, Set, etc.) are NOT heap-allocated
     // Only user-defined classes and explicit ownership types need smart pointers
-    const builtInValueTypes = ['Map', 'Array', 'Set', 'String', 'RegExp', 'Date', 'Promise'];
+    // IteratorResult is a value type (struct) - created on stack, not heap
+    const builtInValueTypes = ['Map', 'Array', 'Set', 'String', 'RegExp', 'Date', 'Promise', 'IteratorResult'];
     
     if (builtInValueTypes.includes(baseClassName)) {
       // Value types: direct construction (no smart pointer)
