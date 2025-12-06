@@ -267,7 +267,11 @@ export class ClassDeclarationHandler {
     // Restore previous return type and template params
     this.ctx.currentFunctionReturnType = previousReturnType;
     this.ctx.currentFunctionIsAsync = previousIsAsync;
-    this.ctx.templateParameters = previousTemplateParams;
+    // Restore template params by clearing and re-adding (can't reassign readonly Set)
+    this.ctx.templateParameters.clear();
+    for (const param of previousTemplateParams) {
+      this.ctx.templateParameters.add(param);
+    }
     
     // Determine method attributes
     const interfaceMethodNames = this.getInterfaceMethodNames(baseClasses);

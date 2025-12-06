@@ -309,4 +309,61 @@ describe('CombinedListView', () => {
       expect(combined.contains(1000)).toBe(false);
     });
   });
+
+  describe('generic methods', () => {
+    it('map<U>() transforms elements to different type', () => {
+      const combined = new CombinedListView([
+        [1, 2, 3],
+        [4, 5],
+        [6, 7, 8]
+      ]);
+      
+      // Map numbers to strings
+      const strings = combined.map((n: number) => `num-${n}`);
+      expect(strings).toEqual(['num-1', 'num-2', 'num-3', 'num-4', 'num-5', 'num-6', 'num-7', 'num-8']);
+      
+      // Map to objects
+      const objects = combined.map((n: number) => ({ value: n, doubled: n * 2 }));
+      expect(objects.length).toBe(8);
+      expect(objects[0]).toEqual({ value: 1, doubled: 2 });
+      expect(objects[7]).toEqual({ value: 8, doubled: 16 });
+    });
+
+    it('filter() returns elements matching predicate', () => {
+      const combined = new CombinedListView([
+        [1, 2, 3, 4],
+        [5, 6, 7],
+        [8, 9, 10]
+      ]);
+      
+      const evens = combined.filter((n: number) => n % 2 === 0);
+      expect(evens).toEqual([2, 4, 6, 8, 10]);
+      
+      const greaterThan5 = combined.filter((n: number) => n > 5);
+      expect(greaterThan5).toEqual([6, 7, 8, 9, 10]);
+    });
+
+    it('filter() with empty result', () => {
+      const combined = new CombinedListView([
+        [1, 2, 3],
+        [4, 5]
+      ]);
+      
+      const result = combined.filter((n: number) => n > 10);
+      expect(result).toEqual([]);
+    });
+
+    it('map() and filter() can be chained on result', () => {
+      const combined = new CombinedListView([
+        ['hello', 'world'],
+        ['foo', 'bar']
+      ]);
+      
+      // Filter then map
+      const lengths = combined
+        .filter((s: string) => s.length > 3)
+        .map((s: string) => s.length);
+      expect(lengths).toEqual([5, 5]);
+    });
+  });
 });

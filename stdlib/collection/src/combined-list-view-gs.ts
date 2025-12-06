@@ -227,4 +227,38 @@ export class CombinedListView<T> {
     }
     return true;
   }
+
+  /**
+   * Maps each element to a new value using the provided function.
+   * 
+   * @param fn - Function to transform each element
+   * @returns Array of transformed elements
+   */
+  map<U>(fn: (element: T) => U): U[] {
+    const result: U[] = [];
+    for (const list of this.lists) {
+      for (const element of list) {
+        result.push(fn(element));
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Filters elements that pass the test.
+   * 
+   * @param predicate - Function to test each element
+   * @returns Array of elements that pass the test
+   */
+  filter(predicate: (element: T) => boolean): T[] {
+    const result: T[] = [];
+    for (const list of this.lists) {
+      for (const element of list) {
+        if (predicate(element)) {
+          result.push(element);
+        }
+      }
+    }
+    return result;
+  }
 }
