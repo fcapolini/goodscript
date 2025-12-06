@@ -1015,6 +1015,7 @@ export class AstCodegen {
   private visitForOfStatement(node: ts.ForOfStatement): ast.RangeForStmt {
     // for (const num of numbers) → for (const auto& num : numbers)
     // for (const [key, value] of map) → for (const auto& [key, value] : map)
+    // for (const item of customIterable) → for (const auto& item : gs::make_range(customIterable->__iterator()))
     
     let varName = 'item';
     let isConst = false;
@@ -1046,7 +1047,33 @@ export class AstCodegen {
       }
     }
     
-    const iterable = this.visitExpression(node.expression);
+    let iterable = this.visitExpression(node.expression);
+    
+    // Check if this is a custom iterable (has __iterator method)
+    // Built-in types (Array, Map, Set) use native C++ iterators
+    // Custom classes implementing Iterable<T> need gs::make_range wrapper
+    if (this.checker && ts.isIdentifier(node.expression)) {
+      const type = this.checker.getTypeAtLocation(node.expression);
+      const symbol = type.getSymbol();
+      if (symbol && symbol.members) {
+        // Check if type has __iterator or [Symbol.iterator] method
+        const hasIterator = Array.from(symbol.members.values()).some(member => {
+          const memberName = member.getName();
+          return memberName === '__iterator' || memberName === '[Symbol.iterator]';
+        });
+        
+        if (hasIterator) {
+          // Wrap with gs::make_range for custom iterables
+          // This converts Iterator<T> to C++ range-based for compatible
+          const iteratorCall = new ast.CallExpr(
+            new ast.MemberExpr(iterable, '__iterator', this.ownershipChecker.requiresPointerAccess(node.expression)),
+            []
+          );
+          iterable = cpp.call(cpp.id('gs::make_range'), [iteratorCall]);
+        }
+      }
+    }
+    
     const body = ts.isBlock(node.statement)
       ? this.visitBlock(node.statement)
       : new ast.Block([this.visitStatement(node.statement)!]);

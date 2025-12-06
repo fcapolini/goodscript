@@ -212,16 +212,24 @@ export class Validator {
       }
     }
 
-    // No Symbol (GS125) - implementation limitation
+    // Allow Symbol.iterator for iterator protocol, block other Symbol usage (GS125)
     if (ts.isIdentifier(node) && node.text === 'Symbol') {
-      // Check if it's a type reference or value usage
       const parent = node.parent;
+      // Allow Symbol.iterator property access for iterator protocol
+      if (ts.isPropertyAccessExpression(parent) && 
+          parent.expression === node &&
+          ts.isIdentifier(parent.name) && 
+          parent.name.text === 'iterator') {
+        // Allow Symbol.iterator - this is the iterator protocol
+        return;
+      }
+      // Block all other Symbol usage
       if (ts.isTypeReferenceNode(parent) || 
           ts.isCallExpression(parent) || 
           ts.isNewExpression(parent) ||
           ts.isPropertyAccessExpression(parent)) {
         this.addError(
-          'Symbol is not supported - lacks clear C++ equivalent',
+          'Symbol is only supported for iterator protocol (Symbol.iterator)',
           location,
           'GS125'
         );
@@ -626,11 +634,27 @@ export class Validator {
       return this.isExplicitBooleanExpression(expr.operand, checker);
     }
 
+    // Type-based checks require a valid checker
+    if (!checker) {
+      return false;
+    }
+
     // Function calls - check actual return type
     if (ts.isCallExpression(expr)) {
       const type = checker.getTypeAtLocation(expr);
-      // Only allow if the function actually returns boolean
-      return (type.flags & ts.TypeFlags.Boolean) !== 0 || (type.flags & ts.TypeFlags.BooleanLiteral) !== 0;
+      return this.isBooleanType(type);
+    }
+
+    // Property access - check if the property type is boolean
+    if (ts.isPropertyAccessExpression(expr)) {
+      const type = checker.getTypeAtLocation(expr);
+      return this.isBooleanType(type);
+    }
+
+    // Identifier - check if it's a boolean variable
+    if (ts.isIdentifier(expr)) {
+      const type = checker.getTypeAtLocation(expr);
+      return this.isBooleanType(type);
     }
 
     // Parenthesized expressions
@@ -671,6 +695,35 @@ export class Validator {
   private isNumberType(type: ts.Type): boolean {
     return (type.flags & ts.TypeFlags.Number) !== 0 ||
            (type.flags & ts.TypeFlags.NumberLiteral) !== 0;
+  }
+
+  /**
+   * Helper: Check if type is boolean (handles unions)
+   */
+  private isBooleanType(type: ts.Type): boolean {
+    // Direct boolean type
+    if ((type.flags & ts.TypeFlags.Boolean) !== 0 || (type.flags & ts.TypeFlags.BooleanLiteral) !== 0) {
+      return true;
+    }
+
+    // Union type - check if contains at least one boolean type
+    // (TypeScript may infer as boolean | undefined for optional fields)
+    if (type.flags & ts.TypeFlags.Union) {
+      const unionType = type as ts.UnionType;
+      const hasBoolean = unionType.types.some(t => 
+        (t.flags & ts.TypeFlags.Boolean) !== 0 || (t.flags & ts.TypeFlags.BooleanLiteral) !== 0
+      );
+      const allBooleanOrUndefined = unionType.types.every(t =>
+        (t.flags & ts.TypeFlags.Boolean) !== 0 || 
+        (t.flags & ts.TypeFlags.BooleanLiteral) !== 0 ||
+        (t.flags & ts.TypeFlags.Undefined) !== 0 ||
+        (t.flags & ts.TypeFlags.Null) !== 0
+      );
+      // Allow if it's a boolean union or boolean | undefined/null
+      return hasBoolean && allBooleanOrUndefined;
+    }
+
+    return false;
   }
 
   /**

@@ -23,6 +23,8 @@
  *   - gs::Object: Object utilities (keys, values, entries, assign, is)
  *   - gs::RegExp: Regular expression support with full JS semantics (PCRE2)
  *   - gs::Error: Error classes (Error, TypeError, RangeError, SyntaxError, etc.)
+ *   - gs::Iterator<T>: TypeScript-style iterator protocol
+ *   - gs::Iterable<T>: TypeScript-style iterable protocol
  *   - gs::shared_ptr<T>: Non-atomic shared pointer for single-threaded use
  *   - gs::weak_ptr<T>: Non-atomic weak pointer for single-threaded use
  */
@@ -33,6 +35,7 @@
 #include "gs_string_builder.hpp"
 #include "gs_array.hpp"
 #include "gs_map.hpp"
+#include "gs_iterator.hpp"
 #include "gs_property.hpp"
 #include "gs_json.hpp"
 #include "gs_console.hpp"

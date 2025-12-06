@@ -236,15 +236,19 @@ const sym = Symbol('test');
       const result = compileSource(source);
       expect(hasError(result.diagnostics, 'GS125')).toBe(true);
       const errors = getErrors(result.diagnostics, 'GS125');
-      expect(errors[0].message).toContain('Symbol is not supported');
+      expect(errors[0].message).toContain('Symbol is only supported for iterator protocol');
     });
 
-    it('should reject Symbol.iterator', () => {
+    it('should accept Symbol.iterator in iterator method', () => {
       const source = `
-const iter = Symbol.iterator;
+class MyIterable {
+  [Symbol.iterator]() {
+    return null;
+  }
+}
       `;
       const result = compileSource(source);
-      expect(hasError(result.diagnostics, 'GS125')).toBe(true);
+      expect(hasError(result.diagnostics, 'GS125')).toBe(false);
     });
 
     it('should reject Symbol.for()', () => {

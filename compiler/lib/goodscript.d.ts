@@ -25,6 +25,25 @@ declare type share<T> = T;
 declare type use<T> = T | null | undefined;
 
 /**
+ * Iterator protocol support
+ * Maps to C++ begin/end range-based for loop
+ */
+
+interface IteratorResult<T> {
+  done: boolean;
+  value: T;
+}
+
+interface Iterator<T> {
+  next(): IteratorResult<T>;
+  return?(value?: T): IteratorResult<T>;
+}
+
+interface Iterable<T> {
+  [Symbol.iterator](): Iterator<T>;
+}
+
+/**
  * Console interface for output
  */
 // declare const console: {
