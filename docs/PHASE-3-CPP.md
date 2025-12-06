@@ -547,6 +547,32 @@ See `src/cpp/README.md` for usage examples.
      - `compiler/test/phase3/basic/array-inline-bounds-check.test.ts` - Safety validation tests
      - `compiler/test/phase3/basic/array-set-unchecked.test.ts` - Write optimization tests
 
+**Recent Additions (Dec 6, 2024 - Iterator Protocol Implementation)**: 🎉
+1. ✅ **Full Iterator Protocol Support** - Complete TypeScript iterator compatibility (+75 tests)
+   - **Problem**: Collection libraries needed Symbol.iterator support for for...of loops
+   - **Solutions Implemented**:
+     a. **Iterator.next() Non-Const**: Made Iterator<T>.next() non-const to allow state mutation
+     b. **IteratorResult Value Type**: Changed IteratorResultImpl to stack-allocated struct (not pointer)
+     c. **C-Style Cast for Upcasts**: Use `(Iterator<T>*)` instead of `static_cast<>` for incomplete type upcasts in inline methods
+     d. **Symbol.iterator Mapping**: Map `[Symbol.iterator]()` → `__iterator()` method
+     e. **Type Mapping**: IteratorResultImpl<T> → IteratorResult<T> throughout type system
+   - **Architecture**:
+     - `Iterator<T>`: Pure virtual base class with virtual next() method
+     - `IteratorResult<T>`: Stack-allocated struct with done/value fields
+     - `__iterator()`: Returns `Iterator<T>*` (upcast from derived iterator class)
+     - C-style cast handles forward-declared types in inline methods
+   - **New Utilities**: Range (18 tests), Zip (25 tests), Partition (32 tests)
+   - **Impact**: All stdlib collection libraries now support for...of loops naturally
+   - **Test Results**: 496 total tests passing (14 libraries validated)
+   - **Files**:
+     - `compiler/src/cpp/codegen.ts` - Skip IteratorResultImpl class generation
+     - `compiler/src/cpp/class-declaration-handler.ts` - Iterator.next() non-const
+     - `compiler/src/cpp/statement-handler.ts` - C-style cast for __iterator() returns
+     - `compiler/src/cpp/type-mapper.ts` - IteratorResultImpl → IteratorResult mapping
+     - `stdlib/collection/src/range-gs.ts` - Range utility with iterator
+     - `stdlib/collection/src/zip-gs.ts` - Zip utility with iterator
+     - `stdlib/collection/src/partition-gs.ts` - Partition utility functions
+
 **Recent Additions (Nov 30, 2025 - Late Evening Session)**:
 1. ✅ **AST-Based Optimizer** - Clean, composable optimization passes (+14 tests) 🎉
    - **Architecture**: Visitor-based transformation on C++ AST before rendering
@@ -925,6 +951,79 @@ See `docs/ZIG-TOOLCHAIN.md` for detailed information on Zig integration.
 - **`this` Keyword** - Preserved for member access
 
 #### Special Features
+- **Iterator Protocol** - Full TypeScript iterator compatibility:
+  ```typescript
+  // TypeScript
+  class RangeIterable {
+    constructor(private start: number, private end: number) {}
+    
+    [Symbol.iterator](): Iterator<number> {
+      return new RangeIterator(this.start, this.end);
+    }
+  }
+  
+  class RangeIterator implements Iterator<number> {
+    private current: number;
+    
+    constructor(private start: number, private end: number) {
+      this.current = start;
+    }
+    
+    next(): IteratorResult<number> {
+      if (this.current < this.end) {
+        return { done: false, value: this.current++ };
+      }
+      return { done: true, value: undefined };
+    }
+  }
+  
+  // for...of loops work automatically
+  for (const n of new RangeIterable(0, 5)) {
+    console.log(n);  // 0, 1, 2, 3, 4
+  }
+  ```
+  ```cpp
+  // C++ Translation
+  class RangeIterable {
+    double start;
+    double end;
+  public:
+    RangeIterable(double start, double end) : start(start), end(end) {}
+    
+    // Symbol.iterator maps to __iterator()
+    // C-style cast handles incomplete type upcast (inline method)
+    gs::Iterator<double>* __iterator() const {
+      return (gs::Iterator<double>*)gs::gc::Allocator::alloc<RangeIterator>(
+        this->start, this->end
+      );
+    }
+  };
+  
+  class RangeIterator : public gs::Iterator<double> {
+    double current;
+    double start;
+    double end;
+  public:
+    RangeIterator(double start, double end) 
+      : current(start), start(start), end(end) {}
+    
+    // Non-const to allow state mutation
+    gs::IteratorResult<double> next() override {
+      if (this->current < this->end) {
+        return gs::IteratorResult<double>(false, this->current++);
+      }
+      return gs::IteratorResult<double>(true, this->start);
+    }
+  };
+  ```
+  - **Symbol.iterator** → `__iterator()` method returning `Iterator<T>*`
+  - **Iterator<T>** → Pure virtual base class with `virtual next() = 0`
+  - **IteratorResult<T>** → Stack-allocated struct with `done` and `value` fields
+  - **Iterator.next()** → Non-const (allows state mutation in derived classes)
+  - **C-style cast** for __iterator() return (handles incomplete type upcasts)
+  - **for...of loops** work automatically with any class implementing __iterator()
+  - Used by: Range, Zip, Partition utilities (75 tests passing)
+
 - **Standard Headers** - Automatically included:
   ```cpp
   #include <memory>        // Smart pointers

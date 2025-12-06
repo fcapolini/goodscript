@@ -20,8 +20,13 @@ Data structures and algorithms translated from Dart's collection package.
 - **BoolList** - Space-efficient boolean list (32x memory savings)
 - **Algorithms** - Sorting and searching utilities (binarySearch, mergeSort, insertionSort, etc.)
 - **Collection Utils** - Higher-order collection functions (groupBy, minBy, maxBy, mergeMaps, lastBy)
+- **Range** - Numeric sequence generation with lazy iteration (range, rangeCount)
+- **Zip** - Combine multiple iterables (zip2/3, zipWith, enumerate, unzip)
+- **Partition** - Split and group collections (partition, chunk, groupBy, splitAt, takeWhile, dropWhile)
 
-**Status:** ✅ 11 libraries complete (355 tests, 100% pass rate), ~14 more planned
+**Status:** ✅ 14 libraries complete (496 tests, 100% pass rate), ~11 more planned
+
+**Iterator Protocol:** ✅ Fully supported (Symbol.iterator, for...of loops, custom iterators)
 
 ### @goodscript/core (planned)
 Core utilities
