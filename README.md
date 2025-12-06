@@ -1,4 +1,4 @@
-# GoodScript: Go for TypeScript Developers
+# GoodScript: Clean TypeScript with Go-Like Deployment
 
 > **🚧 Alpha State:** GoodScript is currently in active development. The compiler is 100% complete (1169/1169 tests passing) with all core features working. Phase 3 (C++ code generation) is complete! Currently working on conformance testing and API development. See [Current Status](#7-current-status-december-2025) for details.
 
