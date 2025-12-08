@@ -6,7 +6,7 @@
 
 import ts from 'typescript';
 import type { IRModule, IRProgram, IRDeclaration, IRExpr, IRType, IRBlock, IRInstruction, IRTerminator } from '../ir/types.js';
-import { BinaryOp, UnaryOp, Ownership } from '../ir/types.js';
+import { BinaryOp, UnaryOp, Ownership, PrimitiveType } from '../ir/types.js';
 import { IRBuilder, types, expr } from '../ir/builder.js';
 
 export class IRLowering {
@@ -238,6 +238,11 @@ export class IRLowering {
 
     if (ts.isStringLiteral(node)) {
       return expr.literal(node.text, types.string());
+    }
+
+    // Template literals (e.g., `Hello, ${name}!`)
+    if (ts.isTemplateExpression(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+      return this.lowerTemplateExpression(node, sourceFile);
     }
 
     if (node.kind === ts.SyntaxKind.TrueKeyword) {
@@ -542,5 +547,46 @@ export class IRLowering {
     }
 
     return types.void();
+  }
+
+  private lowerTemplateExpression(node: ts.TemplateExpression | ts.NoSubstitutionTemplateLiteral, sourceFile: ts.SourceFile): IRExpr {
+    // No substitution template literal: `plain text`
+    if (ts.isNoSubstitutionTemplateLiteral(node)) {
+      return expr.literal(node.text, types.string());
+    }
+
+    // Template expression with substitutions: `Hello, ${name}!`
+    // Build it as a series of string concatenations
+    let result: IRExpr = expr.literal(node.head.text, types.string());
+
+    for (const span of node.templateSpans) {
+      // Add the expression (convert to string if needed)
+      const spanExpr = this.lowerExpr(span.expression, sourceFile);
+      const stringExpr = this.convertToString(spanExpr);
+      
+      // Concatenate: result + expression
+      result = expr.binary(BinaryOp.Add, result, stringExpr, types.string());
+
+      // Add the literal text after the expression
+      if (span.literal.text) {
+        const literalExpr = expr.literal(span.literal.text, types.string());
+        result = expr.binary(BinaryOp.Add, result, literalExpr, types.string());
+      }
+    }
+
+    return result;
+  }
+
+  private convertToString(expr: IRExpr): IRExpr {
+    // If already a string, return as-is
+    if (expr.type.kind === 'primitive' && expr.type.type === PrimitiveType.String) {
+      return expr;
+    }
+
+    // For numbers and booleans, we need to convert to string
+    // In C++, this will use std::to_string() or similar
+    // For now, we'll use a type cast (will need proper runtime support later)
+    // TODO: Add proper toString() conversion in runtime
+    return expr;  // Temporary: rely on C++ operator+ overloading
   }
 }
