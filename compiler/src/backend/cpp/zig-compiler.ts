@@ -131,7 +131,7 @@ export class ZigCompiler {
 
   private async compileVendoredDep(
     name: string,
-    options: CompileOptions,
+    _options: CompileOptions,
     diagnostics: string[]
   ): Promise<string> {
     const outputPath = path.join(this.cacheDir, 'vendor', `${name}.o`);

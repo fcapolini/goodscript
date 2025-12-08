@@ -17,8 +17,6 @@ import type {
   IRExpr,
   IRType,
   IRParam,
-  IRField,
-  IRMethod,
   SourceLocation,
 } from '../../ir/types.js';
 import { Ownership } from '../../ir/types.js';
@@ -81,16 +79,11 @@ export class CppCodegen {
     this.emit(`#define ${guard}`);
     this.emit('');
 
-    // System includes
-    this.emit('#include <cstdint>');
-    this.emit('#include <string>');
-    this.emit('#include <memory>');
-    this.emit('#include <vector>');
-    this.emit('#include <map>');
-    this.emit('#include <functional>');
-    
+    // GoodScript runtime
     if (this.mode === 'gc') {
-      this.emit('#include "gc/gc.h"  // Boehm GC');
+      this.emit('#include "runtime/cpp/ownership/gs_gc_runtime.hpp"');
+    } else {
+      this.emit('#include "runtime/cpp/ownership/gs_runtime.hpp"');
     }
     
     this.emit('');
@@ -359,8 +352,8 @@ export class CppCodegen {
   }
 
   private generateInstruction(inst: IRInstruction): void {
-    // Emit source location if available
-    this.emitSourceLocation(inst.source);
+    // Skip source location for now - type narrowing is complex
+    // TODO: Add proper source location emission
     
     switch (inst.kind) {
       case 'assign':
@@ -413,8 +406,14 @@ export class CppCodegen {
         return `(${this.generateExpr(expr.left)} ${expr.op} ${this.generateExpr(expr.right)})`;
       case 'unary':
         return `${expr.op}${this.generateExpr(expr.operand)}`;
-      case 'member':
-        return `${this.generateExpr(expr.object)}.${expr.member}`;
+      case 'member': {
+        const obj = this.generateExpr(expr.object);
+        // Special case: console.log/error/warn -> gs::console::
+        if (obj === 'console') {
+          return `gs::console::${expr.member}`;
+        }
+        return `${obj}.${expr.member}`;
+      }
       case 'index':
         return `${this.generateExpr(expr.object)}[${this.generateExpr(expr.index)}]`;
       case 'callExpr':
@@ -422,7 +421,7 @@ export class CppCodegen {
       case 'new':
         return this.generateNew(expr.className, expr.args);
       case 'array':
-        return `std::vector<${this.generateCppType(expr.type)}>{ ${expr.elements.map(e => this.generateExpr(e)).join(', ')} }`;
+        return `gs::Array<${this.generateCppType(expr.type)}>{ ${expr.elements.map(e => this.generateExpr(e)).join(', ')} }`;
       case 'object':
         // Objects are not directly supported in C++ - would need struct definition
         return `/* object literal */`;
@@ -453,8 +452,8 @@ export class CppCodegen {
       return 'nullptr';
     }
     if (typeof value === 'string') {
-      // C++ string literal
-      return `std::string(${JSON.stringify(value)})`;
+      // GoodScript string literal
+      return `gs::String(${JSON.stringify(value)})`;
     }
     if (typeof value === 'boolean') {
       return value ? 'true' : 'false';
@@ -470,9 +469,9 @@ export class CppCodegen {
       case 'interface':
         return this.generatePointerType(type.name, type.ownership);
       case 'array':
-        return `std::vector<${this.generateCppType(type.element)}>`;
+        return `gs::Array<${this.generateCppType(type.element)}>`;
       case 'map':
-        return `std::map<${this.generateCppType(type.key)}, ${this.generateCppType(type.value)}>`;
+        return `gs::Map<${this.generateCppType(type.key)}, ${this.generateCppType(type.value)}>`;
       case 'function': {
         const params = type.params.map(p => this.generateCppType(p)).join(', ');
         return `std::function<${this.generateCppType(type.returnType)}(${params})>`;
@@ -495,7 +494,7 @@ export class CppCodegen {
       case 'integer53':
         return 'int64_t';
       case 'string':
-        return 'std::string';
+        return 'gs::String';
       case 'boolean':
         return 'bool';
       case 'void':
@@ -517,9 +516,9 @@ export class CppCodegen {
         case Ownership.Own:
           return `std::unique_ptr<${typeName}>`;
         case Ownership.Share:
-          return `std::shared_ptr<${typeName}>`;
+          return `gs::shared_ptr<${typeName}>`;
         case Ownership.Use:
-          return `${typeName}*`;  // Borrowed reference
+          return `gs::weak_ptr<${typeName}>`;
         default:
           return `${typeName}`;  // Value type
       }

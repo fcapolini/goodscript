@@ -10,7 +10,6 @@ import { IRLowering } from './frontend/lowering.js';
 import { Optimizer } from './optimizer/optimizer.js';
 import { CppCodegen } from './backend/cpp/codegen.js';
 import { ZigCompiler } from './backend/cpp/zig-compiler.js';
-import { TypeScriptCodegen } from './backend/typescript.js';
 import type { CompileOptions, CompileResult } from './types.js';
 
 export async function compile(options: CompileOptions): Promise<CompileResult> {
@@ -77,11 +76,11 @@ export async function compile(options: CompileOptions): Promise<CompileResult> {
     }
 
     // Phase 5: Generate code
-    let output: Map<string, string>;
+    let output: Map<string, string> | undefined;
     
-    if (options.target === 'native') {
+    if (options.target === 'cpp') {
       const codegen = new CppCodegen();
-      output = codegen.generate(ir, options.mode ?? 'gc');
+      output = codegen.generate(ir, options.mode ?? 'gc', options.sourceMap ?? false);
       
       // Phase 6: Compile to binary (optional)
       if (options.compile) {
@@ -124,6 +123,9 @@ export async function compile(options: CompileOptions): Promise<CompileResult> {
           buildTime: Date.now() - startTime,
         };
       }
+    } else {
+      // For non-C++ targets, just validate and return empty output
+      output = new Map();
     }
 
     // For non-native targets, just validate and return empty output
@@ -131,7 +133,7 @@ export async function compile(options: CompileOptions): Promise<CompileResult> {
     return {
       success: true,
       diagnostics,
-      output,
+      output: output ?? new Map(),
       buildTime: Date.now() - startTime,
     };
   } catch (error) {

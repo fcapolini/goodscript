@@ -17,22 +17,13 @@ import type {
   IRInstruction,
   IRBinary,
   IRUnary,
-  BinaryOp,
-  UnaryOp,
   IRTerminator,
-  IRVariable,
-  IRAssign,
-  IRCall,
-  IRFieldAssign,
-  IRExprStmt,
 } from '../ir/types.js';
 
 export class Optimizer {
-  private optimizationLevel: number = 1;
   private modified: boolean = false;
 
-  optimize(program: IRProgram, level: number): IRProgram {
-    this.optimizationLevel = level;
+  optimize(program: IRProgram, _level: number): IRProgram {
 
     // Multiple passes until fixed point
     let iterations = 0;
