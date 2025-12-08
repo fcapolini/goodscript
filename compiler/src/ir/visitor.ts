@@ -39,6 +39,8 @@ export abstract class IRVisitor<T = void> {
         return this.visitFunction(decl);
       case 'class':
         return this.visitClass(decl);
+      case 'const':
+        return this.visitExpr(decl.value);
       case 'interface':
       case 'typeAlias':
         return undefined as T;
@@ -75,6 +77,8 @@ export abstract class IRVisitor<T = void> {
         return this.visitExpr(instruction.callee);
       case 'fieldAssign':
         this.visitExpr(instruction.object);
+        return this.visitExpr(instruction.value);
+      case 'expr':
         return this.visitExpr(instruction.value);
     }
   }

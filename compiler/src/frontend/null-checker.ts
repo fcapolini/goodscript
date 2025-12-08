@@ -165,7 +165,7 @@ export class NullChecker {
   /**
    * Check if a type is use<T>
    */
-  private isUseType(node: ts.Node, checker: ts.TypeChecker): boolean {
+  private isUseType(_node: ts.Node, _checker: ts.TypeChecker): boolean {
     // TODO: Implement proper type checking
     // For now, use simple heuristic based on declaration
     return false;

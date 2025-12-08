@@ -102,7 +102,7 @@ export class OwnershipAnalyzer {
   private analyzeProperty(
     node: ts.PropertyDeclaration | ts.PropertySignature,
     sourceFile: ts.SourceFile,
-    checker: ts.TypeChecker
+    _checker: ts.TypeChecker
   ): void {
     if (!node.type) return;
 
@@ -201,7 +201,7 @@ export class OwnershipAnalyzer {
   /**
    * Get the containing class name
    */
-  private getContainingClass(node: ts.Node, sourceFile: ts.SourceFile): string | undefined {
+  private getContainingClass(node: ts.Node, _sourceFile: ts.SourceFile): string | undefined {
     let current = node.parent;
     while (current) {
       if (ts.isClassDeclaration(current) && current.name) {

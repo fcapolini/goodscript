@@ -7,7 +7,7 @@
 import type { IRProgram } from '../ir/types.js';
 
 export class TypeScriptCodegen {
-  generate(program: IRProgram): Map<string, string> {
+  generate(_program: IRProgram): Map<string, string> {
     const output = new Map<string, string>();
 
     // TODO: Implement TypeScript code generation from IR

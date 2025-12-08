@@ -10,7 +10,7 @@
 import type { IRProgram } from '../ir/types.js';
 
 export class Optimizer {
-  optimize(program: IRProgram, level: number): IRProgram {
+  optimize(program: IRProgram, _level: number): IRProgram {
     // TODO: Implement optimization passes
     return program;
   }

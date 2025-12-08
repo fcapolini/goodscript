@@ -13,9 +13,10 @@ import type {
   IRTerminator,
   BinaryOp,
   UnaryOp,
-  Ownership,
-  PrimitiveType,
+  IRStatement,
+  IRExpression,
 } from './types.js';
+import { PrimitiveType, Ownership } from './types.js';
 
 /**
  * Fluent builder for IR construction
@@ -71,6 +72,14 @@ export const types = {
     return { kind: 'primitive', type: PrimitiveType.Number };
   },
 
+  integer(): IRType {
+    return { kind: 'primitive', type: PrimitiveType.Integer };
+  },
+
+  integer53(): IRType {
+    return { kind: 'primitive', type: PrimitiveType.Integer53 };
+  },
+
   string(): IRType {
     return { kind: 'primitive', type: PrimitiveType.String };
   },
@@ -87,12 +96,20 @@ export const types = {
     return { kind: 'class', name, ownership, typeArgs };
   },
 
-  array(element: IRType, ownership: Ownership): IRType {
-    return { kind: 'array', element, ownership };
+  array(element: IRType, ownership?: Ownership): IRType {
+    return { kind: 'array', element, ownership: ownership ?? Ownership.Value };
+  },
+
+  map(key: IRType, value: IRType, ownership?: Ownership): IRType {
+    return { kind: 'map', key, value, ownership: ownership ?? Ownership.Value };
   },
 
   nullable(inner: IRType): IRType {
     return { kind: 'nullable', inner };
+  },
+
+  function(params: IRType[], returnType: IRType): IRType {
+    return { kind: 'function', params, returnType };
   },
 };
 
@@ -136,4 +153,147 @@ export const expr = {
   borrow(source: IRExpr, type: IRType): IRExpr {
     return { kind: 'borrow', source, type };
   },
+
+  variable(name: string, version: number, type: IRType): IRExpr {
+    return { kind: 'variable', name, version, type };
+  },
+
+  fieldAccess(object: IRExpr, field: string, type: IRType): IRExpr {
+    return { kind: 'member', object, member: field, type };
+  },
 };
+
+/**
+ * Expression builders (for AST-level IR)
+ */
+export const exprs = {
+  literal(value: number | string | boolean | null, type: IRType, location?: { line: number; column: number }): IRExpression {
+    return { kind: 'literal', value, type, location };
+  },
+
+  identifier(name: string, type: IRType, location?: { line: number; column: number }): IRExpression {
+    return { kind: 'identifier', name, type, location };
+  },
+
+  binary(operator: BinaryOp, left: IRExpression, right: IRExpression, type: IRType, location?: { line: number; column: number }): IRExpression {
+    return { kind: 'binary', operator, left, right, type, location };
+  },
+
+  unary(operator: UnaryOp, operand: IRExpression, type: IRType, location?: { line: number; column: number }): IRExpression {
+    return { kind: 'unary', operator, operand, type, location };
+  },
+
+  call(callee: IRExpression, args: IRExpression[], type: IRType, location?: { line: number; column: number }): IRExpression {
+    return { kind: 'call', callee, arguments: args, type, location };
+  },
+
+  memberAccess(object: IRExpression, member: string, type: IRType, location?: { line: number; column: number }): IRExpression {
+    return { kind: 'memberAccess', object, member, type, location };
+  },
+
+  indexAccess(object: IRExpression, index: IRExpression, type: IRType, location?: { line: number; column: number }): IRExpression {
+    return { kind: 'indexAccess', object, index, type, location };
+  },
+
+  assignment(left: IRExpression, right: IRExpression, type: IRType, location?: { line: number; column: number }): IRExpression {
+    return { kind: 'assignment', left, right, type, location };
+  },
+
+  arrayLiteral(elements: IRExpression[], type: IRType, location?: { line: number; column: number }): IRExpression {
+    return { kind: 'arrayLiteral', elements, type, location };
+  },
+
+  objectLiteral(properties: Array<{ key: string; value: IRExpression }>, type: IRType, location?: { line: number; column: number }): IRExpression {
+    return { kind: 'objectLiteral', properties, type, location };
+  },
+};
+
+/**
+ * Statement builders (for AST-level IR)
+ */
+export const stmts = {
+  variableDeclaration(
+    name: string,
+    variableType: IRType,
+    initializer?: IRExpression,
+    location?: { line: number; column: number }
+  ): IRStatement {
+    return {
+      kind: 'variableDeclaration',
+      name,
+      variableType,
+      initializer,
+      location,
+    };
+  },
+
+  return(value?: IRExpression, location?: { line: number; column: number }): IRStatement {
+    return {
+      kind: 'return',
+      value,
+      location,
+    };
+  },
+
+  expressionStatement(expression: IRExpression, location?: { line: number; column: number }): IRStatement {
+    return {
+      kind: 'expressionStatement',
+      expression,
+      location,
+    };
+  },
+
+  if(
+    condition: IRExpression,
+    thenBranch: IRStatement[],
+    elseBranch?: IRStatement[],
+    location?: { line: number; column: number }
+  ): IRStatement {
+    return {
+      kind: 'if',
+      condition,
+      thenBranch,
+      elseBranch,
+      location,
+    };
+  },
+
+  while(
+    condition: IRExpression,
+    body: IRStatement[],
+    location?: { line: number; column: number }
+  ): IRStatement {
+    return {
+      kind: 'while',
+      condition,
+      body,
+      location,
+    };
+  },
+
+  for(
+    initializer: IRStatement | undefined,
+    condition: IRExpression | undefined,
+    increment: IRExpression | undefined,
+    body: IRStatement[],
+    location?: { line: number; column: number }
+  ): IRStatement {
+    return {
+      kind: 'for',
+      initializer,
+      condition,
+      increment,
+      body,
+      location,
+    };
+  },
+
+  block(statements: IRStatement[], location?: { line: number; column: number }): IRStatement {
+    return {
+      kind: 'block',
+      statements,
+      location,
+    };
+  },
+};
+

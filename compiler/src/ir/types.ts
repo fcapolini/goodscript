@@ -22,6 +22,7 @@ export enum Ownership {
 export type IRType = 
   | { kind: 'primitive'; type: PrimitiveType }
   | { kind: 'class'; name: string; ownership: Ownership; typeArgs?: IRType[] }
+  | { kind: 'interface'; name: string; ownership: Ownership; typeArgs?: IRType[] }
   | { kind: 'array'; element: IRType; ownership: Ownership }
   | { kind: 'map'; key: IRType; value: IRType; ownership: Ownership }
   | { kind: 'function'; params: IRType[]; returnType: IRType }
@@ -30,6 +31,8 @@ export type IRType =
 
 export enum PrimitiveType {
   Number = 'number',
+  Integer = 'integer',
+  Integer53 = 'integer53',
   String = 'string',
   Boolean = 'boolean',
   Void = 'void',
@@ -37,18 +40,30 @@ export enum PrimitiveType {
 }
 
 // ============================================================================
+// Source Location Tracking
+// ============================================================================
+
+/**
+ * Source location for debugging and error reporting
+ */
+export interface SourceLocation {
+  file: string;     // Absolute path to source file
+  line: number;     // 1-based line number
+  column: number;   // 1-based column number
+}
+
+// ============================================================================
 // Program Structure
 // ============================================================================
 
 export interface IRProgram {
-  modules: Map<string, IRModule>;
+  modules: IRModule[];
 }
 
 export interface IRModule {
   path: string;
   declarations: IRDeclaration[];
   imports: IRImport[];
-  exports: IRExport[];
 }
 
 export interface IRImport {
@@ -69,7 +84,16 @@ export type IRDeclaration =
   | IRFunctionDecl
   | IRClassDecl
   | IRInterfaceDecl
-  | IRTypeAliasDecl;
+  | IRTypeAliasDecl
+  | IRConstDecl;
+
+export interface IRConstDecl {
+  kind: 'const';
+  name: string;
+  type: IRType;
+  value: IRExpr;
+  source?: SourceLocation;
+}
 
 export interface IRFunctionDecl {
   kind: 'function';
@@ -78,6 +102,7 @@ export interface IRFunctionDecl {
   returnType: IRType;
   body: IRBlock;
   typeParams?: IRTypeParam[];
+  source?: SourceLocation;
 }
 
 export interface IRClassDecl {
@@ -89,11 +114,13 @@ export interface IRClassDecl {
   extends?: string;
   implements?: string[];
   typeParams?: IRTypeParam[];
+  source?: SourceLocation;
 }
 
 export interface IRInterfaceDecl {
   kind: 'interface';
   name: string;
+  properties: Array<{ name: string; type: IRType; location?: SourceLocation }>;
   methods: IRMethodSignature[];
   extends?: string[];
   typeParams?: IRTypeParam[];
@@ -159,7 +186,13 @@ export interface IRBlock {
 export type IRInstruction =
   | IRAssign
   | IRCall
-  | IRFieldAssign;
+  | IRFieldAssign
+  | IRExprStmt;
+
+export interface IRExprStmt {
+  kind: 'expr';
+  value: IRExpr;
+}
 
 export interface IRAssign {
   kind: 'assign';
@@ -215,6 +248,7 @@ export interface IRLiteral {
   kind: 'literal';
   value: number | string | boolean | null;
   type: IRType;
+  source?: SourceLocation;
 }
 
 export interface IRVariable {
@@ -222,6 +256,7 @@ export interface IRVariable {
   name: string;
   version: number; // SSA version
   type: IRType;
+  source?: SourceLocation;
 }
 
 export interface IRBinary {
@@ -230,6 +265,7 @@ export interface IRBinary {
   left: IRExpr;
   right: IRExpr;
   type: IRType;
+  source?: SourceLocation;
 }
 
 export interface IRUnary {
@@ -237,6 +273,7 @@ export interface IRUnary {
   op: UnaryOp;
   operand: IRExpr;
   type: IRType;
+  source?: SourceLocation;
 }
 
 export interface IRMemberAccess {
@@ -244,6 +281,7 @@ export interface IRMemberAccess {
   object: IRExpr;
   member: string;
   type: IRType;
+  source?: SourceLocation;
 }
 
 export interface IRIndexAccess {
@@ -251,6 +289,7 @@ export interface IRIndexAccess {
   object: IRExpr;
   index: IRExpr;
   type: IRType;
+  source?: SourceLocation;
 }
 
 export interface IRCallExpr {
@@ -258,6 +297,7 @@ export interface IRCallExpr {
   callee: IRExpr;
   args: IRExpr[];
   type: IRType;
+  source?: SourceLocation;
 }
 
 export interface IRNew {
@@ -316,3 +356,35 @@ export enum UnaryOp {
   Neg = '-',
   Plus = '+',
 }
+
+// ============================================================================
+// AST-Level IR (for Phase 2 Analysis)
+// ============================================================================
+
+/**
+ * AST-level expressions (before lowering to SSA)
+ */
+export type IRExpression =
+  | { kind: 'literal'; value: number | string | boolean | null; type: IRType; location?: { line: number; column: number } }
+  | { kind: 'identifier'; name: string; type: IRType; location?: { line: number; column: number } }
+  | { kind: 'binary'; operator: BinaryOp; left: IRExpression; right: IRExpression; type: IRType; location?: { line: number; column: number } }
+  | { kind: 'unary'; operator: UnaryOp; operand: IRExpression; type: IRType; location?: { line: number; column: number } }
+  | { kind: 'call'; callee: IRExpression; arguments: IRExpression[]; type: IRType; location?: { line: number; column: number } }
+  | { kind: 'memberAccess'; object: IRExpression; member: string; type: IRType; location?: { line: number; column: number } }
+  | { kind: 'indexAccess'; object: IRExpression; index: IRExpression; type: IRType; location?: { line: number; column: number } }
+  | { kind: 'assignment'; left: IRExpression; right: IRExpression; type: IRType; location?: { line: number; column: number } }
+  | { kind: 'arrayLiteral'; elements: IRExpression[]; type: IRType; location?: { line: number; column: number } }
+  | { kind: 'objectLiteral'; properties: Array<{ key: string; value: IRExpression }>; type: IRType; location?: { line: number; column: number } };
+
+/**
+ * AST-level statements (before lowering to SSA)
+ */
+export type IRStatement =
+  | { kind: 'variableDeclaration'; name: string; variableType: IRType; initializer?: IRExpression; location?: { line: number; column: number } }
+  | { kind: 'expressionStatement'; expression: IRExpression; location?: { line: number; column: number } }
+  | { kind: 'return'; value?: IRExpression; location?: { line: number; column: number } }
+  | { kind: 'if'; condition: IRExpression; thenBranch: IRStatement[]; elseBranch?: IRStatement[]; location?: { line: number; column: number } }
+  | { kind: 'while'; condition: IRExpression; body: IRStatement[]; location?: { line: number; column: number } }
+  | { kind: 'for'; initializer?: IRStatement; condition?: IRExpression; increment?: IRExpression; body: IRStatement[]; location?: { line: number; column: number } }
+  | { kind: 'block'; statements: IRStatement[]; location?: { line: number; column: number } };
+
