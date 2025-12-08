@@ -188,28 +188,98 @@ export class IRLowering {
     }
 
     if (ts.isExpressionStatement(node)) {
-      // Check if this is an assignment expression
-      if (ts.isBinaryExpression(node.expression) &&
-          node.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
-        // Generate an assignment instruction
-        const target = this.lowerExpr(node.expression.left, sourceFile);
-        const value = this.lowerExpr(node.expression.right, sourceFile);
+      // Check for assignment expressions (=, +=, -=, etc.)
+      if (ts.isBinaryExpression(node.expression)) {
+        const op = node.expression.operatorToken.kind;
         
-        // Target must be a variable
-        if (target.kind !== 'variable') {
-          throw new Error('Assignment target must be a variable');
+        // Simple assignment: y = value
+        if (op === ts.SyntaxKind.EqualsToken) {
+          const target = this.lowerExpr(node.expression.left, sourceFile);
+          const value = this.lowerExpr(node.expression.right, sourceFile);
+          
+          if (target.kind !== 'variable') {
+            throw new Error('Assignment target must be a variable');
+          }
+          
+          const isReassignment = this.declaredVariables.has(target.name);
+          
+          return {
+            kind: 'assign',
+            target,
+            value,
+            type: value.type,
+            isDeclaration: !isReassignment,
+          };
         }
         
-        // Check if this is a reassignment (variable already declared)
-        const isReassignment = this.declaredVariables.has(target.name);
+        // Compound assignments: +=, -=, *=, /=, %=
+        const compoundOp = this.getCompoundAssignmentOp(op);
+        if (compoundOp) {
+          const target = this.lowerExpr(node.expression.left, sourceFile);
+          const right = this.lowerExpr(node.expression.right, sourceFile);
+          
+          if (target.kind !== 'variable') {
+            throw new Error('Assignment target must be a variable');
+          }
+          
+          // Convert y += x to y = y + x
+          const value = expr.binary(compoundOp, target, right, target.type);
+          
+          return {
+            kind: 'assign',
+            target,
+            value,
+            type: target.type,
+            isDeclaration: false,
+          };
+        }
+      }
+      
+      // Check for postfix increment/decrement: y++, y--
+      if (ts.isPostfixUnaryExpression(node.expression)) {
+        const target = this.lowerExpr(node.expression.operand, sourceFile);
+        
+        if (target.kind !== 'variable') {
+          throw new Error('Increment/decrement target must be a variable');
+        }
+        
+        const op = node.expression.operator === ts.SyntaxKind.PlusPlusToken 
+          ? BinaryOp.Add 
+          : BinaryOp.Sub;
+        const one = expr.literal(1, types.number());
+        const value = expr.binary(op, target, one, target.type);
         
         return {
           kind: 'assign',
           target,
           value,
-          type: value.type,
-          isDeclaration: !isReassignment,
+          type: target.type,
+          isDeclaration: false,
         };
+      }
+      
+      // Check for prefix increment/decrement in statement position: ++y, --y
+      if (ts.isPrefixUnaryExpression(node.expression)) {
+        const op = node.expression.operator;
+        if (op === ts.SyntaxKind.PlusPlusToken || op === ts.SyntaxKind.MinusMinusToken) {
+          const target = this.lowerExpr(node.expression.operand, sourceFile);
+          
+          if (target.kind !== 'variable') {
+            throw new Error('Increment/decrement target must be a variable');
+          }
+          
+          const binaryOp = op === ts.SyntaxKind.PlusPlusToken ? BinaryOp.Add : BinaryOp.Sub;
+          const one = expr.literal(1, types.number());
+          const value = expr.binary(binaryOp, target, one, target.type);
+          
+          return {
+            kind: 'assign',
+            target,
+            value,
+            type: target.type,
+            isDeclaration: false,
+          };
+        }
       }
       
       const value = this.lowerExpr(node.expression, sourceFile);
@@ -392,11 +462,26 @@ export class IRLowering {
   }
 
   private lowerUnaryExpr(node: ts.PrefixUnaryExpression, sourceFile: ts.SourceFile): IRExpr {
+    // Handle prefix increment/decrement (++y, --y)
+    // Note: These modify the variable and return the new value
+    // For now, we'll treat them as expressions that return the incremented value
+    // TODO: Properly handle side effects in SSA
     const operand = this.lowerExpr(node.operand, sourceFile);
     const op = this.getUnaryOp(node.operator);
     const type = this.inferType(node);
 
     return expr.unary(op, operand, type);
+  }
+
+  private getCompoundAssignmentOp(kind: ts.SyntaxKind): BinaryOp | null {
+    switch (kind) {
+      case ts.SyntaxKind.PlusEqualsToken: return BinaryOp.Add;
+      case ts.SyntaxKind.MinusEqualsToken: return BinaryOp.Sub;
+      case ts.SyntaxKind.AsteriskEqualsToken: return BinaryOp.Mul;
+      case ts.SyntaxKind.SlashEqualsToken: return BinaryOp.Div;
+      case ts.SyntaxKind.PercentEqualsToken: return BinaryOp.Mod;
+      default: return null;
+    }
   }
 
   private lowerCallExpr(node: ts.CallExpression, sourceFile: ts.SourceFile): IRExpr {
