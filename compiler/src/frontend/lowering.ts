@@ -377,7 +377,13 @@ export class IRLowering {
     // Array literal
     if (ts.isArrayLiteralExpression(node)) {
       const elements = node.elements.map(el => this.lowerExpr(el, sourceFile));
-      const elementType = elements.length > 0 ? elements[0].type : types.void();
+      
+      // For arrays, prefer contextual type (from return type, assignment, etc.)
+      // This handles empty arrays correctly
+      const contextualType = this.typeChecker.getContextualType(node);
+      const fullType = contextualType ? this.convertTsTypeToIRType(contextualType) : this.inferType(node);
+      const elementType = fullType.kind === 'array' ? fullType.element : types.void();
+      
       const arrayType = types.array(elementType);
       return expr.array(elements, arrayType);
     }

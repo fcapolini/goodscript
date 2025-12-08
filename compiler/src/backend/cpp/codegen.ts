@@ -469,8 +469,23 @@ export class CppCodegen {
         }
         return `${obj}.${expr.member}`;
       }
-      case 'index':
-        return `${this.generateExpr(expr.object)}[${this.generateExpr(expr.index)}]`;
+      case 'index': {
+        const obj = this.generateExpr(expr.object);
+        const indexExpr = this.generateExpr(expr.index);
+        // If index is a number (double), cast to int to avoid ambiguous overload
+        const indexType = expr.index.type;
+        const finalIndex = (indexType.kind === 'primitive' && indexType.type === PrimitiveType.Number) 
+          ? `static_cast<int>(${indexExpr})`
+          : indexExpr;
+        
+        // For primitive types, we need to dereference since operator[] returns T*
+        // For non-primitive types (objects), we want the pointer
+        const resultType = expr.type;
+        const isPrimitive = resultType.kind === 'primitive';
+        const indexAccess = `${obj}[${finalIndex}]`;
+        
+        return isPrimitive ? `*${indexAccess}` : indexAccess;
+      }
       case 'callExpr':
         return `${this.generateExpr(expr.callee)}(${expr.args.map(a => this.generateExpr(a)).join(', ')})`;
       case 'methodCall': {
