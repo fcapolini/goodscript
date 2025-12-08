@@ -1,6 +1,6 @@
 # GoodScript v0.12.0
 
-TypeScript without the bad parts, compiled to native code.
+Clean TypeScript, compiled to native code.
 
 ## 🚧 Status: Core Compiler Complete (109/109 Tests Passing)
 
