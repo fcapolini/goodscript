@@ -4,17 +4,25 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete (156 tests passing)
+**Current Status**: Phase 1-6 implementation complete (157 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
-- ✅ AST → IR lowering
+- ✅ AST → IR lowering (basic expressions, lambdas, object literals)
 - ✅ Ownership analyzer (Phase 2a: cycle detection)
 - ✅ Null checker (Phase 2b: use<T> safety)
 - ✅ Optimizer (constant folding, DCE, multi-pass)
 - ✅ C++ backend (GC and ownership modes)
+- ✅ Lambda/arrow functions (C++ lambda generation)
+- ✅ C++ identifier sanitization (70+ reserved keywords)
 - ✅ Zig compiler integration (binary compilation)
 - ✅ Source maps (#line directives for debugging)
+- ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
+
+**Recent Progress (Dec 8, 2025)**:
+- Implemented lambda/arrow function support with full C++ codegen
+- Added C++ identifier sanitization (prevents keyword conflicts)
+- Object literal lowering to IR (C++ codegen pending)
 
 ## Architecture
 
