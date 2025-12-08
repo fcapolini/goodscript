@@ -213,3 +213,12 @@ All vendored dependencies are under permissive licenses (MIT, BSD) that allow:
 - ✅ Modification (though we don't modify)
 
 See each dependency's LICENSE file for full terms.
+
+## License
+
+The GoodScript compiler itself is licensed under either of:
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](../../LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- MIT License ([LICENSE-MIT](../../LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
