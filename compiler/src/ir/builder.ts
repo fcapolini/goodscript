@@ -155,6 +155,10 @@ export const expr = {
     return { kind: 'array', elements, type };
   },
 
+  object(properties: Array<{ key: string; value: IRExpr }>, type: IRType): IRExpr {
+    return { kind: 'object', properties, type };
+  },
+
   lambda(params: IRParam[], body: IRBlock, captures: Array<{ name: string; type: IRType }>, type: IRType): IRExpr {
     return { kind: 'lambda', params, body, captures, type };
   },

@@ -189,6 +189,14 @@ export class IRLowering {
       };
     }
 
+    // If statements are handled at block level, not as instructions
+    // They generate multiple blocks with branch terminators
+    if (ts.isIfStatement(node)) {
+      // TODO: Implement if/else lowering with block generation
+      // For now, return null and handle at a higher level
+      return null;
+    }
+
     return null;
   }
 
@@ -255,6 +263,20 @@ export class IRLowering {
     // Arrow function (lambda)
     if (ts.isArrowFunction(node)) {
       return this.lowerArrowFunction(node, sourceFile);
+    }
+
+    // Object literal
+    if (ts.isObjectLiteralExpression(node)) {
+      const properties: Array<{ key: string; value: IRExpr }> = [];
+      for (const prop of node.properties) {
+        if (ts.isPropertyAssignment(prop)) {
+          const key = prop.name.getText(sourceFile);
+          const value = this.lowerExpr(prop.initializer, sourceFile);
+          properties.push({ key, value });
+        }
+      }
+      const type = this.inferType(node);
+      return expr.object(properties, type);
     }
 
     return expr.literal(null, types.void());
