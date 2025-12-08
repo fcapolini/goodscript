@@ -167,6 +167,44 @@ const numbers: own<Array<integer>> = [1, 2, 3];
 const cache: own<Map<string, Data>> = new Map();
 ```
 
+### Immutability
+
+GoodScript supports TypeScript's `readonly` modifier for shallow immutability:
+
+```typescript
+class Config {
+  readonly version: string = "1.0.0";  // Cannot reassign field
+  readonly items: string[] = [];       // Cannot reassign array
+}
+
+const config = new Config();
+config.version = "2.0.0";  // ❌ Error: Cannot assign to readonly property
+config.items = [];         // ❌ Error: Cannot assign to readonly property
+config.items.push("new");  // ✅ OK: Shallow immutability (array contents mutable)
+```
+
+**Deep Immutability**: For truly immutable collections, use TypeScript's readonly utility types:
+
+- `ReadonlyArray<T>` - Immutable array (no push, pop, etc.)
+- `ReadonlyMap<K, V>` - Immutable map (no set, delete, etc.)
+- `ReadonlySet<T>` - Immutable set (no add, delete, etc.)
+- `Readonly<T>` - Makes all properties of T readonly
+
+```typescript
+class DeepImmutable {
+  readonly items: ReadonlyArray<string>;  // Deep immutability
+  readonly config: Readonly<{ port: number }>;
+}
+
+const obj = new DeepImmutable();
+obj.items.push("new");  // ❌ Error: Property 'push' does not exist on ReadonlyArray
+```
+
+**C++ Mapping**:
+- `readonly field: T` → `const T field_` (shallow const)
+- `ReadonlyArray<T>` → Custom immutable array wrapper (future)
+- `ReadonlyMap<K,V>` → Custom immutable map wrapper (future)
+
 ## Language Restrictions ("Good Parts")
 
 GoodScript enforces the following restrictions to maintain static analyzability and compilation safety:
