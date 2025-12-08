@@ -22,7 +22,7 @@ describe('Null Safety Checker', () => {
           },
           {
             name: 'parent',
-            type: types.class('Node', Ownership.Use'), // use<Node> - FORBIDDEN
+            type: types.class('Node', Ownership.Use), // use<Node> - FORBIDDEN
           },
         ],
         methods: [],
@@ -51,7 +51,7 @@ describe('Null Safety Checker', () => {
           },
           {
             name: 'parent',
-            type: types.class('INode', Ownership.Use'), // use<INode> - FORBIDDEN
+            type: types.class('INode', Ownership.Use), // use<INode> - FORBIDDEN
           },
         ],
         methods: [],
@@ -75,11 +75,11 @@ describe('Null Safety Checker', () => {
         fields: [
           {
             name: 'child',
-            type: types.class('Node', Ownership.Own'), // own<Node> - ALLOWED
+            type: types.class('Node', Ownership.Own), // own<Node> - ALLOWED
           },
           {
             name: 'sibling',
-            type: types.class('Node', Ownership.Share'), // share<Node> - ALLOWED
+            type: types.class('Node', Ownership.Share), // share<Node> - ALLOWED
           },
         ],
         methods: [],
@@ -101,9 +101,9 @@ describe('Null Safety Checker', () => {
         kind: 'function',
         name: 'getNode',
         params: [
-          { name: 'pool', type: types.class('Pool', Ownership.Share') },
+          { name: 'pool', type: types.class('Pool', Ownership.Share) },
         ],
-        returnType: types.class('Node', Ownership.Use'), // use<Node> - FORBIDDEN
+        returnType: types.class('Node', Ownership.Use), // use<Node> - FORBIDDEN
         body: { id: 0, instructions: [], terminator: { kind: 'return', value: undefined } },
       };
 
@@ -124,7 +124,7 @@ describe('Null Safety Checker', () => {
         kind: 'function',
         name: 'createNode',
         params: [],
-        returnType: types.class('Node', Ownership.Own'), // own<Node> - ALLOWED
+        returnType: types.class('Node', Ownership.Own), // own<Node> - ALLOWED
         body: { id: 0, instructions: [], terminator: { kind: 'return', value: undefined } },
       };
 
@@ -132,7 +132,7 @@ describe('Null Safety Checker', () => {
         kind: 'function',
         name: 'shareNode',
         params: [],
-        returnType: types.class('Node', Ownership.Share'), // share<Node> - ALLOWED
+        returnType: types.class('Node', Ownership.Share), // share<Node> - ALLOWED
         body: { id: 0, instructions: [], terminator: { kind: 'return', value: undefined } },
       };
 
@@ -152,12 +152,12 @@ describe('Null Safety Checker', () => {
         kind: 'function',
         name: 'processNode',
         params: [
-          { name: 'node', type: types.class('Node', Ownership.Use') }, // use<Node> param
+          { name: 'node', type: types.class('Node', Ownership.Use) }, // use<Node> param
         ],
-        returnType: types.class('Node', Ownership.Share'),
+        returnType: types.class('Node', Ownership.Share),
         body: [
           stmts.return(
-            exprs.identifier('node', types.class('Node', Ownership.Use')),
+            exprs.identifier('node', types.class('Node', Ownership.Use)),
             { line: 2, column: 2 }
           ),
         ],
@@ -180,20 +180,20 @@ describe('Null Safety Checker', () => {
         kind: 'function',
         name: 'getNode',
         params: [],
-        returnType: types.class('Node', Ownership.Own'),
+        returnType: types.class('Node', Ownership.Own),
         body: [
           stmts.variableDeclaration(
             'node',
-            types.class('Node', Ownership.Own'),
+            types.class('Node', Ownership.Own),
             exprs.call(
-              exprs.identifier('createNode', types.function([], types.class('Node', Ownership.Own'))),
+              exprs.identifier('createNode', types.function([], types.class('Node', Ownership.Own))),
               [],
-              types.class('Node', Ownership.Own')
+              types.class('Node', Ownership.Own)
             ),
             { line: 2, column: 4 }
           ),
           stmts.return(
-            exprs.identifier('node', types.class('Node', Ownership.Own')),
+            exprs.identifier('node', types.class('Node', Ownership.Own)),
             { line: 3, column: 2 }
           ),
         ],
@@ -217,7 +217,7 @@ describe('Null Safety Checker', () => {
         fields: [
           {
             name: 'nodes',
-            type: types.array(types.class('Node', Ownership.Use')), // Array<use<Node>> - FORBIDDEN
+            type: types.array(types.class('Node', Ownership.Use)), // Array<use<Node>> - FORBIDDEN
           },
         ],
         methods: [],
@@ -240,7 +240,7 @@ describe('Null Safety Checker', () => {
         fields: [
           {
             name: 'nodes',
-            type: types.map(types.string(), types.class('Node', Ownership.Use')), // Map<string, use<Node>> - FORBIDDEN
+            type: types.map(types.string(), types.class('Node', Ownership.Use)), // Map<string, use<Node>> - FORBIDDEN
           },
         ],
         methods: [],
@@ -263,14 +263,14 @@ describe('Null Safety Checker', () => {
         kind: 'function',
         name: 'traverse',
         params: [
-          { name: 'root', type: types.class('Node', Ownership.Share') },
+          { name: 'root', type: types.class('Node', Ownership.Share) },
         ],
         returnType: types.void(),
         body: [
           stmts.variableDeclaration(
             'current',
-            types.class('Node', Ownership.Use'), // use<Node> local var - ALLOWED
-            exprs.identifier('root', types.class('Node', Ownership.Share')),
+            types.class('Node', Ownership.Use), // use<Node> local var - ALLOWED
+            exprs.identifier('root', types.class('Node', Ownership.Share)),
             { line: 2, column: 4 }
           ),
         ],
@@ -290,7 +290,7 @@ describe('Null Safety Checker', () => {
         kind: 'function',
         name: 'process',
         params: [
-          { name: 'node', type: types.class('Node', Ownership.Use') }, // use<Node> param - ALLOWED
+          { name: 'node', type: types.class('Node', Ownership.Use) }, // use<Node> param - ALLOWED
         ],
         returnType: types.void(),
         body: { id: 0, instructions: [], terminator: { kind: 'return', value: undefined } },
@@ -314,11 +314,11 @@ describe('Null Safety Checker', () => {
         fields: [
           {
             name: 'parent',
-            type: types.class('Node', Ownership.Use'), // Violation 1
+            type: types.class('Node', Ownership.Use), // Violation 1
           },
           {
             name: 'children',
-            type: types.array(types.class('Node', Ownership.Use')), // Violation 2
+            type: types.array(types.class('Node', Ownership.Use)), // Violation 2
           },
         ],
         methods: [],
@@ -328,7 +328,7 @@ describe('Null Safety Checker', () => {
         kind: 'function',
         name: 'getNode',
         params: [],
-        returnType: types.class('Node', Ownership.Use'), // Violation 3
+        returnType: types.class('Node', Ownership.Use), // Violation 3
         body: { id: 0, instructions: [], terminator: { kind: 'return', value: undefined } },
       };
 
@@ -353,7 +353,7 @@ describe('Null Safety Checker', () => {
         fields: [
           {
             name: 'parent',
-            type: types.class('Node', Ownership.Use'), // Would be violation in ownership mode
+            type: types.class('Node', Ownership.Use), // Would be violation in ownership mode
           },
         ],
         methods: [],
@@ -363,7 +363,7 @@ describe('Null Safety Checker', () => {
         kind: 'function',
         name: 'getNode',
         params: [],
-        returnType: types.class('Node', Ownership.Use'), // Would be violation in ownership mode
+        returnType: types.class('Node', Ownership.Use), // Would be violation in ownership mode
         body: { id: 0, instructions: [], terminator: { kind: 'return', value: undefined } },
       };
 
@@ -373,7 +373,7 @@ describe('Null Safety Checker', () => {
       };
 
       // GC mode: No errors
-      const diagnostics = analyzeNullSafety(module, Ownership.gc');
+      const diagnostics = analyzeNullSafety(module, 'gc');
       expect(diagnostics).toHaveLength(0);
     });
   });

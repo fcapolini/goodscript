@@ -303,9 +303,10 @@ describe('Ownership Analyzer', () => {
               {
                 name: 'items',
                 type: types.map(
-                isReadonly: false,                  types.string(),
+                  types.string(),
                   types.class('Item', Ownership.Share)
                 ),
+                isReadonly: false,
               },
             ],
             methods: [],
@@ -317,7 +318,8 @@ describe('Ownership Analyzer', () => {
               {
                 name: 'registry',
                 type: types.class('Registry', Ownership.Share),
-                isReadonly: false,              },
+                isReadonly: false,
+              },
             ],
             methods: [],
           } as IRClassDecl,
