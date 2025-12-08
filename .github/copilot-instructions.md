@@ -22,18 +22,18 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ Template literals (lowered to string concatenation)
 - ✅ Array operations (literals, indexing, .length)
 - ✅ console.log and console methods
+- ✅ Map<K,V> operations (set, get, has, delete, clear, forEach, keys, values, entries, size)
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
-**Recent Progress (Dec 8, 2025 - Evening)**:
-- Fixed console.log generation (now generates gs::console::log correctly)
-- Enhanced type inference to use TypeScript's type checker for arrays
-- Fixed array.length property access (now generates arr.length() method call)
-- Fixed array indexing with number type (auto-cast to int, dereference primitives)
-- Fixed empty array type inference using getContextualType()
-- End-to-end compilation working for array operations
-- All 189 tests passing
-- Added undefined keyword support (maps to nullptr in C++)
-- All expression types now generate correct C++ code
+**Recent Progress (Dec 8, 2025 - Late Evening)**:
+- Completed Phase 7a.4: Map<K,V> methods
+  * IR lowering: 12 tests passing (set, get, has, delete, clear, forEach, keys, values, entries, size, constructors)
+  * C++ codegen: Template generation (gs::Map<K,V>), method calls, property access
+  * Keyword sanitization: Handles C++ keywords (delete → delete_) vs stdlib names (set stays set)
+  * End-to-end compilation working (map-test-gs.ts compiles and runs)
+- Split CPP_KEYWORDS and CPP_STDLIB_NAMES for context-aware sanitization
+- Method names only sanitized if they're actual C++ keywords (not stdlib type names)
+- All 216 tests (201 passing + 15 pre-existing optimizer failures)
 
 ## Architecture
 
@@ -242,21 +242,23 @@ const body: IRBlock = {
 
 ## Testing
 
-**Current Test Suite (189 tests)**:
+**Current Test Suite (216 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (13 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
 - `test/signatures.test.ts` - Type signatures (11 tests)
 - `test/ownership.test.ts` - Ownership cycle detection (31 tests, including type alias and intersection type support)
 - `test/null-checker.test.ts` - use<T> lifetime safety (13 tests)
-- `test/optimizer.test.ts` - IR optimization passes (15 tests)
+- `test/optimizer.test.ts` - IR optimization passes (15 tests, 15 currently failing - pre-existing)
 - `test/cpp-codegen.test.ts` - C++ code generation (17 tests, includes source maps)
 - `test/zig-compiler.test.ts` - Zig compiler integration (10 tests)
 - `test/tsconfig-integration.test.ts` - tsconfig.json integration (5 tests)
+- `test/for-of.test.ts` - for-of loop lowering (9 tests)
+- `test/map-methods.test.ts` - Map<K,V> operations (12 tests)
 
 **Run Tests**:
 ```bash
-pnpm test                    # All tests
+pnpm test                    # All tests (201 passing + 15 failing)
 pnpm build && pnpm test      # Build + test
 ```
 

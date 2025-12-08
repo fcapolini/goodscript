@@ -28,8 +28,8 @@ import { types } from '../../ir/builder.js';
 type MemoryMode = 'ownership' | 'gc';
 
 // C++ reserved keywords that need to be sanitized
-const CPP_RESERVED_KEYWORDS = new Set([
-  // C++ keywords
+// C++ language keywords (not safe as identifiers in any context)
+const CPP_KEYWORDS = new Set([
   'alignas', 'alignof', 'and', 'and_eq', 'asm', 'auto', 'bitand', 'bitor',
   'bool', 'break', 'case', 'catch', 'char', 'char8_t', 'char16_t', 'char32_t',
   'class', 'compl', 'concept', 'const', 'consteval', 'constexpr', 'constinit',
@@ -43,10 +43,15 @@ const CPP_RESERVED_KEYWORDS = new Set([
   'template', 'this', 'thread_local', 'throw', 'true', 'try', 'typedef',
   'typeid', 'typename', 'union', 'unsigned', 'using', 'virtual', 'void',
   'volatile', 'wchar_t', 'while', 'xor', 'xor_eq',
-  // Common standard library names to avoid
+]);
+
+// Standard library names to avoid for top-level identifiers
+const CPP_STDLIB_NAMES = new Set([
   'std', 'string', 'vector', 'map', 'set', 'list', 'array', 'pair', 'tuple',
   'unique_ptr', 'shared_ptr', 'weak_ptr', 'function', 'optional', 'variant',
 ]);
+
+const CPP_RESERVED_KEYWORDS = new Set([...CPP_KEYWORDS, ...CPP_STDLIB_NAMES]);
 
 export class CppCodegen {
   private mode: MemoryMode = 'gc';
@@ -636,9 +641,16 @@ export class CppCodegen {
       
       case 'memberAccess': {
         const obj = this.generateExpression(expr.object);
-        // Don't sanitize standard library method names (map, filter, etc.)
-        // These are methods on objects, not standalone identifiers
-        const member = expr.member;
+        // Only sanitize actual C++ keywords (like delete), not stdlib names (like set)
+        // Method names don't conflict with stdlib types
+        const member = CPP_KEYWORDS.has(expr.member) ? `${expr.member}_` : expr.member;
+        
+        // In C++, some properties are actually methods that need ()
+        // Map.size, Array.length are methods in our C++ runtime
+        if (member === 'size' || member === 'length') {
+          return `${obj}.${member}()`;
+        }
+        
         return `${obj}.${member}`;
       }
       
@@ -674,6 +686,18 @@ export class CppCodegen {
       case 'newExpression': {
         const className = this.sanitizeIdentifier(expr.className);
         const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
+        
+        // For built-in generic classes like Map, use the type to generate template parameters
+        if (className === 'Map') {
+          if (expr.type.kind === 'map') {
+            const keyType = this.generateCppType(expr.type.key);
+            const valueType = this.generateCppType(expr.type.value);
+            return `gs::Map<${keyType}, ${valueType}>(${args})`;
+          }
+          // Fallback: Map without type info (shouldn't happen but let's handle it)
+          return `gs::Map<gs::String, double>(${args})`;
+        }
+        
         // For Error and other built-in classes, use gs:: namespace
         if (className === 'Error' || className === 'TypeError' || className === 'RangeError') {
           return `gs::${className}(${args})`;
