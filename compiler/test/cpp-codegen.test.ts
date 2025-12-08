@@ -227,6 +227,61 @@ describe('C++ Codegen - GC Mode - Classes', () => {
     expect(source).toContain('Person::Person(std::string name)');
     expect(source).toContain('this.name_ = name;');
   });
+
+  it('should generate readonly fields with const qualifier', () => {
+    const cls: IRClassDecl = {
+      kind: 'class',
+      name: 'Config',
+      fields: [
+        { 
+          name: 'version', 
+          type: types.string(), 
+          isReadonly: true,
+          initializer: exprs.literal('1.0.0', types.string()),
+        },
+        { 
+          name: 'port', 
+          type: types.integer(), 
+          isReadonly: true,
+          initializer: exprs.literal(8080, types.integer()),
+        },
+        { 
+          name: 'debug', 
+          type: types.boolean(), 
+          isReadonly: false,
+        },
+      ],
+      methods: [],
+      constructor: {
+        params: [],
+        body: createBlock(0, [], { kind: 'return' }),
+      },
+    };
+
+    const module: IRModule = {
+      path: 'config.gs',
+      declarations: [cls],
+      imports: [],
+    };
+
+    const output = codegen.generate(createProgram(module), 'gc');
+    const header = output.get('config.hpp');
+    const source = output.get('config.cpp');
+
+    expect(header).toBeDefined();
+    expect(source).toBeDefined();
+
+    // Check header has const for readonly fields
+    expect(header).toContain('const std::string version_;');
+    expect(header).toContain('const int32_t port_;');
+    expect(header).toContain('bool debug_;');
+    expect(header).not.toContain('const bool debug_;');
+
+    // Check source has initializer list for readonly fields
+    expect(source).toContain('Config::Config()');
+    expect(source).toContain(': version_(std::string("1.0.0"))');
+    expect(source).toContain(', port_(8080)');
+  });
 });
 
 describe('C++ Codegen - GC Mode - Interfaces', () => {

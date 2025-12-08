@@ -202,7 +202,8 @@ export class CppCodegen {
 
     // Fields
     for (const field of cls.fields) {
-      this.emit(`${this.generateCppType(field.type)} ${field.name}_;`);
+      const constMod = field.isReadonly ? 'const ' : '';
+      this.emit(`${constMod}${this.generateCppType(field.type)} ${field.name}_;`);
     }
 
     this.indent--;
@@ -301,7 +302,23 @@ export class CppCodegen {
     // Constructor implementation
     if (cls.constructor) {
       const params = cls.constructor.params.map(p => this.generateCppParam(p)).join(', ');
-      this.emit(`${cls.name}::${cls.name}(${params}) {`);
+      
+      // Generate initializer list for readonly fields
+      const readonlyFields = cls.fields.filter(f => f.isReadonly && f.initializer);
+      if (readonlyFields.length > 0) {
+        this.emit(`${cls.name}::${cls.name}(${params})`);
+        this.indent++;
+        for (let i = 0; i < readonlyFields.length; i++) {
+          const field = readonlyFields[i];
+          const prefix = i === 0 ? ': ' : ', ';
+          this.emit(`${prefix}${field.name}_(${this.generateExpr(field.initializer!)})`);
+        }
+        this.indent--;
+        this.emit('{');
+      } else {
+        this.emit(`${cls.name}::${cls.name}(${params}) {`);
+      }
+      
       this.indent++;
       this.generateBlockStatements(cls.constructor.body);
       this.indent--;
