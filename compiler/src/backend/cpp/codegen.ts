@@ -466,8 +466,15 @@ export class CppCodegen {
         return `${this.generateExpr(expr.object)}[${this.generateExpr(expr.index)}]`;
       case 'callExpr':
         return `${this.generateExpr(expr.callee)}(${expr.args.map(a => this.generateExpr(a)).join(', ')})`;
-      case 'methodCall':
-        return `${this.generateExpr(expr.object)}.${expr.method}(${expr.args.map(a => this.generateExpr(a)).join(', ')})`;
+      case 'methodCall': {
+        const obj = this.generateExpr(expr.object);
+        const args = expr.args.map(a => this.generateExpr(a)).join(', ');
+        // Special case: console.log/error/warn -> gs::console::
+        if (obj === 'console') {
+          return `gs::console::${expr.method}(${args})`;
+        }
+        return `${obj}.${expr.method}(${args})`;
+      }
       case 'new':
         return this.generateNew(expr.className, expr.args);
       case 'array': {

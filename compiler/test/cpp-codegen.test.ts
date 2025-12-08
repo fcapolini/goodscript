@@ -993,5 +993,45 @@ describe('C++ Codegen - Source Maps', () => {
     expect(source).toContain('gs::Array<double> double_(gs::Array<double> arr)');
     expect(source).toContain('arr.map([](double x) { return (x * 2); })');
   });
+
+  it('should generate console.log calls correctly', () => {
+    const func: IRFunctionDecl = {
+      kind: 'function',
+      name: 'greet',
+      params: [{ name: 'name', type: types.string() }],
+      returnType: types.void(),
+      body: createBlock(
+        0,
+        [],
+        {
+          kind: 'return',
+          value: {
+            kind: 'methodCall',
+            object: { kind: 'variable', name: 'console', version: 0, type: types.void() },
+            method: 'log',
+            args: [
+              { kind: 'literal', value: 'Hello, ', type: types.string() },
+              { kind: 'variable', name: 'name', version: 0, type: types.string() },
+            ],
+            type: types.void(),
+          },
+        }
+      ),
+    };
+
+    const module: IRModule = {
+      path: 'test.gs',
+      declarations: [func],
+      imports: [],
+    };
+
+    const output = codegen.generate(createProgram(module), 'gc');
+    const source = output.get('test.cpp');
+
+    expect(source).toBeDefined();
+    expect(source).toContain('void greet(gs::String name)');
+    expect(source).toContain('gs::console::log(gs::String("Hello, "), name)');
+    expect(source).not.toContain('console.log'); // Should not generate plain console.log
+  });
 });
 
