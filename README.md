@@ -15,7 +15,7 @@ This is a **clean rewrite** of GoodScript with a proper IR-based compiler archit
 
 **Next**: Optimizer and code generation backends
 
-See the original [GoodScript repository](https://github.com/fcapolini/goodscript) for the v0.11 implementation.
+See the original [GoodScript repository](https://github.com/fcapolini/goodscript0) for the v0.11 implementation.
 
 ## Why the Rewrite?
 
