@@ -310,14 +310,14 @@ public:
     }
 };
 
-// Static member initialization
-std::queue<std::function<void()>> TimerManager::eventQueue;
-std::mutex TimerManager::eventQueueMutex;
-std::map<int, TimerManager::WaitingTimer> TimerManager::waitingTimers;
-std::mutex TimerManager::waitingTimersMutex;
-std::map<int, TimerManager::TimerEntry> TimerManager::activeTimers;
-std::mutex TimerManager::activeTimersMutex;
-std::atomic<int> TimerManager::nextId{1};
+// Static member initialization (inline to avoid duplicate symbols)
+inline std::queue<std::function<void()>> TimerManager::eventQueue;
+inline std::mutex TimerManager::eventQueueMutex;
+inline std::map<int, TimerManager::WaitingTimer> TimerManager::waitingTimers;
+inline std::mutex TimerManager::waitingTimersMutex;
+inline std::map<int, TimerManager::TimerEntry> TimerManager::activeTimers;
+inline std::mutex TimerManager::activeTimersMutex;
+inline std::atomic<int> TimerManager::nextId{1};
 
 /**
  * Global setTimeout function (JavaScript-compatible API)
