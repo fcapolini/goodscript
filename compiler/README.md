@@ -90,6 +90,36 @@ pnpm dev
 - Standard library porting
 - Source map generation
 
+## File Extensions
+
+GoodScript uses `-gs.ts` and `-gs.tsx` suffixes (not `.gs`):
+- `math-gs.ts` - GoodScript TypeScript file
+- `component-gs.tsx` - GoodScript TSX/React file
+
+**Why this convention?**
+- ✅ All TypeScript tooling works out of the box (VSCode, tsc, ESLint, Prettier)
+- ✅ No special IDE plugins needed
+- ✅ Files are valid TypeScript - just import type aliases
+- ✅ Clear intent: `-gs` signals "follows GoodScript restrictions"
+- ✅ Gradual adoption: mix `.ts` and `-gs.ts` files in same project
+
+**Example**:
+```typescript
+// math-gs.ts
+import type { own, share, use, integer, integer53 } from '@goodscript/types';
+
+export function fibonacci(n: integer): integer {
+  // Your GoodScript code here - fully type-checked by tsc
+}
+```
+
+Then compile to native binary:
+```bash
+gsc --target cpp --compile src/math-gs.ts -o build/math
+```
+
+## TypeScript/JavaScript Output
+
 **Note**: For TypeScript/JavaScript output, just use `tsc` directly on your `-gs.ts` or `-gs.tsx` files.
 GoodScript files are valid TypeScript with type aliases:
 ```typescript
