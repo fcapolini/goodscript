@@ -4,13 +4,13 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-3 implementation complete (77 tests passing)
+**Current Status**: Phase 1-2 implementation complete (109 tests passing)
 - ✅ Validator (15 language restrictions)
-- ✅ IR type system with ownership semantics
+- ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
 - ✅ AST → IR lowering
-- ⏳ Ownership analyzer (stub)
-- ⏳ Null checker (stub)
+- ✅ Ownership analyzer (Phase 2a: cycle detection)
+- ✅ Null checker (Phase 2b: use<T> safety)
 - ⏳ Optimizer (stub)
 - ⏳ C++/TypeScript backends (stubs)
 
@@ -40,10 +40,11 @@ TypeScript Source
 
 - `compiler/src/frontend/validator.ts` - Phase 1: Language restrictions
 - `compiler/src/frontend/lowering.ts` - Phase 3: AST → IR conversion
-- `compiler/src/ir/types.ts` - IR type system definitions
+- `compiler/src/ir/types.ts` - IR type system definitions (SSA-based)
 - `compiler/src/ir/builder.ts` - IR construction helpers
 - `compiler/src/ir/signatures.ts` - Phase 2c: Structural type signatures
-- `compiler/src/analysis/` - Phase 2a/2b stubs
+- `compiler/src/analysis/ownership.ts` - Phase 2a: Ownership cycle detection
+- `compiler/src/analysis/null-checker.ts` - Phase 2b: use<T> lifetime safety
 - `compiler/src/optimizer/` - Phase 4 stubs
 - `compiler/src/codegen/` - Phase 5 stubs
 
@@ -172,13 +173,56 @@ const literal = exprs.literal(42, numType);
 - GS3xx: Ownership errors (ownership analyzer)
 - GS4xx: Null safety errors (null checker)
 
+## IR Type System
+
+GoodScript uses two levels of IR:
+
+### AST-Level IR (`IRExpression`, `IRStatement`)
+- Used during initial lowering from TypeScript AST
+- Has `kind: 'identifier'` for variable references
+- Statement-based control flow
+- **Builder**: `exprs.identifier()`, `stmts.return()`
+- **Used by**: `lowering.ts` (AST → IR conversion)
+
+### SSA-Level IR (`IRExpr`, `IRInstruction`, `IRBlock`)
+- Used for analysis and optimization
+- Has `kind: 'variable'` with SSA version numbers
+- Block-based control flow with terminators
+- **Structure**: `IRBlock` with `instructions[]` and `terminator`
+- **Used by**: `ownership.ts`, `null-checker.ts`, future optimizer
+- **Key types**: `IRVariable`, `IRAssign`, `IRTerminator`
+
+**Example**:
+```typescript
+// AST-level (from builder)
+const expr = exprs.identifier('x', types.number());
+// { kind: 'identifier', name: 'x', type: ... }
+
+// SSA-level (in IRBlock)
+const variable: IRVariable = { 
+  kind: 'variable', 
+  name: 'x', 
+  version: 0,  // SSA version
+  type: types.number() 
+};
+
+// Function body as IRBlock
+const body: IRBlock = {
+  id: 0,
+  instructions: [/* IRInstruction[] */],
+  terminator: { kind: 'return', value: variable }
+};
+```
+
 ## Testing
 
-**Current Test Suite (77 tests)**:
+**Current Test Suite (109 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (13 tests)
-- `test/validator.test.ts` - Language restrictions (42 tests)
+- `test/validator.test.ts` - Language restrictions (45 tests)
 - `test/signatures.test.ts` - Type signatures (11 tests)
+- `test/ownership.test.ts` - Ownership cycle detection (16 tests)
+- `test/null-checker.test.ts` - use<T> lifetime safety (13 tests)
 
 **Run Tests**:
 ```bash
@@ -298,12 +342,11 @@ worker.onmessage = (event) => {
 
 ## Next Steps (Priority Order)
 
-1. **Phase 2a**: Ownership analyzer - cycle detection for `share<T>`
-2. **Phase 2b**: Null checker - validate `use<T>` safety
-3. **Phase 4**: Optimizer - constant folding, DCE, SSA
-4. **Phase 5**: C++ backend - generate compilable C++ with source maps
-5. **Phase 5**: TypeScript backend - clean transpilation with source maps
-6. **Runtime**: Standard library implementation
+1. **Phase 4**: Optimizer - constant folding, DCE, SSA transformations
+2. **Phase 5**: C++ backend - generate compilable C++ with source maps
+3. **Phase 5**: TypeScript backend - clean transpilation with source maps
+4. **Runtime**: Standard library implementation
+5. **Tooling**: CLI, build system integration, IDE support
 
 ## Important Notes
 
@@ -314,6 +357,9 @@ worker.onmessage = (event) => {
 - Use `Map<K,V>` for dynamic data, not object properties
 - Phase 2a behavior differs by mode: error (ownership) vs warning (GC) for cycles
 - **Source locations**: IR tracks file/line/column for debugging and source maps
+- **Two IR levels**: AST-level (`IRExpression`) for lowering, SSA-level (`IRExpr`) for analysis
+- **IRBlock structure**: `{ id, instructions, terminator }` - terminators handle control flow
+- **Variable tracking**: SSA version numbers (`IRVariable.version`) for dataflow analysis
 
 ## Quick Reference
 

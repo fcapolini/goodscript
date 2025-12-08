@@ -222,7 +222,14 @@ Error GS105: "var" keyword is forbidden - use "const" or "let"
 - `share<T>` reference cycle detection (DAG requirement)
 - `use<T>` lifetime validation
 
-**Implementation**: `src/analysis/ownership.ts` (stub)
+**Implementation**: `src/analysis/ownership.ts` (✅ complete)
+
+**Features**:
+- Builds ownership graph from class/interface relationships
+- Detects cycles in `share<T>` references using Tarjan's algorithm
+- Supports both ownership mode (errors on cycles) and GC mode (warnings)
+- Handles nested containers (Array, Map) and interface properties
+- 16 comprehensive test cases covering all cycle patterns
 
 **Error Codes**: GS301-GS399
 
@@ -238,7 +245,15 @@ Error GS105: "var" keyword is forbidden - use "const" or "let"
 - No dangling references
 - Proper initialization order
 
-**Implementation**: `src/analysis/nullchecker.ts` (stub)
+**Implementation**: `src/analysis/null-checker.ts` (✅ complete)
+
+**Features**:
+- GS401: Forbids `use<T>` in class fields and interface properties
+- GS402: Forbids `use<T>` in function return types
+- GS403: Forbids returning `use<T>` variables from functions
+- Tracks variable ownership across scopes (function, block)
+- Analyzes SSA-level IR (IRBlock instructions and terminators)
+- 13 comprehensive test cases covering all safety rules
 
 **Error Codes**: GS401-GS499
 

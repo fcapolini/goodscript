@@ -2,9 +2,18 @@
 
 TypeScript without the bad parts, compiled to native code.
 
-## 🚧 Status: Complete Rewrite in Progress
+## 🚧 Status: Core Compiler Complete (109/109 Tests Passing)
 
 This is a **clean rewrite** of GoodScript with a proper IR-based compiler architecture.
+
+**Phase 1-2 Complete** ✅:
+- Language validation (15 "good parts" restrictions)
+- SSA-based IR with ownership semantics
+- Ownership cycle detection (DAG enforcement)
+- Null safety checking (use<T> lifetime analysis)
+- Type signatures (structural typing)
+
+**Next**: Optimizer and code generation backends
 
 See the original [GoodScript repository](https://github.com/fcapolini/goodscript) for the v0.11 implementation.
 
@@ -59,15 +68,30 @@ pnpm dev
 
 ## Roadmap
 
+**Phase 1-2: Frontend & Analysis** ✅
 - [x] Project structure and IR design
-- [ ] Frontend: TS parsing and validation
-- [ ] IR lowering
+- [x] Frontend: TS parsing and validation
+- [x] IR lowering (AST → SSA)
+- [x] Ownership analyzer (cycle detection)
+- [x] Null checker (use<T> lifetime safety)
+- [x] Type signatures (structural typing)
+
+**Phase 3-4: Optimization**
+- [ ] SSA transformations
+- [ ] Constant folding and propagation
+- [ ] Dead code elimination
+- [ ] Ownership simplification
+
+**Phase 5: Code Generation**
 - [ ] C++ backend (ownership mode)
-- [ ] Optimizer passes
-- [ ] GC mode support
+- [ ] C++ backend (GC mode)
+- [ ] TypeScript backend
+- [ ] Source maps
+
+**Runtime & Stdlib**
 - [ ] Port runtime library
-- [ ] Port stdlib
-- [ ] Migrate tests from v0.11
+- [ ] Port standard library
+- [ ] Module system integration
 
 ## License
 
