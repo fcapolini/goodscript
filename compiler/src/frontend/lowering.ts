@@ -239,6 +239,22 @@ export class IRLowering {
       return expr.fieldAccess(object, property, type);
     }
 
+    // Array literal
+    if (ts.isArrayLiteralExpression(node)) {
+      const elements = node.elements.map(el => this.lowerExpr(el, sourceFile));
+      const elementType = elements.length > 0 ? elements[0].type : types.void();
+      const arrayType = types.array(elementType);
+      return expr.array(elements, arrayType);
+    }
+
+    // Arrow function (lambda)
+    if (ts.isArrowFunction(node)) {
+      // For now, create a placeholder - full lambda support needs closure conversion
+      // TODO: Implement proper lambda lowering with closure conversion
+      const type = this.inferType(node);
+      return expr.literal(null, type);
+    }
+
     return expr.literal(null, types.void());
   }
 

@@ -20,6 +20,7 @@ import type {
   SourceLocation,
 } from '../../ir/types.js';
 import { Ownership } from '../../ir/types.js';
+import { types } from '../../ir/builder.js';
 
 type MemoryMode = 'ownership' | 'gc';
 
@@ -420,8 +421,11 @@ export class CppCodegen {
         return `${this.generateExpr(expr.callee)}(${expr.args.map(a => this.generateExpr(a)).join(', ')})`;
       case 'new':
         return this.generateNew(expr.className, expr.args);
-      case 'array':
-        return `gs::Array<${this.generateCppType(expr.type)}>{ ${expr.elements.map(e => this.generateExpr(e)).join(', ')} }`;
+      case 'array': {
+        // Extract element type from array type
+        const elementType = expr.type.kind === 'array' ? expr.type.element : types.void();
+        return `gs::Array<${this.generateCppType(elementType)}>{ ${expr.elements.map(e => this.generateExpr(e)).join(', ')} }`;
+      }
       case 'object':
         // Objects are not directly supported in C++ - would need struct definition
         return `/* object literal */`;

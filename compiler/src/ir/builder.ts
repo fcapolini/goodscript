@@ -150,6 +150,10 @@ export const expr = {
     return { kind: 'new', className, args, type };
   },
 
+  array(elements: IRExpr[], type: IRType): IRExpr {
+    return { kind: 'array', elements, type };
+  },
+
   move(source: IRExpr, type: IRType): IRExpr {
     return { kind: 'move', source, type };
   },
