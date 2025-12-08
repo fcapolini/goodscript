@@ -260,6 +260,14 @@ export class IRLowering {
       return expr.array(elements, arrayType);
     }
 
+    // Element access (array[index])
+    if (ts.isElementAccessExpression(node)) {
+      const object = this.lowerExpr(node.expression, sourceFile);
+      const index = this.lowerExpr(node.argumentExpression, sourceFile);
+      const type = this.inferType(node);
+      return expr.index(object, index, type);
+    }
+
     // Arrow function (lambda)
     if (ts.isArrowFunction(node)) {
       return this.lowerArrowFunction(node, sourceFile);
