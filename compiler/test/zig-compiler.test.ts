@@ -194,9 +194,6 @@ int main() {
   });
 
   it('should cache vendored dependencies', async () => {
-    console.log('Skipping: requires vendor directory');
-    return;
-    
     if (!zigAvailable) {
       console.log('Skipping: Zig not available');
       return;
@@ -210,7 +207,7 @@ int main() { return 0; }
 
     const compiler = new ZigCompiler('build-test-cache', 'vendor');
 
-    // First compilation
+    // First compilation (will compile MPS - takes time)
     const result1 = await compiler.compile({
       sources,
       output: 'build-test-cache/app1',
@@ -218,6 +215,9 @@ int main() { return 0; }
       optimize: '0',
     });
 
+    if (!result1.success) {
+      console.log('First compilation failed:', result1.diagnostics);
+    }
     expect(result1.success).toBe(true);
     const compileMessage1 = result1.diagnostics.find(d => d.includes('Compiling mps'));
     
@@ -239,7 +239,7 @@ int main() { return 0; }
 
     // Cleanup
     await fs.rm('build-test-cache', { recursive: true, force: true });
-  });
+  }, 15000); // Increase timeout to 15s for MPS compilation
 
   it('should support different optimization levels', async () => {
     if (!zigAvailable) {

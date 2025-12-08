@@ -147,6 +147,8 @@ export class ZigCompiler {
     switch (name) {
       case 'mps':
         sourceFile = path.join(this.vendorDir, 'mps/src/mps.c');
+        // MPS uses __DATE__ and __TIME__ macros, which Zig treats as non-reproducible
+        flags.push('-Wno-date-time');
         break;
       case 'pcre2':
         sourceFile = path.join(this.vendorDir, 'pcre2/src/pcre2_all.c');
