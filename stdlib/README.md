@@ -26,26 +26,24 @@ ArrayTools.tryAt(arr, 10);   // Returns null on error
 
 ### @goodscript/io - File System Operations
 
-**Status**: ✅ Complete (29 tests passing)
+**Status**: ✅ Complete (48 tests passing) - **Async/Sync Dual API**
 
-Provides cross-platform file system operations with dual error handling.
+Provides cross-platform file system operations with async/sync dual API.
 
 **Key Features**:
-- `File`: Read/write text and binary files
-- `Directory`: Create, remove, and list directories
+- `File`: Read/write text and binary files (async + sync variants)
+- `Directory`: Create, remove, and list directories (async + sync variants)
 - `Path`: Path manipulation utilities
 
-**Example**:
+**Async/Sync Pattern**:
 ```typescript
-import { File, Directory, Path } from '@goodscript/io';
+// Async (default, Promise-based)
+await File.readText('file.txt')
+await File.tryReadText('file.txt')
 
-const content = File.tryReadText('config.json');
-if (content !== null) {
-  // Process file
-}
-
-Directory.create('output');
-const files = Directory.listFiles('output');
+// Sync (explicit, blocking)
+File.syncReadText('file.txt')
+File.trySyncReadText('file.txt')
 ```
 
 ---
@@ -81,9 +79,9 @@ if (data.kind === 'object') {
 | Package | Tests | Status |
 |---------|-------|--------|
 | @goodscript/core | 89 | ✅ Passing |
-| @goodscript/io | 29 | ✅ Passing |
+| @goodscript/io | 48 | ✅ Passing (Async/Sync Dual API) |
 | @goodscript/json | 30 | ✅ Passing |
-| **Total** | **148** | **✅ All Passing** |
+| **Total** | **167** | **✅ All Passing** |
 
 ## Design Principles
 
@@ -91,13 +89,17 @@ if (data.kind === 'object') {
    - `operation()` - throws on error
    - `tryOperation()` - returns null/false on error
 
-2. **Backend Agnostic**: Current implementation uses Node.js APIs, but designed to dispatch to:
+2. **Sync/Async Dual APIs**: I/O operations provide both (see [ASYNC-SYNC-DESIGN.md](./ASYNC-SYNC-DESIGN.md)):
+   - `operation()` / `tryOperation()` - synchronous (blocking)
+   - `asyncOperation()` / `tryAsyncOperation()` - asynchronous (Promise-based)
+
+3. **Backend Agnostic**: Current implementation uses Node.js APIs, but designed to dispatch to:
    - Haxe backend → `haxe.*` stdlib
    - C++ backend → custom implementations
 
-3. **TypeScript Idioms**: Feels natural to TypeScript developers while being GoodScript-compliant
+4. **TypeScript Idioms**: Feels natural to TypeScript developers while being GoodScript-compliant
 
-4. **Ownership Ready**: APIs designed to support `own<T>`, `share<T>`, `use<T>` annotations
+5. **Ownership Ready**: APIs designed to support `own<T>`, `share<T>`, `use<T>` annotations
 
 ## Development
 

@@ -2,11 +2,18 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
- * Directory operations with dual error handling pattern.
+ * Directory operations with async/sync dual API pattern.
+ * 
+ * Default operations are asynchronous (non-blocking, Promise-based).
+ * Synchronous operations use 'sync' prefix (blocking).
  */
 export class Directory {
+  // ============================================================
+  // EXISTS (Sync-only - no blocking benefit from async)
+  // ============================================================
+
   /**
-   * Check if directory exists.
+   * Check if directory exists. (Synchronous only)
    */
   static exists(dirPath: string): boolean {
     try {
@@ -16,21 +23,49 @@ export class Directory {
     }
   }
 
+  // ============================================================
+  // CREATE
+  // ============================================================
+
   /**
-   * Create directory. Throws on error.
+   * Create directory. Non-blocking, rejects on error.
    * Creates parent directories as needed.
    */
-  static create(dirPath: string): void {
-    if (!Directory.tryCreate(dirPath)) {
+  static async create(dirPath: string): Promise<void> {
+    const success = await Directory.tryCreate(dirPath);
+    if (!success) {
       throw new Error(`Failed to create directory: ${dirPath}`);
     }
   }
 
   /**
-   * Create directory. Returns false on error.
+   * Create directory. Non-blocking, returns false on error.
    * Creates parent directories as needed.
    */
-  static tryCreate(dirPath: string): boolean {
+  static async tryCreate(dirPath: string): Promise<boolean> {
+    try {
+      await fs.promises.mkdir(dirPath, { recursive: true });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Create directory. Blocks, throws on error.
+   * Creates parent directories as needed.
+   */
+  static syncCreate(dirPath: string): void {
+    if (!Directory.trySyncCreate(dirPath)) {
+      throw new Error(`Failed to create directory: ${dirPath}`);
+    }
+  }
+
+  /**
+   * Create directory. Blocks, returns false on error.
+   * Creates parent directories as needed.
+   */
+  static trySyncCreate(dirPath: string): boolean {
     try {
       fs.mkdirSync(dirPath, { recursive: true });
       return true;
@@ -39,19 +74,52 @@ export class Directory {
     }
   }
 
+  // ============================================================
+  // REMOVE
+  // ============================================================
+
   /**
-   * Remove directory. Throws on error.
+   * Remove directory. Non-blocking, rejects on error.
    */
-  static remove(dirPath: string, recursive: boolean = false): void {
-    if (!Directory.tryRemove(dirPath, recursive)) {
+  static async remove(dirPath: string, recursive: boolean = false): Promise<void> {
+    const success = await Directory.tryRemove(dirPath, recursive);
+    if (!success) {
       throw new Error(`Failed to remove directory: ${dirPath}`);
     }
   }
 
   /**
-   * Remove directory. Returns false on error.
+   * Remove directory. Non-blocking, returns false on error.
    */
-  static tryRemove(dirPath: string, recursive: boolean = false): boolean {
+  static async tryRemove(dirPath: string, recursive: boolean = false): Promise<boolean> {
+    try {
+      if (!Directory.exists(dirPath)) {
+        return false;
+      }
+      if (recursive) {
+        await fs.promises.rm(dirPath, { recursive: true });
+      } else {
+        await fs.promises.rmdir(dirPath);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Remove directory. Blocks, throws on error.
+   */
+  static syncRemove(dirPath: string, recursive: boolean = false): void {
+    if (!Directory.trySyncRemove(dirPath, recursive)) {
+      throw new Error(`Failed to remove directory: ${dirPath}`);
+    }
+  }
+
+  /**
+   * Remove directory. Blocks, returns false on error.
+   */
+  static trySyncRemove(dirPath: string, recursive: boolean = false): boolean {
     try {
       if (!Directory.exists(dirPath)) {
         return false;
@@ -67,12 +135,16 @@ export class Directory {
     }
   }
 
+  // ============================================================
+  // LIST
+  // ============================================================
+
   /**
-   * List directory contents. Throws on error.
+   * List directory contents. Non-blocking, rejects on error.
    * Returns array of filenames (not full paths).
    */
-  static list(dirPath: string): Array<string> {
-    const result = Directory.tryList(dirPath);
+  static async list(dirPath: string): Promise<Array<string>> {
+    const result = await Directory.tryList(dirPath);
     if (result === null) {
       throw new Error(`Failed to list directory: ${dirPath}`);
     }
@@ -80,10 +152,34 @@ export class Directory {
   }
 
   /**
-   * List directory contents. Returns null on error.
+   * List directory contents. Non-blocking, returns null on error.
    * Returns array of filenames (not full paths).
    */
-  static tryList(dirPath: string): Array<string> | null {
+  static async tryList(dirPath: string): Promise<Array<string> | null> {
+    try {
+      return await fs.promises.readdir(dirPath);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * List directory contents. Blocks, throws on error.
+   * Returns array of filenames (not full paths).
+   */
+  static syncList(dirPath: string): Array<string> {
+    const result = Directory.trySyncList(dirPath);
+    if (result === null) {
+      throw new Error(`Failed to list directory: ${dirPath}`);
+    }
+    return result;
+  }
+
+  /**
+   * List directory contents. Blocks, returns null on error.
+   * Returns array of filenames (not full paths).
+   */
+  static trySyncList(dirPath: string): Array<string> | null {
     try {
       return fs.readdirSync(dirPath);
     } catch {
@@ -91,19 +187,23 @@ export class Directory {
     }
   }
 
+  // ============================================================
+  // LIST PATHS
+  // ============================================================
+
   /**
-   * List directory contents with full paths. Throws on error.
+   * List directory contents with full paths. Non-blocking, rejects on error.
    */
-  static listPaths(dirPath: string): Array<string> {
-    const entries = Directory.list(dirPath);
+  static async listPaths(dirPath: string): Promise<Array<string>> {
+    const entries = await Directory.list(dirPath);
     return entries.map(entry => path.join(dirPath, entry));
   }
 
   /**
-   * List directory contents with full paths. Returns null on error.
+   * List directory contents with full paths. Non-blocking, returns null on error.
    */
-  static tryListPaths(dirPath: string): Array<string> | null {
-    const entries = Directory.tryList(dirPath);
+  static async tryListPaths(dirPath: string): Promise<Array<string> | null> {
+    const entries = await Directory.tryList(dirPath);
     if (entries === null) {
       return null;
     }
@@ -111,10 +211,52 @@ export class Directory {
   }
 
   /**
-   * List only files in directory (exclude subdirectories). Throws on error.
+   * List directory contents with full paths. Blocks, throws on error.
    */
-  static listFiles(dirPath: string): Array<string> {
-    const entries = Directory.listPaths(dirPath);
+  static syncListPaths(dirPath: string): Array<string> {
+    const entries = Directory.syncList(dirPath);
+    return entries.map(entry => path.join(dirPath, entry));
+  }
+
+  /**
+   * List directory contents with full paths. Blocks, returns null on error.
+   */
+  static trySyncListPaths(dirPath: string): Array<string> | null {
+    const entries = Directory.trySyncList(dirPath);
+    if (entries === null) {
+      return null;
+    }
+    return entries.map(entry => path.join(dirPath, entry));
+  }
+
+  // ============================================================
+  // LIST FILES
+  // ============================================================
+
+  /**
+   * List only files in directory (exclude subdirectories). Non-blocking, rejects on error.
+   */
+  static async listFiles(dirPath: string): Promise<Array<string>> {
+    const entries = await Directory.listPaths(dirPath);
+    const filtered: Array<string> = [];
+    for (const entry of entries) {
+      try {
+        const stats = await fs.promises.stat(entry);
+        if (stats.isFile()) {
+          filtered.push(entry);
+        }
+      } catch {
+        // Skip entries that can't be stat'd
+      }
+    }
+    return filtered;
+  }
+
+  /**
+   * List only files in directory (exclude subdirectories). Blocks, throws on error.
+   */
+  static syncListFiles(dirPath: string): Array<string> {
+    const entries = Directory.syncListPaths(dirPath);
     return entries.filter(entry => {
       try {
         return fs.statSync(entry).isFile();
@@ -124,11 +266,34 @@ export class Directory {
     });
   }
 
+  // ============================================================
+  // LIST DIRECTORIES
+  // ============================================================
+
   /**
-   * List only subdirectories in directory (exclude files). Throws on error.
+   * List only subdirectories in directory (exclude files). Non-blocking, rejects on error.
    */
-  static listDirectories(dirPath: string): Array<string> {
-    const entries = Directory.listPaths(dirPath);
+  static async listDirectories(dirPath: string): Promise<Array<string>> {
+    const entries = await Directory.listPaths(dirPath);
+    const filtered: Array<string> = [];
+    for (const entry of entries) {
+      try {
+        const stats = await fs.promises.stat(entry);
+        if (stats.isDirectory()) {
+          filtered.push(entry);
+        }
+      } catch {
+        // Skip entries that can't be stat'd
+      }
+    }
+    return filtered;
+  }
+
+  /**
+   * List only subdirectories in directory (exclude files). Blocks, throws on error.
+   */
+  static syncListDirectories(dirPath: string): Array<string> {
+    const entries = Directory.syncListPaths(dirPath);
     return entries.filter(entry => {
       try {
         return fs.statSync(entry).isDirectory();
