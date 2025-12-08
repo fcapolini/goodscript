@@ -486,7 +486,7 @@ All GoodScript restrictions produce errors with codes `GS101` through `GS127`. T
 **Example error**:
 ```
 Error GS106: "==" operator is forbidden - use "==="
-  at example.gs:5:7
+  at example-gs.ts:5:7
 ```
 
 ## Migration Guide

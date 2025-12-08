@@ -22,7 +22,7 @@ GoodScript uses **ES modules** for code organization, following TypeScript/JavaS
 ### Imports and Exports
 
 ```typescript
-// math.gs - Named exports
+// math-gs.ts - Named exports
 export function add(a: number, b: number): number {
   return a + b;
 }
@@ -33,7 +33,7 @@ export class Calculator {
   compute(): number { return 0; }
 }
 
-// main.gs - Import specific names
+// main-gs.ts - Import specific names
 import { add, PI } from './math.js';
 
 // Import with alias
@@ -64,7 +64,7 @@ await import(path);  // Error GS127
 - **Relative imports**: `./math.js`, `../utils/helper.js`
 - **Package imports**: `@goodscript/stdlib/array`, `mylib`
 - **File extensions**: Use `.js` in import paths (TypeScript convention)
-- **Index files**: `./utils` resolves to `./utils/index.gs`
+- **Index files**: `./utils` resolves to `./utils/index-gs.ts`
 
 ### Cross-Module Types
 

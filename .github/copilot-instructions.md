@@ -35,9 +35,9 @@ TypeScript Source
     ↓
 [Phase 4] Optimizer → SSA, constant folding, DCE
     ↓
-[Phase 5] Codegen → C++ (GC or ownership mode) or TypeScript
+[Phase 5] Codegen → C++ (GC or ownership mode), TypeScript, or Haxe (multi-target)
     ↓
-[Phase 6] Binary Compilation → Zig compiler (native binaries)
+[Phase 6] Binary Compilation → Zig compiler (native binaries) or Haxe compiler (JVM/C#/Python/etc.)
 ```
 
 ### Key Files
@@ -52,6 +52,8 @@ TypeScript Source
 - `compiler/src/optimizer/optimizer.ts` - Phase 4: IR optimization passes
 - `compiler/src/backend/cpp/codegen.ts` - Phase 5: C++ code generator
 - `compiler/src/backend/cpp/zig-compiler.ts` - Phase 6: Zig compiler integration
+- `compiler/src/backend/haxe/codegen.ts` - Phase 5: Haxe code generator (future)
+- `compiler/src/backend/haxe/compiler.ts` - Phase 6: Haxe compiler integration (future)
 
 ### Documentation
 
@@ -89,19 +91,19 @@ Type signatures are canonicalized for efficient checking (see `signatures.ts`).
 ## Module System
 
 - **ES modules**: Standard `import`/`export` syntax
-- **Per-module compilation**: Each `.gs` file → separate output file
+- **Per-module compilation**: Each `-gs.ts` file → separate output file
 - **Incremental builds**: Only rebuild changed modules
 - **Module resolution**: Relative paths, package imports, index files
-- **C++ output**: Modules → namespaces (e.g., `src/math.gs` → `namespace goodscript::math`)
+- **C++ output**: Modules → namespaces (e.g., `src/math-gs.ts` → `namespace goodscript::math`)
 - **Cross-module ownership**: `own<T>` transfers, `share<T>` shares freely
 
 ```typescript
-// math.gs
+// math-gs.ts
 export function add(a: number, b: number): number {
   return a + b;
 }
 
-// main.gs
+// main-gs.ts
 import { add } from './math.js';
 console.log(add(1, 2));
 ```
@@ -270,9 +272,9 @@ zig c++ build/main.o build/mps.o build/pcre2.o -o myapp    # Link
 
 **CLI Examples**:
 ```bash
-gsc --target cpp --compile src/main.gs -o myapp       # Compile to native binary
-gsc --target cpp --compile --triple wasm32-wasi src/main.gs  # Compile to WebAssembly
-gsc --target cpp src/main.gs                          # Generate C++ only (no compilation)
+gsc --target cpp --compile src/main-gs.ts -o myapp       # Compile to native binary
+gsc --target cpp --compile --triple wasm32-wasi src/main-gs.ts  # Compile to WebAssembly
+gsc --target cpp src/main-gs.ts                          # Generate C++ only (no compilation)
 ```
 
 **Implementation**: `src/codegen/zig.ts` (future)
@@ -333,7 +335,7 @@ pnpm --filter @goodscript/compiler build
 
 ```typescript
 // Spawn worker
-const worker = new Worker('./worker.gs');
+const worker = new Worker('./worker-gs.ts');
 
 // Send message (JSON string)
 worker.postMessage(JSON.stringify({ data: [1, 2, 3] }));
@@ -353,8 +355,9 @@ worker.onmessage = (event) => {
 
 1. **CLI tool**: Command-line interface for compilation
 2. **Runtime library**: Core runtime support (workers, async, etc.)
-3. **Standard library**: Port existing standard library packages
-4. **IDE support**: LSP server, syntax highlighting
+3. **Standard library**: Leverage Haxe's cross-platform APIs for initial implementation
+4. **Haxe backend**: Multi-target adapter (JVM, C#, Python, etc.) - enables broad platform support
+5. **IDE support**: LSP server, syntax highlighting
 
 **Note**: Source maps (C++ #line directives) and tsconfig.json integration are already implemented.
 
@@ -370,6 +373,8 @@ worker.onmessage = (event) => {
 - **Two IR levels**: AST-level (`IRExpression`) for lowering, SSA-level (`IRExpr`) for analysis
 - **IRBlock structure**: `{ id, instructions, terminator }` - terminators handle control flow
 - **Variable tracking**: SSA version numbers (`IRVariable.version`) for dataflow analysis
+- **Haxe backend**: Implementation detail for multi-target support (JVM, C#, Python, etc.) - GC-only mode
+- **Standard library design**: Aligned with Haxe's cross-platform APIs for maximum portability
 
 ## Quick Reference
 

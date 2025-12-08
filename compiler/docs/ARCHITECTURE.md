@@ -11,14 +11,14 @@ The GoodScript compiler is a multi-phase compiler that transforms TypeScript sou
 GoodScript uses **ES modules** for code organization, matching TypeScript/JavaScript conventions:
 
 ```typescript
-// math.gs - Export declarations
+// math-gs.ts - Export declarations
 export function add(a: number, b: number): number {
   return a + b;
 }
 
 export const PI = 3.14159;
 
-// main.gs - Import and use
+// main-gs.ts - Import and use
 import { add, PI } from './math.js';
 console.log(add(1, 2));
 ```
@@ -27,8 +27,8 @@ console.log(add(1, 2));
 
 - **Relative imports**: `./math.js`, `../utils/helper.js`
 - **Package imports**: `@goodscript/stdlib`, `mylib`
-- **Extensions**: `.gs` files, resolved like TypeScript (`.js` extension in imports)
-- **Index files**: `./utils` resolves to `./utils/index.gs`
+- **Extensions**: `-gs.ts` and `-gs.tsx` files, resolved like TypeScript (`.js` extension in imports)
+- **Index files**: `./utils` resolves to `./utils/index-gs.ts`
 
 ### Compilation Strategy
 
@@ -53,8 +53,8 @@ gsc --target js src/
 Generates one `.js`/`.ts` file per module:
 ```
 src/
-  math.gs → dist/math.js
-  main.gs → dist/main.js
+  math-gs.ts → dist/math.js
+  main-gs.ts → dist/main.js
 ```
 
 Standard ES modules, works with Node.js, Deno, browsers.
@@ -67,19 +67,19 @@ gsc --target cpp src/
 Generates header/source pairs:
 ```
 src/
-  math.gs → build/math.hpp + build/math.cpp
-  main.gs → build/main.cpp
+  math-gs.ts → build/math.hpp + build/math.cpp
+  main-gs.ts → build/main.cpp
 ```
 
 **Module → Namespace mapping**:
 ```cpp
-// math.gs exports
+// math-gs.ts exports
 namespace goodscript::math {
   double add(double a, double b);
   constexpr double PI = 3.14159;
 }
 
-// main.gs imports
+// main-gs.ts imports
 #include "math.hpp"
 using namespace goodscript;
 
@@ -181,7 +181,8 @@ Source Code (TypeScript)
    Optimized IR
          ↓
   [Phase 5: Codegen] ──┬─ C++ Backend
-                       └─ TypeScript Backend
+                       ├─ TypeScript Backend
+                       └─ Haxe Backend (Multi-Target Adapter)
          ↓
    Output Code
 ```
@@ -501,9 +502,9 @@ Uses C++ `#line` directives to map generated code back to original GoodScript:
 
 namespace goodscript::math {
 
-#line 5 "src/math.gs"
+#line 5 "src/math-gs.ts"
 double add(double a, double b) {
-#line 6 "src/math.gs"
+#line 6 "src/math-gs.ts"
   return a + b;
 }
 
@@ -512,23 +513,23 @@ double add(double a, double b) {
 
 **Compilation with debug info**:
 ```bash
-gsc --target cpp --source-maps src/math.gs
+gsc --target cpp --source-maps src/math-gs.ts
 g++ -g build/math.cpp  # -g includes DWARF debug info
 ```
 
 **Debugging experience**:
 ```bash
 $ gdb ./myapp
-(gdb) break src/math.gs:6
-Breakpoint 1 at 0x401234: file src/math.gs, line 6.
+(gdb) break src/math-gs.ts:6
+Breakpoint 1 at 0x401234: file src/math-gs.ts, line 6.
 
 (gdb) run
-Breakpoint 1, goodscript::math::add (a=1, b=2) at src/math.gs:6
+Breakpoint 1, goodscript::math::add (a=1, b=2) at src/math-gs.ts:6
 6       return a + b;
 
 (gdb) backtrace
-#0  goodscript::math::add (a=1, b=2) at src/math.gs:6
-#1  main () at src/main.gs:10
+#0  goodscript::math::add (a=1, b=2) at src/math-gs.ts:6
+#1  main () at src/main-gs.ts:10
 ```
 
 Debuggers (GDB, LLDB, Visual Studio) show GoodScript file paths and line numbers, not generated C++.
@@ -538,7 +539,7 @@ Debuggers (GDB, LLDB, Visual Studio) show GoodScript file paths and line numbers
 Generates standard `.js.map` files for browser/Node.js debugging:
 
 ```bash
-gsc --target js --source-maps src/math.gs
+gsc --target js --source-maps src/math-gs.ts
 # Generates: build/math.js + build/math.js.map
 ```
 
@@ -546,7 +547,7 @@ gsc --target js --source-maps src/math.gs
 ```json
 {
   "version": 3,
-  "sources": ["../../src/math.gs"],
+  "sources": ["../../src/math-gs.ts"],
   "sourcesContent": ["export function add(a: number, b: number) { ... }"],
   "mappings": "AAAA,OAAO,SAAS,GAAG,CAAC...",
   "names": ["add", "a", "b"]
@@ -560,6 +561,196 @@ Browser dev tools and Node.js automatically use source maps - stack traces and b
 - Phase 5 (Codegen): 
   - C++: Emit `#line` directives
   - JS: Generate `.js.map` using source-map library
+
+#### Haxe Backend (Multi-Target Adapter)
+
+**Target**: Haxe (GC-only)
+
+**Purpose**: Strategic adapter for cross-platform compilation to targets without dedicated GoodScript backends.
+
+**Supported Platforms** (via Haxe):
+- **JVM**: Java bytecode for enterprise environments
+- **C#**: Unity game engine, .NET ecosystem
+- **Python**: Data science, ML, scripting
+- **PHP**: Web servers, WordPress
+- **HashLink**: High-performance VM for games
+- **Lua**: Game scripting, embedded systems
+- **Flash/AIR**: Legacy platform support
+- And more...
+
+**Design Philosophy**:
+
+Haxe is an **implementation detail**, not a user-facing feature. Users see:
+```bash
+gsc --target jvm src/main-gs.ts    # Compiles to JVM bytecode
+gsc --target csharp src/main-gs.ts # Compiles to C#
+gsc --target python src/main-gs.ts # Compiles to Python
+```
+
+Internally, the compiler:
+1. Generates Haxe code from IR
+2. Invokes Haxe compiler with appropriate target flag
+3. Returns final output (no `.hx` files visible to user)
+
+**Memory Management**:
+- **GC-only**: All Haxe targets use garbage collection
+- No ownership mode support (Haxe has no smart pointer equivalents)
+- `own<T>`, `share<T>`, `use<T>` → regular Haxe references
+- Ownership analyzer runs in GC mode (cycles allowed, warnings only)
+
+**Type Mapping**:
+
+| GoodScript | Haxe | Notes |
+|------------|------|-------|
+| `number` | `Float` | IEEE 754 double |
+| `integer` | `Int` | 32-bit signed |
+| `integer53` | `haxe.Int64` | 64-bit (truncated to 53 bits for JS compat) |
+| `string` | `String` | UTF-8 strings |
+| `boolean` | `Bool` | true/false |
+| `void` | `Void` | No return value |
+| `own<T>` | `T` | GC handles ownership |
+| `share<T>` | `T` | GC handles sharing |
+| `use<T>` | `T` | All references are safe (GC) |
+| Array | `Array<T>` | Dynamic arrays |
+| Object | `{}` / class | Structural typing via `typedef` |
+| Function | `(A, B) -> R` | First-class functions |
+
+**Module System**:
+```typescript
+// math-gs.ts
+export function add(a: number, b: number): number {
+  return a + b;
+}
+```
+
+Generates Haxe:
+```haxe
+// goodscript.math.Math
+package goodscript.math;
+
+class Math {
+  public static function add(a: Float, b: Float): Float {
+    return a + b;
+  }
+}
+```
+
+**Standard Library Implications**:
+
+The Haxe backend significantly influences GoodScript's standard library design:
+
+1. **Haxe Standard Library as Foundation**: Instead of reinventing the wheel, GoodScript's stdlib can be a thin wrapper around Haxe's proven cross-platform APIs
+
+2. **Cross-Platform Guarantees**: By aligning with Haxe's abstractions, we ensure stdlib works identically on all targets
+
+3. **Example - File I/O**:
+   ```typescript
+   // GoodScript stdlib (wraps Haxe sys.io.File)
+   import { File } from '@goodscript/io';
+   
+   const content = File.readText('data.txt');
+   File.writeText('output.txt', content);
+   ```
+   
+   Compiles to:
+   - **C++**: Direct file operations (custom implementation)
+   - **JVM/C#/Python/etc.**: `sys.io.File.getContent()` / `saveContent()` (Haxe stdlib)
+
+4. **Target-Specific Extensions**: Stdlib can expose platform-specific APIs when targeting specific backends:
+   ```typescript
+   // Only available when compiling to JVM
+   import { JavaInterop } from '@goodscript/platform/jvm';
+   
+   const list = JavaInterop.createArrayList();
+   ```
+
+**Benefits**:
+- **Leverage Haxe's maturity**: 15+ years of cross-platform battle-testing
+- **Reduced maintenance**: One stdlib implementation → many targets
+- **Community resources**: Access Haxe's package ecosystem (Haxelib)
+- **Proven abstractions**: File I/O, networking, threads, etc. already work everywhere
+- **Faster time-to-market**: Focus on C++ backend optimization, get other platforms "for free"
+
+**Compilation Flags**:
+
+The Haxe backend always compiles in strict mode for maximum type safety and performance:
+
+```bash
+haxe -D nullSafety -D no-dynamic --main Main -jvm output.jar
+```
+
+Key flags:
+- **`-D nullSafety`**: Strict null checking (non-nullable by default, `Null<T>` for nullable)
+- **`-D no-dynamic`**: Disallows `Dynamic` type, forces static typing
+- **Target flag**: `-jvm`, `-cs`, `-python`, `-php`, etc.
+
+**Type Safety Alignment**:
+
+GoodScript's restrictions map perfectly to Haxe's strict mode:
+
+| GoodScript | Haxe Strict Mode |
+|------------|------------------|
+| No `any` type (GS109) | `-D no-dynamic` disallows `Dynamic` |
+| Explicit null handling | `-D nullSafety` enforces null checks |
+| `string` (non-null) | `String` (non-nullable in strict mode) |
+| `string \| null` | `Null<String>` |
+
+**Performance Benefits**:
+
+Strict compilation flags eliminate runtime overhead on statically-typed targets:
+- **JVM**: No boxing/unboxing for dynamic types, full JIT optimization
+- **C#**: Direct CLR types, no `object` casting overhead
+- **Native targets**: No vtable lookups for dynamic dispatch
+
+**Error Handling Pattern**:
+
+GoodScript stdlib uses a **dual API pattern** for consistent error handling:
+
+```typescript
+// Every fallible operation provides two variants:
+
+// 1. Throwing variant (default, ergonomic)
+const content = File.readText('data.txt');  // Throws on error
+
+// 2. Non-throwing variant (opt-in)
+const content = File.tryReadText('data.txt');  // Returns null on error
+if (content !== null) {
+  process(content);
+}
+```
+
+**Implementation**:
+```typescript
+export class File {
+  // Throwing variant (wraps tryReadText)
+  static readText(path: string): string {
+    const result = this.tryReadText(path);
+    if (result === null) {
+      throw new Error(`Failed to read file: ${path}`);
+    }
+    return result;
+  }
+  
+  // Non-throwing variant (backend-specific)
+  static tryReadText(path: string): string | null {
+    // Haxe: maps to sys.io.File.getContent() (Null<String>)
+    // C++: custom implementation
+  }
+}
+```
+
+**Benefits**:
+- **Backend alignment**: Haxe's nullable returns map directly to `tryX()` methods
+- **User choice**: Use throwing API for simple cases, `try*` for expected errors
+- **Performance**: C++ can optimize `tryX()` without exception overhead
+- **Consistency**: Same pattern across all stdlib modules
+
+**Implementation Status**: 🚧 Planned (after CLI, runtime, initial stdlib)
+
+**Implementation Files** (future):
+- `src/backend/haxe/codegen.ts` - Haxe code generator
+- `src/backend/haxe/compiler.ts` - Haxe compiler integration
+- `src/backend/haxe/types.ts` - Type mapping utilities
 
 #### C++ Compilation with Zig
 
@@ -577,7 +768,7 @@ GoodScript uses **Zig as the C++ compiler** for the final compilation stage. Thi
 
 ```bash
 # Compile to native binary (uses Zig internally)
-gsc --target cpp --compile src/main.gs -o myapp
+gsc --target cpp --compile src/main-gs.ts -o myapp
 
 # Cross-compile to different targets
 gsc --target cpp --compile --triple x86_64-linux-gnu src/main.gs
@@ -672,8 +863,8 @@ GoodScript uses a **single-threaded execution model** with **worker-based parall
 ### Worker API
 
 ```typescript
-// main.gs - Spawn a worker
-const worker = new Worker('./worker.gs');
+// main-gs.ts - Spawn a worker
+const worker = new Worker('./worker-gs.ts');
 
 // Send message (JSON string)
 worker.postMessage(JSON.stringify({ type: 'process', data: [1, 2, 3] }));
@@ -1506,9 +1697,9 @@ The compiler is designed for extensibility:
 
 - **Incremental builds** - Only recompile changed modules
 - **Watch mode** - Continuous compilation
-- **Source maps** - Map compiled code to original
+- **Haxe backend** - Multi-target adapter (JVM, C#, Python, etc.)
+- **Haxe-based stdlib** - Cross-platform standard library leveraging Haxe's APIs
 - **LLVM backend** - Alternative to C++ for better optimization
-- **WebAssembly target** - Direct WASM generation
 - **Hot reload** - Development server with live updates
 
 ---
