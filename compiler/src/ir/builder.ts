@@ -204,8 +204,8 @@ export const expr = {
     return { kind: 'variable', name, version, type };
   },
 
-  fieldAccess(object: IRExpr, field: string, type: IRType): IRExpr {
-    return { kind: 'member', object, member: field, type };
+  fieldAccess(object: IRExpr, field: string, type: IRType, optional?: boolean): IRExpr {
+    return { kind: 'member', object, member: field, optional, type };
   },
 };
 
@@ -233,8 +233,8 @@ export const exprs = {
     return { kind: 'call', callee, arguments: args, type, location };
   },
 
-  memberAccess(object: IRExpression, member: string, type: IRType, location?: { line: number; column: number }): IRExpression {
-    return { kind: 'memberAccess', object, member, type, location };
+  memberAccess(object: IRExpression, member: string, type: IRType, optional?: boolean, location?: { line: number; column: number }): IRExpression {
+    return { kind: 'memberAccess', object, member, optional, type, location };
   },
 
   indexAccess(object: IRExpression, index: IRExpression, type: IRType, location?: { line: number; column: number }): IRExpression {

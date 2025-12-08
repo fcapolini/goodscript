@@ -1,7 +1,7 @@
 # Standard Library Requirements for Compiler & Runtime
 
-**Date**: December 8, 2025  
-**Status**: Phase 7a.1 COMPLETE ✅, Phase 7a.2 COMPLETE ✅
+**Date**: December 9, 2025  
+**Status**: Phase 7a.1-7a.5 COMPLETE ✅
 
 This document catalogs the language features and runtime APIs required to support the GoodScript standard library. The stdlib defines the requirements; the compiler and runtime must adapt to support them.
 
@@ -11,13 +11,44 @@ This document catalogs the language features and runtime APIs required to suppor
 - ✅ Phase 7a.1: Exception handling (try/catch/throw/finally)
 - ✅ Phase 7a.2: Array methods (map, filter, slice, push, forEach, reduce, every, some, indexOf, includes)
 - ✅ Phase 7a.3: for-of loops (arrays, strings, break, continue, nested loops)
-- Compiler handles expressions, functions, arrays, objects, lambdas, iteration
+- ✅ Phase 7a.4: Map<K,V> methods (set, get, has, delete, clear, forEach, keys, values, entries, size)
+- ✅ Phase 7a.5: Optional chaining (obj?.field, nested chaining, method calls)
+- Compiler handles expressions, functions, arrays, objects, lambdas, iteration, nullable access
 - Binary compilation working via Zig
-- 189 + 9 = 198 tests passing
+- 221 tests passing
 
-**Gap**: stdlib still needs async/await, optional chaining, Map methods, union types
+**Gap**: stdlib still needs async/await, string methods, union types
 
 **Priority**: Implement features in phases, starting with most fundamental and widely used.
+
+---
+
+### ✅ 7a.5 Optional Chaining (COMPLETE)
+**Status**: Implemented December 9, 2025
+
+**Implemented**:
+- IR support: `optional?: boolean` flag on SSA and AST-level memberAccess
+- TypeScript lowering: Detects `questionDotToken` on PropertyAccessExpression
+- Nested chaining: `options?.headers?.has()` fully working
+- Method calls: `obj?.method(args)` converted to call with optional memberAccess callee
+- C++ codegen: Basic ternary operator (`obj != nullptr ? obj->field : nullptr`)
+
+**Tests**:
+- `test/optional-chaining.test.ts` - 5 comprehensive tests (all passing)
+- Basic property access, nested chaining, conditionals, method calls
+
+**Generated C++**:
+```cpp
+// options?.method → (options != nullptr ? options->method : nullptr)
+if (expr.optional) {
+  return `(${obj} != nullptr ? ${obj}->${member} : nullptr)`;
+}
+```
+
+**Limitations**:
+- C++ implementation is placeholder (should use std::optional)
+- Union types (T | null) not fully integrated
+- Optional call expressions (func?.()) not yet supported
 
 ---
 

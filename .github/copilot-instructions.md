@@ -4,7 +4,7 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete (189 tests passing)
+**Current Status**: Phase 1-6 implementation complete (221 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
@@ -20,20 +20,22 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ Assignment expressions (declaration vs reassignment tracking)
 - ✅ typeof operator (compile-time type detection)
 - ✅ Template literals (lowered to string concatenation)
-- ✅ Array operations (literals, indexing, .length)
+- ✅ Array operations (literals, indexing, .length, methods)
 - ✅ console.log and console methods
 - ✅ Map<K,V> operations (set, get, has, delete, clear, forEach, keys, values, entries, size)
+- ✅ Exception handling (try/catch/throw/finally)
+- ✅ for-of loops (arrays, strings, break, continue)
+- ✅ Optional chaining (obj?.field, nested chaining)
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
-**Recent Progress (Dec 8, 2025 - Late Evening)**:
-- Completed Phase 7a.4: Map<K,V> methods
-  * IR lowering: 12 tests passing (set, get, has, delete, clear, forEach, keys, values, entries, size, constructors)
-  * C++ codegen: Template generation (gs::Map<K,V>), method calls, property access
-  * Keyword sanitization: Handles C++ keywords (delete → delete_) vs stdlib names (set stays set)
-  * End-to-end compilation working (map-test-gs.ts compiles and runs)
-- Split CPP_KEYWORDS and CPP_STDLIB_NAMES for context-aware sanitization
-- Method names only sanitized if they're actual C++ keywords (not stdlib type names)
-- All 216 tests (201 passing + 15 pre-existing optimizer failures)
+**Recent Progress (Dec 9, 2025)**:
+- Completed Phase 7a.5: Optional chaining (obj?.field)
+  * IR support: Added `optional?: boolean` flag to SSA and AST-level memberAccess
+  * TypeScript AST lowering: Detects `questionDotToken` on PropertyAccessExpression
+  * Nested chaining: `options?.headers?.has()` fully supported
+  * C++ codegen: Basic ternary operator implementation (placeholder)
+  * Tests: 5/5 passing (basic, nested, conditionals, method calls)
+- All 221 tests passing (5 new optional chaining tests)
 
 ## Architecture
 

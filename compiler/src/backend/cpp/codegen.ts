@@ -647,11 +647,20 @@ export class CppCodegen {
         
         // In C++, some properties are actually methods that need ()
         // Map.size, Array.length are methods in our C++ runtime
-        if (member === 'size' || member === 'length') {
-          return `${obj}.${member}()`;
+        const isMethodProperty = member === 'size' || member === 'length';
+        const accessExpr = isMethodProperty ? `${member}()` : member;
+        
+        // Optional chaining: obj?.field becomes (obj != nullptr ? obj->field : nullptr)
+        // For now, we'll use a simpler approach: obj != nullptr && obj.field
+        // This requires the type to be nullable (T | null)
+        if (expr.optional) {
+          // Generate ternary expression: (obj != nullptr ? obj->field : defaultValue)
+          // For pointers, use -> operator; for nullable types, need std::optional
+          // Simplified: assume non-pointer types for now
+          return `(${obj} != nullptr ? ${obj}->${accessExpr} : nullptr)`;
         }
         
-        return `${obj}.${member}`;
+        return `${obj}.${accessExpr}`;
       }
       
       case 'indexAccess': {

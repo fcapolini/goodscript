@@ -320,6 +320,7 @@ export interface IRMemberAccess {
   kind: 'member';
   object: IRExpr;
   member: string;
+  optional?: boolean;  // true for optional chaining (obj?.field)
   type: IRType;
   source?: SourceLocation;
 }
@@ -428,7 +429,7 @@ export type IRExpression =
   | { kind: 'binary'; operator: BinaryOp; left: IRExpression; right: IRExpression; type: IRType; location?: { line: number; column: number } }
   | { kind: 'unary'; operator: UnaryOp; operand: IRExpression; type: IRType; location?: { line: number; column: number } }
   | { kind: 'call'; callee: IRExpression; arguments: IRExpression[]; type: IRType; location?: { line: number; column: number } }
-  | { kind: 'memberAccess'; object: IRExpression; member: string; type: IRType; location?: { line: number; column: number } }
+  | { kind: 'memberAccess'; object: IRExpression; member: string; optional?: boolean; type: IRType; location?: { line: number; column: number } }
   | { kind: 'indexAccess'; object: IRExpression; index: IRExpression; type: IRType; location?: { line: number; column: number } }
   | { kind: 'assignment'; left: IRExpression; right: IRExpression; type: IRType; location?: { line: number; column: number } }
   | { kind: 'arrayLiteral'; elements: IRExpression[]; type: IRType; location?: { line: number; column: number } }

@@ -360,6 +360,7 @@ export class IRLowering {
           kind: 'memberAccess',
           object: this.convertExprToExpression(ssaExpr.object),
           member: ssaExpr.member,
+          optional: ssaExpr.optional,  // preserve optional chaining flag
           type: ssaExpr.type,
         };
       
@@ -734,12 +735,13 @@ export class IRLowering {
       return this.lowerCallExpr(node, sourceFile);
     }
 
-    // Property access
+    // Property access (including optional chaining)
     if (ts.isPropertyAccessExpression(node)) {
       const object = this.lowerExpr(node.expression, sourceFile);
       const property = node.name.text;
       const type = this.inferType(node);
-      return expr.fieldAccess(object, property, type);
+      const optional = !!node.questionDotToken;  // true for optional chaining (obj?.field)
+      return expr.fieldAccess(object, property, type, optional);
     }
 
     // Array literal
@@ -870,15 +872,18 @@ export class IRLowering {
   }
 
   private lowerCallExpr(node: ts.CallExpression, sourceFile: ts.SourceFile): IRExpr {
-    // Check if this is a method call (obj.method(args))
+    // Check if this is a method call (obj.method(args) or obj?.method(args))
     if (ts.isPropertyAccessExpression(node.expression)) {
       const object = this.lowerExpr(node.expression.expression, sourceFile);
       const method = node.expression.name.text;
+      const optional = !!node.expression.questionDotToken;  // preserve optional chaining
       const args = node.arguments.map(arg => this.lowerExpr(arg, sourceFile));
       const type = this.inferType(node);
       
-      // Create a method call expression
-      return expr.methodCall(object, method, args, type);
+      // Convert to regular call with fieldAccess callee (preserves optional flag)
+      const memberType = this.inferType(node.expression);
+      const callee = expr.fieldAccess(object, method, memberType, optional);
+      return expr.call(callee, args, type);
     }
     
     // Regular function call
