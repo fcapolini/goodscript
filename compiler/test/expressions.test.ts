@@ -43,17 +43,19 @@ describe('Conditional Expressions', () => {
     expect(decl.kind).toBe('function');
     if (decl.kind !== 'function') throw new Error('Expected function');
     
-    const terminator = decl.body.terminator;
-    expect(terminator.kind).toBe('return');
-    if (terminator.kind !== 'return') throw new Error('Expected return');
+    if (!('statements' in decl.body)) throw new Error('Expected IRFunctionBody with statements');
+    const statements = decl.body.statements;
+    const lastStmt = statements[statements.length - 1];
+    expect(lastStmt.kind).toBe('return');
+    if (lastStmt.kind !== 'return') throw new Error('Expected return');
     
-    expect(terminator.value).toBeDefined();
-    expect(terminator.value!.kind).toBe('conditional');
+    expect(lastStmt.value).toBeDefined();
+    expect(lastStmt.value!.kind).toBe('conditional');
     
-    if (terminator.value!.kind === 'conditional') {
-      expect(terminator.value!.condition.kind).toBe('binary');
-      expect(terminator.value!.whenTrue.kind).toBe('variable');
-      expect(terminator.value!.whenFalse.kind).toBe('variable');
+    if (lastStmt.value!.kind === 'conditional') {
+      expect(lastStmt.value!.condition.kind).toBe('binary');
+      expect(lastStmt.value!.thenExpr.kind).toBe('identifier');
+      expect(lastStmt.value!.elseExpr.kind).toBe('identifier');
     }
   });
 
@@ -67,13 +69,15 @@ describe('Conditional Expressions', () => {
     const decl = ir.modules[0].declarations[0];
     if (decl.kind !== 'function') throw new Error('Expected function');
     
-    const terminator = decl.body.terminator;
-    if (terminator.kind !== 'return') throw new Error('Expected return');
+    if (!('statements' in decl.body)) throw new Error('Expected IRFunctionBody with statements');
+    const statements = decl.body.statements;
+    const lastStmt = statements[statements.length - 1];
+    if (lastStmt.kind !== 'return') throw new Error('Expected return');
     
-    expect(terminator.value!.kind).toBe('conditional');
-    if (terminator.value!.kind === 'conditional') {
-      // The whenFalse should be another conditional
-      expect(terminator.value!.whenFalse.kind).toBe('conditional');
+    expect(lastStmt.value!.kind).toBe('conditional');
+    if (lastStmt.value!.kind === 'conditional') {
+      // The elseExpr should be another conditional
+      expect(lastStmt.value!.elseExpr.kind).toBe('conditional');
     }
   });
 });
@@ -89,11 +93,13 @@ describe('Parenthesized Expressions', () => {
     const decl = ir.modules[0].declarations[0];
     if (decl.kind !== 'function') throw new Error('Expected function');
     
-    const terminator = decl.body.terminator;
-    if (terminator.kind !== 'return') throw new Error('Expected return');
+    if (!('statements' in decl.body)) throw new Error('Expected IRFunctionBody with statements');
+    const statements = decl.body.statements;
+    const lastStmt = statements[statements.length - 1];
+    if (lastStmt.kind !== 'return') throw new Error('Expected return');
     
     // Parentheses should be transparent in the IR
-    expect(terminator.value!.kind).toBe('binary');
+    expect(lastStmt.value!.kind).toBe('binary');
   });
 });
 
@@ -108,15 +114,17 @@ describe('New Expressions', () => {
     const decl = ir.modules[0].declarations[0];
     if (decl.kind !== 'function') throw new Error('Expected function');
     
-    const terminator = decl.body.terminator;
-    if (terminator.kind !== 'return') throw new Error('Expected return');
+    if (!('statements' in decl.body)) throw new Error('Expected IRFunctionBody with statements');
+    const statements = decl.body.statements;
+    const lastStmt = statements[statements.length - 1];
+    if (lastStmt.kind !== 'return') throw new Error('Expected return');
     
-    expect(terminator.value!.kind).toBe('new');
-    if (terminator.value!.kind === 'new') {
-      expect(terminator.value!.className).toBe('Point');
-      expect(terminator.value!.args).toHaveLength(2);
-      expect(terminator.value!.args[0].kind).toBe('literal');
-      expect(terminator.value!.args[1].kind).toBe('literal');
+    expect(lastStmt.value!.kind).toBe('newExpression');
+    if (lastStmt.value!.kind === 'newExpression') {
+      expect(lastStmt.value!.className).toBe('Point');
+      expect(lastStmt.value!.arguments).toHaveLength(2);
+      expect(lastStmt.value!.arguments[0].kind).toBe('literal');
+      expect(lastStmt.value!.arguments[1].kind).toBe('literal');
     }
   });
 });

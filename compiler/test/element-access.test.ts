@@ -45,18 +45,24 @@ describe('Element Access', () => {
     expect(decl.kind).toBe('function');
     if (decl.kind !== 'function') throw new Error('Expected function');
     
-    const terminator = decl.body.terminator;
-    expect(terminator.kind).toBe('return');
-    if (terminator.kind !== 'return') throw new Error('Expected return');
+    // Check function body (AST-level IR has statements array)
+    if (!('statements' in decl.body)) throw new Error('Expected IRFunctionBody with statements');
+    const statements = decl.body.statements;
+    expect(statements.length).toBeGreaterThan(0);
     
-    expect(terminator.value).toBeDefined();
-    expect(terminator.value!.kind).toBe('index');
+    // Last statement should be return
+    const lastStmt = statements[statements.length - 1];
+    expect(lastStmt.kind).toBe('return');
+    if (lastStmt.kind !== 'return') throw new Error('Expected return');
     
-    if (terminator.value!.kind === 'index') {
-      expect(terminator.value!.object.kind).toBe('variable');
-      expect(terminator.value!.index.kind).toBe('literal');
-      if (terminator.value!.index.kind === 'literal') {
-        expect(terminator.value!.index.value).toBe(0);
+    expect(lastStmt.value).toBeDefined();
+    expect(lastStmt.value!.kind).toBe('indexAccess');
+    
+    if (lastStmt.value!.kind === 'indexAccess') {
+      expect(lastStmt.value!.object.kind).toBe('identifier');
+      expect(lastStmt.value!.index.kind).toBe('literal');
+      if (lastStmt.value!.index.kind === 'literal') {
+        expect(lastStmt.value!.index.value).toBe(0);
       }
     }
   });
@@ -71,15 +77,17 @@ describe('Element Access', () => {
     const decl = ir.modules[0].declarations[0];
     if (decl.kind !== 'function') throw new Error('Expected function');
     
-    const terminator = decl.body.terminator;
-    if (terminator.kind !== 'return') throw new Error('Expected return');
+    if (!('statements' in decl.body)) throw new Error('Expected IRFunctionBody with statements');
+    const statements = decl.body.statements;
+    const lastStmt = statements[statements.length - 1];
+    if (lastStmt.kind !== 'return') throw new Error('Expected return');
     
-    expect(terminator.value!.kind).toBe('index');
-    if (terminator.value!.kind === 'index') {
-      expect(terminator.value!.object.kind).toBe('variable');
-      expect(terminator.value!.index.kind).toBe('variable');
-      if (terminator.value!.index.kind === 'variable') {
-        expect(terminator.value!.index.name).toBe('i');
+    expect(lastStmt.value!.kind).toBe('indexAccess');
+    if (lastStmt.value!.kind === 'indexAccess') {
+      expect(lastStmt.value!.object.kind).toBe('identifier');
+      expect(lastStmt.value!.index.kind).toBe('identifier');
+      if (lastStmt.value!.index.kind === 'identifier') {
+        expect(lastStmt.value!.index.name).toBe('i');
       }
     }
   });

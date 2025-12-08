@@ -47,17 +47,15 @@ export abstract class IRVisitor<T = void> {
     }
   }
 
-  visitFunction(func: IRFunctionDecl): T {
-    return this.visitBlock(func.body);
+  visitFunction(_func: IRFunctionDecl): T {
+    // TODO: Add proper AST-level statement visiting
+    // For now, skip AST-level function bodies
+    return undefined as T;
   }
 
-  visitClass(cls: IRClassDecl): T {
-    for (const method of cls.methods) {
-      this.visitBlock(method.body);
-    }
-    if (cls.constructor) {
-      this.visitBlock(cls.constructor.body);
-    }
+  visitClass(_cls: IRClassDecl): T {
+    // TODO: Add proper AST-level statement visiting
+    // For now, skip AST-level method bodies
     return undefined as T;
   }
 

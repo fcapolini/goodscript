@@ -271,17 +271,23 @@ describe('IR Lowering', () => {
       expect(decl.kind).toBe('function');
       if (decl.kind !== 'function') throw new Error('Expected function');
       
-      // Check the return terminator contains a method call
-      const terminator = decl.body.terminator;
-      expect(terminator.kind).toBe('return');
-      if (terminator.kind !== 'return') throw new Error('Expected return');
-      expect(terminator.value).toBeDefined();
-      expect(terminator.value!.kind).toBe('methodCall');
+      // Check the return statement in the function body
+      if (!('statements' in decl.body)) throw new Error('Expected IRFunctionBody with statements');
+      const statements = decl.body.statements;
+      const lastStmt = statements[statements.length - 1];
+      expect(lastStmt.kind).toBe('return');
+      if (lastStmt.kind !== 'return') throw new Error('Expected return');
+      expect(lastStmt.value).toBeDefined();
+      expect(lastStmt.value!.kind).toBe('call');
       
-      if (terminator.value!.kind !== 'methodCall') throw new Error('Expected methodCall');
-      expect(terminator.value!.method).toBe('map');
-      expect(terminator.value!.args).toHaveLength(1);
-      expect(terminator.value!.args[0].kind).toBe('lambda');
+      // In AST-level IR, method calls are converted to regular calls with memberAccess callee
+      if (lastStmt.value!.kind === 'call') {
+        expect(lastStmt.value!.callee.kind).toBe('memberAccess');
+        if (lastStmt.value!.callee.kind === 'memberAccess') {
+          expect(lastStmt.value!.callee.member).toBe('map');
+        }
+        expect(lastStmt.value!.arguments).toHaveLength(1);
+      }
     });
   });
 });

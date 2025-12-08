@@ -177,8 +177,21 @@ export class TypeSignatureGenerator {
         result = types.join('|');
         break;
 
+      case 'intersection':
+        const intersectionTypes = type.types.map(t => this.getTypeString(t)).sort();
+        result = intersectionTypes.join('&');
+        break;
+
+      case 'typeAlias':
+        result = this.getTypeString(type.aliasedType);
+        break;
+
       case 'nullable':
         result = `${this.getTypeString(type.inner)}?`;
+        break;
+
+      default:
+        result = 'unknown';
         break;
     }
 

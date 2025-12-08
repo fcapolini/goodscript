@@ -18,6 +18,9 @@ import type {
   IRType,
   IRParam,
   SourceLocation,
+  IRFunctionBody,
+  IRStatement,
+  IRExpression,
 } from '../../ir/types.js';
 import { Ownership, PrimitiveType } from '../../ir/types.js';
 import { types } from '../../ir/builder.js';
@@ -337,7 +340,7 @@ export class CppCodegen {
     
     this.emit(`${returnType} ${this.sanitizeIdentifier(func.name)}(${params}) {`);
     this.indent++;
-    this.generateBlockStatements(func.body);
+    this.generateFunctionBody(func.body);
     this.indent--;
     this.emit('}');
   }
@@ -364,7 +367,7 @@ export class CppCodegen {
       }
       
       this.indent++;
-      this.generateBlockStatements(cls.constructor.body);
+      this.generateFunctionBody(cls.constructor.body);
       this.indent--;
       this.emit('}');
       this.emit('');
@@ -378,7 +381,7 @@ export class CppCodegen {
       
       this.emit(`${returnType} ${staticMod}${this.sanitizeIdentifier(method.name)}(${params}) {`);
       this.indent++;
-      this.generateBlockStatements(method.body);
+      this.generateFunctionBody(method.body);
       this.indent--;
       this.emit('}');
       
@@ -392,14 +395,301 @@ export class CppCodegen {
     this.emit(`const ${this.generateCppType(constDecl.type)} ${this.sanitizeIdentifier(constDecl.name)} = ${this.generateExpr(constDecl.value)};`);
   }
 
-  private generateBlockStatements(block: IRBlock): void {
+  /**
+   * Generate C++ code from AST-level function body
+   */
+  private generateFunctionBody(body: IRFunctionBody | IRBlock): void {
+    // Support both old IRBlock format (from tests) and new IRFunctionBody format
+    if ('statements' in body) {
+      // New AST-level format
+      for (const stmt of body.statements) {
+        this.generateStatement(stmt);
+      }
+    } else {
+      // Old SSA-level format (IRBlock)
+      for (const inst of body.instructions) {
+        this.generateInstruction(inst);
+      }
+      this.generateTerminator(body.terminator);
+    }
+  }
+
+  /**
+   * Generate C++ code from AST-level statement
+   */
+  private generateStatement(stmt: IRStatement): void {
+    switch (stmt.kind) {
+      case 'variableDeclaration':
+        this.emit(`auto ${this.sanitizeIdentifier(stmt.name)} = ${stmt.initializer ? this.generateExpression(stmt.initializer) : 'nullptr'};`);
+        break;
+      
+      case 'assignment':
+        this.emit(`${this.sanitizeIdentifier(stmt.target)} = ${this.generateExpression(stmt.value)};`);
+        break;
+      
+      case 'expressionStatement':
+        // Skip void expressions (like console.log) which generate nullptr
+        const exprCode = this.generateExpression(stmt.expression);
+        if (exprCode !== 'nullptr') {
+          this.emit(`${exprCode};`);
+        }
+        break;
+      
+      case 'return':
+        if (stmt.value) {
+          this.emit(`return ${this.generateExpression(stmt.value)};`);
+        } else {
+          this.emit('return;');
+        }
+        break;
+      
+      case 'throw':
+        this.emit(`throw ${this.generateExpression(stmt.expression)};`);
+        break;
+      
+      case 'try': {
+        this.emit('try {');
+        this.indent++;
+        for (const tryStmt of stmt.tryBlock) {
+          this.generateStatement(tryStmt);
+        }
+        this.indent--;
+        this.emit('}');
+        
+        if (stmt.catchClause) {
+          const catchVar = this.sanitizeIdentifier(stmt.catchClause.variable);
+          // In C++, catch exceptions by const reference, not by value or unique_ptr
+          // Always catch gs::Error& for GoodScript exceptions
+          this.emit(`catch (const gs::Error& ${catchVar}) {`);
+          this.indent++;
+          for (const catchStmt of stmt.catchClause.body) {
+            this.generateStatement(catchStmt);
+          }
+          this.indent--;
+          this.emit('}');
+        }
+        
+        if (stmt.finallyBlock) {
+          // C++ doesn't have finally, but we can use RAII or scope guards
+          // For now, just emit the code after the try-catch
+          // TODO: Implement proper finally semantics with scope guard
+          this.emit('// finally block (executed after try-catch)');
+          this.emit('{');
+          this.indent++;
+          for (const finallyStmt of stmt.finallyBlock) {
+            this.generateStatement(finallyStmt);
+          }
+          this.indent--;
+          this.emit('}');
+        }
+        break;
+      }
+      
+      case 'if':
+        this.emit(`if (${this.generateExpression(stmt.condition)}) {`);
+        this.indent++;
+        for (const thenStmt of stmt.thenBranch) {
+          this.generateStatement(thenStmt);
+        }
+        this.indent--;
+        if (stmt.elseBranch) {
+          this.emit('} else {');
+          this.indent++;
+          for (const elseStmt of stmt.elseBranch) {
+            this.generateStatement(elseStmt);
+          }
+          this.indent--;
+        }
+        this.emit('}');
+        break;
+      
+      case 'while':
+        this.emit(`while (${this.generateExpression(stmt.condition)}) {`);
+        this.indent++;
+        for (const bodyStmt of stmt.body) {
+          this.generateStatement(bodyStmt);
+        }
+        this.indent--;
+        this.emit('}');
+        break;
+      
+      case 'for':
+        // Build for loop header as single string
+        let forHeader = 'for (';
+        if (stmt.initializer) {
+          // Generate initializer inline (no semicolon, will be added by for syntax)
+          const savedIndent = this.indent;
+          this.indent = 0;
+          const savedOutput = this.output;
+          this.output = [];
+          this.generateStatement(stmt.initializer);
+          const initCode = this.output.join('').trim().replace(/;$/, '');
+          this.output = savedOutput;
+          this.indent = savedIndent;
+          forHeader += initCode + '; ';
+        } else {
+          forHeader += '; ';
+        }
+        if (stmt.condition) {
+          forHeader += this.generateExpression(stmt.condition) + '; ';
+        } else {
+          forHeader += '; ';
+        }
+        if (stmt.increment) {
+          forHeader += this.generateExpression(stmt.increment);
+        }
+        forHeader += ') {';
+        this.emit(forHeader);
+        this.indent++;
+        for (const bodyStmt of stmt.body) {
+          this.generateStatement(bodyStmt);
+        }
+        this.indent--;
+        this.emit('}');
+        break;
+      
+      case 'block':
+        this.emit('{');
+        this.indent++;
+        for (const blockStmt of stmt.statements) {
+          this.generateStatement(blockStmt);
+        }
+        this.indent--;
+        this.emit('}');
+        break;
+    }
+  }
+
+  /**
+   * Generate C++ code from AST-level expression
+   */
+  private generateExpression(expr: IRExpression): string {
+    switch (expr.kind) {
+      case 'literal':
+        if (expr.value === null) {
+          return 'nullptr';
+        } else if (typeof expr.value === 'string') {
+          return `gs::String("${expr.value.replace(/"/g, '\\"')}")`;
+        } else if (typeof expr.value === 'boolean') {
+          return expr.value ? 'true' : 'false';
+        } else {
+          return String(expr.value);
+        }
+      
+      case 'identifier':
+        return this.sanitizeIdentifier(expr.name);
+      
+      case 'binary': {
+        const left = this.generateExpression(expr.left);
+        const right = this.generateExpression(expr.right);
+        return `(${left} ${expr.operator} ${right})`;
+      }
+      
+      case 'unary': {
+        const operand = this.generateExpression(expr.operand);
+        if (expr.operator === 'typeof') {
+          // typeof in GoodScript returns a string
+          return `gs::typeOf(${operand})`;
+        }
+        return `(${expr.operator}${operand})`;
+      }
+      
+      case 'call': {
+        const callee = this.generateExpression(expr.callee);
+        const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
+        return `${callee}(${args})`;
+      }
+      
+      case 'memberAccess':
+        return `${this.generateExpression(expr.object)}.${this.sanitizeIdentifier(expr.member)}`;
+      
+      case 'indexAccess': {
+        const obj = this.generateExpression(expr.object);
+        const index = this.generateExpression(expr.index);
+        return `${obj}[static_cast<int>(${index})]`;
+      }
+      
+      case 'assignment': {
+        const left = this.generateExpression(expr.left);
+        const right = this.generateExpression(expr.right);
+        return `(${left} = ${right})`;
+      }
+      
+      case 'arrayLiteral': {
+        const elements = expr.elements.map((el: IRExpression) => this.generateExpression(el)).join(', ');
+        // Infer element type from the array type
+        const arrayType = expr.type;
+        if (arrayType.kind === 'array') {
+          const elementType = this.generateCppType(arrayType.element);
+          return `gs::Array<${elementType}>{ ${elements} }`;
+        }
+        return `gs::Array<double>{ ${elements} }`;
+      }
+      
+      case 'objectLiteral': {
+        // For now, return a placeholder
+        // TODO: Implement struct generation for object literals
+        return '/* object literal not yet implemented */';
+      }
+      
+      case 'newExpression': {
+        const className = this.sanitizeIdentifier(expr.className);
+        const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
+        // For Error and other built-in classes, use gs:: namespace
+        if (className === 'Error' || className === 'TypeError' || className === 'RangeError') {
+          return `gs::${className}(${args})`;
+        }
+        return `${className}(${args})`;
+      }
+      
+      case 'conditional': {
+        const cond = this.generateExpression(expr.condition);
+        const thenExpr = this.generateExpression(expr.thenExpr);
+        const elseExpr = this.generateExpression(expr.elseExpr);
+        return `(${cond} ? ${thenExpr} : ${elseExpr})`;
+      }
+      
+      case 'lambda': {
+        // Generate C++ lambda
+        const params = expr.params.map(p => `${this.generateCppType(p.type)} ${this.sanitizeIdentifier(p.name)}`).join(', ');
+        const returnType = expr.type.kind === 'function' ? this.generateCppType(expr.type.returnType) : 'auto';
+        
+        // Generate lambda body (IRBlock format)
+        const savedOutput = this.output;
+        const savedIndent = this.indent;
+        this.output = [];
+        this.indent = 0;
+        
+        for (const inst of expr.body.instructions) {
+          this.generateInstruction(inst);
+        }
+        this.generateTerminator(expr.body.terminator);
+        
+        const bodyCode = this.output.join('\n');
+        this.output = savedOutput;
+        this.indent = savedIndent;
+        
+        return `[](${params}) -> ${returnType} {\n${bodyCode}\n}`;
+      }
+
+      default:
+        return '/* unknown expression */';
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  /**
+   * Generate block statements (SSA-level IR)
+   */
+  // @ts-expect-error - Temporarily unused during AST-level IR transition
+  private generateBlockStatements(_block: IRBlock): void {
     // Generate instructions
-    for (const inst of block.instructions) {
+    for (const inst of _block.instructions) {
       this.generateInstruction(inst);
     }
 
     // Generate terminator
-    this.generateTerminator(block.terminator);
+    this.generateTerminator(_block.terminator);
   }
 
   private generateInstruction(inst: IRInstruction): void {
@@ -671,6 +961,10 @@ export class CppCodegen {
       case 'nullable':
         // Nullable in C++ is std::optional or raw pointer
         return `std::optional<${this.generateCppType(type.inner)}>`;
+      case 'intersection':
+      case 'typeAlias':
+        // These should be resolved during type checking, but provide fallback
+        throw new Error(`Unexpected unresolved type: ${type.kind}`);
     }
   }
 
@@ -749,15 +1043,12 @@ export class CppCodegen {
   private preScanDeclaration(decl: IRDeclaration): void {
     switch (decl.kind) {
       case 'function':
-        this.preScanBlock(decl.body);
+        // TODO: Pre-scan AST-level statements
+        // For now, skip since we're using AST-level function bodies
         break;
       case 'class':
-        if (decl.constructor) {
-          this.preScanBlock(decl.constructor.body);
-        }
-        for (const method of decl.methods) {
-          this.preScanBlock(method.body);
-        }
+        // TODO: Pre-scan AST-level statements
+        // For now, skip since we're using AST-level function bodies
         break;
       case 'const':
         this.preScanExpr(decl.value);

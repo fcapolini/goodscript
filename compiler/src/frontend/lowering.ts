@@ -5,9 +5,9 @@
  */
 
 import ts from 'typescript';
-import type { IRModule, IRProgram, IRDeclaration, IRExpr, IRType, IRBlock, IRInstruction, IRTerminator } from '../ir/types.js';
+import type { IRModule, IRProgram, IRDeclaration, IRExpr, IRType, IRBlock, IRInstruction, IRTerminator, IRStatement, IRFunctionBody, IRExpression } from '../ir/types.js';
 import { BinaryOp, UnaryOp, Ownership, PrimitiveType } from '../ir/types.js';
-import { IRBuilder, types, expr } from '../ir/builder.js';
+import { IRBuilder, types, expr, stmts } from '../ir/builder.js';
 
 export class IRLowering {
   private builder = new IRBuilder();
@@ -86,7 +86,7 @@ export class IRLowering {
     }));
 
     const returnType = this.lowerTypeNode(node.type, sourceFile);
-    const body = node.body ? this.lowerBlock(node.body, sourceFile) : this.builder.block([], { kind: 'return', value: undefined });
+    const body = node.body ? this.lowerFunctionBody(node.body, sourceFile) : this.builder.functionBody([]);
 
     return {
       kind: 'function',
@@ -102,7 +102,7 @@ export class IRLowering {
     if (!name) return null;
 
     const fields: Array<{ name: string; type: IRType; isReadonly: boolean }> = [];
-    const methods: Array<{ name: string; params: { name: string; type: IRType }[]; returnType: IRType; body: IRBlock; isStatic: boolean }> = [];
+    const methods: Array<{ name: string; params: { name: string; type: IRType }[]; returnType: IRType; body: IRFunctionBody; isStatic: boolean }> = [];
 
     for (const member of node.members) {
       if (ts.isPropertyDeclaration(member)) {
@@ -125,7 +125,7 @@ export class IRLowering {
     };
   }
 
-  private lowerMethod(node: ts.MethodDeclaration, sourceFile: ts.SourceFile): { name: string; params: { name: string; type: IRType }[]; returnType: IRType; body: IRBlock; isStatic: boolean } | null {
+  private lowerMethod(node: ts.MethodDeclaration, sourceFile: ts.SourceFile): { name: string; params: { name: string; type: IRType }[]; returnType: IRType; body: IRFunctionBody; isStatic: boolean } | null {
     const name = node.name.getText(sourceFile);
     
     const params = node.parameters.map(p => ({
@@ -134,7 +134,7 @@ export class IRLowering {
     }));
 
     const returnType = this.lowerTypeNode(node.type, sourceFile);
-    const body = node.body ? this.lowerBlock(node.body, sourceFile) : this.builder.block([], { kind: 'return', value: undefined });
+    const body = node.body ? this.lowerFunctionBody(node.body, sourceFile) : this.builder.functionBody([]);
     const isStatic = node.modifiers?.some(m => m.kind === ts.SyntaxKind.StaticKeyword) ?? false;
 
     return {
@@ -146,6 +146,264 @@ export class IRLowering {
     };
   }
 
+  /**
+   * Lower a function body to AST-level IR statements
+   */
+  private lowerFunctionBody(node: ts.Block, sourceFile: ts.SourceFile): IRFunctionBody {
+    const statements: IRStatement[] = [];
+    
+    for (const stmt of node.statements) {
+      const irStmt = this.lowerStatementAST(stmt, sourceFile);
+      if (irStmt) {
+        statements.push(irStmt);
+      }
+    }
+
+    return this.builder.functionBody(statements);
+  }
+
+  /**
+   * Lower a TypeScript statement to AST-level IR statement
+   */
+  private lowerStatementAST(node: ts.Statement, sourceFile: ts.SourceFile): IRStatement | null {
+    // Variable declaration
+    if (ts.isVariableStatement(node)) {
+      const decl = node.declarationList.declarations[0];
+      if (!decl) return null;
+
+      const name = decl.name.getText(sourceFile);
+      const type = this.lowerType(decl, sourceFile);
+      const initializer = decl.initializer ? this.lowerExpression(decl.initializer, sourceFile) : undefined;
+      
+      // Mark this variable as declared
+      this.declaredVariables.add(name);
+
+      return stmts.variableDeclaration(name, type, initializer);
+    }
+
+    // Return statement
+    if (ts.isReturnStatement(node)) {
+      const value = node.expression ? this.lowerExpression(node.expression, sourceFile) : undefined;
+      return stmts.return(value);
+    }
+
+    // Throw statement
+    if (ts.isThrowStatement(node)) {
+      const expression = node.expression 
+        ? this.lowerExpression(node.expression, sourceFile) 
+        : { kind: 'literal' as const, value: null, type: types.void() };
+      return stmts.throw(expression);
+    }
+
+    // Try statement
+    if (ts.isTryStatement(node)) {
+      const tryBlock = node.tryBlock.statements.map(s => this.lowerStatementAST(s, sourceFile)).filter((s): s is IRStatement => s !== null);
+      
+      let catchClause: { variable: string; variableType: IRType; body: IRStatement[] } | undefined;
+      if (node.catchClause) {
+        const catchVar = node.catchClause.variableDeclaration?.name.getText(sourceFile) || 'error';
+        const catchVarType = types.class('Error', Ownership.Own); // TODO: Get actual type
+        const catchBody = node.catchClause.block.statements.map(s => this.lowerStatementAST(s, sourceFile)).filter((s): s is IRStatement => s !== null);
+        catchClause = {
+          variable: catchVar,
+          variableType: catchVarType,
+          body: catchBody,
+        };
+      }
+
+      const finallyBlock = node.finallyBlock 
+        ? node.finallyBlock.statements.map(s => this.lowerStatementAST(s, sourceFile)).filter((s): s is IRStatement => s !== null)
+        : undefined;
+
+      return stmts.try(tryBlock, catchClause, finallyBlock);
+    }
+
+    // Expression statement
+    if (ts.isExpressionStatement(node)) {
+      // Handle assignments specially (result = "value")
+      if (ts.isBinaryExpression(node.expression) && 
+          node.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+        const left = this.lowerExpr(node.expression.left, sourceFile);
+        const right = this.lowerExpression(node.expression.right, sourceFile);
+        
+        if (left.kind === 'variable') {
+          // Simple variable assignment
+          return {
+            kind: 'assignment',
+            target: left.name,
+            value: right,
+          };
+        }
+        // Fall through for complex assignments (property, index)
+      }
+      
+      const expression = this.lowerExpression(node.expression, sourceFile);
+      return stmts.expressionStatement(expression);
+    }
+
+    // If statement
+    if (ts.isIfStatement(node)) {
+      const condition = this.lowerExpression(node.expression, sourceFile);
+      const thenBranch = [this.lowerStatementAST(node.thenStatement, sourceFile)].filter((s): s is IRStatement => s !== null);
+      const elseBranch = node.elseStatement 
+        ? [this.lowerStatementAST(node.elseStatement, sourceFile)].filter((s): s is IRStatement => s !== null)
+        : undefined;
+      return stmts.if(condition, thenBranch, elseBranch);
+    }
+
+    // Block statement
+    if (ts.isBlock(node)) {
+      const blockStmts = node.statements.map(s => this.lowerStatementAST(s, sourceFile)).filter((s): s is IRStatement => s !== null);
+      return stmts.block(blockStmts);
+    }
+
+    return null;
+  }
+
+  /**
+   * Lower a TypeScript expression to AST-level IR expression
+   */
+  private lowerExpression(node: ts.Expression, sourceFile: ts.SourceFile): IRExpression {
+    // For now, delegate to lowerExpr and convert SSA IRExpr to AST IRExpression
+    // This is a temporary bridge - we'll eventually have separate implementations
+    const ssaExpr = this.lowerExpr(node, sourceFile);
+    return this.convertExprToExpression(ssaExpr);
+  }
+
+  /**
+   * Convert SSA-level IRExpr to AST-level IRExpression
+   * Temporary helper during transition period
+   */
+  private convertExprToExpression(ssaExpr: IRExpr): IRExpression {
+    switch (ssaExpr.kind) {
+      case 'literal':
+        return {
+          kind: 'literal',
+          value: ssaExpr.value,
+          type: ssaExpr.type,
+        };
+      
+      case 'variable':
+        return {
+          kind: 'identifier',
+          name: ssaExpr.name,
+          type: ssaExpr.type,
+        };
+      
+      case 'binary':
+        return {
+          kind: 'binary',
+          operator: ssaExpr.op,
+          left: this.convertExprToExpression(ssaExpr.left),
+          right: this.convertExprToExpression(ssaExpr.right),
+          type: ssaExpr.type,
+        };
+      
+      case 'unary':
+        return {
+          kind: 'unary',
+          operator: ssaExpr.op,
+          operand: this.convertExprToExpression(ssaExpr.operand),
+          type: ssaExpr.type,
+        };
+      
+      case 'callExpr':
+        return {
+          kind: 'call',
+          callee: this.convertExprToExpression(ssaExpr.callee),
+          arguments: ssaExpr.args.map((arg: IRExpr) => this.convertExprToExpression(arg)),
+          type: ssaExpr.type,
+        };
+      
+      case 'member':
+        return {
+          kind: 'memberAccess',
+          object: this.convertExprToExpression(ssaExpr.object),
+          member: ssaExpr.member,
+          type: ssaExpr.type,
+        };
+      
+      case 'index':
+        return {
+          kind: 'indexAccess',
+          object: this.convertExprToExpression(ssaExpr.object),
+          index: this.convertExprToExpression(ssaExpr.index),
+          type: ssaExpr.type,
+        };
+      
+      case 'array':
+        return {
+          kind: 'arrayLiteral',
+          elements: ssaExpr.elements.map((el: IRExpr) => this.convertExprToExpression(el)),
+          type: ssaExpr.type,
+        };
+      
+      case 'object':
+        return {
+          kind: 'objectLiteral',
+          properties: ssaExpr.properties.map((prop: { key: string; value: IRExpr }) => ({
+            key: prop.key,
+            value: this.convertExprToExpression(prop.value),
+          })),
+          type: ssaExpr.type,
+        };
+      
+      case 'new':
+        return {
+          kind: 'newExpression',
+          className: ssaExpr.className,
+          arguments: ssaExpr.args.map((arg: IRExpr) => this.convertExprToExpression(arg)),
+          type: ssaExpr.type,
+        };
+      
+      case 'conditional':
+        return {
+          kind: 'conditional',
+          condition: this.convertExprToExpression(ssaExpr.condition),
+          thenExpr: this.convertExprToExpression(ssaExpr.whenTrue),
+          elseExpr: this.convertExprToExpression(ssaExpr.whenFalse),
+          type: ssaExpr.type,
+        };
+      
+      case 'lambda':
+        // Lambda keeps its IRBlock body (SSA-level) even in AST context
+        // This is fine since lambdas are self-contained
+        return {
+          kind: 'lambda',
+          params: ssaExpr.params,
+          body: ssaExpr.body,
+          captures: ssaExpr.captures,
+          type: ssaExpr.type,
+        };
+      
+      case 'methodCall':
+        // Convert method call to regular call with memberAccess callee
+        return {
+          kind: 'call',
+          callee: {
+            kind: 'memberAccess',
+            object: this.convertExprToExpression(ssaExpr.object),
+            member: ssaExpr.method,
+            type: types.void(), // TODO: proper type for method reference
+          },
+          arguments: ssaExpr.args.map((arg: IRExpr) => this.convertExprToExpression(arg)),
+          type: ssaExpr.type,
+        };
+      
+      default:
+        // For other expression types, create a placeholder
+        return {
+          kind: 'literal',
+          value: null,
+          type: types.void(),
+        };
+    }
+  }
+
+  /**
+   * Lower SSA block (for backward compatibility)
+   * TODO: Phase out once we convert AST-level statements to SSA blocks
+   */
   private lowerBlock(node: ts.Block, sourceFile: ts.SourceFile): IRBlock {
     const instructions: IRInstruction[] = [];
     let terminator: IRTerminator = { kind: 'return', value: undefined };
@@ -156,6 +414,40 @@ export class IRLowering {
         const returnValue = stmt.expression ? this.lowerExpr(stmt.expression, sourceFile) : undefined;
         terminator = { kind: 'return', value: returnValue };
         break; // No more statements after return
+      }
+      
+      // Check if this is a throw statement
+      if (ts.isThrowStatement(stmt)) {
+        // For now, treat throw like return (terminates the block)
+        // In the future, this needs proper exception handling IR
+        if (stmt.expression) {
+          this.lowerExpr(stmt.expression, sourceFile); // Evaluate expression but don't use yet
+        }
+        // TODO: Add proper throw terminator or instruction
+        // For now, just skip the throw statement to prevent empty bodies
+        console.warn('Warning: throw statement not yet implemented in IR');
+        continue;
+      }
+      
+      // Check if this is a try statement
+      if (ts.isTryStatement(stmt)) {
+        // For now, lower the try block contents directly
+        // In the future, need proper exception handling IR
+        console.warn('Warning: try/catch statement not yet fully implemented in IR');
+        
+        // Lower try block
+        for (const tryStmt of stmt.tryBlock.statements) {
+          if (ts.isReturnStatement(tryStmt)) {
+            const returnValue = tryStmt.expression ? this.lowerExpr(tryStmt.expression, sourceFile) : undefined;
+            terminator = { kind: 'return', value: returnValue };
+            break;
+          }
+          const instr = this.lowerStatement(tryStmt, sourceFile);
+          if (instr) instructions.push(instr);
+        }
+        
+        // TODO: Handle catch clause and finally block properly
+        continue;
       }
       
       const instr = this.lowerStatement(stmt, sourceFile);

@@ -103,9 +103,17 @@ export interface IRFunctionDecl {
   name: string;
   params: IRParam[];
   returnType: IRType;
-  body: IRBlock;
+  body: IRFunctionBody | IRBlock;  // AST-level (new) or SSA-level (old, for tests)
   typeParams?: IRTypeParam[];
   source?: SourceLocation;
+}
+
+/**
+ * Function body containing AST-level statements
+ * This is an intermediate form before SSA conversion
+ */
+export interface IRFunctionBody {
+  statements: IRStatement[];
 }
 
 export interface IRClassDecl {
@@ -151,7 +159,7 @@ export interface IRMethod {
   name: string;
   params: IRParam[];
   returnType: IRType;
-  body: IRBlock;
+  body: IRFunctionBody;  // AST-level statements (before SSA conversion)
   isStatic: boolean;
 }
 
@@ -163,7 +171,7 @@ export interface IRMethodSignature {
 
 export interface IRConstructor {
   params: IRParam[];
-  body: IRBlock;
+  body: IRFunctionBody;  // AST-level statements (before SSA conversion)
 }
 
 export interface IRParam {
@@ -424,17 +432,23 @@ export type IRExpression =
   | { kind: 'indexAccess'; object: IRExpression; index: IRExpression; type: IRType; location?: { line: number; column: number } }
   | { kind: 'assignment'; left: IRExpression; right: IRExpression; type: IRType; location?: { line: number; column: number } }
   | { kind: 'arrayLiteral'; elements: IRExpression[]; type: IRType; location?: { line: number; column: number } }
-  | { kind: 'objectLiteral'; properties: Array<{ key: string; value: IRExpression }>; type: IRType; location?: { line: number; column: number } };
+  | { kind: 'objectLiteral'; properties: Array<{ key: string; value: IRExpression }>; type: IRType; location?: { line: number; column: number } }
+  | { kind: 'newExpression'; className: string; arguments: IRExpression[]; type: IRType; location?: { line: number; column: number } }
+  | { kind: 'conditional'; condition: IRExpression; thenExpr: IRExpression; elseExpr: IRExpression; type: IRType; location?: { line: number; column: number } }
+  | { kind: 'lambda'; params: IRParam[]; body: IRBlock; captures: Array<{ name: string; type: IRType }>; type: IRType; location?: { line: number; column: number } };
 
 /**
  * AST-level statements (before lowering to SSA)
  */
 export type IRStatement =
   | { kind: 'variableDeclaration'; name: string; variableType: IRType; initializer?: IRExpression; location?: { line: number; column: number } }
+  | { kind: 'assignment'; target: string; value: IRExpression; location?: { line: number; column: number } }
   | { kind: 'expressionStatement'; expression: IRExpression; location?: { line: number; column: number } }
   | { kind: 'return'; value?: IRExpression; location?: { line: number; column: number } }
   | { kind: 'if'; condition: IRExpression; thenBranch: IRStatement[]; elseBranch?: IRStatement[]; location?: { line: number; column: number } }
   | { kind: 'while'; condition: IRExpression; body: IRStatement[]; location?: { line: number; column: number } }
   | { kind: 'for'; initializer?: IRStatement; condition?: IRExpression; increment?: IRExpression; body: IRStatement[]; location?: { line: number; column: number } }
+  | { kind: 'try'; tryBlock: IRStatement[]; catchClause?: { variable: string; variableType: IRType; body: IRStatement[] }; finallyBlock?: IRStatement[]; location?: { line: number; column: number } }
+  | { kind: 'throw'; expression: IRExpression; location?: { line: number; column: number } }
   | { kind: 'block'; statements: IRStatement[]; location?: { line: number; column: number } };
 

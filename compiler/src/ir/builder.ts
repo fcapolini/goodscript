@@ -16,6 +16,7 @@ import type {
   UnaryOp,
   IRStatement,
   IRExpression,
+  IRFunctionBody,
 } from './types.js';
 import { PrimitiveType, Ownership } from './types.js';
 
@@ -25,7 +26,6 @@ import { PrimitiveType, Ownership } from './types.js';
 export class IRBuilder {
   private blockCounter = 0;
   private variableVersions = new Map<string, number>();
-
   /**
    * Create a new basic block
    */
@@ -34,6 +34,15 @@ export class IRBuilder {
       id: this.blockCounter++,
       instructions,
       terminator,
+    };
+  }
+
+  /**
+   * Create a function body (AST-level statements)
+   */
+  functionBody(statements: IRStatement[]): IRFunctionBody {
+    return {
+      statements,
     };
   }
 
@@ -329,6 +338,29 @@ export const stmts = {
     return {
       kind: 'block',
       statements,
+      location,
+    };
+  },
+
+  try(
+    tryBlock: IRStatement[],
+    catchClause?: { variable: string; variableType: IRType; body: IRStatement[] },
+    finallyBlock?: IRStatement[],
+    location?: { line: number; column: number }
+  ): IRStatement {
+    return {
+      kind: 'try',
+      tryBlock,
+      catchClause,
+      finallyBlock,
+      location,
+    };
+  },
+
+  throw(expression: IRExpression, location?: { line: number; column: number }): IRStatement {
+    return {
+      kind: 'throw',
+      expression,
       location,
     };
   },
