@@ -167,6 +167,90 @@ const numbers: own<Array<integer>> = [1, 2, 3];
 const cache: own<Map<string, Data>> = new Map();
 ```
 
+#### Array Semantics and JavaScript Compatibility
+
+GoodScript arrays follow JavaScript/TypeScript semantics with some important differences:
+
+**✅ Supported JavaScript Behaviors:**
+
+```typescript
+// Array literals
+const arr: number[] = [1, 2, 3];
+
+// Element access
+const x = arr[0];           // ✅ Returns 1
+
+// Out-of-bounds read (safe)
+const y = arr[999];         // ✅ Returns 0 (default value), no crash
+const z = arr[-1];          // ✅ Returns 0, no crash
+
+// Out-of-bounds write (auto-resize)
+arr[5] = 99;                // ✅ Auto-resizes: [1, 2, 3, 0, 0, 99]
+console.log(arr.length);    // 6
+
+// Length property assignment
+arr.length = 10;            // ✅ Extends array with default values
+arr.length = 2;             // ✅ Truncates to [1, 2]
+
+// Compound assignment on elements
+arr[0] += 5;                // ✅ Works: arr[0] = arr[0] + 5
+
+// Array methods
+arr.push(4);                // ✅ Adds element, returns new length
+arr.pop();                  // ✅ Removes last element
+arr[0] = arr[1] * 2;        // ✅ Assignment with expression
+```
+
+**⚠️ Sparse Arrays Not Supported:**
+
+JavaScript's sparse arrays (with "holes") are **not** implemented in GoodScript. 
+Out-of-bounds writes auto-fill gaps with **default values** (`0` for numbers, 
+`false` for booleans, etc.), not `undefined`.
+
+```typescript
+// JavaScript behavior (with holes):
+const jsArr = [];
+jsArr[5] = 99;
+console.log(jsArr);         // [<5 empty items>, 99]
+console.log(jsArr[2]);      // undefined
+console.log(jsArr.length);  // 6
+
+// GoodScript behavior (dense array):
+const gsArr: number[] = [];
+gsArr[5] = 99;
+console.log(gsArr);         // [0, 0, 0, 0, 0, 99]
+console.log(gsArr[2]);      // 0 (default value)
+console.log(gsArr.length);  // 6
+```
+
+**Rationale:** Sparse arrays complicate memory layout and iterator semantics. 
+Dense arrays with default values provide:
+- Predictable memory usage (no holes)
+- Faster iteration (no hole checking)
+- Simpler C++ implementation (contiguous storage)
+- Type-safe default values
+
+**Alternative for Sparse Data:** Use `Map<number, T>` for sparse numeric indices:
+
+```typescript
+// ❌ Don't use sparse arrays
+const sparse: number[] = [];
+sparse[1000000] = 1;  // Wastes 4MB+ memory!
+
+// ✅ Use Map for sparse data
+const sparse = new Map<number, number>();
+sparse.set(1000000, 1);  // O(1) space, O(1) lookup
+```
+
+**Out-of-Bounds Behavior Summary:**
+
+| Operation | JavaScript | GoodScript | Notes |
+|-----------|-----------|------------|-------|
+| `arr[999]` read | `undefined` | `0` (default) | Safe, no crash |
+| `arr[-1]` read | `undefined` | `0` (default) | Safe, no crash |
+| `arr[5] = x` write | Sparse array | Dense array | Auto-fills gaps |
+| Iteration | Skips holes | Iterates all | Includes defaults |
+
 ### Immutability
 
 GoodScript supports TypeScript's `readonly` modifier for shallow immutability:

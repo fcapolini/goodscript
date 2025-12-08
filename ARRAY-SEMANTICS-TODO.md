@@ -1,87 +1,86 @@
-# Array Semantics - Remaining Work
+# Array Semantics - Implementation Notes
 
-## Current Status ✅
+## ✅ Completed Features
 
-We've implemented:
+**Phase 1 - Assignment Semantics:**
 - ✅ Array element assignment: `arr[index] = value`
 - ✅ Property assignment: `arr.length = value`
 - ✅ Compound assignment: `arr[0] += 5`
 - ✅ Auto-resizing on out-of-bounds write
 - ✅ Runtime methods: `setLength()`, `set()`
 
-## Remaining JavaScript Semantics Gaps
+**Phase 2 - Safe Access:**
+- ✅ Out-of-bounds read safety (returns default value)
+- ✅ Negative index handling (returns default value)
+- ✅ Optional value support in console.log
+- ✅ Crash-free array access
 
-### 1. Out-of-Bounds Read Safety 🔴 CRITICAL
+## 📊 JavaScript Semantics Coverage
 
-**Problem:** `arr[5]` when arr.length=3 currently:
-- Returns `nullptr` 
-- Dereferencing `*arr[5]` causes segfault
+| Feature | JavaScript | GoodScript | Status |
+|---------|-----------|------------|--------|
+| Out-of-bounds read | `undefined` | `0` (default) | ✅ Safe |
+| Out-of-bounds write | Sparse array | Dense array | ✅ Works |
+| Negative index | `undefined` | `0` (default) | ✅ Safe |
+| `arr.length = n` | Truncate/extend | Same | ✅ Works |
+| `arr[i] += x` | Compound assign | Same | ✅ Works |
+| `pop()` on empty | `undefined` | Optional | ✅ Works |
+| Sparse arrays | Holes (undefined) | **Not supported** | ⚠️ By design |
 
-**JavaScript behavior:** Returns `undefined` (no crash)
+## ⚠️ Design Decision: No Sparse Arrays
 
-**Solutions:**
+**JavaScript sparse arrays:**
+```javascript
+const arr = [];
+arr[5] = 99;
+// Result: [<5 empty items>, 99]
+// arr[2] === undefined
+// arr.length === 6
+```
 
-#### Option A: Change IR type system (big change)
+**GoodScript dense arrays:**
 ```typescript
-// Array access returns T | undefined
-type IRIndexAccess = {
-  kind: 'index';
-  type: IRType;  // Should be nullable<element>
-}
-```
-Pros: Type-safe, matches JS semantics
-Cons: Every array access needs null check, breaks existing code
-
-#### Option B: Runtime helper with default value (pragmatic)
-```cpp
-// In C++ runtime
-template<typename T>
-T Array<T>::get_or_default(int index, T defaultValue = T{}) const {
-  if (index < 0 || index >= size()) return defaultValue;
-  return impl_[index];
-}
-```
-Codegen: `arr.get_or_default(5)` instead of `*arr[5]`
-
-Pros: No type system changes, safe by default
-Cons: Less efficient, doesn't match JS `undefined` exactly
-
-#### Option C: Bounds-checked access with exception
-```cpp
-T& Array<T>::at(int index) {
-  if (index < 0 || index >= size()) {
-    throw std::out_of_range("Array index out of bounds");
-  }
-  return impl_[index];
-}
-```
-Codegen: `arr.at(5)` instead of `*arr[5]`
-
-Pros: Clear error, prevents undefined behavior
-Cons: Exceptions are slow, doesn't match JS semantics
-
-**Recommendation:** Start with Option B for safety, migrate to Option A for correctness
-
-### 2. Optional Return Types Support 🟡 MEDIUM
-
-**Problem:** Methods like `pop()`, `shift()` return `std::optional<T>` but:
-- Can't console.log them
-- Can't use in expressions without unwrapping
-
-**Solution:**
-```cpp
-// Add console.log overload
-template<typename T>
-void log_impl(const std::optional<T>& value) {
-  if (value.has_value()) {
-    log_impl(*value);
-  } else {
-    std::cout << "undefined";
-  }
-}
+const arr: number[] = [];
+arr[5] = 99;
+// Result: [0, 0, 0, 0, 0, 99]
+// arr[2] === 0  (default value)
+// arr.length === 6
 ```
 
-### 3. Multi-Argument Array Methods 🟢 LOW
+**Rationale:**
+1. **Memory efficiency**: Sparse arrays would require either:
+   - Hash table (slower, complex iteration)
+   - Bit vector for holes (memory overhead, iteration complexity)
+   - Vector of optionals (2x memory, cache inefficiency)
+
+2. **Performance**: Dense arrays are faster:
+   - Contiguous memory layout
+   - No hole checking during iteration
+   - Better cache locality
+   - Simpler C++ implementation
+
+3. **Type safety**: Default values are type-safe:
+   - `0` for numbers
+   - `false` for booleans
+   - `""` for strings
+   - No `undefined` coercion edge cases
+
+4. **Alternative exists**: `Map<number, T>` for truly sparse data:
+   ```typescript
+   // ❌ Don't do this (wastes memory)
+   const sparse: number[] = [];
+   sparse[1000000] = 1;  // Allocates 4MB+
+   
+   // ✅ Use Map for sparse indices
+   const sparse = new Map<number, number>();
+   sparse.set(1000000, 1);  // O(1) space
+   ```
+
+**Documentation**: See LANGUAGE.md for user-facing documentation.
+
+## 🔧 Remaining Work (Lower Priority)
+
+### 1. Multi-Argument Array Methods 🟢 LOW
 
 **Problem:** JavaScript allows `arr.push(1, 2, 3)` but C++ only supports one element
 
@@ -96,30 +95,71 @@ int push(Args&&... elements) {
 }
 ```
 
-#### Initializer list:
+**Codegen challenge:** Need to detect variadic calls in lowering and generate 
+multiple push statements or expand arguments inline.
+
+**Priority:** Low - workaround is simple: `arr.push(1); arr.push(2); arr.push(3);`
+
+### 2. Performance Optimizations 🟢 LOW
+
+Future optimizations for known-safe access patterns:
+- Range analysis to eliminate bounds checks
+- Inline `get_or_default()` when provably safe
+- SIMD operations for bulk array operations
+
+**Priority:** Low - current implementation is correct and reasonably fast
+
+## 📝 Implementation Notes
+
+### Memory Layout
+
+**Ownership Mode:**
+- Uses `std::vector<T>` for dense storage
+- Auto-resizes with 1.5x growth factor
+- Fills new elements with `T{}` (default value)
+
+**GC Mode:**
+- Uses custom GC-allocated array
+- Optimized growth strategy (1.5x)
+- memcpy for POD types
+
+### Type-Specific Defaults
+
+| Type | Default Value | C++ Expression |
+|------|---------------|----------------|
+| `number` | `0` | `double{}` = `0.0` |
+| `integer` | `0` | `int{}` = `0` |
+| `boolean` | `false` | `bool{}` = `false` |
+| `string` | `""` | `String{}` = `""` |
+| Objects | `nullptr` | `T*{}` = `nullptr` |
+
+### Codegen Examples
+
+**Before (unsafe):**
 ```cpp
-int push(std::initializer_list<T> elements) {
-  for (const auto& elem : elements) {
-    impl_.push_back(elem);
-  }
-  return static_cast<int>(impl_.size());
-}
+auto val = *arr[5];  // Crashes if out of bounds!
 ```
 
-**Codegen challenge:** Need to detect variadic calls in lowering
+**After (safe):**
+```cpp
+auto val = arr.get_or_default(5);  // Returns 0.0 if out of bounds
+```
 
-## Implementation Priority
+**Write operations:**
+```cpp
+arr.set(5, 99);              // Auto-resizes to length 6
+arr.setLength(10);           // Extends to length 10
+```
 
-1. **CRITICAL:** Out-of-bounds read safety (Option B first)
-2. **MEDIUM:** Optional console.log support
-3. **LOW:** Multi-argument push (nice-to-have)
+## Remaining JavaScript Semantics Gaps
 
-## Testing Checklist
+### 1. Out-of-Bounds Read Safety 🔴 CRITICAL
 
-- [ ] Out-of-bounds read doesn't crash
-- [ ] Out-of-bounds write creates sparse array
-- [ ] arr.length setter works both ways
-- [ ] Compound assignment on elements
-- [ ] pop/shift return handling
-- [ ] Negative indices return undefined
-- [ ] Empty array operations
+**Problem:** `arr[5]` when arr.length=3 currently:
+- Returns `nullptr` 
+- Dereferencing `*arr[5]` causes segfault
+
+**JavaScript behavior:** Returns `undefined` (no crash)
+
+**Solutions:**
+
