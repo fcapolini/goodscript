@@ -116,6 +116,10 @@ export const types = {
   function(params: IRType[], returnType: IRType): IRType {
     return { kind: 'function', params, returnType };
   },
+
+  struct(fields: Array<{ name: string; type: IRType }>, ownership?: Ownership): IRType {
+    return { kind: 'struct', fields, ownership: ownership ?? Ownership.Value };
+  },
 };
 
 // ============================================================================

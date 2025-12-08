@@ -150,6 +150,15 @@ export class TypeSignatureGenerator {
         }
         break;
 
+      case 'struct':
+        // Struct types are structural - generate signature from sorted fields
+        const fields = type.fields
+          .map(f => `${f.name}:${this.getTypeString(f.type)}`)
+          .sort()
+          .join(',');
+        result = `{${fields}}<${type.ownership}>`;
+        break;
+
       case 'array':
         result = `Array<${this.getTypeString(type.element)},${type.ownership}>`;
         break;

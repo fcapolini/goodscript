@@ -51,6 +51,8 @@ export class CppCodegen {
   private indent = 0;
   private output: string[] = [];
   private currentNamespace: string[] = [];
+  private structRegistry = new Map<string, { name: string; fields: Array<{ name: string; type: IRType }> }>();
+  private structCounter = 0;
 
   /**
    * Sanitize identifier to avoid C++ reserved keywords
@@ -109,6 +111,10 @@ export class CppCodegen {
   // ========================================================================
 
   private generateHeader(module: IRModule): void {
+    // Reset struct registry for each module
+    this.structRegistry.clear();
+    this.structCounter = 0;
+    
     const guard = this.getIncludeGuard(module.path);
     this.emit(`#pragma once`);
     this.emit(`#ifndef ${guard}`);
@@ -156,6 +162,13 @@ export class CppCodegen {
       if (decl.kind === 'interface') {
         this.emit(`struct ${decl.name};`);
       }
+    }
+
+    // Anonymous struct definitions (from object literals)
+    // Note: We need to pre-scan declarations to populate the registry
+    this.preScanDeclarations(module.declarations);
+    if (this.structRegistry.size > 0) {
+      this.generateStructDefinitions();
     }
 
     // Declarations
@@ -521,9 +534,17 @@ export class CppCodegen {
         const elementType = expr.type.kind === 'array' ? expr.type.element : types.void();
         return `gs::Array<${this.generateCppType(elementType)}>{ ${expr.elements.map(e => this.generateExpr(e)).join(', ')} }`;
       }
-      case 'object':
-        // Objects are not directly supported in C++ - would need struct definition
-        return `/* object literal */`;
+      case 'object': {
+        // Generate struct type and initialization
+        if (expr.type.kind === 'struct') {
+          const structType = this.generateCppType(expr.type);
+          const initializers = expr.properties.map(p => 
+            `.${this.sanitizeIdentifier(p.key)} = ${this.generateExpr(p.value)}`
+          ).join(', ');
+          return `${structType}{ ${initializers} }`;
+        }
+        return `/* object literal (non-struct type) */`;
+      }
       case 'lambda':
         return this.generateLambda(expr);
       case 'move':
@@ -634,6 +655,8 @@ export class CppCodegen {
       case 'class':
       case 'interface':
         return this.generatePointerType(type.name, type.ownership);
+      case 'struct':
+        return this.getOrCreateStructType(type.fields);
       case 'array':
         return `gs::Array<${this.generateCppType(type.element)}>`;
       case 'map':
@@ -710,6 +733,161 @@ export class CppCodegen {
       // Emit #line directive for source mapping
       // Format: #line <line> "<filename>"
       this.output.push(`#line ${location.line} "${location.file}"`);
+    }
+  }
+
+  /**
+   * Pre-scan declarations to discover all struct types that need to be generated.
+   * This populates the struct registry before we generate the actual code.
+   */
+  private preScanDeclarations(declarations: IRDeclaration[]): void {
+    for (const decl of declarations) {
+      this.preScanDeclaration(decl);
+    }
+  }
+
+  private preScanDeclaration(decl: IRDeclaration): void {
+    switch (decl.kind) {
+      case 'function':
+        this.preScanBlock(decl.body);
+        break;
+      case 'class':
+        if (decl.constructor) {
+          this.preScanBlock(decl.constructor.body);
+        }
+        for (const method of decl.methods) {
+          this.preScanBlock(method.body);
+        }
+        break;
+      case 'const':
+        this.preScanExpr(decl.value);
+        break;
+    }
+  }
+
+  private preScanBlock(block: IRBlock): void {
+    for (const inst of block.instructions) {
+      if (inst.kind === 'assign') {
+        this.preScanExpr(inst.value);
+      } else if (inst.kind === 'call' && inst.target) {
+        this.preScanExpr(inst.callee);
+        for (const arg of inst.args) {
+          this.preScanExpr(arg);
+        }
+      } else if (inst.kind === 'fieldAssign') {
+        this.preScanExpr(inst.object);
+        this.preScanExpr(inst.value);
+      } else if (inst.kind === 'indexAssign') {
+        this.preScanExpr(inst.object);
+        this.preScanExpr(inst.index);
+        this.preScanExpr(inst.value);
+      } else if (inst.kind === 'memberAssign') {
+        this.preScanExpr(inst.object);
+        this.preScanExpr(inst.value);
+      }
+    }
+    
+    const term = block.terminator;
+    if (term.kind === 'return' && term.value) {
+      this.preScanExpr(term.value);
+    } else if (term.kind === 'branch') {
+      this.preScanExpr(term.condition);
+    }
+  }
+
+  private preScanExpr(expr: IRExpr): void {
+    switch (expr.kind) {
+      case 'binary':
+        this.preScanExpr(expr.left);
+        this.preScanExpr(expr.right);
+        break;
+      case 'unary':
+        this.preScanExpr(expr.operand);
+        break;
+      case 'conditional':
+        this.preScanExpr(expr.condition);
+        this.preScanExpr(expr.whenTrue);
+        this.preScanExpr(expr.whenFalse);
+        break;
+      case 'member':
+      case 'index':
+        this.preScanExpr(expr.object);
+        if (expr.kind === 'index') {
+          this.preScanExpr(expr.index);
+        }
+        break;
+      case 'callExpr':
+        this.preScanExpr(expr.callee);
+        for (const arg of expr.args) {
+          this.preScanExpr(arg);
+        }
+        break;
+      case 'methodCall':
+        this.preScanExpr(expr.object);
+        for (const arg of expr.args) {
+          this.preScanExpr(arg);
+        }
+        break;
+      case 'array':
+        for (const elem of expr.elements) {
+          this.preScanExpr(elem);
+        }
+        break;
+      case 'object':
+        // Register the struct type
+        if (expr.type.kind === 'struct') {
+          this.getOrCreateStructType(expr.type.fields);
+        }
+        for (const prop of expr.properties) {
+          this.preScanExpr(prop.value);
+        }
+        break;
+      case 'lambda':
+        this.preScanBlock(expr.body);
+        break;
+      case 'move':
+      case 'borrow':
+        this.preScanExpr(expr.source);
+        break;
+    }
+  }
+
+  /**
+   * Get or create a struct type name for a set of fields.
+   * Returns the C++ type name.
+   */
+  private getOrCreateStructType(fields: Array<{ name: string; type: IRType }>): string {
+    // Create a canonical key from sorted field names and types
+    const key = fields
+      .map(f => `${f.name}:${this.generateCppType(f.type)}`)
+      .sort()
+      .join(';');
+    
+    // Check if we already have this struct
+    let structInfo = this.structRegistry.get(key);
+    if (!structInfo) {
+      // Generate new struct name
+      const structName = `AnonymousStruct${this.structCounter++}`;
+      structInfo = { name: structName, fields };
+      this.structRegistry.set(key, structInfo);
+    }
+    
+    return structInfo.name;
+  }
+
+  /**
+   * Generate struct definitions in header
+   */
+  private generateStructDefinitions(): void {
+    for (const [_, structInfo] of this.structRegistry) {
+      this.emit(`struct ${structInfo.name} {`);
+      this.indent++;
+      for (const field of structInfo.fields) {
+        this.emit(`${this.generateCppType(field.type)} ${this.sanitizeIdentifier(field.name)};`);
+      }
+      this.indent--;
+      this.emit(`};`);
+      this.emit('');
     }
   }
 }

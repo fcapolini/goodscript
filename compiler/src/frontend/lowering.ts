@@ -670,34 +670,17 @@ export class IRLowering {
 
   private inferType(node: ts.Node): IRType {
     const tsType = this.typeChecker.getTypeAtLocation(node);
-    
-    // Check for array types
-    if (this.typeChecker.isArrayType(tsType)) {
-      const typeArgs = this.typeChecker.getTypeArguments(tsType as ts.TypeReference);
-      if (typeArgs && typeArgs.length > 0) {
-        const elementType = this.convertTsTypeToIRType(typeArgs[0]);
-        return types.array(elementType);
-      }
-      return types.array(types.void());
-    }
-    
-    if (tsType.flags & ts.TypeFlags.Number) {
-      return types.number();
-    }
-    if (tsType.flags & ts.TypeFlags.String) {
-      return types.string();
-    }
-    if (tsType.flags & ts.TypeFlags.Boolean) {
-      return types.boolean();
-    }
-    if (tsType.flags & ts.TypeFlags.Void) {
-      return types.void();
-    }
-
-    return types.void();
+    return this.convertTsTypeToIRType(tsType);
   }
 
-  private convertTsTypeToIRType(tsType: ts.Type): IRType {
+  private convertTsTypeToIRType(tsType: ts.Type, visited: Set<ts.Type> = new Set()): IRType {
+    // Cycle detection to prevent infinite recursion
+    if (visited.has(tsType)) {
+      return types.void(); // Break cycles
+    }
+    visited.add(tsType);
+    
+    // Check primitive types first
     if (tsType.flags & ts.TypeFlags.Number) {
       return types.number();
     }
@@ -711,14 +694,29 @@ export class IRLowering {
       return types.void();
     }
     
-    // Check for array types
+    // Check for array types (BEFORE general Object check!)
     if (this.typeChecker.isArrayType(tsType)) {
       const typeArgs = this.typeChecker.getTypeArguments(tsType as ts.TypeReference);
       if (typeArgs && typeArgs.length > 0) {
-        const elementType = this.convertTsTypeToIRType(typeArgs[0]);
+        const elementType = this.convertTsTypeToIRType(typeArgs[0], visited);
         return types.array(elementType);
       }
       return types.array(types.void());
+    }
+    
+    // Check for object types (struct) - after arrays!
+    if (tsType.flags & ts.TypeFlags.Object) {
+      const properties = tsType.getProperties();
+      if (properties.length > 0) {
+        const fields = properties.map(prop => {
+          const propType = this.typeChecker.getTypeOfSymbolAtLocation(prop, prop.valueDeclaration!);
+          return {
+            name: prop.getName(),
+            type: this.convertTsTypeToIRType(propType, visited)
+          };
+        });
+        return types.struct(fields);
+      }
     }
     
     return types.void();

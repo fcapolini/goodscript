@@ -23,6 +23,7 @@ export type IRType =
   | { kind: 'primitive'; type: PrimitiveType }
   | { kind: 'class'; name: string; ownership: Ownership; typeArgs?: IRType[] }
   | { kind: 'interface'; name: string; ownership: Ownership; typeArgs?: IRType[] }
+  | { kind: 'struct'; fields: Array<{ name: string; type: IRType }>; ownership: Ownership }
   | { kind: 'array'; element: IRType; ownership: Ownership }
   | { kind: 'map'; key: IRType; value: IRType; ownership: Ownership }
   | { kind: 'function'; params: IRType[]; returnType: IRType }
