@@ -91,9 +91,16 @@ pnpm dev
 - Source map generation
 
 **Note**: For TypeScript/JavaScript output, just use `tsc` directly on your `.gs` files.
-GoodScript files are valid TypeScript with type aliases for ownership annotations:
+GoodScript files are valid TypeScript with type aliases:
 ```typescript
+// Ownership types (semantics only enforced in C++ mode)
 type own<T> = T;
 type share<T> = T;
 type use<T> = T;
+
+// Integer types (full semantics only in C++ mode)
+type integer = number;    // int32_t in C++, number in JS
+type integer53 = number;  // int64_t in C++, safe integer in JS
 ```
+
+Integer semantics are only guaranteed in C++ compilation mode.
