@@ -1,0 +1,26 @@
+{
+  "name": "@goodscript/io",
+  "version": "0.12.0",
+  "description": "GoodScript file system I/O utilities",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "goodscript",
+    "stdlib",
+    "io",
+    "filesystem"
+  ],
+  "author": "GoodScript Contributors",
+  "license": "MIT OR Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
