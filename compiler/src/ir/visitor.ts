@@ -93,6 +93,10 @@ export abstract class IRVisitor<T = void> {
         return this.visitExpr(expr.right);
       case 'unary':
         return this.visitExpr(expr.operand);
+      case 'conditional':
+        this.visitExpr(expr.condition);
+        this.visitExpr(expr.whenTrue);
+        return this.visitExpr(expr.whenFalse);
       case 'member':
         return this.visitExpr(expr.object);
       case 'index':

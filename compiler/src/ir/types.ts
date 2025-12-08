@@ -235,6 +235,7 @@ export type IRExpr =
   | IRVariable
   | IRBinary
   | IRUnary
+  | IRConditional
   | IRMemberAccess
   | IRIndexAccess
   | IRCallExpr
@@ -274,6 +275,15 @@ export interface IRUnary {
   kind: 'unary';
   op: UnaryOp;
   operand: IRExpr;
+  type: IRType;
+  source?: SourceLocation;
+}
+
+export interface IRConditional {
+  kind: 'conditional';
+  condition: IRExpr;
+  whenTrue: IRExpr;
+  whenFalse: IRExpr;
   type: IRType;
   source?: SourceLocation;
 }

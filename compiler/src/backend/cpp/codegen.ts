@@ -444,6 +444,8 @@ export class CppCodegen {
         return `(${this.generateExpr(expr.left)} ${expr.op} ${this.generateExpr(expr.right)})`;
       case 'unary':
         return `${expr.op}${this.generateExpr(expr.operand)}`;
+      case 'conditional':
+        return `(${this.generateExpr(expr.condition)} ? ${this.generateExpr(expr.whenTrue)} : ${this.generateExpr(expr.whenFalse)})`;
       case 'member': {
         const obj = this.generateExpr(expr.object);
         // Special case: console.log/error/warn -> gs::console::

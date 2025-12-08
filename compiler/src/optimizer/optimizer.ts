@@ -17,6 +17,7 @@ import type {
   IRInstruction,
   IRBinary,
   IRUnary,
+  IRConditional,
   IRTerminator,
 } from '../ir/types.js';
 
@@ -178,6 +179,8 @@ export class Optimizer {
         return this.foldBinary(expr);
       case 'unary':
         return this.foldUnary(expr);
+      case 'conditional':
+        return this.foldConditional(expr);
       case 'callExpr':
         return {
           ...expr,
@@ -344,6 +347,25 @@ export class Optimizer {
 
     this.modified = false;
     return { ...expr, operand };
+  }
+
+  private foldConditional(expr: IRConditional): IRExpr {
+    const condition = this.constantFold(expr.condition);
+    const whenTrue = this.constantFold(expr.whenTrue);
+    const whenFalse = this.constantFold(expr.whenFalse);
+
+    // If condition is a literal boolean, choose the appropriate branch
+    if (condition.kind === 'literal' && typeof condition.value === 'boolean') {
+      this.modified = true;
+      return condition.value ? whenTrue : whenFalse;
+    }
+
+    if (condition !== expr.condition || whenTrue !== expr.whenTrue || whenFalse !== expr.whenFalse) {
+      this.modified = true;
+      return { ...expr, condition, whenTrue, whenFalse };
+    }
+
+    return expr;
   }
 
   private removeDeadCode(instructions: IRInstruction[], terminator: IRTerminator): IRInstruction[] {

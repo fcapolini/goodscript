@@ -135,6 +135,10 @@ export const expr = {
     return { kind: 'unary', op, operand, type };
   },
 
+  conditional(condition: IRExpr, whenTrue: IRExpr, whenFalse: IRExpr, type: IRType): IRExpr {
+    return { kind: 'conditional', condition, whenTrue, whenFalse, type };
+  },
+
   member(object: IRExpr, member: string, type: IRType): IRExpr {
     return { kind: 'member', object, member, type };
   },

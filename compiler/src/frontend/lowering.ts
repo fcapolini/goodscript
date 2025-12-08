@@ -273,6 +273,28 @@ export class IRLowering {
       return this.lowerArrowFunction(node, sourceFile);
     }
 
+    // Conditional expression (ternary: a ? b : c)
+    if (ts.isConditionalExpression(node)) {
+      const condition = this.lowerExpr(node.condition, sourceFile);
+      const whenTrue = this.lowerExpr(node.whenTrue, sourceFile);
+      const whenFalse = this.lowerExpr(node.whenFalse, sourceFile);
+      const type = this.inferType(node);
+      return expr.conditional(condition, whenTrue, whenFalse, type);
+    }
+
+    // Parenthesized expression
+    if (ts.isParenthesizedExpression(node)) {
+      return this.lowerExpr(node.expression, sourceFile);
+    }
+
+    // New expression
+    if (ts.isNewExpression(node)) {
+      const className = node.expression.getText(sourceFile);
+      const args = node.arguments ? Array.from(node.arguments).map(arg => this.lowerExpr(arg, sourceFile)) : [];
+      const type = this.inferType(node);
+      return expr.new(className, args, type);
+    }
+
     // Object literal
     if (ts.isObjectLiteralExpression(node)) {
       const properties: Array<{ key: string; value: IRExpr }> = [];
