@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { analyzeOwnership } from '../src/analysis/ownership.js';
-import { IRModule, IRClassDecl, IRInterfaceDecl, Ownership } from '../src/ir/types.js';
+import { IRModule, IRClassDecl, IRInterfaceDecl, IRTypeAliasDecl, Ownership } from '../src/ir/types.js';
 import { types } from '../src/ir/builder.js';
 
 describe('Ownership Analyzer', () => {
@@ -722,6 +722,582 @@ describe('Ownership Analyzer', () => {
 
       expect(result.errors).toHaveLength(0);
       expect(result.sccs).toHaveLength(0);
+    });
+  });
+
+  describe('Struct Type Analysis', () => {
+    it('should detect cycles in struct types with share<T> fields', () => {
+      const module: IRModule = {
+        path: '/test/struct-cycle.gs',
+        declarations: [
+          {
+            kind: 'class',
+            name: 'Person',
+            fields: [
+              {
+                name: 'data',
+                type: types.struct([
+                  { name: 'name', type: types.string() },
+                  { name: 'bestFriend', type: types.class('Person', Ownership.Share) }
+                ], Ownership.Value),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+        ],
+        imports: [],
+      };
+
+      const result = analyzeOwnership([module], 'ownership');
+
+      // Should detect self-loop: Person -> struct -> Person
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe('GS301');
+      expect(result.errors[0].message).toContain('Person');
+    });
+
+    it('should handle struct types with own<T> fields (no cycle)', () => {
+      const module: IRModule = {
+        path: '/test/struct-own.gs',
+        declarations: [
+          {
+            kind: 'class',
+            name: 'Node',
+            fields: [
+              {
+                name: 'data',
+                type: types.struct([
+                  { name: 'value', type: types.number() },
+                  { name: 'child', type: types.class('Node', Ownership.Own) }
+                ], Ownership.Value),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+        ],
+        imports: [],
+      };
+
+      const result = analyzeOwnership([module], 'ownership');
+
+      // own<T> doesn't create cycles
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should detect two-node cycle through struct', () => {
+      const module: IRModule = {
+        path: '/test/struct-two-cycle.gs',
+        declarations: [
+          {
+            kind: 'class',
+            name: 'A',
+            fields: [
+              {
+                name: 'info',
+                type: types.struct([
+                  { name: 'name', type: types.string() },
+                  { name: 'link', type: types.class('B', Ownership.Share) }
+                ], Ownership.Value),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+          {
+            kind: 'class',
+            name: 'B',
+            fields: [
+              {
+                name: 'back',
+                type: types.class('A', Ownership.Share),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+        ],
+        imports: [],
+      };
+
+      const result = analyzeOwnership([module], 'ownership');
+
+      // Should detect cycle: A -> struct -> B -> A
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe('GS302');
+      expect(result.sccs).toHaveLength(1);
+      expect(result.sccs[0].nodes).toContain('A');
+      expect(result.sccs[0].nodes).toContain('B');
+    });
+
+    it('should handle nested structs with share<T>', () => {
+      const module: IRModule = {
+        path: '/test/nested-struct.gs',
+        declarations: [
+          {
+            kind: 'class',
+            name: 'Tree',
+            fields: [
+              {
+                name: 'metadata',
+                type: types.struct([
+                  { name: 'label', type: types.string() },
+                  { 
+                    name: 'refs',
+                    type: types.struct([
+                      { name: 'parent', type: types.class('Tree', Ownership.Share) },
+                      { name: 'sibling', type: types.class('Tree', Ownership.Share) }
+                    ], Ownership.Value)
+                  }
+                ], Ownership.Value),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+        ],
+        imports: [],
+      };
+
+      const result = analyzeOwnership([module], 'ownership');
+
+      // Should detect self-loop through nested struct
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe('GS301');
+      expect(result.errors[0].message).toContain('Tree');
+    });
+
+    it('should handle arrays of structs with share<T>', () => {
+      const module: IRModule = {
+        path: '/test/array-struct.gs',
+        declarations: [
+          {
+            kind: 'class',
+            name: 'Graph',
+            fields: [
+              {
+                name: 'edges',
+                type: types.array(
+                  types.struct([
+                    { name: 'from', type: types.string() },
+                    { name: 'to', type: types.class('Graph', Ownership.Share) }
+                  ], Ownership.Value)
+                ),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+        ],
+        imports: [],
+      };
+
+      const result = analyzeOwnership([module], 'ownership');
+
+      // Should detect self-loop: Graph -> Array -> struct -> Graph
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe('GS301');
+      expect(result.errors[0].message).toContain('Graph');
+    });
+
+    it('should allow struct with no share<T> fields', () => {
+      const module: IRModule = {
+        path: '/test/safe-struct.gs',
+        declarations: [
+          {
+            kind: 'class',
+            name: 'Safe',
+            fields: [
+              {
+                name: 'config',
+                type: types.struct([
+                  { name: 'timeout', type: types.number() },
+                  { name: 'retries', type: types.number() },
+                  { name: 'enabled', type: types.boolean() }
+                ], Ownership.Value),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+        ],
+        imports: [],
+      };
+
+      const result = analyzeOwnership([module], 'ownership');
+
+      // No share<T> fields, no cycles
+      expect(result.errors).toHaveLength(0);
+      expect(result.sccs).toHaveLength(0);
+    });
+
+    it('should detect cycles through Map keys (rare case)', () => {
+      const module: IRModule = {
+        path: '/test/map-key-cycle.gs',
+        declarations: [
+          {
+            kind: 'class',
+            name: 'Node',
+            fields: [
+              {
+                name: 'lookup',
+                type: types.map(
+                  types.class('Node', Ownership.Share),  // share<Node> as key
+                  types.string()
+                ),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+        ],
+        imports: [],
+      };
+
+      const result = analyzeOwnership([module], 'ownership');
+
+      // Should detect self-loop through map key
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe('GS301');
+      expect(result.errors[0].message).toContain('Node');
+    });
+
+    it('should handle union types with share<T>', () => {
+      const module: IRModule = {
+        path: '/test/union.gs',
+        declarations: [
+          {
+            kind: 'class',
+            name: 'Container',
+            fields: [
+              {
+                name: 'data',
+                type: types.union([
+                  types.string(),
+                  types.class('Container', Ownership.Share)
+                ]),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+        ],
+        imports: [],
+      };
+
+      const result = analyzeOwnership([module], 'ownership');
+
+      // Should detect self-loop through union variant
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe('GS301');
+    });
+  });
+
+  describe('Type Alias Resolution', () => {
+    it('should resolve type alias to detect self-referencing share<T>', () => {
+      const module: IRModule = {
+        path: '/test/alias.gs',
+        declarations: [
+          {
+            kind: 'typeAlias',
+            name: 'NodeRef',
+            type: types.class('Node', Ownership.Share),
+          } as IRTypeAliasDecl,
+          {
+            kind: 'class',
+            name: 'Node',
+            fields: [
+              {
+                name: 'next',
+                type: types.typeAlias('NodeRef', types.class('Node', Ownership.Share)),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+        ],
+        imports: [],
+      };
+
+      const result = analyzeOwnership([module], 'ownership');
+
+      // Should detect self-loop through type alias
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe('GS301');
+      expect(result.errors[0].message).toContain('Node');
+    });
+
+    it('should resolve nested type aliases', () => {
+      const module: IRModule = {
+        path: '/test/nested-alias.gs',
+        declarations: [
+          {
+            kind: 'typeAlias',
+            name: 'SharedNode',
+            type: types.class('Node', Ownership.Share),
+          } as IRTypeAliasDecl,
+          {
+            kind: 'typeAlias',
+            name: 'NodeRef',
+            type: types.typeAlias('SharedNode', types.class('Node', Ownership.Share)),
+          } as IRTypeAliasDecl,
+          {
+            kind: 'class',
+            name: 'Node',
+            fields: [
+              {
+                name: 'next',
+                type: types.typeAlias('NodeRef', types.typeAlias('SharedNode', types.class('Node', Ownership.Share))),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+        ],
+        imports: [],
+      };
+
+      const result = analyzeOwnership([module], 'ownership');
+
+      // Should detect self-loop through nested type aliases
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe('GS301');
+    });
+
+    it('should resolve type alias in cycle detection', () => {
+      const module: IRModule = {
+        path: '/test/alias-cycle.gs',
+        declarations: [
+          {
+            kind: 'typeAlias',
+            name: 'BRef',
+            type: types.class('B', Ownership.Share),
+          } as IRTypeAliasDecl,
+          {
+            kind: 'class',
+            name: 'A',
+            fields: [
+              {
+                name: 'b',
+                type: types.typeAlias('BRef', types.class('B', Ownership.Share)),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+          {
+            kind: 'class',
+            name: 'B',
+            fields: [
+              {
+                name: 'a',
+                type: types.class('A', Ownership.Share),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+        ],
+        imports: [],
+      };
+
+      const result = analyzeOwnership([module], 'ownership');
+
+      // Should detect cycle through type alias
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe('GS302');
+      expect(result.errors[0].message).toContain('Cyclic share<T>');
+    });
+
+    it('should resolve type alias in container types', () => {
+      const module: IRModule = {
+        path: '/test/alias-container.gs',
+        declarations: [
+          {
+            kind: 'typeAlias',
+            name: 'NodeRef',
+            type: types.class('Node', Ownership.Share),
+          } as IRTypeAliasDecl,
+          {
+            kind: 'class',
+            name: 'Node',
+            fields: [
+              {
+                name: 'children',
+                type: types.array(
+                  types.typeAlias('NodeRef', types.class('Node', Ownership.Share)),
+                  Ownership.Value
+                ),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+        ],
+        imports: [],
+      };
+
+      const result = analyzeOwnership([module], 'ownership');
+
+      // Should detect self-loop through type alias in array
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe('GS301');
+    });
+  });
+
+  describe('Intersection Type Handling', () => {
+    it('should handle intersection types with share<T>', () => {
+      const module: IRModule = {
+        path: '/test/intersection.gs',
+        declarations: [
+          {
+            kind: 'interface',
+            name: 'Named',
+            properties: [{ name: 'name', type: types.string() }],
+            methods: [],
+          } as IRInterfaceDecl,
+          {
+            kind: 'class',
+            name: 'Node',
+            fields: [
+              {
+                name: 'next',
+                // Intersection of Named & share<Node>
+                type: types.intersection([
+                  types.class('Named', Ownership.Value),
+                  types.class('Node', Ownership.Share)
+                ]),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+        ],
+        imports: [],
+      };
+
+      const result = analyzeOwnership([module], 'ownership');
+
+      // Should detect self-loop through intersection type
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe('GS301');
+      expect(result.errors[0].message).toContain('Node');
+    });
+
+    it('should handle deep intersection types', () => {
+      const module: IRModule = {
+        path: '/test/deep-intersection.gs',
+        declarations: [
+          {
+            kind: 'interface',
+            name: 'Serializable',
+            properties: [{ name: 'serialize', type: types.function([], types.string()) }],
+            methods: [],
+          } as IRInterfaceDecl,
+          {
+            kind: 'interface',
+            name: 'Comparable',
+            properties: [{ name: 'compare', type: types.function([types.class('Comparable', Ownership.Use)], types.number()) }],
+            methods: [],
+          } as IRInterfaceDecl,
+          {
+            kind: 'class',
+            name: 'A',
+            fields: [
+              {
+                name: 'b',
+                type: types.intersection([
+                  types.class('Serializable', Ownership.Value),
+                  types.class('B', Ownership.Share)
+                ]),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+          {
+            kind: 'class',
+            name: 'B',
+            fields: [
+              {
+                name: 'a',
+                type: types.intersection([
+                  types.class('Comparable', Ownership.Value),
+                  types.class('A', Ownership.Share)
+                ]),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+        ],
+        imports: [],
+      };
+
+      const result = analyzeOwnership([module], 'ownership');
+
+      // Should detect cycle through intersection types
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe('GS302');
+      expect(result.errors[0].message).toContain('Cyclic share<T>');
+    });
+
+    it('should handle intersection in union types', () => {
+      const module: IRModule = {
+        path: '/test/intersection-union.gs',
+        declarations: [
+          {
+            kind: 'interface',
+            name: 'Tagged',
+            properties: [{ name: 'tag', type: types.string() }],
+            methods: [],
+          } as IRInterfaceDecl,
+          {
+            kind: 'class',
+            name: 'Container',
+            fields: [
+              {
+                name: 'data',
+                type: types.union([
+                  types.string(),
+                  types.intersection([
+                    types.class('Tagged', Ownership.Value),
+                    types.class('Container', Ownership.Share)
+                  ])
+                ]),
+                isReadonly: false,
+              },
+            ],
+            methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
+          } as IRClassDecl,
+        ],
+        imports: [],
+      };
+
+      const result = analyzeOwnership([module], 'ownership');
+
+      // Should detect self-loop through intersection in union
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe('GS301');
     });
   });
 });

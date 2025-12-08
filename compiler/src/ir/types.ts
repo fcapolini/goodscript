@@ -28,6 +28,8 @@ export type IRType =
   | { kind: 'map'; key: IRType; value: IRType; ownership: Ownership }
   | { kind: 'function'; params: IRType[]; returnType: IRType }
   | { kind: 'union'; types: IRType[] }
+  | { kind: 'intersection'; types: IRType[] }
+  | { kind: 'typeAlias'; name: string; aliasedType: IRType }
   | { kind: 'nullable'; inner: IRType };
 
 export enum PrimitiveType {

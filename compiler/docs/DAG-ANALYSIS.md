@@ -90,7 +90,54 @@ class Node {
 
 **Compiler Action**: Instantiate generics with concrete types during analysis. Each `Container<Node>` is treated as a distinct type node in the graph.
 
-#### Rule 1.5: Cross-Module Cycles
+#### Rule 1.5: Type Aliases (Transparent)
+
+Type aliases are resolved to their underlying types before cycle detection. They do not create additional nodes in the ownership graph.
+
+```typescript
+type NodeRef = share<Node>;
+
+class Node {
+  next: NodeRef;  // Resolved to: next: share<Node> → Edge: Node → Node (CYCLE)
+}
+```
+
+**Compiler Action**: Maintain a type alias resolution cache. When encountering a type alias, recursively resolve it to the underlying type before checking for `share<T>` ownership.
+
+#### Rule 1.6: Intersection Types (All Members Analyzed)
+
+Intersection types (`A & B`) are analyzed by checking each member type for `share<T>` ownership.
+
+```typescript
+interface Named { name: string; }
+
+class Node {
+  next: Named & share<Node>;  // Edge: Node → Node (CYCLE from share<Node> member)
+}
+```
+
+**Compiler Action**: For `type1 & type2 & ...`, check each member type independently. If any member has `share<T>` ownership, create an ownership edge for that member.
+
+#### Rule 1.7: Union Types (All Variants Analyzed)
+
+Union types (`A | B`) are analyzed by checking each variant for `share<T>` ownership.
+
+```typescript
+class Container {
+  data: string | share<Container>;  // Edge: Container → Container (CYCLE from variant)
+}
+```
+
+**Compiler Action**: For `type1 | type2 | ...`, check each variant independently. If any variant has `share<T>` ownership, create an ownership edge for that variant.
+
+**Combined Example** (Union of Intersections):
+```typescript
+class Node {
+  data: string | (Named & share<Node>);  // Edge through intersection in union (CYCLE)
+}
+```
+
+#### Rule 1.8: Cross-Module Cycles
 
 Ownership edges can span module boundaries. The analyzer must build the complete ownership graph across all imported modules.
 
@@ -109,7 +156,7 @@ export class B {
 
 **Compiler Action**: Module resolution must happen before ownership analysis. The dependency graph ensures modules are analyzed in topological order, but the ownership graph is built across all modules simultaneously.
 
-#### Rule 1.6: Function Return Types (Non-Edges)
+#### Rule 1.9: Function Return Types (Non-Edges)
 
 Function return types **do not create ownership edges** because they do not store persistent references.
 
@@ -123,7 +170,7 @@ class A {
 
 **Rationale**: Returning a `share<A>` increases the reference count temporarily but doesn't create a persistent ownership relationship stored in a field.
 
-#### Rule 1.7: Closure Captures (Non-Edges)
+#### Rule 1.10: Closure Captures (Non-Edges)
 
 Closures that capture `this` or other variables **do not create ownership edges** because they represent borrowed references (`use<T>`).
 

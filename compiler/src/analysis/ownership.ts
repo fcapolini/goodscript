@@ -5,7 +5,7 @@
  * See docs/DAG-ANALYSIS.md for complete algorithm specification.
  */
 
-import { IRModule, IRClassDecl, IRInterfaceDecl, IRType, Ownership } from '../ir/types.js';
+import { IRModule, IRClassDecl, IRInterfaceDecl, IRTypeAliasDecl, IRType, Ownership } from '../ir/types.js';
 
 /** Node in the ownership graph */
 interface OwnershipNode {
@@ -49,6 +49,7 @@ export interface OwnershipAnalysisResult {
  */
 export class OwnershipAnalyzer {
   private graph = new Map<string, OwnershipNode>();
+  private typeAliases = new Map<string, IRType>();  // Type alias resolution cache
   private errors: OwnershipDiagnostic[] = [];
   private warnings: OwnershipDiagnostic[] = [];
   private memoryMode: 'gc' | 'ownership';
@@ -103,12 +104,23 @@ export class OwnershipAnalyzer {
    * Build ownership graph for a single module
    */
   private buildGraphForModule(module: IRModule): void {
+    // First pass: collect type aliases for resolution
+    for (const decl of module.declarations) {
+      if (decl.kind === 'typeAlias') {
+        const aliasDecl = decl as IRTypeAliasDecl;
+        this.typeAliases.set(aliasDecl.name, aliasDecl.type);
+      }
+    }
+
+    // Second pass: build ownership graph
     for (const decl of module.declarations) {
       if (decl.kind === 'class') {
         this.buildGraphForClass(decl as IRClassDecl, module.path);
       } else if (decl.kind === 'interface') {
         this.buildGraphForInterface(decl as IRInterfaceDecl, module.path);
       }
+      // Note: Struct types are anonymous (no declarations)
+      // They are analyzed when encountered as field types
     }
   }
 
@@ -152,6 +164,73 @@ export class OwnershipAnalyzer {
         }
       }
 
+      // Struct fields: recursively analyze for share<T>
+      if (field.type.kind === 'struct') {
+        this.analyzeStructFields(field.type.fields, node, field.name);
+      }
+
+      // Union types: check each variant for share<T>
+      if (field.type.kind === 'union') {
+        for (const [i, variant] of field.type.types.entries()) {
+          if (this.hasShareOwnership(variant)) {
+            const targetClass = this.extractClassName(variant);
+            if (targetClass) {
+              node.fields.set(`${field.name}|${i}`, {
+                fieldName: field.name,
+                targetClass,
+                source: 'container',
+              });
+            }
+          }
+          // Also check if variant is an intersection type with share<T>
+          if (variant.kind === 'intersection') {
+            for (const [j, member] of variant.types.entries()) {
+              if (this.hasShareOwnership(member)) {
+                const targetClass = this.extractClassName(member);
+                if (targetClass) {
+                  node.fields.set(`${field.name}|${i}&${j}`, {
+                    fieldName: field.name,
+                    targetClass,
+                    source: 'container',
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Intersection types: check each member for share<T>
+      if (field.type.kind === 'intersection') {
+        for (const [i, member] of field.type.types.entries()) {
+          if (this.hasShareOwnership(member)) {
+            const targetClass = this.extractClassName(member);
+            if (targetClass) {
+              node.fields.set(`${field.name}&${i}`, {
+                fieldName: field.name,
+                targetClass,
+                source: 'container',
+              });
+            }
+          }
+          // Also check if member is a union type with share<T>
+          if (member.kind === 'union') {
+            for (const [j, variant] of member.types.entries()) {
+              if (this.hasShareOwnership(variant)) {
+                const targetClass = this.extractClassName(variant);
+                if (targetClass) {
+                  node.fields.set(`${field.name}&${i}|${j}`, {
+                    fieldName: field.name,
+                    targetClass,
+                    source: 'container',
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+
       // Rule 1.2: Container with share<T> elements
       const containerTarget = this.extractContainerShareTarget(field.type);
       if (containerTarget) {
@@ -184,6 +263,60 @@ export class OwnershipAnalyzer {
     }
 
     this.graph.set(typeName, node);
+  }
+
+  /**
+   * Analyze struct fields recursively for share<T> references
+   */
+  private analyzeStructFields(
+    structFields: Array<{ name: string; type: IRType }>,
+    parentNode: OwnershipNode,
+    fieldPrefix: string
+  ): void {
+    for (const structField of structFields) {
+      const fullFieldName = `${fieldPrefix}.${structField.name}`;
+      
+      // Direct share<T> in struct field
+      if (this.hasShareOwnership(structField.type)) {
+        const targetClass = this.extractClassName(structField.type);
+        if (targetClass) {
+          parentNode.fields.set(fullFieldName, {
+            fieldName: fullFieldName,
+            targetClass,
+            source: 'direct',
+          });
+        }
+      }
+
+      // Nested struct
+      if (structField.type.kind === 'struct') {
+        this.analyzeStructFields(structField.type.fields, parentNode, fullFieldName);
+      }
+
+      // Container with share<T> in struct field
+      const containerTarget = this.extractContainerShareTarget(structField.type);
+      if (containerTarget) {
+        parentNode.fields.set(fullFieldName, {
+          fieldName: fullFieldName,
+          targetClass: containerTarget,
+          source: 'container',
+        });
+      }
+
+      // Deep share<T> in struct field
+      const deepTargets = this.extractDeepShareTargets(structField.type);
+      for (const [i, target] of deepTargets.entries()) {
+        parentNode.fields.set(`${fullFieldName}[${i}]`, {
+          fieldName: fullFieldName,
+          targetClass: target,
+          source: 'container',
+        });
+      }
+      
+      // Note: As new collection types are added (Set, Tuple, etc.),
+      // they will be automatically handled by extractContainerShareTarget
+      // and extractDeepShareTargets
+    }
   }
 
   /**
@@ -354,7 +487,10 @@ export class OwnershipAnalyzer {
    * Check if a type has share<T> ownership
    */
   private hasShareOwnership(type: IRType): boolean {
-    if ((type.kind === 'class' || type.kind === 'interface') && type.ownership === Ownership.Share) {
+    // Resolve type aliases first
+    const resolvedType = this.resolveTypeAlias(type);
+    
+    if ((resolvedType.kind === 'class' || resolvedType.kind === 'interface' || resolvedType.kind === 'struct') && resolvedType.ownership === Ownership.Share) {
       return true;
     }
     return false;
@@ -364,26 +500,94 @@ export class OwnershipAnalyzer {
    * Extract class/interface name from share<T> type
    */
   private extractClassName(type: IRType): string | null {
-    if (type.kind === 'class' || type.kind === 'interface') {
-      return type.name;
+    // Resolve type aliases first
+    const resolvedType = this.resolveTypeAlias(type);
+    
+    if (resolvedType.kind === 'class' || resolvedType.kind === 'interface') {
+      return resolvedType.name;
+    }
+    if (resolvedType.kind === 'struct') {
+      // Structs are anonymous, generate a stable name from structure
+      // Use sorted field names for deterministic naming
+      const fieldSig = resolvedType.fields
+        .map(f => f.name)
+        .sort()
+        .join('_');
+      return `__struct_${fieldSig}`;
     }
     return null;
   }
 
   /**
    * Extract target class from container types (Rule 1.2)
-   * Array<share<T>>, Map<K, share<V>>, Set<share<T>>
+   * Handles all collection types:
+   * - Array<share<T>> → T
+   * - Map<K, share<V>> → V
+   * - Set<share<T>> → T (future)
+   * - Tuple<share<T>, ...> → T (future)
+   * 
+   * Also handles collections of structs:
+   * - Array<struct { field: share<T> }> → T
+   * - Map<K, struct { field: share<T> }> → T
    */
   private extractContainerShareTarget(type: IRType): string | null {
-    if (type.kind === 'array' && this.hasShareOwnership(type.element)) {
-      return this.extractClassName(type.element);
+    // Array<share<T>> or Array<struct>
+    if (type.kind === 'array') {
+      if (this.hasShareOwnership(type.element)) {
+        return this.extractClassName(type.element);
+      }
+      if (type.element.kind === 'struct') {
+        return this.extractStructShareTarget(type.element);
+      }
     }
 
-    if (type.kind === 'map' && this.hasShareOwnership(type.value)) {
-      return this.extractClassName(type.value);
+    // Map<K, share<V>> or Map<K, struct>
+    if (type.kind === 'map') {
+      // Check map value for share<T>
+      if (this.hasShareOwnership(type.value)) {
+        return this.extractClassName(type.value);
+      }
+      if (type.value.kind === 'struct') {
+        return this.extractStructShareTarget(type.value);
+      }
+      
+      // Also check map key (rare but possible: Map<share<K>, V>)
+      if (this.hasShareOwnership(type.key)) {
+        return this.extractClassName(type.key);
+      }
+      if (type.key.kind === 'struct') {
+        return this.extractStructShareTarget(type.key);
+      }
     }
 
-    // Set<share<T>> would be similar
+    // Future collection types would be added here:
+    // - Set<share<T>> → type.kind === 'set'
+    // - Tuple<share<T>, U, V> → type.kind === 'tuple'
+    // - Queue<share<T>>, Stack<share<T>>, etc.
+    
+    return null;
+  }
+
+  /**
+   * Extract share<T> target from struct (if any field has share<T>)
+   */
+  private extractStructShareTarget(structType: IRType): string | null {
+    if (structType.kind !== 'struct') return null;
+    
+    for (const field of structType.fields) {
+      if (this.hasShareOwnership(field.type)) {
+        return this.extractClassName(field.type);
+      }
+      // Recursively check nested structs
+      if (field.type.kind === 'struct') {
+        const target = this.extractStructShareTarget(field.type);
+        if (target) return target;
+      }
+      // Check containers in struct fields
+      const containerTarget = this.extractContainerShareTarget(field.type);
+      if (containerTarget) return containerTarget;
+    }
+    
     return null;
   }
 
@@ -396,13 +600,25 @@ export class OwnershipAnalyzer {
 
     // Recursively traverse type structure
     const traverse = (t: IRType): void => {
-      if ((t.kind === 'class' || t.kind === 'interface') && t.ownership === Ownership.Share) {
+      if ((t.kind === 'class' || t.kind === 'interface' || t.kind === 'struct') && t.ownership === Ownership.Share) {
         // Found a share<T>, check if T contains share<U>
-        const className = t.name;
-        const classNode = this.graph.get(className);
-        if (classNode) {
-          for (const edge of classNode.fields.values()) {
-            targets.push(edge.targetClass);
+        const className = this.extractClassName(t);
+        if (className) {
+          const classNode = this.graph.get(className);
+          if (classNode) {
+            for (const edge of classNode.fields.values()) {
+              targets.push(edge.targetClass);
+            }
+          } else if (t.kind === 'struct') {
+            // Inline struct - analyze its fields directly
+            for (const field of t.fields) {
+              if (this.hasShareOwnership(field.type)) {
+                const targetClass = this.extractClassName(field.type);
+                if (targetClass) {
+                  targets.push(targetClass);
+                }
+              }
+            }
           }
         }
       } else if (t.kind === 'array') {
@@ -410,7 +626,29 @@ export class OwnershipAnalyzer {
       } else if (t.kind === 'map') {
         traverse(t.key);
         traverse(t.value);
+      } else if (t.kind === 'union') {
+        // Traverse all union variants
+        for (const variant of t.types) {
+          traverse(variant);
+        }
+      } else if (t.kind === 'nullable') {
+        // Traverse inner type
+        traverse(t.inner);
+      } else if (t.kind === 'struct') {
+        // Traverse struct fields
+        for (const field of t.fields) {
+          traverse(field.type);
+        }
+      } else if (t.kind === 'intersection') {
+        // Traverse all intersection members
+        for (const member of t.types) {
+          traverse(member);
+        }
+      } else if (t.kind === 'typeAlias') {
+        // Resolve and traverse aliased type
+        traverse(t.aliasedType);
       }
+      // Future: Add handling for Set, Tuple, and other collection types
     };
 
     traverse(type);
@@ -428,6 +666,24 @@ export class OwnershipAnalyzer {
     // For now, return empty array (to be implemented when generics are added)
 
     return targets;
+  }
+
+  /**
+   * Resolve type alias to its underlying type
+   * Returns the original type if not a type alias
+   */
+  private resolveTypeAlias(type: IRType): IRType {
+    // Handle typeAlias kind (when used as a type reference)
+    if (type.kind === 'typeAlias') {
+      return this.resolveTypeAlias(type.aliasedType);
+    }
+
+    // Handle named type aliases (class/interface that might be aliases)
+    if ((type.kind === 'class' || type.kind === 'interface') && this.typeAliases.has(type.name)) {
+      return this.resolveTypeAlias(this.typeAliases.get(type.name)!);
+    }
+
+    return type;
   }
 }
 

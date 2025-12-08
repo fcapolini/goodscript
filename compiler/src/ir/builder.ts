@@ -113,6 +113,14 @@ export const types = {
     return { kind: 'union', types };
   },
 
+  intersection(types: IRType[]): IRType {
+    return { kind: 'intersection', types };
+  },
+
+  typeAlias(name: string, aliasedType: IRType): IRType {
+    return { kind: 'typeAlias', name, aliasedType };
+  },
+
   function(params: IRType[], returnType: IRType): IRType {
     return { kind: 'function', params, returnType };
   },

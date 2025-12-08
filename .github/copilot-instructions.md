@@ -4,7 +4,7 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete (174 tests passing)
+**Current Status**: Phase 1-6 implementation complete (189 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
@@ -31,7 +31,7 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - Fixed array indexing with number type (auto-cast to int, dereference primitives)
 - Fixed empty array type inference using getContextualType()
 - End-to-end compilation working for array operations
-- All 174 tests passing
+- All 189 tests passing
 - Added undefined keyword support (maps to nullptr in C++)
 - All expression types now generate correct C++ code
 
@@ -242,12 +242,12 @@ const body: IRBlock = {
 
 ## Testing
 
-**Current Test Suite (156 tests)**:
+**Current Test Suite (189 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (13 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
 - `test/signatures.test.ts` - Type signatures (11 tests)
-- `test/ownership.test.ts` - Ownership cycle detection (16 tests)
+- `test/ownership.test.ts` - Ownership cycle detection (31 tests, including type alias and intersection type support)
 - `test/null-checker.test.ts` - use<T> lifetime safety (13 tests)
 - `test/optimizer.test.ts` - IR optimization passes (15 tests)
 - `test/cpp-codegen.test.ts` - C++ code generation (17 tests, includes source maps)

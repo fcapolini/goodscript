@@ -230,7 +230,11 @@ Error GS105: "var" keyword is forbidden - use "const" or "let"
 - Detects cycles in `share<T>` references using Tarjan's algorithm
 - Supports both ownership mode (errors on cycles) and GC mode (warnings)
 - Handles nested containers (Array, Map) and interface properties
-- 16 comprehensive test cases covering all cycle patterns
+- **Type alias resolution**: Transparently resolves type aliases to underlying types
+- **Intersection type support**: Analyzes all members of intersection types for `share<T>`
+- **Union type support**: Checks all variants in union types for cycles
+- **Complex type handling**: Handles unions of intersections, intersections of unions, etc.
+- 31 comprehensive test cases covering all cycle patterns including type aliases and intersections
 
 **Error Codes**: GS301-GS399
 
