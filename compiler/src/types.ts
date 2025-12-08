@@ -5,7 +5,7 @@
 export interface CompileOptions {
   files: string[];
   outDir?: string;
-  target?: 'typescript' | 'native';
+  target?: 'cpp';
   mode?: 'ownership' | 'gc';
   optimize?: boolean;
   emit?: 'js' | 'ts' | 'both';

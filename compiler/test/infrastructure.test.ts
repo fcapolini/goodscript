@@ -13,7 +13,7 @@ describe('Compiler Infrastructure', () => {
   it('should compile with empty input', async () => {
     const result = await compile({
       files: [],
-      target: 'typescript',
+      target: 'cpp',
     });
 
     expect(result.success).toBe(true);
@@ -23,7 +23,7 @@ describe('Compiler Infrastructure', () => {
   it('should handle validation errors gracefully', async () => {
     const result = await compile({
       files: [],
-      target: 'native',
+      target: 'cpp',
       mode: 'gc',
     });
 

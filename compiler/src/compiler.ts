@@ -124,11 +124,10 @@ export async function compile(options: CompileOptions): Promise<CompileResult> {
           buildTime: Date.now() - startTime,
         };
       }
-    } else {
-      const codegen = new TypeScriptCodegen();
-      output = codegen.generate(ir);
     }
 
+    // For non-native targets, just validate and return empty output
+    // Users can use tsc directly on their .gs/.ts files
     return {
       success: true,
       diagnostics,

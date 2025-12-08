@@ -27,7 +27,6 @@ TypeScript Source
       ↓
 [Phase 5: Code Generation]
   - C++ Codegen (ownership/gc mode)
-  - TypeScript Codegen
       ↓
 [Phase 6: Binary Compilation]
   - Zig compiler integration
@@ -68,7 +67,7 @@ pnpm install
 # Build
 pnpm build
 
-# Test (163 tests)
+# Test (149 tests)
 pnpm test
 
 # Watch mode
@@ -77,12 +76,12 @@ pnpm dev
 
 ## Status
 
-✅ **Phases 1-6 Complete** (163 tests passing)
+✅ **Phases 1-6 Complete** (149 tests passing)
 - ✅ Phase 1: Frontend (validator, parser)
 - ✅ Phase 2: Analysis (ownership, null checking, type signatures)
 - ✅ Phase 3: IR Lowering (AST → IR)
 - ✅ Phase 4: Optimizer (constant folding, DCE)
-- ✅ Phase 5: Code Generation (TypeScript & C++)
+- ✅ Phase 5: Code Generation (C++)
 - ✅ Phase 6: Binary Compilation (Zig integration)
 
 **Next Steps**:
@@ -90,3 +89,11 @@ pnpm dev
 - Runtime library implementation
 - Standard library porting
 - Source map generation
+
+**Note**: For TypeScript/JavaScript output, just use `tsc` directly on your `.gs` files.
+GoodScript files are valid TypeScript with type aliases for ownership annotations:
+```typescript
+type own<T> = T;
+type share<T> = T;
+type use<T> = T;
+```
