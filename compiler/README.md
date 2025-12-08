@@ -90,7 +90,7 @@ pnpm dev
 - Standard library porting
 - Source map generation
 
-**Note**: For TypeScript/JavaScript output, just use `tsc` directly on your `.gs` files.
+**Note**: For TypeScript/JavaScript output, just use `tsc` directly on your `-gs.ts` or `-gs.tsx` files.
 GoodScript files are valid TypeScript with type aliases:
 ```typescript
 // Ownership types (semantics only enforced in C++ mode)

@@ -54,16 +54,16 @@ export class CppCodegen {
   }
 
   private getHeaderPath(modulePath: string): string {
-    return modulePath.replace(/\.(gs|js|ts)$/, '.hpp');
+    return modulePath.replace(/-gs\.(tsx?)|\.(gs|js|tsx?)$/, '.hpp');
   }
 
   private getSourcePath(modulePath: string): string {
-    return modulePath.replace(/\.(gs|js|ts)$/, '.cpp');
+    return modulePath.replace(/-gs\.(tsx?)|\.(gs|js|tsx?)$/, '.cpp');
   }
 
   private getNamespaceName(modulePath: string): string[] {
-    // Convert src/math/vector.gs -> ['goodscript', 'math', 'vector']
-    const parts = modulePath.replace(/\.gs$/, '').split('/');
+    // Convert src/math/vector-gs.ts -> ['goodscript', 'src', 'math', 'vector']
+    const parts = modulePath.replace(/-gs\.(tsx?)|\.(gs|js|tsx?)$/, '').split('/');
     return ['goodscript', ...parts];
   }
 
@@ -141,9 +141,9 @@ export class CppCodegen {
   }
 
   private getIncludeGuard(modulePath: string): string {
-    // src/math/vector.gs -> GOODSCRIPT_SRC_MATH_VECTOR_HPP_
+    // src/math/vector-gs.ts -> GOODSCRIPT_SRC_MATH_VECTOR_HPP_
     return 'GOODSCRIPT_' + modulePath
-      .replace(/\.gs$/, '')
+      .replace(/-gs\.(tsx?)|\.gs$/, '')
       .replace(/[\/\.]/g, '_')
       .toUpperCase() + '_HPP_';
   }

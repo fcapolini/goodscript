@@ -127,7 +127,7 @@ export async function compile(options: CompileOptions): Promise<CompileResult> {
     }
 
     // For non-native targets, just validate and return empty output
-    // Users can use tsc directly on their .gs/.ts files
+    // Users can use tsc directly on their -gs.ts/-gs.tsx files
     return {
       success: true,
       diagnostics,
