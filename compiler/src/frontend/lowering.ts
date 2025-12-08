@@ -629,6 +629,16 @@ export class IRLowering {
   private inferType(node: ts.Node): IRType {
     const tsType = this.typeChecker.getTypeAtLocation(node);
     
+    // Check for array types
+    if (this.typeChecker.isArrayType(tsType)) {
+      const typeArgs = this.typeChecker.getTypeArguments(tsType as ts.TypeReference);
+      if (typeArgs && typeArgs.length > 0) {
+        const elementType = this.convertTsTypeToIRType(typeArgs[0]);
+        return types.array(elementType);
+      }
+      return types.array(types.void());
+    }
+    
     if (tsType.flags & ts.TypeFlags.Number) {
       return types.number();
     }
@@ -642,6 +652,33 @@ export class IRLowering {
       return types.void();
     }
 
+    return types.void();
+  }
+
+  private convertTsTypeToIRType(tsType: ts.Type): IRType {
+    if (tsType.flags & ts.TypeFlags.Number) {
+      return types.number();
+    }
+    if (tsType.flags & ts.TypeFlags.String) {
+      return types.string();
+    }
+    if (tsType.flags & ts.TypeFlags.Boolean) {
+      return types.boolean();
+    }
+    if (tsType.flags & ts.TypeFlags.Void) {
+      return types.void();
+    }
+    
+    // Check for array types
+    if (this.typeChecker.isArrayType(tsType)) {
+      const typeArgs = this.typeChecker.getTypeArguments(tsType as ts.TypeReference);
+      if (typeArgs && typeArgs.length > 0) {
+        const elementType = this.convertTsTypeToIRType(typeArgs[0]);
+        return types.array(elementType);
+      }
+      return types.array(types.void());
+    }
+    
     return types.void();
   }
 

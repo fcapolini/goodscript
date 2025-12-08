@@ -1033,5 +1033,41 @@ describe('C++ Codegen - Source Maps', () => {
     expect(source).toContain('gs::console::log(gs::String("Hello, "), name)');
     expect(source).not.toContain('console.log'); // Should not generate plain console.log
   });
+
+  it('should generate array.length as method call', () => {
+    const func: IRFunctionDecl = {
+      kind: 'function',
+      name: 'getLength',
+      params: [{ name: 'arr', type: types.array(types.number()) }],
+      returnType: types.number(),
+      body: createBlock(
+        0,
+        [],
+        {
+          kind: 'return',
+          value: {
+            kind: 'member',
+            object: { kind: 'variable', name: 'arr', version: 0, type: types.array(types.number()) },
+            member: 'length',
+            type: types.number(),
+          },
+        }
+      ),
+    };
+
+    const module: IRModule = {
+      path: 'test.gs',
+      declarations: [func],
+      imports: [],
+    };
+
+    const output = codegen.generate(createProgram(module), 'gc');
+    const source = output.get('test.cpp');
+
+    expect(source).toBeDefined();
+    expect(source).toContain('double getLength(gs::Array<double> arr)');
+    expect(source).toContain('arr.length()'); // Should be a method call
+    expect(source).not.toContain('arr.length;'); // Should not be property access
+  });
 });
 

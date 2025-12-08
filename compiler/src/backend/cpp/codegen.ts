@@ -460,6 +460,13 @@ export class CppCodegen {
         if (obj === 'console') {
           return `gs::console::${expr.member}`;
         }
+        // Special case: array.length and string.length are methods in C++
+        if (expr.member === 'length') {
+          const objType = expr.object.type;
+          if (objType.kind === 'array' || (objType.kind === 'primitive' && objType.type === PrimitiveType.String)) {
+            return `${obj}.length()`;
+          }
+        }
         return `${obj}.${expr.member}`;
       }
       case 'index':
