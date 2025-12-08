@@ -329,6 +329,18 @@ export class IRLowering {
   }
 
   private lowerCallExpr(node: ts.CallExpression, sourceFile: ts.SourceFile): IRExpr {
+    // Check if this is a method call (obj.method(args))
+    if (ts.isPropertyAccessExpression(node.expression)) {
+      const object = this.lowerExpr(node.expression.expression, sourceFile);
+      const method = node.expression.name.text;
+      const args = node.arguments.map(arg => this.lowerExpr(arg, sourceFile));
+      const type = this.inferType(node);
+      
+      // Create a method call expression
+      return expr.methodCall(object, method, args, type);
+    }
+    
+    // Regular function call
     const callee = this.lowerExpr(node.expression, sourceFile);
     const args = node.arguments.map(arg => this.lowerExpr(arg, sourceFile));
     const type = this.inferType(node);

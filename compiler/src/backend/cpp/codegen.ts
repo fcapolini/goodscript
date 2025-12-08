@@ -322,7 +322,7 @@ export class CppCodegen {
     // Emit source location for function declaration
     this.emitSourceLocation(func.source);
     
-    this.emit(`${returnType} ${func.name}(${params}) {`);
+    this.emit(`${returnType} ${this.sanitizeIdentifier(func.name)}(${params}) {`);
     this.indent++;
     this.generateBlockStatements(func.body);
     this.indent--;
@@ -359,11 +359,11 @@ export class CppCodegen {
 
     // Method implementations
     for (const method of cls.methods) {
-      const staticMod = method.isStatic ? '' : `${cls.name}::`;
+      const staticMod = method.isStatic ? '' : `${this.sanitizeIdentifier(cls.name)}::`;
       const returnType = this.generateCppType(method.returnType);
       const params = method.params.map(p => this.generateCppParam(p)).join(', ');
       
-      this.emit(`${returnType} ${staticMod}${method.name}(${params}) {`);
+      this.emit(`${returnType} ${staticMod}${this.sanitizeIdentifier(method.name)}(${params}) {`);
       this.indent++;
       this.generateBlockStatements(method.body);
       this.indent--;
@@ -456,6 +456,8 @@ export class CppCodegen {
         return `${this.generateExpr(expr.object)}[${this.generateExpr(expr.index)}]`;
       case 'callExpr':
         return `${this.generateExpr(expr.callee)}(${expr.args.map(a => this.generateExpr(a)).join(', ')})`;
+      case 'methodCall':
+        return `${this.generateExpr(expr.object)}.${expr.method}(${expr.args.map(a => this.generateExpr(a)).join(', ')})`;
       case 'new':
         return this.generateNew(expr.className, expr.args);
       case 'array': {

@@ -147,6 +147,10 @@ export const expr = {
     return { kind: 'callExpr', callee, args, type };
   },
 
+  methodCall(object: IRExpr, method: string, args: IRExpr[], type: IRType): IRExpr {
+    return { kind: 'methodCall', object, method, args, type };
+  },
+
   new(className: string, args: IRExpr[], type: IRType): IRExpr {
     return { kind: 'new', className, args, type };
   },

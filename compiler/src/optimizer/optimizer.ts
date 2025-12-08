@@ -183,6 +183,12 @@ export class Optimizer {
           ...expr,
           args: expr.args.map(arg => this.constantFold(arg)),
         };
+      case 'methodCall':
+        return {
+          ...expr,
+          object: this.constantFold(expr.object),
+          args: expr.args.map(arg => this.constantFold(arg)),
+        };
       case 'member':
         return {
           ...expr,

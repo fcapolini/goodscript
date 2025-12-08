@@ -258,4 +258,31 @@ describe('IR Lowering', () => {
       expect(decl.methods[0].name).toBe('greet');
     });
   });
+
+  describe('Method Calls', () => {
+    it('should lower method calls as IRMethodCall', () => {
+      const ir = parseAndLower(`
+        function test(arr: number[]): number[] {
+          return arr.map((x: number) => x * 2);
+        }
+      `);
+      
+      const decl = ir.modules[0].declarations[0];
+      expect(decl.kind).toBe('function');
+      if (decl.kind !== 'function') throw new Error('Expected function');
+      
+      // Check the return terminator contains a method call
+      const terminator = decl.body.terminator;
+      expect(terminator.kind).toBe('return');
+      if (terminator.kind !== 'return') throw new Error('Expected return');
+      expect(terminator.value).toBeDefined();
+      expect(terminator.value!.kind).toBe('methodCall');
+      
+      if (terminator.value!.kind !== 'methodCall') throw new Error('Expected methodCall');
+      expect(terminator.value!.method).toBe('map');
+      expect(terminator.value!.args).toHaveLength(1);
+      expect(terminator.value!.args[0].kind).toBe('lambda');
+    });
+  });
 });
+

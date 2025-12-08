@@ -238,6 +238,7 @@ export type IRExpr =
   | IRMemberAccess
   | IRIndexAccess
   | IRCallExpr
+  | IRMethodCall
   | IRNew
   | IRArrayLiteral
   | IRObjectLiteral
@@ -296,6 +297,15 @@ export interface IRIndexAccess {
 export interface IRCallExpr {
   kind: 'callExpr';
   callee: IRExpr;
+  args: IRExpr[];
+  type: IRType;
+  source?: SourceLocation;
+}
+
+export interface IRMethodCall {
+  kind: 'methodCall';
+  object: IRExpr;
+  method: string;
   args: IRExpr[];
   type: IRType;
   source?: SourceLocation;

@@ -594,6 +594,234 @@ describe('C++ Codegen - Namespaces', () => {
   });
 });
 
+describe('C++ Codegen - Identifier Sanitization', () => {
+  const codegen = new CppCodegen();
+
+  it('should sanitize C++ keywords in function names', () => {
+    const testCases = [
+      { name: 'double', expected: 'double_' },
+      { name: 'class', expected: 'class_' },
+      { name: 'private', expected: 'private_' },
+      { name: 'public', expected: 'public_' },
+      { name: 'return', expected: 'return_' },
+      { name: 'namespace', expected: 'namespace_' },
+    ];
+
+    for (const { name, expected } of testCases) {
+      const func: IRFunctionDecl = {
+        kind: 'function',
+        name,
+        params: [],
+        returnType: types.void(),
+        body: createBlock(0, [], { kind: 'return' }),
+      };
+
+      const module: IRModule = {
+        path: 'test.gs',
+        declarations: [func],
+        imports: [],
+      };
+
+      const output = codegen.generate(createProgram(module), 'gc');
+      const header = output.get('test.hpp');
+      const source = output.get('test.cpp');
+
+      expect(header).toContain(`void ${expected}();`);
+      expect(source).toContain(`void ${expected}()`);
+    }
+  });
+
+  it('should sanitize C++ keywords in parameter names', () => {
+    const func: IRFunctionDecl = {
+      kind: 'function',
+      name: 'test',
+      params: [
+        { name: 'int', type: types.number() },
+        { name: 'float', type: types.number() },
+        { name: 'long', type: types.number() },
+      ],
+      returnType: types.void(),
+      body: createBlock(0, [], { kind: 'return' }),
+    };
+
+    const module: IRModule = {
+      path: 'test.gs',
+      declarations: [func],
+      imports: [],
+    };
+
+    const output = codegen.generate(createProgram(module), 'gc');
+    const header = output.get('test.hpp');
+
+    expect(header).toContain('void test(double int_, double float_, double long_);');
+  });
+
+  it('should sanitize C++ keywords in class names', () => {
+    const cls: IRClassDecl = {
+      kind: 'class',
+      name: 'template',
+      fields: [{ name: 'value', type: types.number() }],
+      methods: [],
+      constructor: {
+        params: [],
+        body: createBlock(0, [], { kind: 'return' }),
+      },
+    };
+
+    const module: IRModule = {
+      path: 'test.gs',
+      declarations: [cls],
+      imports: [],
+    };
+
+    const output = codegen.generate(createProgram(module), 'gc');
+    const header = output.get('test.hpp');
+
+    expect(header).toContain('class template_');
+    expect(header).toContain('double value_;');
+  });
+
+  it('should sanitize C++ keywords in method names', () => {
+    const cls: IRClassDecl = {
+      kind: 'class',
+      name: 'MyClass',
+      fields: [],
+      methods: [{
+        name: 'delete',
+        params: [],
+        returnType: types.void(),
+        body: createBlock(0, [], { kind: 'return' }),
+      }],
+      constructor: {
+        params: [],
+        body: createBlock(0, [], { kind: 'return' }),
+      },
+    };
+
+    const module: IRModule = {
+      path: 'test.gs',
+      declarations: [cls],
+      imports: [],
+    };
+
+    const output = codegen.generate(createProgram(module), 'gc');
+    const header = output.get('test.hpp');
+    const source = output.get('test.cpp');
+
+    expect(header).toContain('void delete_();');
+    expect(source).toContain('void MyClass::delete_()');
+  });
+
+  it('should sanitize C++ keywords in variable names', () => {
+    const func: IRFunctionDecl = {
+      kind: 'function',
+      name: 'test',
+      params: [],
+      returnType: types.number(),
+      body: createBlock(
+        0,
+        [
+          {
+            kind: 'assign',
+            target: { kind: 'variable', name: 'const', version: 0, type: types.number() },
+            value: { kind: 'literal', value: 42, type: types.number() },
+          },
+        ],
+        {
+          kind: 'return',
+          value: { kind: 'variable', name: 'const', version: 0, type: types.number() },
+        }
+      ),
+    };
+
+    const module: IRModule = {
+      path: 'test.gs',
+      declarations: [func],
+      imports: [],
+    };
+
+    const output = codegen.generate(createProgram(module), 'gc');
+    const source = output.get('test.cpp');
+
+    expect(source).toContain('auto const_ = 42;');
+    expect(source).toContain('return const_;');
+  });
+
+  it('should sanitize this keyword', () => {
+    const cls: IRClassDecl = {
+      kind: 'class',
+      name: 'Person',
+      fields: [{ name: 'name_', type: types.string() }],
+      methods: [],
+      constructor: {
+        params: [{ name: 'name', type: types.string() }],
+        body: createBlock(
+          0,
+          [
+            {
+              kind: 'fieldAssign',
+              object: { kind: 'variable', name: 'this', version: 0, type: types.primitive('void') },
+              field: 'name_',
+              value: { kind: 'variable', name: 'name', version: 0, type: types.string() },
+            },
+          ],
+          { kind: 'return' }
+        ),
+      },
+    };
+
+    const module: IRModule = {
+      path: 'test.gs',
+      declarations: [cls],
+      imports: [],
+    };
+
+    const output = codegen.generate(createProgram(module), 'gc');
+    const source = output.get('test.cpp');
+
+    expect(source).toContain('this_.name_ = name;');
+  });
+
+  it('should not sanitize non-keywords', () => {
+    const func: IRFunctionDecl = {
+      kind: 'function',
+      name: 'calculate',
+      params: [
+        { name: 'value', type: types.number() },
+        { name: 'count', type: types.number() },
+      ],
+      returnType: types.number(),
+      body: createBlock(
+        0,
+        [],
+        {
+          kind: 'return',
+          value: {
+            kind: 'binary',
+            op: '*' as BinaryOp,
+            left: { kind: 'variable', name: 'value', version: 0, type: types.number() },
+            right: { kind: 'variable', name: 'count', version: 0, type: types.number() },
+            type: types.number(),
+          },
+        }
+      ),
+    };
+
+    const module: IRModule = {
+      path: 'test.gs',
+      declarations: [func],
+      imports: [],
+    };
+
+    const output = codegen.generate(createProgram(module), 'gc');
+    const header = output.get('test.hpp');
+
+    expect(header).toContain('double calculate(double value, double count);');
+    expect(header).not.toContain('value_');
+    expect(header).not.toContain('count_');
+  });
+});
+
 describe('C++ Codegen - Source Maps', () => {
   const codegen = new CppCodegen();
 
@@ -708,4 +936,62 @@ describe('C++ Codegen - Source Maps', () => {
     expect(source).toContain('double add(double a, double b)');
     expect(source).toContain('auto result = (a + b);');
   });
+
+  it('should generate method calls correctly', () => {
+    const func: IRFunctionDecl = {
+      kind: 'function',
+      name: 'double',
+      params: [{ name: 'arr', type: types.array(types.number()) }],
+      returnType: types.array(types.number()),
+      body: createBlock(
+        0,
+        [],
+        {
+          kind: 'return',
+          value: {
+            kind: 'methodCall',
+            object: { kind: 'variable', name: 'arr', version: 0, type: types.array(types.number()) },
+            method: 'map',
+            args: [
+              {
+                kind: 'lambda',
+                params: [{ name: 'x', type: types.number() }],
+                body: createBlock(
+                  0,
+                  [],
+                  {
+                    kind: 'return',
+                    value: {
+                      kind: 'binary',
+                      op: '*' as BinaryOp,
+                      left: { kind: 'variable', name: 'x', version: 0, type: types.number() },
+                      right: { kind: 'literal', value: 2, type: types.number() },
+                      type: types.number(),
+                    },
+                  }
+                ),
+                captures: [],
+                type: types.function([types.number()], types.number()),
+              },
+            ],
+            type: types.array(types.number()),
+          },
+        }
+      ),
+    };
+
+    const module: IRModule = {
+      path: 'test.gs',
+      declarations: [func],
+      imports: [],
+    };
+
+    const output = codegen.generate(createProgram(module), 'gc');
+    const source = output.get('test.cpp');
+
+    expect(source).toBeDefined();
+    expect(source).toContain('gs::Array<double> double_(gs::Array<double> arr)');
+    expect(source).toContain('arr.map([](double x) { return (x * 2); })');
+  });
 });
+

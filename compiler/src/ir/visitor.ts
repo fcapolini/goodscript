@@ -102,6 +102,10 @@ export abstract class IRVisitor<T = void> {
         this.visitExpr(expr.callee);
         expr.args.forEach(arg => this.visitExpr(arg));
         return undefined as T;
+      case 'methodCall':
+        this.visitExpr(expr.object);
+        expr.args.forEach(arg => this.visitExpr(arg));
+        return undefined as T;
       case 'new':
         expr.args.forEach(arg => this.visitExpr(arg));
         return undefined as T;
