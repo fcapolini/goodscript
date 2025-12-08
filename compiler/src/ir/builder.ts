@@ -11,6 +11,7 @@ import type {
   IRBlock,
   IRInstruction,
   IRTerminator,
+  IRParam,
   BinaryOp,
   UnaryOp,
   IRStatement,
@@ -152,6 +153,10 @@ export const expr = {
 
   array(elements: IRExpr[], type: IRType): IRExpr {
     return { kind: 'array', elements, type };
+  },
+
+  lambda(params: IRParam[], body: IRBlock, captures: Array<{ name: string; type: IRType }>, type: IRType): IRExpr {
+    return { kind: 'lambda', params, body, captures, type };
   },
 
   move(source: IRExpr, type: IRType): IRExpr {

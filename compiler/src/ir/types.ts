@@ -241,6 +241,7 @@ export type IRExpr =
   | IRNew
   | IRArrayLiteral
   | IRObjectLiteral
+  | IRLambda
   | IRMove
   | IRBorrow;
 
@@ -317,6 +318,14 @@ export interface IRObjectLiteral {
   kind: 'object';
   properties: Array<{ key: string; value: IRExpr }>;
   type: IRType;
+}
+
+export interface IRLambda {
+  kind: 'lambda';
+  params: IRParam[];
+  body: IRBlock;
+  captures: Array<{ name: string; type: IRType }>; // Captured variables
+  type: IRType; // Function type
 }
 
 export interface IRMove {

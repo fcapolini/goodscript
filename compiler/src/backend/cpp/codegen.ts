@@ -24,12 +24,43 @@ import { types } from '../../ir/builder.js';
 
 type MemoryMode = 'ownership' | 'gc';
 
+// C++ reserved keywords that need to be sanitized
+const CPP_RESERVED_KEYWORDS = new Set([
+  // C++ keywords
+  'alignas', 'alignof', 'and', 'and_eq', 'asm', 'auto', 'bitand', 'bitor',
+  'bool', 'break', 'case', 'catch', 'char', 'char8_t', 'char16_t', 'char32_t',
+  'class', 'compl', 'concept', 'const', 'consteval', 'constexpr', 'constinit',
+  'const_cast', 'continue', 'co_await', 'co_return', 'co_yield', 'decltype',
+  'default', 'delete', 'do', 'double', 'dynamic_cast', 'else', 'enum', 'explicit',
+  'export', 'extern', 'false', 'float', 'for', 'friend', 'goto', 'if', 'inline',
+  'int', 'long', 'mutable', 'namespace', 'new', 'noexcept', 'not', 'not_eq',
+  'nullptr', 'operator', 'or', 'or_eq', 'private', 'protected', 'public',
+  'register', 'reinterpret_cast', 'requires', 'return', 'short', 'signed',
+  'sizeof', 'static', 'static_assert', 'static_cast', 'struct', 'switch',
+  'template', 'this', 'thread_local', 'throw', 'true', 'try', 'typedef',
+  'typeid', 'typename', 'union', 'unsigned', 'using', 'virtual', 'void',
+  'volatile', 'wchar_t', 'while', 'xor', 'xor_eq',
+  // Common standard library names to avoid
+  'std', 'string', 'vector', 'map', 'set', 'list', 'array', 'pair', 'tuple',
+  'unique_ptr', 'shared_ptr', 'weak_ptr', 'function', 'optional', 'variant',
+]);
+
 export class CppCodegen {
   private mode: MemoryMode = 'gc';
   private sourceMap = false;
   private indent = 0;
   private output: string[] = [];
   private currentNamespace: string[] = [];
+
+  /**
+   * Sanitize identifier to avoid C++ reserved keywords
+   */
+  private sanitizeIdentifier(name: string): string {
+    if (CPP_RESERVED_KEYWORDS.has(name)) {
+      return `${name}_`;
+    }
+    return name;
+  }
 
   generate(program: IRProgram, mode: MemoryMode, sourceMap = false): Map<string, string> {
     this.mode = mode;
@@ -65,7 +96,11 @@ export class CppCodegen {
 
   private getNamespaceName(modulePath: string): string[] {
     // Convert src/math/vector-gs.ts -> ['goodscript', 'src', 'math', 'vector']
-    const parts = modulePath.replace(/-gs\.(tsx?)|\.(gs|js|tsx?)$/, '').split('/');
+    // Replace dashes with underscores for valid C++ identifiers
+    const parts = modulePath
+      .replace(/-gs\.(tsx?)|\.(gs|js|tsx?)$/, '')
+      .split('/')
+      .map(part => part.replace(/-/g, '_'));
     return ['goodscript', ...parts];
   }
 
@@ -141,7 +176,7 @@ export class CppCodegen {
     // src/math/vector-gs.ts -> GOODSCRIPT_SRC_MATH_VECTOR_HPP_
     return 'GOODSCRIPT_' + modulePath
       .replace(/-gs\.(tsx?)|\.gs$/, '')
-      .replace(/[\/\.]/g, '_')
+      .replace(/[\/\.\-]/g, '_')  // Replace slashes, dots, and dashes with underscores
       .toUpperCase() + '_HPP_';
   }
 
@@ -164,20 +199,21 @@ export class CppCodegen {
 
   private generateHeaderFunction(func: IRFunctionDecl): void {
     const returnType = this.generateCppType(func.returnType);
-    const params = func.params.map(p => this.generateCppParam(p)).join(', ');
-    this.emit(`${returnType} ${func.name}(${params});`);
+    const params = func.params.map(p => this.generateParam(p)).join(', ');
+    this.emit(`${returnType} ${this.sanitizeIdentifier(func.name)}(${params});`);
   }
 
   private generateHeaderClass(cls: IRClassDecl): void {
     const inheritance = cls.extends ? ` : public ${cls.extends}` : '';
-    this.emit(`class ${cls.name}${inheritance} {`);
+    const className = this.sanitizeIdentifier(cls.name);
+    this.emit(`class ${className}${inheritance} {`);
     this.emit('public:');
     this.indent++;
 
     // Constructor
     if (cls.constructor) {
       const params = cls.constructor.params.map(p => this.generateCppParam(p)).join(', ');
-      this.emit(`${cls.name}(${params});`);
+      this.emit(`${className}(${params});`);
       this.emit('');
     }
 
@@ -185,8 +221,8 @@ export class CppCodegen {
     for (const method of cls.methods) {
       const staticMod = method.isStatic ? 'static ' : '';
       const returnType = this.generateCppType(method.returnType);
-      const params = method.params.map(p => this.generateCppParam(p)).join(', ');
-      this.emit(`${staticMod}${returnType} ${method.name}(${params});`);
+      const params = method.params.map(p => this.generateParam(p)).join(', ');
+      this.emit(`${staticMod}${returnType} ${this.sanitizeIdentifier(method.name)}(${params});`);
     }
 
     if (cls.fields.length > 0) {
@@ -197,7 +233,7 @@ export class CppCodegen {
     // Fields
     for (const field of cls.fields) {
       const constMod = field.isReadonly ? 'const ' : '';
-      this.emit(`${constMod}${this.generateCppType(field.type)} ${field.name}_;`);
+      this.emit(`${constMod}${this.generateCppType(field.type)} ${this.sanitizeIdentifier(field.name)}_;`);
     }
 
     this.indent--;
@@ -205,30 +241,31 @@ export class CppCodegen {
   }
 
   private generateHeaderInterface(iface: IRInterfaceDecl): void {
-    this.emit(`struct ${iface.name} {`);
+    const ifaceName = this.sanitizeIdentifier(iface.name);
+    this.emit(`struct ${ifaceName} {`);
     this.indent++;
 
     // Properties (public fields)
     for (const prop of iface.properties) {
-      this.emit(`${this.generateCppType(prop.type)} ${prop.name};`);
+      this.emit(`${this.generateCppType(prop.type)} ${this.sanitizeIdentifier(prop.name)};`);
     }
 
     // Methods (pure virtual)
     for (const method of iface.methods) {
       const returnType = this.generateCppType(method.returnType);
       const params = method.params.map(p => this.generateCppParam(p)).join(', ');
-      this.emit(`virtual ${returnType} ${method.name}(${params}) = 0;`);
+      this.emit(`virtual ${returnType} ${this.sanitizeIdentifier(method.name)}(${params}) = 0;`);
     }
 
     this.emit('');
-    this.emit('virtual ~' + iface.name + '() = default;');
+    this.emit('virtual ~' + ifaceName + '() = default;');
 
     this.indent--;
     this.emit('};');
   }
 
   private generateHeaderConst(constDecl: any): void {
-    this.emit(`extern const ${this.generateCppType(constDecl.type)} ${constDecl.name};`);
+    this.emit(`extern const ${this.generateCppType(constDecl.type)} ${this.sanitizeIdentifier(constDecl.name)};`);
   }
 
   // ========================================================================
@@ -339,7 +376,7 @@ export class CppCodegen {
   }
 
   private generateSourceConst(constDecl: any): void {
-    this.emit(`const ${this.generateCppType(constDecl.type)} ${constDecl.name} = ${this.generateExpr(constDecl.value)};`);
+    this.emit(`const ${this.generateCppType(constDecl.type)} ${this.sanitizeIdentifier(constDecl.name)} = ${this.generateExpr(constDecl.value)};`);
   }
 
   private generateBlockStatements(block: IRBlock): void {
@@ -358,11 +395,11 @@ export class CppCodegen {
     
     switch (inst.kind) {
       case 'assign':
-        this.emit(`auto ${inst.target.name} = ${this.generateExpr(inst.value)};`);
+        this.emit(`auto ${this.sanitizeIdentifier(inst.target.name)} = ${this.generateExpr(inst.value)};`);
         break;
       case 'call':
         if (inst.target) {
-          this.emit(`auto ${inst.target.name} = ${this.generateExpr(inst.callee)}(${inst.args.map(a => this.generateExpr(a)).join(', ')});`);
+          this.emit(`auto ${this.sanitizeIdentifier(inst.target.name)} = ${this.generateExpr(inst.callee)}(${inst.args.map(a => this.generateExpr(a)).join(', ')});`);
         } else {
           this.emit(`${this.generateExpr(inst.callee)}(${inst.args.map(a => this.generateExpr(a)).join(', ')});`);
         }
@@ -402,7 +439,7 @@ export class CppCodegen {
       case 'literal':
         return this.generateLiteral(expr.value);
       case 'variable':
-        return expr.name;
+        return this.sanitizeIdentifier(expr.name);
       case 'binary':
         return `(${this.generateExpr(expr.left)} ${expr.op} ${this.generateExpr(expr.right)})`;
       case 'unary':
@@ -429,6 +466,8 @@ export class CppCodegen {
       case 'object':
         // Objects are not directly supported in C++ - would need struct definition
         return `/* object literal */`;
+      case 'lambda':
+        return this.generateLambda(expr);
       case 'move':
         return this.mode === 'ownership'
           ? `std::move(${this.generateExpr(expr.source)})`
@@ -449,6 +488,45 @@ export class CppCodegen {
       // Ownership mode: use std::make_unique
       return `std::make_unique<${className}>(${argsList})`;
     }
+  }
+
+  private generateLambda(lambda: IRExpr): string {
+    if (lambda.kind !== 'lambda') {
+      return 'nullptr';
+    }
+
+    // Generate C++ lambda: [captures](params) -> returnType { body }
+    const params = lambda.params.map(p => `${this.generateCppType(p.type)} ${this.sanitizeIdentifier(p.name)}`).join(', ');
+    
+    // For now, capture everything by value (simple approach)
+    // TODO: Proper capture analysis for optimization
+    const capture = lambda.captures.length > 0 ? '=' : '';
+    
+    // Check for simple expression body (no instructions, just return)
+    if (lambda.body.instructions.length === 0 && lambda.body.terminator.kind === 'return' && lambda.body.terminator.value) {
+      // Simple expression lambda: (x) => x * 2
+      const returnExpr = this.generateExpr(lambda.body.terminator.value);
+      return `[${capture}](${params}) { return ${returnExpr}; }`;
+    }
+    
+    // Multi-statement lambda
+    const savedIndent = this.indent;
+    const savedOutput = this.output;
+    this.output = [];
+    this.indent = 0;
+    
+    // Generate statements from block
+    for (const inst of lambda.body.instructions) {
+      this.generateInstruction(inst);
+    }
+    this.generateTerminator(lambda.body.terminator);
+    
+    const bodyLines = this.output;
+    this.output = savedOutput;
+    this.indent = savedIndent;
+    
+    const body = bodyLines.map(line => '  ' + line).join('\n');
+    return `[${capture}](${params}) {\n${body}\n}`;
   }
 
   private generateLiteral(value: number | string | boolean | null): string {
@@ -529,8 +607,13 @@ export class CppCodegen {
     }
   }
 
+  private generateParam(param: IRParam): string {
+    return `${this.generateCppType(param.type)} ${this.sanitizeIdentifier(param.name)}`;
+  }
+
+  // Alias for consistency
   private generateCppParam(param: IRParam): string {
-    return `${this.generateCppType(param.type)} ${param.name}`;
+    return this.generateParam(param);
   }
 
   private emit(line: string): void {

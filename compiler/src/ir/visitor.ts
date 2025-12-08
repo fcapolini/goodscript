@@ -111,6 +111,13 @@ export abstract class IRVisitor<T = void> {
       case 'object':
         expr.properties.forEach(prop => this.visitExpr(prop.value));
         return undefined as T;
+      case 'lambda':
+        // Visit lambda body block (instructions only, terminator is implicit)
+        expr.body.instructions.forEach(inst => this.visitInstruction(inst));
+        if (expr.body.terminator.kind === 'return' && expr.body.terminator.value) {
+          this.visitExpr(expr.body.terminator.value);
+        }
+        return undefined as T;
       case 'move':
       case 'borrow':
         return this.visitExpr(expr.source);

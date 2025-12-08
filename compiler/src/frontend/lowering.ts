@@ -5,7 +5,7 @@
  */
 
 import ts from 'typescript';
-import type { IRModule, IRProgram, IRDeclaration, IRExpr, IRType, IRBlock, IRInstruction } from '../ir/types.js';
+import type { IRModule, IRProgram, IRDeclaration, IRExpr, IRType, IRBlock, IRInstruction, IRTerminator } from '../ir/types.js';
 import { BinaryOp, UnaryOp, Ownership } from '../ir/types.js';
 import { IRBuilder, types, expr } from '../ir/builder.js';
 
@@ -146,16 +146,21 @@ export class IRLowering {
 
   private lowerBlock(node: ts.Block, sourceFile: ts.SourceFile): IRBlock {
     const instructions: IRInstruction[] = [];
+    let terminator: IRTerminator = { kind: 'return', value: undefined };
     
     for (const stmt of node.statements) {
+      // Check if this is a return statement
+      if (ts.isReturnStatement(stmt)) {
+        const returnValue = stmt.expression ? this.lowerExpr(stmt.expression, sourceFile) : undefined;
+        terminator = { kind: 'return', value: returnValue };
+        break; // No more statements after return
+      }
+      
       const instr = this.lowerStatement(stmt, sourceFile);
       if (instr) instructions.push(instr);
     }
 
-    return this.builder.block(
-      instructions,
-      { kind: 'return', value: undefined }
-    );
+    return this.builder.block(instructions, terminator);
   }
 
   private lowerStatement(node: ts.Statement, sourceFile: ts.SourceFile): IRInstruction | null {
@@ -249,13 +254,39 @@ export class IRLowering {
 
     // Arrow function (lambda)
     if (ts.isArrowFunction(node)) {
-      // For now, create a placeholder - full lambda support needs closure conversion
-      // TODO: Implement proper lambda lowering with closure conversion
-      const type = this.inferType(node);
-      return expr.literal(null, type);
+      return this.lowerArrowFunction(node, sourceFile);
     }
 
     return expr.literal(null, types.void());
+  }
+
+  private lowerArrowFunction(node: ts.ArrowFunction, sourceFile: ts.SourceFile): IRExpr {
+    // Extract parameters
+    const params = node.parameters.map(p => ({
+      name: p.name.getText(sourceFile),
+      type: this.lowerTypeNode(p.type, sourceFile),
+    }));
+
+    // Lower the body
+    let body: IRBlock;
+    if (ts.isBlock(node.body)) {
+      body = this.lowerBlock(node.body, sourceFile);
+    } else {
+      // Expression body: x => x * 2
+      const returnValue = this.lowerExpr(node.body, sourceFile);
+      body = this.builder.block([], { kind: 'return', value: returnValue });
+    }
+
+    // For now, assume no captures (simple lambdas only)
+    // TODO: Implement proper capture analysis for closures
+    const captures: Array<{ name: string; type: IRType }> = [];
+
+    // Infer function type
+    const paramTypes = params.map(p => p.type);
+    const returnType = this.lowerTypeNode(node.type, sourceFile);
+    const functionType = types.function(paramTypes, returnType);
+
+    return expr.lambda(params, body, captures, functionType);
   }
 
   private lowerBinaryExpr(node: ts.BinaryExpression, sourceFile: ts.SourceFile): IRExpr {

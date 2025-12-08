@@ -17,8 +17,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 async function main() {
   console.log('🔨 Full Compilation Test: TypeScript → C++ → Native\n');
 
+  // Get input file from command line or use default
+  const inputFile = process.argv[2] || 'simple-gs.ts';
+  const basename = inputFile.replace(/-gs\.ts$/, '').replace(/^.*\//, '');
+
   // Read the example file
-  const examplePath = join(__dirname, 'simple-gs.ts');
+  const examplePath = join(__dirname, inputFile);
   const sourceCode = await readFile(examplePath, 'utf-8');
 
   // Create TypeScript program
@@ -31,13 +35,13 @@ async function main() {
   const host = ts.createCompilerHost(compilerOptions);
   const originalGetSourceFile = host.getSourceFile;
   host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
-    if (fileName === 'simple-gs.ts') {
+    if (fileName === inputFile) {
       return ts.createSourceFile(fileName, sourceCode, languageVersion, true);
     }
     return originalGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
   };
 
-  const program = ts.createProgram(['simple-gs.ts'], compilerOptions, host);
+  const program = ts.createProgram([inputFile], compilerOptions, host);
   
   console.log('✅ TypeScript program created');
 
@@ -63,10 +67,10 @@ async function main() {
   }
 
   // Create main entry point
-  const mainCpp = `#include "simple.hpp"
+  const mainCpp = `#include "${basename}.hpp"
 
 int main() {
-  goodscript::simple::main();
+  goodscript::${basename.replace(/-/g, '_')}::main();
   return 0;
 }
 `;
@@ -77,7 +81,7 @@ int main() {
   
   try {
     // Try to compile with zig
-    const zigCmd = `zig c++ -std=c++20 -I${join(__dirname, '..')} ${join(buildDir, 'simple.cpp')} ${join(buildDir, 'main.cpp')} -o ${join(buildDir, 'simple')}`;
+    const zigCmd = `zig c++ -std=c++20 -I${join(__dirname, '..')} ${join(buildDir, basename + '.cpp')} ${join(buildDir, 'main.cpp')} -o ${join(buildDir, basename)}`;
     console.log(`Running: ${zigCmd}\n`);
     
     const output = execSync(zigCmd, { 
@@ -90,7 +94,7 @@ int main() {
     
     // Try to run it
     console.log('\n🚀 Running the compiled binary...\n');
-    const runOutput = execSync(join(buildDir, 'simple'), { encoding: 'utf-8' });
+    const runOutput = execSync(join(buildDir, basename), { encoding: 'utf-8' });
     console.log(runOutput);
     
   } catch (err) {
