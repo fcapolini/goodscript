@@ -327,6 +327,11 @@ export class IRLowering {
       return expr.literal(null, types.nullable(types.void()));
     }
 
+    if (node.kind === ts.SyntaxKind.UndefinedKeyword) {
+      // In C++, undefined is represented as nullptr (same as null)
+      return expr.literal(null, types.void());
+    }
+
     // Binary expressions
     if (ts.isBinaryExpression(node)) {
       return this.lowerBinaryExpr(node, sourceFile);
@@ -346,6 +351,12 @@ export class IRLowering {
     // Variable reference
     if (ts.isIdentifier(node)) {
       const name = node.text;
+      
+      // Handle undefined as a special literal (it's an identifier in TypeScript, not a keyword)
+      if (name === 'undefined') {
+        return expr.literal(null, types.void());
+      }
+      
       const type = this.inferType(node);
       return expr.variable(name, 0, type);
     }
