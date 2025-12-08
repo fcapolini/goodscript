@@ -595,13 +595,27 @@ export class CppCodegen {
       }
       
       case 'call': {
+        // Special handling for console methods
+        if (expr.callee.kind === 'memberAccess' && 
+            expr.callee.object.kind === 'identifier' && 
+            expr.callee.object.name === 'console') {
+          const method = expr.callee.member;
+          const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
+          return `gs::console::${method}(${args})`;
+        }
+        
         const callee = this.generateExpression(expr.callee);
         const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
         return `${callee}(${args})`;
       }
       
-      case 'memberAccess':
-        return `${this.generateExpression(expr.object)}.${this.sanitizeIdentifier(expr.member)}`;
+      case 'memberAccess': {
+        const obj = this.generateExpression(expr.object);
+        // Don't sanitize standard library method names (map, filter, etc.)
+        // These are methods on objects, not standalone identifiers
+        const member = expr.member;
+        return `${obj}.${member}`;
+      }
       
       case 'indexAccess': {
         const obj = this.generateExpression(expr.object);
@@ -650,9 +664,8 @@ export class CppCodegen {
       }
       
       case 'lambda': {
-        // Generate C++ lambda
+        // Generate C++ lambda with auto return type (C++ will infer it)
         const params = expr.params.map(p => `${this.generateCppType(p.type)} ${this.sanitizeIdentifier(p.name)}`).join(', ');
-        const returnType = expr.type.kind === 'function' ? this.generateCppType(expr.type.returnType) : 'auto';
         
         // Generate lambda body (IRBlock format)
         const savedOutput = this.output;
@@ -669,7 +682,7 @@ export class CppCodegen {
         this.output = savedOutput;
         this.indent = savedIndent;
         
-        return `[](${params}) -> ${returnType} {\n${bodyCode}\n}`;
+        return `[](${params}) {\n${bodyCode}\n}`;
       }
 
       default:

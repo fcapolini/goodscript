@@ -1,17 +1,56 @@
 # Standard Library Requirements for Compiler & Runtime
 
 **Date**: December 8, 2025  
-**Status**: Analysis for Phase 7 (Runtime & Language Features)
+**Status**: Phase 7a.1 COMPLETE ✅, Phase 7a.2 COMPLETE ✅
 
 This document catalogs the language features and runtime APIs required to support the GoodScript standard library. The stdlib defines the requirements; the compiler and runtime must adapt to support them.
 
 ## Executive Summary
 
-**Current State**: Compiler can handle basic expressions, functions, arrays, and objects. Binary compilation works.
+**Current State**: 
+- ✅ Phase 7a.1: Exception handling (try/catch/throw/finally)
+- ✅ Phase 7a.2: Array methods (map, filter, slice, push, forEach, reduce, every, some, indexOf, includes)
+- Compiler handles expressions, functions, arrays, objects, lambdas
+- Binary compilation working via Zig
+- 180/195 tests passing (92.3%)
 
-**Gap**: stdlib uses advanced features not yet implemented in the compiler or runtime.
+**Gap**: stdlib still needs async/await, optional chaining, for-of loops, Map methods, union types
 
 **Priority**: Implement features in phases, starting with most fundamental and widely used.
+
+---
+
+## Phase 7a Completed Features
+
+### ✅ 7a.1 Exception Handling (COMPLETE)
+**Status**: Implemented December 8, 2025
+
+**Implemented**:
+- AST-level IR: `IRTryStatement`, `IRCatchClause`, `IRThrowStatement`, `IRFinallyBlock`
+- C++ codegen: `try-catch-finally` blocks, `throw` statements
+- Error class: Full TypeScript Error API (name, message, stack)
+- Test coverage: 15+ tests for all exception scenarios
+
+**Tests**:
+- `examples/null-test-gs.ts` - Try/catch with null checks
+- `examples/null-simple-test-gs.ts` - Basic exception handling
+
+### ✅ 7a.2 Array Methods (COMPLETE)
+**Status**: Implemented December 8, 2025
+
+**Implemented**:
+- Method name sanitization fix (map, filter, etc. no longer renamed to map_, filter_)
+- Lambda return type inference (auto return type instead of explicit void)
+- console.log generation (properly maps to gs::console::log)
+- Array method compilation: map, filter, slice, push, forEach, reduce, every, some, indexOf, includes
+
+**Tests**:
+- `examples/array-methods-test-gs.ts` - map, filter, slice, push
+- `examples/array-methods-advanced-test-gs.ts` - forEach, reduce, every, some, indexOf, includes
+
+**Limitations**:
+- find() requires union type support (number | undefined) - not yet implemented
+- Lambda capture not yet implemented (forEach with external variables)
 
 ---
 
