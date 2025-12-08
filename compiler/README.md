@@ -88,7 +88,7 @@ pnpm dev
 - CLI tool for command-line usage
 - Runtime library implementation
 - Standard library porting
-- Source map generation
+- Source maps for C++ debugging (read from tsconfig.json)
 
 ## File Extensions
 

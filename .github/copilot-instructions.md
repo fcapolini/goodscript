@@ -349,11 +349,13 @@ worker.onmessage = (event) => {
 
 ## Next Steps (Priority Order)
 
-1. **Phase 4**: Optimizer - constant folding, DCE, SSA transformations
-2. **Phase 5**: C++ backend - generate compilable C++ with source maps
-3. **Phase 5**: TypeScript backend - clean transpilation with source maps
-4. **Runtime**: Standard library implementation
-5. **Tooling**: CLI, build system integration, IDE support
+1. **CLI tool**: Command-line interface for compilation
+2. **Runtime library**: Core runtime support (workers, async, etc.)
+3. **Standard library**: Port existing standard library packages
+4. **Source maps**: Read tsconfig.json to embed debug info in C++ binaries
+5. **IDE support**: LSP server, syntax highlighting
+
+**Note**: TypeScript → JavaScript source maps are handled by `tsc` automatically.
 
 ## Important Notes
 
