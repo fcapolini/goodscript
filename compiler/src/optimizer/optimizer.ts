@@ -20,6 +20,7 @@ import type {
   IRConditional,
   IRTerminator,
 } from '../ir/types.js';
+import { types } from '../ir/builder.js';
 
 export class Optimizer {
   private modified: boolean = false;
@@ -343,6 +344,14 @@ export class Optimizer {
           return { kind: 'literal', value: +val, type: expr.type };
         }
         break;
+      case 'typeof':
+        // typeof can be constant-folded if we know the type at compile time
+        let typeStr = 'undefined';
+        if (val === null) typeStr = 'object';  // JavaScript quirk
+        else if (typeof val === 'number') typeStr = 'number';
+        else if (typeof val === 'string') typeStr = 'string';
+        else if (typeof val === 'boolean') typeStr = 'boolean';
+        return { kind: 'literal', value: typeStr, type: types.string() };
     }
 
     this.modified = false;

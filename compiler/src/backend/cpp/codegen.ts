@@ -19,7 +19,7 @@ import type {
   IRParam,
   SourceLocation,
 } from '../../ir/types.js';
-import { Ownership } from '../../ir/types.js';
+import { Ownership, PrimitiveType } from '../../ir/types.js';
 import { types } from '../../ir/builder.js';
 
 type MemoryMode = 'ownership' | 'gc';
@@ -448,6 +448,9 @@ export class CppCodegen {
       case 'binary':
         return `(${this.generateExpr(expr.left)} ${expr.op} ${this.generateExpr(expr.right)})`;
       case 'unary':
+        if (expr.op === 'typeof') {
+          return this.generateTypeof(expr.operand);
+        }
         return `${expr.op}${this.generateExpr(expr.operand)}`;
       case 'conditional':
         return `(${this.generateExpr(expr.condition)} ? ${this.generateExpr(expr.whenTrue)} : ${this.generateExpr(expr.whenFalse)})`;
@@ -536,6 +539,32 @@ export class CppCodegen {
     
     const body = bodyLines.map(line => '  ' + line).join('\n');
     return `[${capture}](${params}) {\n${body}\n}`;
+  }
+
+  private generateTypeof(operand: IRExpr): string {
+    // Generate runtime type checking based on static type information
+    const typeStr = this.getTypeString(operand.type);
+    return `gs::String("${typeStr}")`;
+  }
+
+  private getTypeString(type: IRType): string {
+    if (type.kind === 'primitive') {
+      switch (type.type) {
+        case PrimitiveType.Number:
+        case PrimitiveType.Integer:
+        case PrimitiveType.Integer53:
+          return 'number';
+        case PrimitiveType.String:
+          return 'string';
+        case PrimitiveType.Boolean:
+          return 'boolean';
+        case PrimitiveType.Void:
+          return 'undefined';
+        default:
+          return 'object';
+      }
+    }
+    return 'object';
   }
 
   private generateLiteral(value: number | string | boolean | null): string {

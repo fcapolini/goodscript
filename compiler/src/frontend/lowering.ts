@@ -262,6 +262,12 @@ export class IRLowering {
       return this.lowerUnaryExpr(node, sourceFile);
     }
 
+    // Typeof expression
+    if (ts.isTypeOfExpression(node)) {
+      const operand = this.lowerExpr(node.expression, sourceFile);
+      return expr.unary(UnaryOp.Typeof, operand, types.string());
+    }
+
     // Variable reference
     if (ts.isIdentifier(node)) {
       const name = node.text;
@@ -431,6 +437,8 @@ export class IRLowering {
     switch (kind) {
       case ts.SyntaxKind.MinusToken: return UnaryOp.Neg;
       case ts.SyntaxKind.ExclamationToken: return UnaryOp.Not;
+      case ts.SyntaxKind.PlusToken: return UnaryOp.Plus;
+      case ts.SyntaxKind.TypeOfKeyword: return UnaryOp.Typeof;
       default: return UnaryOp.Not;
     }
   }
