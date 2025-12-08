@@ -4,11 +4,11 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete (172 tests passing)
+**Current Status**: Phase 1-6 implementation complete (174 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
-- ✅ AST → IR lowering (expressions, lambdas, templates)
+- ✅ AST → IR lowering (expressions, lambdas, templates, arrays)
 - ✅ Ownership analyzer (Phase 2a: cycle detection)
 - ✅ Null checker (Phase 2b: use<T> safety)
 - ✅ Optimizer (constant folding, DCE, multi-pass)
@@ -20,14 +20,18 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ Assignment expressions (declaration vs reassignment tracking)
 - ✅ typeof operator (compile-time type detection)
 - ✅ Template literals (lowered to string concatenation)
+- ✅ Array operations (literals, indexing, .length)
+- ✅ console.log and console methods
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
-**Recent Progress (Dec 8, 2025)**:
-- Implemented assignment expressions with proper declaration tracking
-- Added typeof operator with compile-time type detection
-- Implemented template literal expressions (`` `Hello, ${name}!` ``)
-- Added compound assignment operators (+=, -=, *=, /=, %=)
-- Added increment/decrement operators (++, --, both prefix and postfix)
+**Recent Progress (Dec 8, 2025 - Evening)**:
+- Fixed console.log generation (now generates gs::console::log correctly)
+- Enhanced type inference to use TypeScript's type checker for arrays
+- Fixed array.length property access (now generates arr.length() method call)
+- Fixed array indexing with number type (auto-cast to int, dereference primitives)
+- Fixed empty array type inference using getContextualType()
+- End-to-end compilation working for array operations
+- All 174 tests passing
 - Added undefined keyword support (maps to nullptr in C++)
 - All expression types now generate correct C++ code
 
