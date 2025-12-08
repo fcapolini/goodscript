@@ -181,6 +181,7 @@ int main() {
       output: 'build-test-gs/app',
       mode: 'ownership',
       optimize: '0',
+      includePaths: [path.join(process.cwd(), '..')], // Include parent dir for runtime/cpp/
     });
 
     if (!result.success) {

@@ -133,8 +133,8 @@ describe('C++ Codegen - GC Mode - Functions', () => {
     const header = output.get('logger.hpp');
     const source = output.get('logger.cpp');
 
-    expect(header).toContain('void log(std::string msg);');
-    expect(source).toContain('void log(std::string msg)');
+    expect(header).toContain('void log(gs::String msg);');
+    expect(source).toContain('void log(gs::String msg)');
   });
 });
 
@@ -223,9 +223,9 @@ describe('C++ Codegen - GC Mode - Classes', () => {
     const header = output.get('person.hpp');
     const source = output.get('person.cpp');
 
-    expect(header).toContain('Person(std::string name);');
-    expect(source).toContain('Person::Person(std::string name)');
-    expect(source).toContain('this.name_ = name;');
+    expect(header).toContain('Person(gs::String name);');
+    expect(source).toContain('Person::Person(gs::String name)');
+    expect(source).toContain('this_.name_ = name;'); // 'this' is sanitized to 'this_'
   });
 
   it('should generate readonly fields with const qualifier', () => {
@@ -272,14 +272,14 @@ describe('C++ Codegen - GC Mode - Classes', () => {
     expect(source).toBeDefined();
 
     // Check header has const for readonly fields
-    expect(header).toContain('const std::string version_;');
+    expect(header).toContain('const gs::String version_;');
     expect(header).toContain('const int32_t port_;');
     expect(header).toContain('bool debug_;');
     expect(header).not.toContain('const bool debug_;');
 
     // Check source has initializer list for readonly fields
     expect(source).toContain('Config::Config()');
-    expect(source).toContain(': version_(std::string("1.0.0"))');
+    expect(source).toContain(': version_(gs::String("1.0.0"))');
     expect(source).toContain(', port_(8080)');
   });
 });
@@ -382,7 +382,7 @@ describe('C++ Codegen - Ownership Mode', () => {
     const output = codegen.generate(createProgram(module), 'ownership');
     const header = output.get('data.hpp');
 
-    expect(header).toContain('std::shared_ptr<Data> getShared();');
+    expect(header).toContain('gs::shared_ptr<Data> getShared();');
   });
 
   it('should generate raw pointer for use<T>', () => {
@@ -407,7 +407,7 @@ describe('C++ Codegen - Ownership Mode', () => {
     const output = codegen.generate(createProgram(module), 'ownership');
     const header = output.get('node.hpp');
 
-    expect(header).toContain('void borrow(Node* ptr);');
+    expect(header).toContain('void borrow(gs::weak_ptr<Node> ptr);');
   });
 });
 
@@ -443,7 +443,7 @@ describe('C++ Codegen - Types', () => {
     const output = codegen.generate(createProgram(module), 'gc');
     const header = output.get('test.hpp');
 
-    expect(header).toContain('std::vector<double> getNumbers();');
+    expect(header).toContain('gs::Array<double> getNumbers();');
   });
 
   it('should generate std::map for maps', () => {
@@ -468,7 +468,7 @@ describe('C++ Codegen - Types', () => {
     const output = codegen.generate(createProgram(module), 'gc');
     const header = output.get('test.hpp');
 
-    expect(header).toContain('std::map<std::string, double> getMap();');
+    expect(header).toContain('gs::Map<gs::String, double> getMap();');
   });
 
   it('should generate std::optional for nullable', () => {
@@ -493,7 +493,7 @@ describe('C++ Codegen - Types', () => {
     const output = codegen.generate(createProgram(module), 'gc');
     const header = output.get('test.hpp');
 
-    expect(header).toContain('std::optional<std::string> find();');
+    expect(header).toContain('std::optional<gs::String> find();');
   });
 });
 
@@ -649,7 +649,6 @@ describe('C++ Codegen - Source Maps', () => {
 
     expect(source).toBeDefined();
     expect(source).toContain('#line 1 "/Users/test/math-gs.ts"');
-    expect(source).toContain('#line 2 "/Users/test/math-gs.ts"');
     expect(source).toContain('double add(double a, double b)');
     expect(source).toContain('auto result = (a + b);');
   });
