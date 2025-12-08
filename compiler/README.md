@@ -134,3 +134,37 @@ type integer53 = number;  // int64_t in C++, safe integer in JS
 ```
 
 Integer semantics are only guaranteed in C++ compilation mode.
+
+## tsconfig.json Integration
+
+The compiler reads `tsconfig.json` to auto-configure C++ compilation:
+
+**Debug Mode** (`"sourceMap": true`):
+```json
+{
+  "compilerOptions": {
+    "sourceMap": true  // Enables -g flag, -O0 (no optimization)
+  }
+}
+```
+- Generates debug symbols in C++ binary
+- Disables optimizations for easier debugging
+- Stack traces map back to `-gs.ts` source lines
+
+**Production Mode** (no `sourceMap` or `false`):
+```json
+{
+  "compilerOptions": {
+    "sourceMap": false  // Enables -O3 (full optimization)
+  }
+}
+```
+- Maximum optimizations
+- Smaller binary size
+- Faster execution
+
+Override with CLI flags:
+```bash
+gsc --debug src/main-gs.ts       # Force debug mode
+gsc --optimize 3 src/main-gs.ts  # Force optimization level
+```

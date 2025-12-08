@@ -23,6 +23,9 @@ export interface CompileOptions {
   /** Build directory for intermediate files */
   buildDir?: string;
   
+  /** Path to tsconfig.json (auto-detects sourceMap for debug mode) */
+  tsconfig?: string;
+  
   /** Enable debug symbols */
   debug?: boolean;
 }
