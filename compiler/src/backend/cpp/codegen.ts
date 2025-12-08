@@ -395,7 +395,12 @@ export class CppCodegen {
     
     switch (inst.kind) {
       case 'assign':
-        this.emit(`auto ${this.sanitizeIdentifier(inst.target.name)} = ${this.generateExpr(inst.value)};`);
+        // If isDeclaration is not set (undefined), treat as declaration for backwards compatibility
+        if (inst.isDeclaration !== false) {
+          this.emit(`auto ${this.sanitizeIdentifier(inst.target.name)} = ${this.generateExpr(inst.value)};`);
+        } else {
+          this.emit(`${this.sanitizeIdentifier(inst.target.name)} = ${this.generateExpr(inst.value)};`);
+        }
         break;
       case 'call':
         if (inst.target) {

@@ -12,6 +12,7 @@ import { IRBuilder, types, expr } from '../ir/builder.js';
 export class IRLowering {
   private builder = new IRBuilder();
   private typeChecker!: ts.TypeChecker;
+  private declaredVariables = new Set<string>();
 
   lower(program: ts.Program): IRProgram {
     this.typeChecker = program.getTypeChecker();
@@ -28,6 +29,7 @@ export class IRLowering {
 
   private lowerModule(sourceFile: ts.SourceFile): IRModule {
     this.builder.resetVersions();
+    this.declaredVariables.clear();
     const declarations: IRDeclaration[] = [];
     
     ts.forEachChild(sourceFile, (node) => {
@@ -172,16 +174,44 @@ export class IRLowering {
       const type = this.lowerType(decl, sourceFile);
       const value = this.lowerExpr(decl.initializer, sourceFile);
       const variable = this.builder.variable(name, type);
+      
+      // Mark this variable as declared
+      this.declaredVariables.add(name);
 
       return {
         kind: 'assign',
         target: variable,
         value,
         type,
+        isDeclaration: true,
       };
     }
 
     if (ts.isExpressionStatement(node)) {
+      // Check if this is an assignment expression
+      if (ts.isBinaryExpression(node.expression) &&
+          node.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+        // Generate an assignment instruction
+        const target = this.lowerExpr(node.expression.left, sourceFile);
+        const value = this.lowerExpr(node.expression.right, sourceFile);
+        
+        // Target must be a variable
+        if (target.kind !== 'variable') {
+          throw new Error('Assignment target must be a variable');
+        }
+        
+        // Check if this is a reassignment (variable already declared)
+        const isReassignment = this.declaredVariables.has(target.name);
+        
+        return {
+          kind: 'assign',
+          target,
+          value,
+          type: value.type,
+          isDeclaration: !isReassignment,
+        };
+      }
+      
       const value = this.lowerExpr(node.expression, sourceFile);
       return {
         kind: 'expr',

@@ -199,6 +199,7 @@ export interface IRAssign {
   target: IRVariable;
   value: IRExpr;
   type: IRType;
+  isDeclaration?: boolean;  // True for initial declaration, false/undefined for reassignment
 }
 
 export interface IRCall {
