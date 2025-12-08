@@ -538,3 +538,120 @@ describe('C++ Codegen - Namespaces', () => {
     expect(header).toContain('namespace vector {');
   });
 });
+
+describe('C++ Codegen - Source Maps', () => {
+  const codegen = new CppCodegen();
+
+  it('should emit #line directives when sourceMap is enabled', () => {
+    const func: IRFunctionDecl = {
+      kind: 'function',
+      name: 'add',
+      params: [
+        { name: 'a', type: types.number() },
+        { name: 'b', type: types.number() },
+      ],
+      returnType: types.number(),
+      source: {
+        file: '/Users/test/math-gs.ts',
+        line: 1,
+        column: 1,
+      },
+      body: createBlock(
+        0,
+        [
+          {
+            kind: 'assign',
+            target: { kind: 'variable', name: 'result', version: 0, type: types.number() },
+            value: {
+              kind: 'binary',
+              op: '+',
+              left: { kind: 'variable', name: 'a', version: 0, type: types.number() },
+              right: { kind: 'variable', name: 'b', version: 0, type: types.number() },
+              type: types.number(),
+            },
+            source: {
+              file: '/Users/test/math-gs.ts',
+              line: 2,
+              column: 9,
+            },
+          },
+        ],
+        {
+          kind: 'return',
+          value: { kind: 'variable', name: 'result', version: 0, type: types.number() },
+        }
+      ),
+    };
+
+    const module: IRModule = {
+      path: 'math-gs.ts',
+      declarations: [func],
+      imports: [],
+    };
+
+    const output = codegen.generate(createProgram(module), 'gc', true);
+    const source = output.get('math.cpp');
+
+    expect(source).toBeDefined();
+    expect(source).toContain('#line 1 "/Users/test/math-gs.ts"');
+    expect(source).toContain('#line 2 "/Users/test/math-gs.ts"');
+    expect(source).toContain('double add(double a, double b)');
+    expect(source).toContain('auto result = (a + b);');
+  });
+
+  it('should not emit #line directives when sourceMap is disabled', () => {
+    const func: IRFunctionDecl = {
+      kind: 'function',
+      name: 'add',
+      params: [
+        { name: 'a', type: types.number() },
+        { name: 'b', type: types.number() },
+      ],
+      returnType: types.number(),
+      source: {
+        file: '/Users/test/math-gs.ts',
+        line: 1,
+        column: 1,
+      },
+      body: createBlock(
+        0,
+        [
+          {
+            kind: 'assign',
+            target: { kind: 'variable', name: 'result', version: 0, type: types.number() },
+            value: {
+              kind: 'binary',
+              op: '+',
+              left: { kind: 'variable', name: 'a', version: 0, type: types.number() },
+              right: { kind: 'variable', name: 'b', version: 0, type: types.number() },
+              type: types.number(),
+            },
+            source: {
+              file: '/Users/test/math-gs.ts',
+              line: 2,
+              column: 9,
+            },
+          },
+        ],
+        {
+          kind: 'return',
+          value: { kind: 'variable', name: 'result', version: 0, type: types.number() },
+        }
+      ),
+    };
+
+    const module: IRModule = {
+      path: 'math-gs.ts',
+      declarations: [func],
+      imports: [],
+    };
+
+    const output = codegen.generate(createProgram(module), 'gc', false);
+    const source = output.get('math.cpp');
+
+    expect(source).toBeDefined();
+    expect(source).not.toContain('#line');
+    expect(source).toContain('double add(double a, double b)');
+    expect(source).toContain('auto result = (a + b);');
+  });
+});

@@ -4,7 +4,7 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete (149 tests passing)
+**Current Status**: Phase 1-6 implementation complete (156 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
@@ -12,8 +12,9 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ Ownership analyzer (Phase 2a: cycle detection)
 - ✅ Null checker (Phase 2b: use<T> safety)
 - ✅ Optimizer (constant folding, DCE, multi-pass)
-- ✅ C++ backend
+- ✅ C++ backend (GC and ownership modes)
 - ✅ Zig compiler integration (binary compilation)
+- ✅ Source maps (#line directives for debugging)
 
 ## Architecture
 
@@ -220,7 +221,7 @@ const body: IRBlock = {
 
 ## Testing
 
-**Current Test Suite (149 tests)**:
+**Current Test Suite (156 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (13 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
@@ -228,8 +229,9 @@ const body: IRBlock = {
 - `test/ownership.test.ts` - Ownership cycle detection (16 tests)
 - `test/null-checker.test.ts` - use<T> lifetime safety (13 tests)
 - `test/optimizer.test.ts` - IR optimization passes (15 tests)
-- `test/cpp-codegen.test.ts` - C++ code generation (15 tests)
+- `test/cpp-codegen.test.ts` - C++ code generation (17 tests, includes source maps)
 - `test/zig-compiler.test.ts` - Zig compiler integration (10 tests)
+- `test/tsconfig-integration.test.ts` - tsconfig.json integration (5 tests)
 
 **Run Tests**:
 ```bash
@@ -352,10 +354,9 @@ worker.onmessage = (event) => {
 1. **CLI tool**: Command-line interface for compilation
 2. **Runtime library**: Core runtime support (workers, async, etc.)
 3. **Standard library**: Port existing standard library packages
-4. **Source maps**: Read tsconfig.json to embed debug info in C++ binaries
-5. **IDE support**: LSP server, syntax highlighting
+4. **IDE support**: LSP server, syntax highlighting
 
-**Note**: TypeScript → JavaScript source maps are handled by `tsc` automatically.
+**Note**: Source maps (C++ #line directives) and tsconfig.json integration are already implemented.
 
 ## Important Notes
 

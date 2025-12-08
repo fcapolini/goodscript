@@ -34,6 +34,9 @@ export interface CompileOptions {
   /** Enable debug symbols */
   debug?: boolean;
   
+  /** Enable source maps (embeds #line directives in C++) */
+  sourceMap?: boolean;
+  
   /** Additional include paths */
   includePaths?: string[];
   

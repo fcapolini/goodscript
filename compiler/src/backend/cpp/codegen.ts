@@ -19,6 +19,7 @@ import type {
   IRParam,
   IRField,
   IRMethod,
+  SourceLocation,
 } from '../../ir/types.js';
 import { Ownership } from '../../ir/types.js';
 
@@ -26,12 +27,14 @@ type MemoryMode = 'ownership' | 'gc';
 
 export class CppCodegen {
   private mode: MemoryMode = 'gc';
+  private sourceMap = false;
   private indent = 0;
   private output: string[] = [];
   private currentNamespace: string[] = [];
 
-  generate(program: IRProgram, mode: MemoryMode): Map<string, string> {
+  generate(program: IRProgram, mode: MemoryMode, sourceMap = false): Map<string, string> {
     this.mode = mode;
+    this.sourceMap = sourceMap;
     const files = new Map<string, string>();
 
     for (const module of program.modules) {
@@ -284,6 +287,9 @@ export class CppCodegen {
     const returnType = this.generateCppType(func.returnType);
     const params = func.params.map(p => this.generateCppParam(p)).join(', ');
     
+    // Emit source location for function declaration
+    this.emitSourceLocation(func.source);
+    
     this.emit(`${returnType} ${func.name}(${params}) {`);
     this.indent++;
     this.generateBlockStatements(func.body);
@@ -336,6 +342,9 @@ export class CppCodegen {
   }
 
   private generateInstruction(inst: IRInstruction): void {
+    // Emit source location if available
+    this.emitSourceLocation(inst.source);
+    
     switch (inst.kind) {
       case 'assign':
         this.emit(`auto ${inst.target.name} = ${this.generateExpr(inst.value)};`);
@@ -507,5 +516,13 @@ export class CppCodegen {
   private emit(line: string): void {
     const indentation = '  '.repeat(this.indent);
     this.output.push(indentation + line);
+  }
+
+  private emitSourceLocation(location?: SourceLocation): void {
+    if (this.sourceMap && location) {
+      // Emit #line directive for source mapping
+      // Format: #line <line> "<filename>"
+      this.output.push(`#line ${location.line} "${location.file}"`);
+    }
   }
 }

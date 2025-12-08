@@ -2,7 +2,7 @@
 
 Clean TypeScript, compiled to native code.
 
-## 🎉 Status: Core Pipeline Complete (153/153 Tests Passing)
+## 🎉 Status: Core Pipeline Complete (156/156 Tests Passing)
 
 This is a **clean rewrite** of GoodScript with a proper IR-based compiler architecture.
 
@@ -13,8 +13,9 @@ This is a **clean rewrite** of GoodScript with a proper IR-based compiler archit
 - ✅ Null safety checking (use<T> lifetime analysis)
 - ✅ Type signatures (structural typing)
 - ✅ IR optimizer (constant folding, DCE, multi-pass)
-- ✅ TypeScript code generator (clean transpilation)
 - ✅ C++ code generator (GC and ownership modes)
+- ✅ Zig compiler integration (native binaries)
+- ✅ Source maps (#line directives for debugging)
 
 **Test Suite:**
 - 45 validator tests
@@ -24,8 +25,9 @@ This is a **clean rewrite** of GoodScript with a proper IR-based compiler archit
 - 11 type signature tests
 - 11 IR infrastructure tests
 - 15 optimizer tests
-- 14 TypeScript codegen tests
-- 15 C++ codegen tests
+- 17 C++ codegen tests (includes source maps)
+- 10 Zig compiler tests
+- 5 tsconfig integration tests
 
 **Next**: Runtime library, standard library, and CLI tooling
 
@@ -96,19 +98,25 @@ pnpm dev
 - [x] Multi-pass optimization
 - [x] SSA transformations
 
-**Phase 5: Code Generation** ✅ (29 tests)
+**Phase 5: Code Generation** ✅ (17 tests)
 - [x] C++ backend - GC mode (header + source files)
 - [x] C++ backend - Ownership mode (smart pointers)
-- [x] TypeScript backend (clean transpilation)
 - [x] Module namespaces and imports
-- [ ] Source maps
+- [x] Source maps (#line directives)
 
-**Phase 6: Runtime & Tooling** 🚧
+**Phase 6: Binary Compilation** ✅ (15 tests)
+- [x] Zig compiler integration
+- [x] Native binary generation
+- [x] Cross-compilation support
+- [x] Vendored dependencies (MPS GC, PCRE2)
+- [x] Build caching
+- [x] tsconfig.json integration
+
+**Phase 7: Runtime & Tooling** 🚧
 - [ ] CLI tool (compile, build, run)
 - [ ] Runtime library (GC integration, builtins)
 - [ ] Standard library (collections, I/O, etc.)
 - [ ] Module system integration
-- [ ] Build system (Zig integration)
 - [ ] VS Code extension
 
 ## License

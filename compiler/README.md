@@ -143,30 +143,51 @@ The compiler reads `tsconfig.json` to auto-configure C++ compilation:
 ```json
 {
   "compilerOptions": {
-    "sourceMap": true  // Enables -g flag, -O0 (no optimization)
+    "sourceMap": true  // Enables -g flag, -O0 (no optimization), #line directives
   }
 }
 ```
-- Generates debug symbols in C++ binary
-- Disables optimizations for easier debugging
-- Stack traces map back to `-gs.ts` source lines
+- Generates debug symbols in C++ binary (`-g`)
+- Disables optimizations for easier debugging (`-O0`)
+- Embeds `#line` directives mapping C++ lines → `-gs.ts` source lines
+- Stack traces show original TypeScript file and line numbers
 
 **Production Mode** (no `sourceMap` or `false`):
 ```json
 {
   "compilerOptions": {
-    "sourceMap": false  // Enables -O3 (full optimization)
+    "sourceMap": false  // Enables -O3 (full optimization), no #line directives
   }
 }
 ```
-- Maximum optimizations
+- Maximum optimizations (`-O3`)
 - Smaller binary size
 - Faster execution
+- No source location tracking
 
 Override with CLI flags:
 ```bash
-gsc --debug src/main-gs.ts       # Force debug mode
+gsc --debug src/main-gs.ts       # Force debug mode with source maps
 gsc --optimize 3 src/main-gs.ts  # Force optimization level
+```
+
+**How Source Maps Work:**
+
+When `sourceMap: true`, the compiler embeds C preprocessor `#line` directives:
+
+```cpp
+// Generated C++ code
+#line 1 "/path/to/math-gs.ts"
+double add(double a, double b) {
+#line 2 "/path/to/math-gs.ts"
+  auto result = (a + b);
+  return result;
+}
+```
+
+This makes debuggers (gdb, lldb) and crash reports show:
+```
+math-gs.ts:2  instead of  math.cpp:47
 ```
 
 ## License

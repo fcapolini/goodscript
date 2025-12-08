@@ -26,8 +26,11 @@ export interface CompileOptions {
   /** Path to tsconfig.json (auto-detects sourceMap for debug mode) */
   tsconfig?: string;
   
-  /** Enable debug symbols */
+  /** Enable debug symbols and source maps (embeds #line directives in C++) */
   debug?: boolean;
+  
+  /** Enable source maps (embeds #line directives for stack trace mapping) */
+  sourceMap?: boolean;
 }
 
 export interface Diagnostic {
