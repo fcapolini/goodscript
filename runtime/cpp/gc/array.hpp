@@ -143,6 +143,29 @@ public:
     // Properties
     size_t length() const { return length_; }
     size_t size() const { return length_; }
+    
+    /**
+     * Sets the length of the array (JavaScript semantics)
+     * Equivalent to TypeScript: arr.length = newLength
+     * Truncates if newLength < current length, pads with default values if larger
+     */
+    void setLength(int newLength) {
+        if (newLength < 0) {
+            throw std::invalid_argument("Array length must be non-negative");
+        }
+        size_t new_len = static_cast<size_t>(newLength);
+        
+        if (new_len > capacity_) {
+            resize_capacity(new_len);
+        }
+        
+        // Initialize new elements to default values if expanding
+        for (size_t i = length_; i < new_len; ++i) {
+            data_[i] = T{};
+        }
+        
+        length_ = new_len;
+    }
 
     // Methods with optimized growth
     void push(const T& value) {

@@ -197,19 +197,36 @@ export class IRLowering {
           const target = this.lowerExpr(node.expression.left, sourceFile);
           const value = this.lowerExpr(node.expression.right, sourceFile);
           
-          if (target.kind !== 'variable') {
-            throw new Error('Assignment target must be a variable');
+          // Handle different assignment targets
+          if (target.kind === 'variable') {
+            const isReassignment = this.declaredVariables.has(target.name);
+            
+            return {
+              kind: 'assign',
+              target,
+              value,
+              type: value.type,
+              isDeclaration: !isReassignment,
+            };
+          } else if (target.kind === 'index') {
+            // Array index assignment: arr[index] = value
+            return {
+              kind: 'indexAssign',
+              object: target.object,
+              index: target.index,
+              value,
+            };
+          } else if (target.kind === 'member') {
+            // Property assignment: obj.prop = value or arr.length = value
+            return {
+              kind: 'memberAssign',
+              object: target.object,
+              member: target.member,
+              value,
+            };
+          } else {
+            throw new Error('Assignment target must be a variable, property, or array element');
           }
-          
-          const isReassignment = this.declaredVariables.has(target.name);
-          
-          return {
-            kind: 'assign',
-            target,
-            value,
-            type: value.type,
-            isDeclaration: !isReassignment,
-          };
         }
         
         // Compound assignments: +=, -=, *=, /=, %=
@@ -218,20 +235,39 @@ export class IRLowering {
           const target = this.lowerExpr(node.expression.left, sourceFile);
           const right = this.lowerExpr(node.expression.right, sourceFile);
           
-          if (target.kind !== 'variable') {
-            throw new Error('Assignment target must be a variable');
+          // Handle different assignment targets
+          if (target.kind === 'variable') {
+            // Convert y += x to y = y + x
+            const value = expr.binary(compoundOp, target, right, target.type);
+            
+            return {
+              kind: 'assign',
+              target,
+              value,
+              type: target.type,
+              isDeclaration: false,
+            };
+          } else if (target.kind === 'index') {
+            // Convert arr[i] += x to arr[i] = arr[i] + x
+            const value = expr.binary(compoundOp, target, right, target.type);
+            return {
+              kind: 'indexAssign',
+              object: target.object,
+              index: target.index,
+              value,
+            };
+          } else if (target.kind === 'member') {
+            // Convert obj.prop += x to obj.prop = obj.prop + x
+            const value = expr.binary(compoundOp, target, right, target.type);
+            return {
+              kind: 'memberAssign',
+              object: target.object,
+              member: target.member,
+              value,
+            };
+          } else {
+            throw new Error('Compound assignment target must be a variable, property, or array element');
           }
-          
-          // Convert y += x to y = y + x
-          const value = expr.binary(compoundOp, target, right, target.type);
-          
-          return {
-            kind: 'assign',
-            target,
-            value,
-            type: target.type,
-            isDeclaration: false,
-          };
         }
       }
       

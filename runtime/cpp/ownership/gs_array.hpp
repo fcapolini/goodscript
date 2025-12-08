@@ -58,6 +58,18 @@ public:
   }
   
   /**
+   * Sets the length of the array (JavaScript semantics)
+   * Equivalent to TypeScript: arr.length = newLength
+   * Truncates if newLength < current length, pads with default values if larger
+   */
+  void setLength(int newLength) {
+    if (newLength < 0) {
+      throw std::invalid_argument("Array length must be non-negative");
+    }
+    impl_.resize(static_cast<size_t>(newLength));
+  }
+  
+  /**
    * Adds one or more elements to the end of the array
    * Equivalent to TypeScript: arr.push(element)
    * Returns the new length
@@ -584,7 +596,12 @@ public:
   
   // Core array methods
   int getLength() const { return static_cast<int>(impl_.size()); }
-  void setLength(int newLength) { impl_.resize(static_cast<size_t>(newLength), 0); }
+  void setLength(int newLength) { 
+    if (newLength < 0) {
+      throw std::invalid_argument("Array length must be non-negative");
+    }
+    impl_.resize(static_cast<size_t>(newLength), 0); 
+  }
   int length() const { return getLength(); }  // Alias for compatibility
   
   void push(bool value) { impl_.push_back(value ? 1 : 0); }
@@ -738,6 +755,22 @@ public:
   // For writing, provide a helper
   void set_unchecked(int index, bool value) {
     impl_[static_cast<size_t>(index)] = value ? 1 : 0;
+  }
+  
+  /**
+   * Element assignment with inline bounds checking and auto-resize
+   * More efficient than IIFE pattern for dynamic array access
+   * Matches JavaScript semantics for arr[idx] = value
+   */
+  void set(int index, bool value) {
+    if (index < 0) {
+      throw std::invalid_argument("Array index must be non-negative");
+    }
+    size_t idx = static_cast<size_t>(index);
+    if (idx >= impl_.size()) {
+      impl_.resize(idx + 1, 0);
+    }
+    impl_[idx] = value ? 1 : 0;
   }
   
   // STL compatibility - iterator support for range-based for loops

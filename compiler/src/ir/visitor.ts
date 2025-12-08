@@ -78,6 +78,13 @@ export abstract class IRVisitor<T = void> {
       case 'fieldAssign':
         this.visitExpr(instruction.object);
         return this.visitExpr(instruction.value);
+      case 'indexAssign':
+        this.visitExpr(instruction.object);
+        this.visitExpr(instruction.index);
+        return this.visitExpr(instruction.value);
+      case 'memberAssign':
+        this.visitExpr(instruction.object);
+        return this.visitExpr(instruction.value);
       case 'expr':
         return this.visitExpr(instruction.value);
     }

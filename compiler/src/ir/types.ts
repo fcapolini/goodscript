@@ -187,6 +187,8 @@ export type IRInstruction =
   | IRAssign
   | IRCall
   | IRFieldAssign
+  | IRIndexAssign
+  | IRMemberAssign
   | IRExprStmt;
 
 export interface IRExprStmt {
@@ -214,6 +216,20 @@ export interface IRFieldAssign {
   kind: 'fieldAssign';
   object: IRExpr;
   field: string;
+  value: IRExpr;
+}
+
+export interface IRIndexAssign {
+  kind: 'indexAssign';
+  object: IRExpr;
+  index: IRExpr;
+  value: IRExpr;
+}
+
+export interface IRMemberAssign {
+  kind: 'memberAssign';
+  object: IRExpr;
+  member: string;
   value: IRExpr;
 }
 

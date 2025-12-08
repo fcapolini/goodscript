@@ -412,6 +412,26 @@ export class CppCodegen {
       case 'fieldAssign':
         this.emit(`${this.generateExpr(inst.object)}.${inst.field} = ${this.generateExpr(inst.value)};`);
         break;
+      case 'indexAssign': {
+        // Array index assignment: arr[index] = value
+        // Use .set() method for bounds checking and auto-resize (JavaScript semantics)
+        const obj = this.generateExpr(inst.object);
+        const index = this.generateExpr(inst.index);
+        const value = this.generateExpr(inst.value);
+        this.emit(`${obj}.set(static_cast<int>(${index}), ${value});`);
+        break;
+      }
+      case 'memberAssign': {
+        // Property assignment: obj.prop = value
+        // Special handling for arr.length which needs setLength() method
+        const objType = inst.object.type;
+        if (objType.kind === 'array' && inst.member === 'length') {
+          this.emit(`${this.generateExpr(inst.object)}.setLength(static_cast<int>(${this.generateExpr(inst.value)}));`);
+        } else {
+          this.emit(`${this.generateExpr(inst.object)}.${this.sanitizeIdentifier(inst.member)} = ${this.generateExpr(inst.value)};`);
+        }
+        break;
+      }
       case 'expr':
         this.emit(`${this.generateExpr(inst.value)};`);
         break;
