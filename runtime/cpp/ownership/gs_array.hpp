@@ -471,6 +471,18 @@ public:
   }
   
   /**
+   * Safe element access with default value (JavaScript semantics)
+   * Returns default value for out-of-bounds or negative indices
+   * Equivalent to JavaScript: arr[index] || defaultValue
+   */
+  T get_or_default(int index, const T& defaultValue = T{}) const {
+    if (index < 0 || index >= static_cast<int>(impl_.size())) {
+      return defaultValue;
+    }
+    return impl_[static_cast<size_t>(index)];
+  }
+  
+  /**
    * Direct element access by reference (bounds-checked)
    * For performance-critical code where bounds are known to be valid
    * Not part of JavaScript API - C++ optimization
@@ -734,6 +746,17 @@ public:
     } else {
       std::sort(impl_.begin(), impl_.end());
     }
+  }
+  
+  /**
+   * Safe element access with default value (JavaScript semantics)
+   * Returns default value for out-of-bounds or negative indices
+   */
+  bool get_or_default(int index, bool defaultValue = false) const {
+    if (index < 0 || index >= static_cast<int>(impl_.size())) {
+      return defaultValue;
+    }
+    return impl_[static_cast<size_t>(index)] != 0;
   }
   
   // Direct element access - returns uint8_t& which implicitly converts to bool

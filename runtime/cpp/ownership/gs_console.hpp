@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <sstream>
+#include <optional>
 #include "gs_string.hpp"
 
 namespace gs {
@@ -143,6 +144,16 @@ private:
   
   static void log_impl(bool value) {
     std::cout << (value ? "true" : "false");
+  }
+  
+  // Support for optional values - print "undefined" if empty
+  template<typename T>
+  static void log_impl(const std::optional<T>& value) {
+    if (value.has_value()) {
+      log_impl(*value);
+    } else {
+      std::cout << "undefined";
+    }
   }
   
   // Support for arrays - print in JavaScript format

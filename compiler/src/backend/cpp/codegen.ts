@@ -498,13 +498,10 @@ export class CppCodegen {
           ? `static_cast<int>(${indexExpr})`
           : indexExpr;
         
-        // For primitive types, we need to dereference since operator[] returns T*
-        // For non-primitive types (objects), we want the pointer
-        const resultType = expr.type;
-        const isPrimitive = resultType.kind === 'primitive';
-        const indexAccess = `${obj}[${finalIndex}]`;
-        
-        return isPrimitive ? `*${indexAccess}` : indexAccess;
+        // Use safe get_or_default() method instead of operator[] to match JavaScript semantics
+        // This returns the default value for out-of-bounds access instead of crashing
+        // JavaScript: arr[100] returns undefined (we use default-initialized value)
+        return `${obj}.get_or_default(${finalIndex})`;
       }
       case 'callExpr':
         return `${this.generateExpr(expr.callee)}(${expr.args.map(a => this.generateExpr(a)).join(', ')})`;

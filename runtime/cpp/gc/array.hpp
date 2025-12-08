@@ -366,6 +366,18 @@ public:
      */
 
     /**
+     * Safe element access with default value (JavaScript semantics)
+     * Returns default value for out-of-bounds or negative indices
+     * Equivalent to JavaScript: arr[index] || defaultValue
+     */
+    T get_or_default(int index, const T& defaultValue = T{}) const {
+        if (index < 0 || index >= static_cast<int>(length_)) {
+            return defaultValue;
+        }
+        return data_[static_cast<size_t>(index)];
+    }
+
+    /**
      * Direct element access by reference (no bounds checking)
      * For performance-critical code where bounds are known to be valid
      */
