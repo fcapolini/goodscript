@@ -108,6 +108,10 @@ export const types = {
     return { kind: 'nullable', inner };
   },
 
+  union(types: IRType[]): IRType {
+    return { kind: 'union', types };
+  },
+
   function(params: IRType[], returnType: IRType): IRType {
     return { kind: 'function', params, returnType };
   },

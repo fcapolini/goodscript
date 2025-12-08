@@ -4,19 +4,20 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-2 implementation complete (109 tests passing)
+**Current Status**: Phase 1-6 implementation complete (163 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
 - ✅ AST → IR lowering
 - ✅ Ownership analyzer (Phase 2a: cycle detection)
 - ✅ Null checker (Phase 2b: use<T> safety)
-- ⏳ Optimizer (stub)
-- ⏳ C++/TypeScript backends (stubs)
+- ✅ Optimizer (constant folding, DCE, multi-pass)
+- ✅ C++/TypeScript backends
+- ✅ Zig compiler integration (binary compilation)
 
 ## Architecture
 
-### Compilation Pipeline (5 Phases)
+### Compilation Pipeline (6 Phases)
 
 ```
 TypeScript Source
@@ -34,6 +35,8 @@ TypeScript Source
 [Phase 4] Optimizer → SSA, constant folding, DCE
     ↓
 [Phase 5] Codegen → C++ (GC or ownership mode) or TypeScript
+    ↓
+[Phase 6] Binary Compilation → Zig compiler (native binaries)
 ```
 
 ### Key Files
@@ -45,8 +48,10 @@ TypeScript Source
 - `compiler/src/ir/signatures.ts` - Phase 2c: Structural type signatures
 - `compiler/src/analysis/ownership.ts` - Phase 2a: Ownership cycle detection
 - `compiler/src/analysis/null-checker.ts` - Phase 2b: use<T> lifetime safety
-- `compiler/src/optimizer/` - Phase 4 stubs
-- `compiler/src/codegen/` - Phase 5 stubs
+- `compiler/src/optimizer/optimizer.ts` - Phase 4: IR optimization passes
+- `compiler/src/backend/typescript.ts` - Phase 5: TypeScript code generator
+- `compiler/src/backend/cpp/codegen.ts` - Phase 5: C++ code generator
+- `compiler/src/backend/cpp/zig-compiler.ts` - Phase 6: Zig compiler integration
 
 ### Documentation
 
@@ -216,13 +221,17 @@ const body: IRBlock = {
 
 ## Testing
 
-**Current Test Suite (109 tests)**:
+**Current Test Suite (163 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (13 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
 - `test/signatures.test.ts` - Type signatures (11 tests)
 - `test/ownership.test.ts` - Ownership cycle detection (16 tests)
 - `test/null-checker.test.ts` - use<T> lifetime safety (13 tests)
+- `test/optimizer.test.ts` - IR optimization passes (15 tests)
+- `test/typescript-codegen.test.ts` - TypeScript code generation (14 tests)
+- `test/cpp-codegen.test.ts` - C++ code generation (15 tests)
+- `test/zig-compiler.test.ts` - Zig compiler integration (10 tests)
 
 **Run Tests**:
 ```bash

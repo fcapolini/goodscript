@@ -10,6 +10,21 @@ export interface CompileOptions {
   optimize?: boolean;
   emit?: 'js' | 'ts' | 'both';
   skipValidation?: boolean;
+  
+  /** Compile to binary (requires --target native) */
+  compile?: boolean;
+  
+  /** Output binary path (when compile=true) */
+  outputBinary?: string;
+  
+  /** Target triple for cross-compilation (e.g., 'x86_64-linux-gnu') */
+  targetTriple?: string;
+  
+  /** Build directory for intermediate files */
+  buildDir?: string;
+  
+  /** Enable debug symbols */
+  debug?: boolean;
 }
 
 export interface Diagnostic {
@@ -29,4 +44,6 @@ export interface CompileResult {
   success: boolean;
   diagnostics: Diagnostic[];
   output?: Map<string, string>; // fileName -> content
+  binaryPath?: string; // Path to compiled binary (when compile=true)
+  buildTime?: number; // Time in ms
 }

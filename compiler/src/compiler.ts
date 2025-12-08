@@ -9,11 +9,13 @@ import { NullChecker } from './frontend/null-checker.js';
 import { IRLowering } from './frontend/lowering.js';
 import { Optimizer } from './optimizer/optimizer.js';
 import { CppCodegen } from './backend/cpp/codegen.js';
+import { ZigCompiler } from './backend/cpp/zig-compiler.js';
 import { TypeScriptCodegen } from './backend/typescript.js';
 import type { CompileOptions, CompileResult } from './types.js';
 
-export function compile(options: CompileOptions): CompileResult {
+export async function compile(options: CompileOptions): Promise<CompileResult> {
   const diagnostics: CompileResult['diagnostics'] = [];
+  const startTime = Date.now();
 
   try {
     // Phase 0: Parse
@@ -64,22 +66,64 @@ export function compile(options: CompileOptions): CompileResult {
       return { success: false, diagnostics };
     }
 
-    // Phase 2: Lower to IR
+    // Phase 3: Lower to IR
     const lowering = new IRLowering();
     let ir = lowering.lower(program);
 
-    // Phase 3: Optimize
+    // Phase 4: Optimize
     if (options.optimize) {
       const optimizer = new Optimizer();
       ir = optimizer.optimize(ir, 1);
     }
 
-    // Phase 4: Generate code
+    // Phase 5: Generate code
     let output: Map<string, string>;
     
     if (options.target === 'native') {
       const codegen = new CppCodegen();
       output = codegen.generate(ir, options.mode ?? 'gc');
+      
+      // Phase 6: Compile to binary (optional)
+      if (options.compile) {
+        const zigCompiler = new ZigCompiler(
+          options.buildDir ?? 'build',
+          'vendor' // TODO: make configurable
+        );
+        
+        const compileResult = await zigCompiler.compile({
+          sources: output,
+          output: options.outputBinary ?? 'a.out',
+          mode: options.mode ?? 'gc',
+          target: options.targetTriple,
+          optimize: options.optimize ? '3' : '0',
+          debug: options.debug,
+        });
+        
+        // Add compilation diagnostics
+        for (const msg of compileResult.diagnostics) {
+          diagnostics.push({
+            code: 'BUILD',
+            message: msg,
+            severity: 'info',
+          });
+        }
+        
+        if (!compileResult.success) {
+          return { 
+            success: false, 
+            diagnostics,
+            buildTime: Date.now() - startTime,
+          };
+        }
+        
+        return {
+          success: true,
+          diagnostics,
+          output,
+          binaryPath: compileResult.outputPath,
+          buildTime: Date.now() - startTime,
+        };
+      }
     } else {
       const codegen = new TypeScriptCodegen();
       output = codegen.generate(ir);
@@ -89,6 +133,7 @@ export function compile(options: CompileOptions): CompileResult {
       success: true,
       diagnostics,
       output,
+      buildTime: Date.now() - startTime,
     };
   } catch (error) {
     diagnostics.push({
@@ -97,6 +142,10 @@ export function compile(options: CompileOptions): CompileResult {
       severity: 'error',
     });
 
-    return { success: false, diagnostics };
+    return { 
+      success: false, 
+      diagnostics,
+      buildTime: Date.now() - startTime,
+    };
   }
 }

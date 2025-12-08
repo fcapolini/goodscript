@@ -2,18 +2,32 @@
 
 Clean TypeScript, compiled to native code.
 
-## 🚧 Status: Core Compiler Complete (109/109 Tests Passing)
+## 🎉 Status: Core Pipeline Complete (153/153 Tests Passing)
 
 This is a **clean rewrite** of GoodScript with a proper IR-based compiler architecture.
 
-**Phase 1-2 Complete** ✅:
-- Language validation (15 "good parts" restrictions)
-- SSA-based IR with ownership semantics
-- Ownership cycle detection (DAG enforcement)
-- Null safety checking (use<T> lifetime analysis)
-- Type signatures (structural typing)
+**Phases 1-5 Complete** ✅:
+- ✅ Language validation (15 "good parts" restrictions)  
+- ✅ SSA-based IR with ownership semantics
+- ✅ Ownership cycle detection (DAG enforcement)
+- ✅ Null safety checking (use<T> lifetime analysis)
+- ✅ Type signatures (structural typing)
+- ✅ IR optimizer (constant folding, DCE, multi-pass)
+- ✅ TypeScript code generator (clean transpilation)
+- ✅ C++ code generator (GC and ownership modes)
 
-**Next**: Optimizer and code generation backends
+**Test Suite:**
+- 45 validator tests
+- 13 lowering tests
+- 16 ownership analysis tests
+- 13 null checker tests
+- 11 type signature tests
+- 11 IR infrastructure tests
+- 15 optimizer tests
+- 14 TypeScript codegen tests
+- 15 C++ codegen tests
+
+**Next**: Runtime library, standard library, and CLI tooling
 
 See the original [GoodScript repository](https://github.com/fcapolini/goodscript0) for the v0.11 implementation.
 
@@ -68,30 +82,34 @@ pnpm dev
 
 ## Roadmap
 
-**Phase 1-2: Frontend & Analysis** ✅
+**Phase 1-2: Frontend & Analysis** ✅ (109 tests)
 - [x] Project structure and IR design
-- [x] Frontend: TS parsing and validation
-- [x] IR lowering (AST → SSA)
-- [x] Ownership analyzer (cycle detection)
-- [x] Null checker (use<T> lifetime safety)
-- [x] Type signatures (structural typing)
+- [x] Frontend: TS parsing and validation (45 tests)
+- [x] IR lowering (AST → SSA) (13 tests)
+- [x] Ownership analyzer (cycle detection) (16 tests)
+- [x] Null checker (use<T> lifetime safety) (13 tests)
+- [x] Type signatures (structural typing) (11 tests)
 
-**Phase 3-4: Optimization**
-- [ ] SSA transformations
-- [ ] Constant folding and propagation
-- [ ] Dead code elimination
-- [ ] Ownership simplification
+**Phase 3-4: Optimization** ✅ (15 tests)
+- [x] Constant folding and propagation
+- [x] Dead code elimination
+- [x] Multi-pass optimization
+- [x] SSA transformations
 
-**Phase 5: Code Generation**
-- [ ] C++ backend (ownership mode)
-- [ ] C++ backend (GC mode)
-- [ ] TypeScript backend
+**Phase 5: Code Generation** ✅ (29 tests)
+- [x] C++ backend - GC mode (header + source files)
+- [x] C++ backend - Ownership mode (smart pointers)
+- [x] TypeScript backend (clean transpilation)
+- [x] Module namespaces and imports
 - [ ] Source maps
 
-**Runtime & Stdlib**
-- [ ] Port runtime library
-- [ ] Port standard library
+**Phase 6: Runtime & Tooling** 🚧
+- [ ] CLI tool (compile, build, run)
+- [ ] Runtime library (GC integration, builtins)
+- [ ] Standard library (collections, I/O, etc.)
 - [ ] Module system integration
+- [ ] Build system (Zig integration)
+- [ ] VS Code extension
 
 ## License
 

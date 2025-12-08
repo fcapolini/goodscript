@@ -10,8 +10,8 @@ import { IRBuilder, types, expr } from '../src/ir/builder.js';
 import { BinaryOp, Ownership } from '../src/ir/types.js';
 
 describe('Compiler Infrastructure', () => {
-  it('should compile with empty input', () => {
-    const result = compile({
+  it('should compile with empty input', async () => {
+    const result = await compile({
       files: [],
       target: 'typescript',
     });
@@ -20,8 +20,8 @@ describe('Compiler Infrastructure', () => {
     expect(result.diagnostics).toEqual([]);
   });
 
-  it('should handle validation errors gracefully', () => {
-    const result = compile({
+  it('should handle validation errors gracefully', async () => {
+    const result = await compile({
       files: [],
       target: 'native',
       mode: 'gc',
