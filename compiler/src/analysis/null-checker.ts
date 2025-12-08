@@ -15,7 +15,7 @@
 import {
   type IRModule,
   type IRFunctionDecl,
-  type IRExpression,
+  type IRExpr,
   type IRStatement,
   type IRType,
   type IRClassDecl,
@@ -153,9 +153,19 @@ export class NullChecker {
     }
 
     // Check function body
-    if (func.body && func.body.instructions && func.body.instructions.length > 0) {
+    if (func.body) {
+      // Check instructions
       for (const instruction of func.body.instructions) {
         this.checkInstruction(instruction, modulePath);
+      }
+      
+      // Check terminator for return statements (GS403)
+      if (func.body.terminator.kind === 'return' && func.body.terminator.value) {
+        this.checkReturnExpression(
+          func.body.terminator.value,
+          modulePath,
+          func.source
+        );
       }
     }
 
@@ -166,108 +176,67 @@ export class NullChecker {
   /**
    * Check instruction for use<T> violations
    */
-  private checkInstruction(_instruction: IRInstruction, _modulePath: string): void {
-    // TODO: Implement instruction-level checking
-    // For now, this is a stub
-  }
-
-  /**
-   * Check statement for use<T> violations
-   */
-  // @ts-expect-error - Used recursively within switch cases, TypeScript doesn't always detect this
-  private checkStatement(stmt: IRStatement, modulePath: string): void {
-    switch (stmt.kind) {
-      case 'variableDeclaration':
-        // Track variable ownership
-        if (this.hasUseOwnership(stmt.variableType)) {
-          this.currentScope().useRefs.add(stmt.name);
-        } else if (this.hasOwningType(stmt.variableType)) {
-          this.currentScope().ownedRefs.add(stmt.name);
+  private checkInstruction(instruction: IRInstruction, modulePath: string): void {
+    switch (instruction.kind) {
+      case 'assign':
+        // Track variable ownership based on assignment type
+        if (this.hasUseOwnership(instruction.type)) {
+          this.currentScope().useRefs.add(instruction.target.name);
+        } else if (this.hasOwningType(instruction.type)) {
+          this.currentScope().ownedRefs.add(instruction.target.name);
         }
+        // Check the value expression
+        this.checkExpression(instruction.value, modulePath);
+        break;
 
-        // Check initializer
-        if (stmt.initializer) {
-          this.checkExpression(stmt.initializer, modulePath);
+      case 'call':
+        // Check callee and arguments
+        this.checkExpression(instruction.callee, modulePath);
+        for (const arg of instruction.args) {
+          this.checkExpression(arg, modulePath);
         }
         break;
 
-      case 'return':
-        // Check that we're not returning a use<T> variable (GS403)
-        if (stmt.value) {
-          this.checkReturnExpression(stmt.value, modulePath, stmt.location);
-        }
+      case 'fieldAssign':
+        this.checkExpression(instruction.object, modulePath);
+        this.checkExpression(instruction.value, modulePath);
         break;
 
-      case 'if':
-        this.checkExpression(stmt.condition, modulePath);
-        this.pushScope('block');
-        for (const s of stmt.thenBranch) {
-          this.checkStatement(s, modulePath);
-        }
-        this.popScope();
-        if (stmt.elseBranch) {
-          this.pushScope('block');
-          for (const s of stmt.elseBranch) {
-            this.checkStatement(s, modulePath);
-          }
-          this.popScope();
-        }
-        break;
-
-      case 'while':
-        this.checkExpression(stmt.condition, modulePath);
-        this.pushScope('block');
-        for (const s of stmt.body) {
-          this.checkStatement(s, modulePath);
-        }
-        this.popScope();
-        break;
-
-      case 'for':
-        this.pushScope('block');
-        if (stmt.initializer) {
-          this.checkStatement(stmt.initializer, modulePath);
-        }
-        if (stmt.condition) {
-          this.checkExpression(stmt.condition, modulePath);
-        }
-        if (stmt.increment) {
-          this.checkExpression(stmt.increment, modulePath);
-        }
-        for (const s of stmt.body) {
-          this.checkStatement(s, modulePath);
-        }
-        this.popScope();
-        break;
-
-      case 'expressionStatement':
-        this.checkExpression(stmt.expression, modulePath);
-        break;
-
-      case 'block':
-        this.pushScope('block');
-        for (const s of stmt.statements) {
-          this.checkStatement(s, modulePath);
-        }
-        this.popScope();
+      case 'expr':
+        this.checkExpression(instruction.value, modulePath);
         break;
     }
   }
 
   /**
+   * Check statement for use<T> violations
+   * @deprecated This method is for AST-level IR. Use checkInstruction for SSA-level IR.
+   */
+  // @ts-expect-error - Deprecated method for old AST-level IR
+  private checkStatement(_stmt: IRStatement, _modulePath: string): void {
+    // This method is no longer used with IRBlock-based functions
+    // All checking is now done via checkInstruction and terminator analysis
+  }
+
+  /**
    * Check expression for use<T> violations
    */
-  private checkExpression(expr: IRExpression, modulePath: string): void {
+  private checkExpression(expr: IRExpr, modulePath: string): void {
     switch (expr.kind) {
-      case 'call':
+      case 'callExpr':
         this.checkExpression(expr.callee, modulePath);
-        for (const arg of expr.arguments) {
+        for (const arg of expr.args) {
           this.checkExpression(arg, modulePath);
         }
         break;
 
-      case 'memberAccess':
+      case 'member':
         this.checkExpression(expr.object, modulePath);
+        break;
+
+      case 'index':
+        this.checkExpression(expr.object, modulePath);
+        this.checkExpression(expr.index, modulePath);
         break;
 
       case 'binary':
@@ -279,21 +248,28 @@ export class NullChecker {
         this.checkExpression(expr.operand, modulePath);
         break;
 
-      case 'assignment':
-        this.checkExpression(expr.left, modulePath);
-        this.checkExpression(expr.right, modulePath);
-        break;
-
-      case 'arrayLiteral':
+      case 'array':
         for (const element of expr.elements) {
           this.checkExpression(element, modulePath);
         }
         break;
 
-      case 'objectLiteral':
+      case 'object':
         for (const prop of expr.properties) {
           this.checkExpression(prop.value, modulePath);
         }
+        break;
+
+      case 'move':
+      case 'borrow':
+        this.checkExpression(expr.source, modulePath);
+        break;
+
+      // Base cases: literal, variable, new
+      case 'literal':
+      case 'variable':
+      case 'new':
+        // No nested expressions to check
         break;
     }
   }
@@ -302,20 +278,20 @@ export class NullChecker {
    * Check return expression for use<T> variables (GS403)
    */
   private checkReturnExpression(
-    expr: IRExpression,
+    expr: IRExpr,
     modulePath: string,
     location?: { line: number; column: number }
   ): void {
     // Check if expression is a use<T> variable reference
-    if (expr.kind === 'identifier') {
+    if (expr.kind === 'variable') {
       const varName = expr.name;
       if (this.isUseRef(varName)) {
         this.addError(
           'GS403',
           `Cannot return 'use<T>' reference '${varName}'. Use 'own<T>' or 'share<T>' instead.`,
           modulePath,
-          location?.line ?? expr.location?.line ?? 0,
-          location?.column ?? expr.location?.column ?? 0
+          location?.line ?? expr.source?.line ?? 0,
+          location?.column ?? expr.source?.column ?? 0
         );
       }
     }

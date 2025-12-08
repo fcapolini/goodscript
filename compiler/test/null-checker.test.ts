@@ -164,12 +164,14 @@ describe('Null Safety Checker', () => {
           { name: 'node', type: types.class('Node', Ownership.Use) }, // use<Node> param
         ],
         returnType: types.class('Node', Ownership.Share),
-        body: [
-          stmts.return(
-            exprs.identifier('node', types.class('Node', Ownership.Use)),
-            { line: 2, column: 2 }
-          ),
-        ],
+        body: {
+          id: 0,
+          instructions: [],
+          terminator: {
+            kind: 'return',
+            value: { kind: 'variable', name: 'node', version: 0, type: types.class('Node', Ownership.Use) },
+          },
+        },
       };
 
       const module: IRModule = {
@@ -191,22 +193,26 @@ describe('Null Safety Checker', () => {
         name: 'getNode',
         params: [],
         returnType: types.class('Node', Ownership.Own),
-        body: [
-          stmts.variableDeclaration(
-            'node',
-            types.class('Node', Ownership.Own),
-            exprs.call(
-              exprs.identifier('createNode', types.function([], types.class('Node', Ownership.Own))),
-              [],
-              types.class('Node', Ownership.Own)
-            ),
-            { line: 2, column: 4 }
-          ),
-          stmts.return(
-            exprs.identifier('node', types.class('Node', Ownership.Own)),
-            { line: 3, column: 2 }
-          ),
-        ],
+        body: {
+          id: 0,
+          instructions: [
+            {
+              kind: 'assign',
+              target: { kind: 'variable', name: 'node', version: 0, type: types.class('Node', Ownership.Own) },
+              value: {
+                kind: 'callExpr',
+                callee: { kind: 'variable', name: 'createNode', version: 0, type: types.function([], types.class('Node', Ownership.Own)) },
+                args: [],
+                type: types.class('Node', Ownership.Own),
+              },
+              type: types.class('Node', Ownership.Own),
+            },
+          ],
+          terminator: {
+            kind: 'return',
+            value: { kind: 'variable', name: 'node', version: 0, type: types.class('Node', Ownership.Own) },
+          },
+        },
       };
 
       const module: IRModule = {
@@ -281,14 +287,18 @@ describe('Null Safety Checker', () => {
           { name: 'root', type: types.class('Node', Ownership.Share) }
         ],
         returnType: types.void(),
-        body: [
-          stmts.variableDeclaration(
-            'current',
-            types.class('Node', Ownership.Use), // use<Node> local var - ALLOWED
-            exprs.identifier('root', types.class('Node', Ownership.Share)),
-            { line: 2, column: 4 }
-          ),
-        ],
+        body: {
+          id: 0,
+          instructions: [
+            {
+              kind: 'assign',
+              target: { kind: 'variable', name: 'current', version: 0, type: types.class('Node', Ownership.Use) },
+              value: { kind: 'variable', name: 'root', version: 0, type: types.class('Node', Ownership.Share) },
+              type: types.class('Node', Ownership.Use),
+            },
+          ],
+          terminator: { kind: 'return' },
+        },
       };
 
       const module: IRModule = {
