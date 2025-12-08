@@ -174,6 +174,7 @@ export class NullChecker {
   /**
    * Check statement for use<T> violations
    */
+  // @ts-expect-error - Used recursively within switch cases, TypeScript doesn't always detect this
   private checkStatement(stmt: IRStatement, modulePath: string): void {
     switch (stmt.kind) {
       case 'variableDeclaration':

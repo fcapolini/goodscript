@@ -23,6 +23,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
         ],
         imports: [],
@@ -51,6 +52,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
         ],
         imports: [],
@@ -79,6 +81,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -90,6 +93,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
         ],
         imports: [],
@@ -118,6 +122,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -129,6 +134,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -140,6 +146,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
         ],
         imports: [],
@@ -173,6 +180,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -184,6 +192,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
         ],
         imports: [],
@@ -210,6 +219,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -221,6 +231,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -232,6 +243,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -243,6 +255,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
         ],
         imports: [],
@@ -270,6 +283,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -281,6 +295,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
         ],
         imports: [],
@@ -310,6 +325,7 @@ describe('Ownership Analyzer', () => {
               },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -322,6 +338,7 @@ describe('Ownership Analyzer', () => {
               },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
         ],
         imports: [],
@@ -349,6 +366,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -360,6 +378,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
         ],
         imports: [],
@@ -385,6 +404,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -396,6 +416,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
         ],
         imports: [],
@@ -424,6 +445,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -435,6 +457,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
         ],
         imports: [],
@@ -463,6 +486,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -474,6 +498,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
         ],
         imports: [],
@@ -498,9 +523,10 @@ describe('Ownership Analyzer', () => {
               {
                 name: 'next',
                 type: types.class('NodeB', Ownership.Share),
-                isReadonly: false,              },
+                },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRInterfaceDecl,
           {
             kind: 'interface',
@@ -509,9 +535,10 @@ describe('Ownership Analyzer', () => {
               {
                 name: 'prev',
                 type: types.class('NodeA', Ownership.Share),
-                isReadonly: false,              },
+                },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRInterfaceDecl,
         ],
         imports: [],
@@ -539,6 +566,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'interface',
@@ -547,9 +575,10 @@ describe('Ownership Analyzer', () => {
               {
                 name: 'impl',
                 type: types.class('ConcreteNode', Ownership.Share), // share<ConcreteNode>
-                isReadonly: false,              },
+                },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRInterfaceDecl,
         ],
         imports: [],
@@ -577,6 +606,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -588,6 +618,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -599,6 +630,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -610,6 +642,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
         ],
         imports: [],
@@ -643,6 +676,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -654,6 +688,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -665,6 +700,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
           {
             kind: 'class',
@@ -676,6 +712,7 @@ describe('Ownership Analyzer', () => {
                 isReadonly: false,              },
             ],
             methods: [],
+            constructor: { params: [], body: { id: 0, instructions: [], terminator: { kind: 'return' } } },
           } as IRClassDecl,
         ],
         imports: [],

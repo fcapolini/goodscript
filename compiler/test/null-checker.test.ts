@@ -7,7 +7,6 @@ import { analyzeNullSafety } from '../src/analysis/null-checker.js';
 import { types, exprs, stmts } from '../src/ir/builder.js';
 import type { IRModule, IRClassDecl, IRFunctionDecl, IRInterfaceDecl } from '../src/ir/types.js';
 import { Ownership } from '../src/ir/types.js';
-import { Ownership } from '../src/ir/types.js';
 
 describe('Null Safety Checker', () => {
   describe('Field Storage (GS401)', () => {
@@ -19,10 +18,12 @@ describe('Null Safety Checker', () => {
           {
             name: 'data',
             type: types.number(),
+            isReadonly: false,
           },
           {
             name: 'parent',
             type: types.class('Node', Ownership.Use), // use<Node> - FORBIDDEN
+            isReadonly: false,
           },
         ],
         methods: [],
@@ -31,6 +32,7 @@ describe('Null Safety Checker', () => {
       const module: IRModule = {
         path: 'test.gs',
         declarations: [nodeClass],
+        imports: [],
       };
 
       const diagnostics = analyzeNullSafety(module);
@@ -48,11 +50,12 @@ describe('Null Safety Checker', () => {
           {
             name: 'value',
             type: types.number(),
-          },
+            },
           {
             name: 'parent',
             type: types.class('INode', Ownership.Use), // use<INode> - FORBIDDEN
-          },
+              isReadonly: false,
+          }
         ],
         methods: [],
       };
@@ -60,6 +63,7 @@ describe('Null Safety Checker', () => {
       const module: IRModule = {
         path: 'test.gs',
         declarations: [nodeInterface],
+        imports: [],
       };
 
       const diagnostics = analyzeNullSafety(module);
@@ -76,11 +80,13 @@ describe('Null Safety Checker', () => {
           {
             name: 'child',
             type: types.class('Node', Ownership.Own), // own<Node> - ALLOWED
+              isReadonly: false,
           },
           {
             name: 'sibling',
             type: types.class('Node', Ownership.Share), // share<Node> - ALLOWED
-          },
+              isReadonly: false,
+          }
         ],
         methods: [],
       };
@@ -88,6 +94,7 @@ describe('Null Safety Checker', () => {
       const module: IRModule = {
         path: 'test.gs',
         declarations: [nodeClass],
+        imports: [],
       };
 
       const diagnostics = analyzeNullSafety(module);
@@ -101,7 +108,7 @@ describe('Null Safety Checker', () => {
         kind: 'function',
         name: 'getNode',
         params: [
-          { name: 'pool', type: types.class('Pool', Ownership.Share) },
+          { name: 'pool', type: types.class('Pool', Ownership.Share) }
         ],
         returnType: types.class('Node', Ownership.Use), // use<Node> - FORBIDDEN
         body: { id: 0, instructions: [], terminator: { kind: 'return', value: undefined } },
@@ -110,6 +117,7 @@ describe('Null Safety Checker', () => {
       const module: IRModule = {
         path: 'test.gs',
         declarations: [func],
+        imports: [],
       };
 
       const diagnostics = analyzeNullSafety(module);
@@ -139,6 +147,7 @@ describe('Null Safety Checker', () => {
       const module: IRModule = {
         path: 'test.gs',
         declarations: [func1, func2],
+        imports: [],
       };
 
       const diagnostics = analyzeNullSafety(module);
@@ -166,6 +175,7 @@ describe('Null Safety Checker', () => {
       const module: IRModule = {
         path: 'test.gs',
         declarations: [func],
+        imports: [],
       };
 
       const diagnostics = analyzeNullSafety(module);
@@ -202,6 +212,7 @@ describe('Null Safety Checker', () => {
       const module: IRModule = {
         path: 'test.gs',
         declarations: [func],
+        imports: [],
       };
 
       const diagnostics = analyzeNullSafety(module);
@@ -218,7 +229,8 @@ describe('Null Safety Checker', () => {
           {
             name: 'nodes',
             type: types.array(types.class('Node', Ownership.Use)), // Array<use<Node>> - FORBIDDEN
-          },
+              isReadonly: false,
+          }
         ],
         methods: [],
       };
@@ -226,6 +238,7 @@ describe('Null Safety Checker', () => {
       const module: IRModule = {
         path: 'test.gs',
         declarations: [nodeClass],
+        imports: [],
       };
 
       const diagnostics = analyzeNullSafety(module);
@@ -241,7 +254,8 @@ describe('Null Safety Checker', () => {
           {
             name: 'nodes',
             type: types.map(types.string(), types.class('Node', Ownership.Use)), // Map<string, use<Node>> - FORBIDDEN
-          },
+              isReadonly: false,
+          }
         ],
         methods: [],
       };
@@ -249,6 +263,7 @@ describe('Null Safety Checker', () => {
       const module: IRModule = {
         path: 'test.gs',
         declarations: [nodeClass],
+        imports: [],
       };
 
       const diagnostics = analyzeNullSafety(module);
@@ -263,7 +278,7 @@ describe('Null Safety Checker', () => {
         kind: 'function',
         name: 'traverse',
         params: [
-          { name: 'root', type: types.class('Node', Ownership.Share) },
+          { name: 'root', type: types.class('Node', Ownership.Share) }
         ],
         returnType: types.void(),
         body: [
@@ -279,6 +294,7 @@ describe('Null Safety Checker', () => {
       const module: IRModule = {
         path: 'test.gs',
         declarations: [func],
+        imports: [],
       };
 
       const diagnostics = analyzeNullSafety(module);
@@ -299,6 +315,7 @@ describe('Null Safety Checker', () => {
       const module: IRModule = {
         path: 'test.gs',
         declarations: [func],
+        imports: [],
       };
 
       const diagnostics = analyzeNullSafety(module);
@@ -315,11 +332,13 @@ describe('Null Safety Checker', () => {
           {
             name: 'parent',
             type: types.class('Node', Ownership.Use), // Violation 1
+              isReadonly: false,
           },
           {
             name: 'children',
             type: types.array(types.class('Node', Ownership.Use)), // Violation 2
-          },
+              isReadonly: false,
+          }
         ],
         methods: [],
       };
@@ -335,6 +354,7 @@ describe('Null Safety Checker', () => {
       const module: IRModule = {
         path: 'test.gs',
         declarations: [nodeClass, func],
+        imports: [],
       };
 
       const diagnostics = analyzeNullSafety(module);
@@ -354,7 +374,8 @@ describe('Null Safety Checker', () => {
           {
             name: 'parent',
             type: types.class('Node', Ownership.Use), // Would be violation in ownership mode
-          },
+              isReadonly: false,
+          }
         ],
         methods: [],
       };
@@ -370,6 +391,7 @@ describe('Null Safety Checker', () => {
       const module: IRModule = {
         path: 'test.gs',
         declarations: [nodeClass, func],
+        imports: [],
       };
 
       // GC mode: No errors
