@@ -26,6 +26,9 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - Implemented assignment expressions with proper declaration tracking
 - Added typeof operator with compile-time type detection
 - Implemented template literal expressions (`` `Hello, ${name}!` ``)
+- Added compound assignment operators (+=, -=, *=, /=, %=)
+- Added increment/decrement operators (++, --, both prefix and postfix)
+- Added undefined keyword support (maps to nullptr in C++)
 - All expression types now generate correct C++ code
 
 ## Architecture
