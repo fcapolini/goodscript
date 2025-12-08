@@ -152,7 +152,18 @@ export class NullChecker {
       );
     }
 
-    // TODO: Check AST-level function body statements
+    // Check function body
+    // Support both AST-level (IRFunctionBody) and SSA-level (IRBlock) bodies
+    if (func.body && 'instructions' in func.body) {
+      // SSA-level body (IRBlock) - used in tests
+      for (const instruction of func.body.instructions) {
+        this.checkInstruction(instruction, modulePath);
+      }
+      if (func.body.terminator) {
+        this.checkTerminator(func.body.terminator, modulePath, func.returnType);
+      }
+    }
+    // TODO: Check AST-level function body statements (IRFunctionBody)
     // For now, skip null-checking of AST-level bodies
     // This will be implemented when we add proper AST-level analysis
 
@@ -163,37 +174,58 @@ export class NullChecker {
   /**
    * Check instruction for use<T> violations
    */
-  // @ts-expect-error - Temporarily unused, will be used when SSA-level analysis is implemented
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  private checkInstruction(_instruction: IRInstruction, _modulePath: string): void {
-    switch (_instruction.kind) {
+  private checkInstruction(instruction: IRInstruction, modulePath: string): void {
+    switch (instruction.kind) {
       case 'assign':
         // Track variable ownership based on assignment type
-        if (this.hasUseOwnership(_instruction.type)) {
-          this.currentScope().useRefs.add(_instruction.target.name);
-        } else if (this.hasOwningType(_instruction.type)) {
-          this.currentScope().ownedRefs.add(_instruction.target.name);
+        if (this.hasUseOwnership(instruction.type)) {
+          this.currentScope().useRefs.add(instruction.target.name);
+        } else if (this.hasOwningType(instruction.type)) {
+          this.currentScope().ownedRefs.add(instruction.target.name);
         }
         // Check the value expression
-        this.checkExpression(_instruction.value, _modulePath);
+        this.checkExpression(instruction.value, modulePath);
         break;
 
       case 'call':
         // Check callee and arguments
-        this.checkExpression(_instruction.callee, _modulePath);
-        for (const arg of _instruction.args) {
-          this.checkExpression(arg, _modulePath);
+        this.checkExpression(instruction.callee, modulePath);
+        for (const arg of instruction.args) {
+          this.checkExpression(arg, modulePath);
         }
         break;
 
       case 'fieldAssign':
-        this.checkExpression(_instruction.object, _modulePath);
-        this.checkExpression(_instruction.value, _modulePath);
+        this.checkExpression(instruction.object, modulePath);
+        this.checkExpression(instruction.value, modulePath);
         break;
 
       case 'expr':
-        this.checkExpression(_instruction.value, _modulePath);
+        this.checkExpression(instruction.value, modulePath);
         break;
+    }
+  }
+
+  /**
+   * Check terminator for use<T> violations (GS403)
+   */
+  private checkTerminator(terminator: any, modulePath: string, _returnType: any): void {
+    if (terminator.kind === 'return' && terminator.value) {
+      // Check if returning a use<T> variable
+      if (terminator.value.kind === 'variable') {
+        const varName = terminator.value.name;
+        if (this.currentScope().useRefs.has(varName)) {
+          this.addError(
+            'GS403',
+            `Cannot return 'use<T>' variable '${varName}'. Convert to owned or shared reference first.`,
+            modulePath,
+            0,
+            0
+          );
+        }
+      }
+      // Check the return value expression
+      this.checkExpression(terminator.value, modulePath);
     }
   }
 

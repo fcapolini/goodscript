@@ -56,12 +56,10 @@ export class Optimizer {
   private optimizeDeclaration(decl: IRDeclaration): IRDeclaration {
     switch (decl.kind) {
       case 'function':
-        // TODO: Add optimizer for AST-level statements
-        // For now, return as-is since we're using IRFunctionBody
-        return decl;
+        return this.optimizeFunction(decl);
       case 'class':
-        // TODO: Add optimizer for AST-level statements
-        // For now, return as-is since methods use IRFunctionBody
+        // Class methods use IRFunctionBody (AST-level), not IRBlock (SSA-level)
+        // TODO: Add statement-level optimization for methods
         return decl;
       case 'const':
         return {
@@ -73,29 +71,38 @@ export class Optimizer {
     }
   }
 
-  // @ts-expect-error - Temporarily unused during AST-level IR transition
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  private optimizeFunction(_func: IRFunctionDecl): IRFunctionDecl {
-    // TODO: Add optimizer for AST-level statements
-    return _func;
+  private isFunctionBody(body: any): body is { statements: any[] } {
+    return body && 'statements' in body;
   }
 
-  // @ts-expect-error - Temporarily unused during AST-level IR transition
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  private optimizeBlock(_block: IRBlock): IRBlock {
+  private optimizeFunction(func: IRFunctionDecl): IRFunctionDecl {
+    // Check if body is SSA-level (IRBlock) or AST-level (IRFunctionBody)
+    if (this.isFunctionBody(func.body)) {
+      // AST-level body - TODO: implement statement-level optimization
+      return func;
+    }
+    
+    // SSA-level body - optimize blocks
+    return {
+      ...func,
+      body: this.optimizeBlock(func.body),
+    };
+  }
+
+  private optimizeBlock(block: IRBlock): IRBlock {
     // Optimize instructions
-    const optimizedInstructions = _block.instructions
+    const optimizedInstructions = block.instructions
       .map(i => this.optimizeInstruction(i))
       .filter((i): i is IRInstruction => i !== null);
 
     // Optimize terminator
-    const optimizedTerminator = this.optimizeTerminator(_block.terminator);
+    const optimizedTerminator = this.optimizeTerminator(block.terminator);
 
     // Dead code elimination: remove instructions after unconditional jump/return
     const deadCodeFreeInstructions = this.removeDeadCode(optimizedInstructions, optimizedTerminator);
 
     return {
-      ..._block,
+      ...block,
       instructions: deadCodeFreeInstructions,
       terminator: optimizedTerminator,
     };
