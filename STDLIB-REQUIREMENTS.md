@@ -10,13 +10,41 @@ This document catalogs the language features and runtime APIs required to suppor
 **Current State**: 
 - ✅ Phase 7a.1: Exception handling (try/catch/throw/finally)
 - ✅ Phase 7a.2: Array methods (map, filter, slice, push, forEach, reduce, every, some, indexOf, includes)
-- Compiler handles expressions, functions, arrays, objects, lambdas
+- ✅ Phase 7a.3: for-of loops (arrays, strings, break, continue, nested loops)
+- Compiler handles expressions, functions, arrays, objects, lambdas, iteration
 - Binary compilation working via Zig
-- 180/195 tests passing (92.3%)
+- 189 + 9 = 198 tests passing
 
-**Gap**: stdlib still needs async/await, optional chaining, for-of loops, Map methods, union types
+**Gap**: stdlib still needs async/await, optional chaining, Map methods, union types
 
 **Priority**: Implement features in phases, starting with most fundamental and widely used.
+
+---
+
+### ✅ 7a.3 for-of Loops (COMPLETE)
+**Status**: Implemented December 9, 2025
+
+**Implemented**:
+- AST-level IR: `IRForOfStatement` with variable, iterable, and body
+- Break/continue statements: Full support for loop control
+- C++ codegen: Range-based for loops (`for (auto x : array)`)
+- Nested loops: Full support for nested iterations
+- Type safety: Properly typed loop variables
+
+**Tests**:
+- `test/for-of.test.ts` - 9 comprehensive tests (all passing)
+- `examples/for-of-test-gs.ts` - End-to-end compilation test
+
+**Generated C++**:
+```cpp
+for (auto num : numbers) {
+  gs::console::log(gs::String("  "), num);
+}
+```
+
+**Limitations**:
+- String iteration not yet tested (but should work with gs::String)
+- Map.entries() iteration requires Map methods (Phase 7a.4)
 
 ---
 

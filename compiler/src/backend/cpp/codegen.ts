@@ -548,6 +548,31 @@ export class CppCodegen {
         this.emit('}');
         break;
       
+      case 'for-of': {
+        // Range-based for loop in C++
+        const varName = this.sanitizeIdentifier(stmt.variable);
+        const iterableCode = this.generateExpression(stmt.iterable);
+        
+        // Determine if we need const or auto based on variable type
+        // For now, use auto& for efficiency (no copies)
+        this.emit(`for (auto ${varName} : ${iterableCode}) {`);
+        this.indent++;
+        for (const bodyStmt of stmt.body) {
+          this.generateStatement(bodyStmt);
+        }
+        this.indent--;
+        this.emit('}');
+        break;
+      }
+      
+      case 'break':
+        this.emit('break;');
+        break;
+      
+      case 'continue':
+        this.emit('continue;');
+        break;
+      
       case 'block':
         this.emit('{');
         this.indent++;

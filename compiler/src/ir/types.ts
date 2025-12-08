@@ -448,6 +448,9 @@ export type IRStatement =
   | { kind: 'if'; condition: IRExpression; thenBranch: IRStatement[]; elseBranch?: IRStatement[]; location?: { line: number; column: number } }
   | { kind: 'while'; condition: IRExpression; body: IRStatement[]; location?: { line: number; column: number } }
   | { kind: 'for'; initializer?: IRStatement; condition?: IRExpression; increment?: IRExpression; body: IRStatement[]; location?: { line: number; column: number } }
+  | { kind: 'for-of'; variable: string; variableType: IRType; iterable: IRExpression; body: IRStatement[]; location?: { line: number; column: number } }
+  | { kind: 'break'; location?: { line: number; column: number } }
+  | { kind: 'continue'; location?: { line: number; column: number } }
   | { kind: 'try'; tryBlock: IRStatement[]; catchClause?: { variable: string; variableType: IRType; body: IRStatement[] }; finallyBlock?: IRStatement[]; location?: { line: number; column: number } }
   | { kind: 'throw'; expression: IRExpression; location?: { line: number; column: number } }
   | { kind: 'block'; statements: IRStatement[]; location?: { line: number; column: number } };

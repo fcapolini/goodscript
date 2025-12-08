@@ -364,5 +364,36 @@ export const stmts = {
       location,
     };
   },
+
+  forOf(
+    variable: string,
+    variableType: IRType,
+    iterable: IRExpression,
+    body: IRStatement[],
+    location?: { line: number; column: number }
+  ): IRStatement {
+    return {
+      kind: 'for-of',
+      variable,
+      variableType,
+      iterable,
+      body,
+      location,
+    };
+  },
+
+  break(location?: { line: number; column: number }): IRStatement {
+    return {
+      kind: 'break',
+      location,
+    };
+  },
+
+  continue(location?: { line: number; column: number }): IRStatement {
+    return {
+      kind: 'continue',
+      location,
+    };
+  },
 };
 

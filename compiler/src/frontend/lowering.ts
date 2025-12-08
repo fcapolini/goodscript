@@ -257,6 +257,46 @@ export class IRLowering {
       return stmts.block(blockStmts);
     }
 
+    // For-of statement
+    if (ts.isForOfStatement(node)) {
+      // Get the loop variable
+      const varDecl = node.initializer;
+      let varName: string;
+      let varType: IRType;
+      
+      if (ts.isVariableDeclarationList(varDecl)) {
+        const decl = varDecl.declarations[0];
+        varName = decl.name.getText(sourceFile);
+        varType = this.lowerType(decl, sourceFile);
+        
+        // Mark variable as declared
+        this.declaredVariables.add(varName);
+      } else {
+        // Shouldn't happen for valid for-of
+        return null;
+      }
+      
+      // Get the iterable expression
+      const iterable = this.lowerExpression(node.expression, sourceFile);
+      
+      // Get the body
+      const body = ts.isBlock(node.statement)
+        ? node.statement.statements.map(s => this.lowerStatementAST(s, sourceFile)).filter((s): s is IRStatement => s !== null)
+        : [this.lowerStatementAST(node.statement, sourceFile)].filter((s): s is IRStatement => s !== null);
+      
+      return stmts.forOf(varName, varType, iterable, body);
+    }
+
+    // Break statement
+    if (ts.isBreakStatement(node)) {
+      return stmts.break();
+    }
+
+    // Continue statement
+    if (ts.isContinueStatement(node)) {
+      return stmts.continue();
+    }
+
     return null;
   }
 
