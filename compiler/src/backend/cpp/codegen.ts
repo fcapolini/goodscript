@@ -680,6 +680,16 @@ export class CppCodegen {
           return `gs::${className}::${method}(${args})`;
         }
         
+        // Special handling for HTTP static methods
+        if (expr.callee.kind === 'memberAccess' && 
+            expr.callee.object.kind === 'identifier' && 
+            (expr.callee.object.name === 'HTTP' || expr.callee.object.name === 'HTTPAsync')) {
+          const className = expr.callee.object.name;
+          const method = expr.callee.member;
+          const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
+          return `gs::http::${className}::${method}(${args})`;
+        }
+        
         const callee = this.generateExpression(expr.callee);
         const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
         return `${callee}(${args})`;
@@ -695,6 +705,12 @@ export class CppCodegen {
         if (expr.object.kind === 'identifier' && 
             (expr.object.name === 'FileSystem' || expr.object.name === 'FileSystemAsync')) {
           return `gs::${expr.object.name}::${member}`;
+        }
+        
+        // Special handling for HTTP and HTTPAsync static methods
+        if (expr.object.kind === 'identifier' && 
+            (expr.object.name === 'HTTP' || expr.object.name === 'HTTPAsync')) {
+          return `gs::http::${expr.object.name}::${member}`;
         }
         
         // Special handling for console static methods
@@ -924,6 +940,10 @@ export class CppCodegen {
         if (obj === 'FileSystem' || obj === 'FileSystemAsync') {
           return `gs::${obj}::${expr.member}`;
         }
+        // Special case: HTTP and HTTPAsync static methods
+        if (obj === 'HTTP' || obj === 'HTTPAsync') {
+          return `gs::http::${obj}::${expr.member}`;
+        }
         // Special case: Map.size and Array.length are methods in C++
         // Only apply this for actual Map/Array types, not for struct fields
         const objType = expr.object.type;
@@ -963,6 +983,10 @@ export class CppCodegen {
         // Special case: FileSystem and FileSystemAsync static methods
         if (obj === 'FileSystem' || obj === 'FileSystemAsync') {
           return `gs::${obj}::${expr.method}(${args})`;
+        }
+        // Special case: HTTP and HTTPAsync static methods
+        if (obj === 'HTTP' || obj === 'HTTPAsync') {
+          return `gs::http::${obj}::${expr.method}(${args})`;
         }
         return `${obj}.${expr.method}(${args})`;
       }
