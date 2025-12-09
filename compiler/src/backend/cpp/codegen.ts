@@ -670,6 +670,24 @@ export class CppCodegen {
           return `gs::console::${method}(${args})`;
         }
         
+        // Special handling for Math static methods
+        if (expr.callee.kind === 'memberAccess' && 
+            expr.callee.object.kind === 'identifier' && 
+            expr.callee.object.name === 'Math') {
+          const method = expr.callee.member;
+          const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
+          return `gs::Math::${method}(${args})`;
+        }
+        
+        // Special handling for JSON static methods
+        if (expr.callee.kind === 'memberAccess' && 
+            expr.callee.object.kind === 'identifier' && 
+            expr.callee.object.name === 'JSON') {
+          const method = expr.callee.member;
+          const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
+          return `gs::JSON::${method}(${args})`;
+        }
+        
         // Special handling for FileSystem static methods
         if (expr.callee.kind === 'memberAccess' && 
             expr.callee.object.kind === 'identifier' && 
@@ -700,6 +718,16 @@ export class CppCodegen {
         // Only sanitize actual C++ keywords (like delete), not stdlib names (like set)
         // Method names don't conflict with stdlib types
         const member = CPP_KEYWORDS.has(expr.member) ? `${expr.member}_` : expr.member;
+        
+        // Special handling for Math static methods
+        if (expr.object.kind === 'identifier' && expr.object.name === 'Math') {
+          return `gs::Math::${member}`;
+        }
+        
+        // Special handling for JSON static methods
+        if (expr.object.kind === 'identifier' && expr.object.name === 'JSON') {
+          return `gs::JSON::${member}`;
+        }
         
         // Special handling for FileSystem and FileSystemAsync static methods
         if (expr.object.kind === 'identifier' && 
@@ -935,6 +963,14 @@ export class CppCodegen {
         // Special case: console.log/error/warn -> gs::console::
         if (obj === 'console') {
           return `gs::console::${expr.member}`;
+        }
+        // Special case: Math static methods
+        if (obj === 'Math') {
+          return `gs::Math::${expr.member}`;
+        }
+        // Special case: JSON static methods
+        if (obj === 'JSON') {
+          return `gs::JSON::${expr.member}`;
         }
         // Special case: FileSystem and FileSystemAsync static methods
         if (obj === 'FileSystem' || obj === 'FileSystemAsync') {
