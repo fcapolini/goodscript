@@ -26,8 +26,8 @@ export async function compileCommand(options: CliOptions): Promise<CommandResult
   const warnings: string[] = [];
   
   try {
-    // Resolve input files
-    const files = await resolveFiles(options.files);
+    // Resolve input files (from CLI args or tsconfig.json)
+    const files = await resolveFiles(options);
     if (files.length === 0) {
       errors.push('No input files found');
       return { success: false, errors, warnings };
@@ -196,25 +196,45 @@ function createProgram(files: string[], _options: CliOptions): ts.Program {
 }
 
 /**
- * Resolve glob patterns and file paths
+ * Resolve files from CLI args or tsconfig.json
  */
-async function resolveFiles(patterns: string[]): Promise<string[]> {
-  const files: string[] = [];
-  
-  for (const pattern of patterns) {
-    // For now, just handle literal file paths
-    // TODO: Add glob pattern support
-    try {
-      const stat = await fs.stat(pattern);
-      if (stat.isFile()) {
-        files.push(path.resolve(pattern));
+async function resolveFiles(options: CliOptions): Promise<string[]> {
+  // If explicit files provided, use those
+  if (options.files.length > 0) {
+    const files: string[] = [];
+    for (const file of options.files) {
+      try {
+        const stat = await fs.stat(file);
+        if (stat.isFile()) {
+          files.push(path.resolve(file));
+        }
+      } catch {
+        // File doesn't exist, skip
       }
-    } catch {
-      // File doesn't exist, skip
     }
+    return files;
   }
   
-  return files;
+  // Otherwise, use tsconfig.json
+  if (options.configPath) {
+    const configFile = ts.readConfigFile(options.configPath, ts.sys.readFile);
+    if (configFile.error) {
+      return [];
+    }
+    
+    const configDir = path.dirname(options.configPath);
+    const parsedConfig = ts.parseJsonConfigFileContent(
+      configFile.config,
+      ts.sys,
+      configDir,
+      undefined,
+      options.configPath
+    );
+    
+    return parsedConfig.fileNames;
+  }
+  
+  return [];
 }
 
 /**

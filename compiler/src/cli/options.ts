@@ -19,6 +19,11 @@ export interface CliOptions {
   help?: boolean;          // -h, --help
   version?: boolean;       // -v, --version
   
+  // tsconfig.json settings
+  include?: string[];
+  exclude?: string[];
+  configPath?: string;     // Resolved path to tsconfig.json
+  
   // GoodScript-specific flags (--gs* prefix)
   gsTarget?: 'cpp' | 'js' | 'ts' | 'haxe';
   gsMemory?: 'gc' | 'ownership';
@@ -207,7 +212,17 @@ export function loadTsConfig(projectPath?: string): Partial<CliOptions> {
     const content = fs.readFileSync(configPath, 'utf-8');
     const config = JSON.parse(content);
     
-    const result: Partial<CliOptions> = {};
+    const result: Partial<CliOptions> = {
+      configPath,
+    };
+    
+    // Include/exclude patterns
+    if (config.include) {
+      result.include = config.include;
+    }
+    if (config.exclude) {
+      result.exclude = config.exclude;
+    }
     
     // Standard TypeScript options
     if (config.compilerOptions) {
@@ -297,9 +312,15 @@ export function validateOptions(options: CliOptions): string[] {
     errors.push('--watch mode is not compatible with --gsCompile (yet)');
   }
   
-  // Require input files unless showing help/version
-  if (!options.help && !options.version && options.files.length === 0 && !options.project) {
-    errors.push('No input files specified');
+  // Require input files or tsconfig.json with include patterns
+  if (!options.help && !options.version) {
+    const hasFiles = options.files.length > 0;
+    const hasConfig = options.configPath !== undefined;
+    const hasInclude = options.include && options.include.length > 0;
+    
+    if (!hasFiles && !hasConfig && !hasInclude) {
+      errors.push('No input files specified and no tsconfig.json found');
+    }
   }
   
   return errors;

@@ -226,14 +226,14 @@ describe('Option Validation', () => {
     expect(errors).toContain('--watch mode is not compatible with --gsCompile (yet)');
   });
   
-  it('should require input files', () => {
+  it('should require input files or tsconfig.json', () => {
     const options = {
       files: [],
     };
     
     const errors = validateOptions(options);
     
-    expect(errors).toContain('No input files specified');
+    expect(errors).toContain('No input files specified and no tsconfig.json found');
   });
   
   it('should allow missing files with --help', () => {
@@ -325,3 +325,38 @@ describe('Apply Defaults', () => {
     expect(options.gsOptimize).toBe('2');
   });
 });
+
+describe('tsconfig.json Integration', () => {
+  it('should load include/exclude patterns from tsconfig.json', () => {
+    // Note: This test uses the actual tsconfig.json in the compiler directory
+    const config = loadTsConfig();
+    
+    // The compiler's tsconfig.json has include: ["src/**/*"]
+    expect(config.include).toBeDefined();
+    expect(config.configPath).toBeDefined();
+  });
+  
+  it('should not require files when tsconfig.json exists with include', () => {
+    const options = applyDefaults({
+      files: [],
+      configPath: './tsconfig.json',
+      include: ['src/**/*'],
+    });
+    
+    const errors = validateOptions(options);
+    
+    // Should not error because we have a config with include patterns
+    expect(errors).toEqual([]);
+  });
+  
+  it('should error when no files and no tsconfig.json', () => {
+    const options = applyDefaults({
+      files: [],
+    });
+    
+    const errors = validateOptions(options);
+    
+    expect(errors).toContain('No input files specified and no tsconfig.json found');
+  });
+});
+
