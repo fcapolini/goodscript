@@ -31,11 +31,19 @@ export class IRLowering {
     this.builder.resetVersions();
     this.declaredVariables.clear();
     const declarations: IRDeclaration[] = [];
+    const initStatements: IRStatement[] = [];
     
     ts.forEachChild(sourceFile, (node) => {
       const decl = this.lowerDeclaration(node, sourceFile);
       if (decl) {
         declarations.push(decl);
+      } else if (ts.isExpressionStatement(node)) {
+        // Handle top-level expression statements (e.g., console.log())
+        const expression = this.lowerExpression(node.expression, sourceFile);
+        initStatements.push({
+          kind: 'expressionStatement',
+          expression,
+        });
       }
     });
 
@@ -43,6 +51,7 @@ export class IRLowering {
       path: sourceFile.fileName,
       declarations,
       imports: [],
+      initStatements: initStatements.length > 0 ? initStatements : undefined,
     };
   }
 

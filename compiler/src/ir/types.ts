@@ -68,6 +68,7 @@ export interface IRModule {
   path: string;
   declarations: IRDeclaration[];
   imports: IRImport[];
+  initStatements?: IRStatement[];  // Top-level statements (executed in main())
 }
 
 export interface IRImport {

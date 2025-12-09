@@ -352,6 +352,24 @@ export class CppCodegen {
     for (let i = this.currentNamespace.length - 1; i >= 0; i--) {
       this.emit(`}  // namespace ${this.currentNamespace[i]}`);
     }
+
+    // Generate main() if there are top-level statements
+    if (module.initStatements && module.initStatements.length > 0) {
+      this.emit('');
+      this.emit('int main(int argc, char* argv[]) {');
+      this.indent++;
+      this.emit('// Initialize process.argv');
+      this.emit('gs::process::init(argc, argv);');
+      this.emit('');
+      this.emit('// Execute top-level statements');
+      for (const stmt of module.initStatements) {
+        this.generateStatement(stmt);
+      }
+      this.emit('');
+      this.emit('return 0;');
+      this.indent--;
+      this.emit('}');
+    }
   }
 
   private generateSourceDeclaration(decl: IRDeclaration): void {
