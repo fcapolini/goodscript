@@ -163,6 +163,20 @@ public:
     T sync_wait() {
         return cppcoro::sync_wait(take_task());
     }
+    
+    // Static helper: Promise.resolve(value)
+    static Promise<T> resolve(T value) {
+        return Promise<T>([value](auto resolve, auto reject) {
+            resolve(value);
+        });
+    }
+    
+    // Static helper: Promise.reject(error)
+    static Promise<T> reject(gs::Error error) {
+        return Promise<T>([error](auto resolve, auto reject) {
+            reject(error);
+        });
+    }
 };
 
 // Specialization for void
@@ -243,6 +257,20 @@ public:
     
     void sync_wait() {
         cppcoro::sync_wait(take_task());
+    }
+    
+    // Static helper: Promise.resolve()
+    static Promise<void> resolve() {
+        return Promise<void>([](auto resolve, auto reject) {
+            resolve();
+        });
+    }
+    
+    // Static helper: Promise.reject(error)
+    static Promise<void> reject(gs::Error error) {
+        return Promise<void>([error](auto resolve, auto reject) {
+            reject(error);
+        });
     }
 };
 

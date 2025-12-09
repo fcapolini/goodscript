@@ -851,10 +851,11 @@ export class CppCodegen {
   private generateTerminator(term: IRTerminator): void {
     switch (term.kind) {
       case 'return':
+        const returnKeyword = this.isAsyncContext ? 'co_return' : 'return';
         if (term.value) {
-          this.emit(`return ${this.generateExpr(term.value)};`);
+          this.emit(`${returnKeyword} ${this.generateExpr(term.value)};`);
         } else {
-          this.emit(`return;`);
+          this.emit(`${returnKeyword};`);
         }
         break;
       case 'branch':
