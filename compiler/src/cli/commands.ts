@@ -116,21 +116,24 @@ export async function compileCommand(options: CliOptions): Promise<CommandResult
       await compileWithTypeScript(program, options, errors, warnings);
     }
     
-    // Write generated files
+    // Write generated C++ files to dist/build/ (or dist/ if only generating code)
     if (generatedFiles.size > 0 && options.outDir) {
-      await fs.mkdir(options.outDir, { recursive: true });
+      const cppOutDir = options.gsCodegen || options.gsTarget !== 'cpp'
+        ? options.outDir
+        : path.join(options.outDir, 'build');
+      await fs.mkdir(cppOutDir, { recursive: true });
       
       for (const [fileName, content] of generatedFiles) {
         // Extract just the basename (codegen returns full paths)
         const basename = path.basename(fileName);
-        const outputPath = path.join(options.outDir, basename);
+        const outputPath = path.join(cppOutDir, basename);
         await fs.writeFile(outputPath, content, 'utf-8');
         console.log(`  ✓ ${basename}`);
       }
     }
     
-    // Phase 6: Compile to binary
-    if (options.gsCompile && options.gsTarget === 'cpp') {
+    // Phase 6: Compile to binary (default for C++ target unless --gsCodegen)
+    if (options.gsTarget === 'cpp' && !options.gsCodegen) {
       await compileToBinary(generatedFiles, files, options, errors, warnings);
     }
     
@@ -203,27 +206,37 @@ async function compileToBinary(
   console.log('\n🔨 Compiling to native binary...');
   
   const buildDir = path.join(options.outDir || 'dist', 'build');
+  const distDir = options.outDir || 'dist';
   const vendorDir = path.join(PACKAGE_ROOT, 'vendor');
   const runtimeDir = path.join(PACKAGE_ROOT, 'runtime/cpp');
   const cppcoroDir = path.join(PACKAGE_ROOT, 'vendor/cppcoro/include');
   
-  // Determine default output name from first source file if not specified
-  let defaultOutput = 'a.out';
-  if (!options.output && sourceFiles.length > 0) {
-    // Use first TypeScript source file for binary name
+  // Determine output path (binary goes to dist/, not dist/build/)
+  let outputPath: string;
+  if (options.output) {
+    // User specified output (via -o or tsconfig.json goodscript.outFile)
+    // If relative path, make it relative to distDir; if absolute, use as-is
+    outputPath = path.isAbsolute(options.output) 
+      ? options.output 
+      : path.join(distDir, options.output);
+  } else if (sourceFiles.length > 0) {
+    // Default: use first TypeScript source file for binary name
     // Example: src/main-gs.ts -> main, src/app-gs.ts -> app
     const firstSourceFile = sourceFiles[0];
     const basename = path.basename(firstSourceFile)
       .replace(/-gs\.(tsx?)$/, '')  // Remove -gs.ts or -gs.tsx
       .replace(/\.(ts|tsx|js|jsx)$/, '');  // Remove .ts, .tsx, .js, .jsx
-    defaultOutput = basename;
+    outputPath = path.join(distDir, basename);
+  } else {
+    // Fallback
+    outputPath = path.join(distDir, 'a.out');
   }
   
   const compiler = new ZigCompiler(buildDir, vendorDir);
   
   const compileOptions: ZigCompileOptions = {
     sources,
-    output: options.output || path.join(buildDir, defaultOutput),
+    output: outputPath,
     mode: options.gsMemory || 'gc',
     target: options.gsTriple,
     optimize: options.gsOptimize || (options.sourceMap ? '0' : '3'),

@@ -27,7 +27,7 @@ export interface CliOptions {
   // GoodScript-specific flags (--gs* prefix)
   gsTarget?: 'cpp' | 'js' | 'ts' | 'haxe';
   gsMemory?: 'gc' | 'ownership';
-  gsCompile?: boolean;
+  gsCodegen?: boolean;     // Only generate C++ code, don't compile to binary
   gsOptimize?: '0' | '1' | '2' | '3' | 's' | 'z';
   gsTriple?: string;
   gsShowIR?: boolean;
@@ -35,7 +35,7 @@ export interface CliOptions {
   gsSkipValidation?: boolean;
   gsDebug?: boolean;
   
-  // Output path for binary (when gsCompile=true)
+  // Output path for binary (C++ target compiles by default)
   output?: string;         // -o
 }
 
@@ -143,8 +143,8 @@ export function parseArguments(args: string[]): ParsedOptions {
       continue;
     }
     
-    if (arg === '--gsCompile') {
-      options.gsCompile = true;
+    if (arg === '--gsCodegen') {
+      options.gsCodegen = true;
       continue;
     }
     
@@ -237,7 +237,7 @@ export function loadTsConfig(projectPath?: string): Partial<CliOptions> {
       const gs = config.goodscript;
       if (gs.target) result.gsTarget = gs.target;
       if (gs.memory) result.gsMemory = gs.memory;
-      if (gs.compile !== undefined) result.gsCompile = gs.compile;
+      if (gs.codegen !== undefined) result.gsCodegen = gs.codegen;
       if (gs.optimize !== undefined) result.gsOptimize = String(gs.optimize) as any;
       if (gs.triple) result.gsTriple = gs.triple;
       if (gs.outFile) result.output = gs.outFile;
@@ -306,24 +306,26 @@ export function validateOptions(options: CliOptions): string[] {
     errors.push('Cannot use --gsValidateOnly and --gsSkipValidation together');
   }
   
-  if (options.gsCompile && options.gsTarget !== 'cpp') {
-    errors.push('--gsCompile requires --gsTarget cpp');
+  if (options.gsCodegen && options.gsTarget !== 'cpp') {
+    errors.push('--gsCodegen only applies to --gsTarget cpp');
   }
   
   if (options.gsMemory && options.gsTarget !== 'cpp' && options.gsTarget !== undefined) {
     errors.push('--gsMemory only applies to --gsTarget cpp');
   }
   
-  if (options.gsTriple && !options.gsCompile) {
-    errors.push('--gsTriple requires --gsCompile');
+  if (options.gsTriple && options.gsCodegen) {
+    errors.push('--gsTriple requires binary compilation (incompatible with --gsCodegen)');
   }
   
-  if (options.output && !options.gsCompile) {
-    errors.push('-o requires --gsCompile');
+  if (options.output && options.gsTarget !== 'cpp') {
+    errors.push('-o requires --gsTarget cpp');
   }
   
-  if (options.watch && options.gsCompile) {
-    errors.push('--watch mode is not compatible with --gsCompile (yet)');
+  // Note: We don't error if output is set with gsCodegen, we just ignore it
+  
+  if (options.watch && options.gsTarget === 'cpp' && !options.gsCodegen) {
+    errors.push('--watch mode is not compatible with binary compilation (use --gsCodegen for C++ code generation only)');
   }
   
   // Require input files or tsconfig.json with include patterns

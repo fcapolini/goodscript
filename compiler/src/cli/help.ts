@@ -3,7 +3,7 @@
  */
 
 export const HELP_TEXT = `
-GoodScript Compiler v0.12.2
+GoodScript Compiler v0.12.4
 
 USAGE:
   gsc [options] [files...]
@@ -18,10 +18,13 @@ COMMON EXAMPLES:
     Transpile to JavaScript (default)
 
   gsc --gsTarget cpp src/main-gs.ts
-    Generate C++ code
+    Compile to native binary (default for C++ target)
 
-  gsc --gsTarget cpp --gsCompile -o myapp src/main-gs.ts
-    Compile to native binary
+  gsc --gsTarget cpp -o myapp src/main-gs.ts
+    Compile to named binary
+
+  gsc --gsTarget cpp --gsCodegen src/main-gs.ts
+    Generate C++ code only (no compilation)
 
   gsc --project tsconfig.json
     Use tsconfig.json configuration
@@ -44,12 +47,13 @@ GOODSCRIPT OPTIONS:
 
   --gsTarget TARGET       Compilation target (default: js)
                           Values: cpp, js, ts, haxe
+                          Note: cpp target compiles to binary by default
 
   --gsMemory MODE         Memory management mode (C++ only)
                           Values: gc (default), ownership
 
-  --gsCompile             Compile to native binary (requires --gsTarget cpp)
-  -o FILE                 Output binary path (requires --gsCompile)
+  --gsCodegen             Generate C++ code only, don't compile to binary
+  -o FILE                 Output binary path (C++ target only)
 
   --gsOptimize LEVEL      Optimization level (default: 3 for production, 0 for debug)
                           Values: 0 (none), 1, 2, 3 (max), s (size), z (size aggressive)
@@ -68,10 +72,13 @@ EXAMPLES:
     gsc --sourceMap --gsTarget cpp --gsDebug src/
 
   Production (optimized binary):
-    gsc --gsTarget cpp --gsMemory ownership --gsCompile --gsOptimize 3 -o myapp src/main-gs.ts
+    gsc --gsTarget cpp --gsMemory ownership --gsOptimize 3 -o myapp src/main-gs.ts
+
+  Generate C++ code only:
+    gsc --gsTarget cpp --gsCodegen src/main-gs.ts
 
   Cross-compilation:
-    gsc --gsTarget cpp --gsCompile --gsTriple wasm32-wasi -o app.wasm src/main-gs.ts
+    gsc --gsTarget cpp --gsTriple wasm32-wasi -o app.wasm src/main-gs.ts
 
   Type-check only:
     gsc --noEmit src/**/*-gs.ts
@@ -102,4 +109,4 @@ MORE INFO:
   Report issues: https://github.com/goodscript/goodscript/issues
 `;
 
-export const VERSION_TEXT = `GoodScript Compiler v0.12.2`;
+export const VERSION_TEXT = `GoodScript Compiler v0.12.4`;

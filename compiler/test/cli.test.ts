@@ -77,10 +77,10 @@ describe('CLI Options Parser', () => {
     expect(options.gsMemory).toBe('ownership');
   });
   
-  it('should parse --gsCompile flag', () => {
-    const { options } = parseArguments(['--gsCompile', 'src/main-gs.ts']);
+  it('should parse --gsCodegen flag', () => {
+    const { options } = parseArguments(['--gsCodegen', 'src/main-gs.ts']);
     
-    expect(options.gsCompile).toBe(true);
+    expect(options.gsCodegen).toBe(true);
   });
   
   it('should parse --gsOptimize flag', () => {
@@ -132,7 +132,6 @@ describe('CLI Options Parser', () => {
     const { options, errors } = parseArguments([
       '--gsTarget', 'cpp',
       '--gsMemory', 'ownership',
-      '--gsCompile',
       '--gsOptimize', '3',
       '-o', 'myapp',
       'src/main-gs.ts'
@@ -141,7 +140,6 @@ describe('CLI Options Parser', () => {
     expect(errors).toEqual([]);
     expect(options.gsTarget).toBe('cpp');
     expect(options.gsMemory).toBe('ownership');
-    expect(options.gsCompile).toBe(true);
     expect(options.gsOptimize).toBe('3');
     expect(options.output).toBe('myapp');
     expect(options.files).toEqual(['src/main-gs.ts']);
@@ -167,16 +165,16 @@ describe('Option Validation', () => {
     expect(errors).toContain('Cannot use --gsValidateOnly and --gsSkipValidation together');
   });
   
-  it('should reject --gsCompile without --gsTarget cpp', () => {
+  it('should reject --gsCodegen without --gsTarget cpp', () => {
     const options = {
       files: ['test.ts'],
       gsTarget: 'js' as const,
-      gsCompile: true,
+      gsCodegen: true,
     };
     
     const errors = validateOptions(options);
     
-    expect(errors).toContain('--gsCompile requires --gsTarget cpp');
+    expect(errors).toContain('--gsCodegen only applies to --gsTarget cpp');
   });
   
   it('should reject --gsMemory without --gsTarget cpp', () => {
@@ -191,39 +189,41 @@ describe('Option Validation', () => {
     expect(errors).toContain('--gsMemory only applies to --gsTarget cpp');
   });
   
-  it('should reject --gsTriple without --gsCompile', () => {
+  it('should reject --gsTriple with --gsCodegen', () => {
     const options = {
       files: ['test.ts'],
+      gsTarget: 'cpp' as const,
+      gsCodegen: true,
       gsTriple: 'wasm32-wasi',
     };
     
     const errors = validateOptions(options);
     
-    expect(errors).toContain('--gsTriple requires --gsCompile');
+    expect(errors).toContain('--gsTriple requires binary compilation (incompatible with --gsCodegen)');
   });
   
-  it('should reject -o without --gsCompile', () => {
+  it('should reject -o without --gsTarget cpp', () => {
     const options = {
       files: ['test.ts'],
+      gsTarget: 'js' as const,
       output: 'myapp',
     };
     
     const errors = validateOptions(options);
     
-    expect(errors).toContain('-o requires --gsCompile');
+    expect(errors).toContain('-o requires --gsTarget cpp');
   });
   
-  it('should reject --watch with --gsCompile', () => {
+  it('should reject --watch with C++ binary compilation', () => {
     const options = {
       files: ['test.ts'],
       watch: true,
-      gsCompile: true,
       gsTarget: 'cpp' as const,
     };
     
     const errors = validateOptions(options);
     
-    expect(errors).toContain('--watch mode is not compatible with --gsCompile (yet)');
+    expect(errors).toContain('--watch mode is not compatible with binary compilation (use --gsCodegen for C++ code generation only)');
   });
   
   it('should require input files or tsconfig.json', () => {
@@ -252,7 +252,6 @@ describe('Option Validation', () => {
       files: ['test.ts'],
       gsTarget: 'cpp' as const,
       gsMemory: 'ownership' as const,
-      gsCompile: true,
       gsOptimize: '3' as const,
       gsTriple: 'x86_64-linux-gnu',
       output: 'myapp',
