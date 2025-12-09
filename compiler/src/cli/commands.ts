@@ -206,11 +206,23 @@ async function compileToBinary(
   const runtimeDir = path.join(PACKAGE_ROOT, 'runtime/cpp');
   const cppcoroDir = path.join(PACKAGE_ROOT, 'vendor/cppcoro/include');
   
+  // Determine default output name from first .cpp file if not specified
+  let defaultOutput = 'a.out';
+  if (!options.output && sources.size > 0) {
+    // Get first .cpp file
+    const firstCppFile = Array.from(sources.keys()).find(f => f.endsWith('.cpp'));
+    if (firstCppFile) {
+      // Extract basename without extension: main1.cpp -> main1
+      const basename = path.basename(firstCppFile, '.cpp');
+      defaultOutput = basename;
+    }
+  }
+  
   const compiler = new ZigCompiler(buildDir, vendorDir);
   
   const compileOptions: ZigCompileOptions = {
     sources,
-    output: options.output || path.join(buildDir, 'a.out'),
+    output: options.output || path.join(buildDir, defaultOutput),
     mode: options.gsMemory || 'gc',
     target: options.gsTriple,
     optimize: options.gsOptimize || (options.sourceMap ? '0' : '3'),
