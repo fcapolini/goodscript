@@ -2,6 +2,58 @@
 
 Complete TypeScript-to-C++/TypeScript compiler with binary compilation support.
 
+## Installation
+
+```bash
+# Install globally
+npm install -g @goodscript/compiler
+
+# Or use with pnpm
+pnpm add -g @goodscript/compiler
+```
+
+**Requirements**:
+- **Node.js** v18+ (for all features)
+- **Zig** (optional, only needed for `--gsCompile` to create native binaries)
+
+### Why Zig is Optional
+
+GoodScript takes a modular approach similar to Rust's architecture:
+- **Core compiler** (Node.js only): Validates GoodScript restrictions and generates C++ code
+- **Binary compilation** (requires Zig): Compiles generated C++ to native executables
+
+This design offers several advantages:
+- ⚡ **Lightweight installation**: Package stays small (<5MB) without bundling Zig (~50-80MB)
+- 🎯 **Progressive enhancement**: Start with validation/C++ generation, add Zig when you need binaries
+- 🔧 **Flexibility**: Use your preferred Zig version or system package manager
+- 📦 **Separation of concerns**: Compiler and build toolchain are independent
+
+**Without Zig installed**:
+```bash
+gsc --gsValidateOnly src/main-gs.ts  # ✅ Works - validates GoodScript restrictions
+gsc --gsTarget cpp src/main-gs.ts    # ✅ Works - generates C++ code
+```
+
+**With Zig installed**:
+```bash
+gsc --gsTarget cpp --gsCompile -o myapp src/main-gs.ts  # ✅ Compiles to native binary
+```
+
+**Installing Zig** (when you need binary compilation):
+```bash
+# macOS
+brew install zig
+
+# Linux
+# Download from https://ziglang.org/download/
+
+# Windows
+# Download from https://ziglang.org/download/
+# Or use: winget install -e --id Zig.Zig
+```
+
+For complete CLI documentation, see [CLI.md](./CLI.md).
+
 ## Architecture
 
 ```
@@ -83,12 +135,20 @@ pnpm dev
 - ✅ Phase 4: Optimizer (constant folding, DCE)
 - ✅ Phase 5: Code Generation (C++)
 - ✅ Phase 6: Binary Compilation (Zig integration)
+- ✅ CLI Tool (`gsc` command - drop-in replacement for `tsc`)
+
+**Features**:
+- Command-line interface compatible with `tsc`
+- GoodScript-specific `--gs*` flags (e.g., `--gsTarget`, `--gsMemory`, `--gsCompile`)
+- tsconfig.json integration with `goodscript` section
+- Progressive toolchain (validation → C++ generation → binary compilation)
+- 368 tests passing (including 37 CLI tests)
 
 **Next Steps**:
-- CLI tool for command-line usage
 - Runtime library implementation
 - Standard library porting
-- Source maps for C++ debugging (read from tsconfig.json)
+- Watch mode for `gsc`
+- IDE integration (LSP server)
 
 ## File Extensions
 
