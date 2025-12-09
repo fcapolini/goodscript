@@ -3,7 +3,7 @@
  */
 
 export const HELP_TEXT = `
-GoodScript Compiler v0.12.1
+GoodScript Compiler v0.12.2
 
 USAGE:
   gsc [options] [files...]
@@ -102,4 +102,4 @@ MORE INFO:
   Report issues: https://github.com/goodscript/goodscript/issues
 `;
 
-export const VERSION_TEXT = `GoodScript Compiler v0.12.1`;
+export const VERSION_TEXT = `GoodScript Compiler v0.12.2`;
