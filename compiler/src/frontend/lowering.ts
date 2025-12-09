@@ -1179,6 +1179,17 @@ export class IRLowering {
       return types.function(params, returnType);
     }
     
+    // Check for Promise types (BEFORE general Object check!)
+    // This prevents TypeScript from trying to expand Promise's internal types
+    if (tsType.symbol && tsType.symbol.name === 'Promise') {
+      const typeArgs = (tsType as ts.TypeReference).typeArguments;
+      if (typeArgs && typeArgs.length >= 1) {
+        const resultType = this.convertTsTypeToIRType(typeArgs[0], visited);
+        return types.promise(resultType);
+      }
+      return types.promise(types.void());
+    }
+    
     // Check for array types (BEFORE general Object check!)
     if (this.typeChecker.isArrayType(tsType)) {
       const typeArgs = this.typeChecker.getTypeArguments(tsType as ts.TypeReference);
@@ -1202,16 +1213,30 @@ export class IRLowering {
     
     // Check for object types (struct) - after arrays and maps!
     if (tsType.flags & ts.TypeFlags.Object) {
-      const properties = tsType.getProperties();
-      if (properties.length > 0) {
-        const fields = properties.map(prop => {
-          const propType = this.typeChecker.getTypeOfSymbolAtLocation(prop, prop.valueDeclaration!);
-          return {
-            name: prop.getName(),
-            type: this.convertTsTypeToIRType(propType, visited)
-          };
-        });
-        return types.struct(fields);
+      try {
+        // getProperties() can cause stack overflow on complex library types
+        const properties = tsType.getProperties();
+        
+        // If there are too many properties, it's likely a complex library type we can't handle
+        // Skip it and return void to avoid stack overflow in TypeScript's type checker
+        if (properties.length > 50) {
+          return types.void();
+        }
+        
+        if (properties.length > 0) {
+          const fields = properties.map(prop => {
+            const propType = this.typeChecker.getTypeOfSymbolAtLocation(prop, prop.valueDeclaration!);
+            return {
+              name: prop.getName(),
+              type: this.convertTsTypeToIRType(propType, visited)
+            };
+          });
+          return types.struct(fields);
+        }
+      } catch (e) {
+        // If we hit a stack overflow or other error during type analysis,
+        // just return void rather than crashing
+        return types.void();
       }
     }
     
