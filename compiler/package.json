@@ -5,6 +5,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "gsc": "./bin/gsc"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -12,7 +15,7 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x bin/gsc",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
