@@ -6,10 +6,10 @@ Complete TypeScript-to-C++/TypeScript compiler with binary compilation support.
 
 ```bash
 # Install globally
-npm install -g @goodscript/compiler
+npm install -g goodscript
 
 # Or use with pnpm
-pnpm add -g @goodscript/compiler
+pnpm add -g goodscript
 ```
 
 **Requirements**:

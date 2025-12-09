@@ -6,10 +6,10 @@ The `gsc` command is a drop-in replacement for TypeScript's `tsc` compiler, with
 
 ```bash
 # Install globally
-npm install -g @goodscript/compiler
+npm install -g goodscript
 
 # Or use via pnpm
-pnpm add -g @goodscript/compiler
+pnpm add -g goodscript
 ```
 
 ## Quick Start
@@ -55,7 +55,7 @@ All GoodScript options use the `--gs` prefix (camelCase):
 | `--gsMemory` | gc, ownership | gc | Memory mode (C++ only) |
 | `--gsCompile` | - | false | Compile to binary |
 | `--gsOptimize` | 0-3, s, z | 3 | Optimization level |
-| `--gsTriple` | string | host | Cross-compile target |
+| `--gsTriple` | string | host | Target triple (e.g., x86_64-linux-gnu) |
 | `--gsDebug` | - | false | Debug symbols |
 | `--gsShowIR` | - | false | Print IR |
 | `--gsValidateOnly` | - | false | Validate only |
@@ -89,16 +89,37 @@ gsc --gsTarget cpp --gsMemory ownership --gsCompile --gsOptimize 3 -o myapp src/
 
 ### Cross-Compilation
 
+Zig enables zero-configuration cross-compilation to any supported platform:
+
 ```bash
-# Linux binary (from macOS/Windows)
+# Linux x86_64 (from macOS/Windows)
 gsc --gsTarget cpp --gsCompile --gsTriple x86_64-linux-gnu -o myapp-linux src/main-gs.ts
 
-# macOS binary (from Linux/Windows)
+# macOS ARM64 (Apple Silicon) (from Linux/Windows)
 gsc --gsTarget cpp --gsCompile --gsTriple aarch64-apple-darwin -o myapp-macos src/main-gs.ts
+
+# macOS x86_64 (Intel) (from Linux/Windows)
+gsc --gsTarget cpp --gsCompile --gsTriple x86_64-apple-darwin -o myapp-macos-intel src/main-gs.ts
+
+# Windows x86_64 (from macOS/Linux)
+gsc --gsTarget cpp --gsCompile --gsTriple x86_64-windows-gnu -o myapp.exe src/main-gs.ts
+
+# Linux ARM64 (from any platform)
+gsc --gsTarget cpp --gsCompile --gsTriple aarch64-linux-gnu -o myapp-arm64 src/main-gs.ts
 
 # WebAssembly
 gsc --gsTarget cpp --gsCompile --gsTriple wasm32-wasi -o app.wasm src/main-gs.ts
 ```
+
+**Common Target Triples**:
+- `x86_64-linux-gnu` - Linux x86_64
+- `aarch64-linux-gnu` - Linux ARM64
+- `x86_64-apple-darwin` - macOS Intel
+- `aarch64-apple-darwin` - macOS Apple Silicon
+- `x86_64-windows-gnu` - Windows x86_64
+- `wasm32-wasi` - WebAssembly
+
+**No toolchain setup required!** Zig includes cross-compilation support for all targets out of the box.
 
 ## Configuration File (`tsconfig.json`)
 
@@ -228,7 +249,7 @@ gsc --gsTarget cpp --gsCompile -o myapp src/main-gs.ts
 
 ### Error: "Zig compiler not found"
 
-Install Zig for binary compilation:
+Install Zig for binary compilation and cross-compilation:
 
 ```bash
 # macOS
@@ -236,10 +257,17 @@ brew install zig
 
 # Linux
 # Download from https://ziglang.org/download/
+# Or use package manager (version may be outdated):
+sudo apt install zig  # Ubuntu/Debian
+sudo dnf install zig  # Fedora
 
 # Windows
 # Download from https://ziglang.org/download/
+# Or use winget:
+winget install -e --id Zig.Zig
 ```
+
+**Note**: Zig includes cross-compilation for all platforms out of the box - no additional toolchains needed!
 
 ## Advanced Usage
 
