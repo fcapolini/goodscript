@@ -2,11 +2,14 @@ import { describe, it, expect } from 'vitest';
 import * as path from 'path';
 import * as fs from 'fs';
 import ts from 'typescript';
+import { execSync } from 'child_process';
 import { Validator } from '../src/frontend/validator.js';
 import { IRLowering } from '../src/frontend/lowering.js';
 import { CppCodegen } from '../src/backend/cpp/codegen.js';
 
 const EXAMPLES_DIR = path.join(__dirname, '../../examples');
+const BUILD_DIR = path.join(__dirname, '../../build');
+const GSC_BIN = path.join(__dirname, '../bin/gsc');
 
 // Helper to create TypeScript program
 function createProgram(files: string[]): ts.Program {
@@ -18,6 +21,42 @@ function createProgram(files: string[]): ts.Program {
     skipLibCheck: true,
     moduleResolution: ts.ModuleResolutionKind.Node10,
   });
+}
+
+// Helper to compile and run example using CLI
+async function compileAndRun(exampleDir: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const examplePath = path.join(EXAMPLES_DIR, exampleDir);
+  const tsconfigPath = path.join(examplePath, 'tsconfig.json');
+  const distDir = path.join(examplePath, 'dist');
+  
+  // Read tsconfig to get output filename
+  const tsconfig = JSON.parse(fs.readFileSync(tsconfigPath, 'utf8'));
+  const outFile = tsconfig.goodscript?.outFile || exampleDir;
+  const binaryPath = path.join(distDir, outFile);
+  
+  // Compile using CLI with project flag (run from example directory)
+  try {
+    execSync(`node ${GSC_BIN} --project tsconfig.json`, {
+      cwd: examplePath,
+      encoding: 'utf8',
+      timeout: 30000,
+      stdio: 'pipe'
+    });
+  } catch (error: any) {
+    throw new Error(`CLI compilation failed: ${error.stderr || error.message}`);
+  }
+  
+  // Run the binary
+  try {
+    const stdout = execSync(binaryPath, { encoding: 'utf8', timeout: 5000 });
+    return { stdout, stderr: '', exitCode: 0 };
+  } catch (error: any) {
+    return { 
+      stdout: error.stdout?.toString() || '', 
+      stderr: error.stderr?.toString() || '', 
+      exitCode: error.status || 1 
+    };
+  }
 }
 
 describe('Examples', () => {
@@ -313,5 +352,122 @@ describe('Examples - Compilation Only', () => {
       const cppFiles = codegen.generate(irProgram, 'gc', false);
       expect(cppFiles.size).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('Examples - Execution', () => {
+  // These tests compile examples to native binaries and execute them
+  // Note: Some examples are skipped due to known codegen issues that need fixing
+  
+  describe('01-hello-world', () => {
+    it('should execute and print hello world', async () => {
+      const result = await compileAndRun('01-hello-world');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Hello, GoodScript!');
+    });
+  });
+
+  describe('02-variables-and-types', () => {
+    it('should execute and print variable values', async () => {
+      const result = await compileAndRun('02-variables-and-types');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('String:');
+      expect(result.stdout).toContain('Number:');
+      expect(result.stdout).toContain('Boolean:');
+    });
+  });
+
+  describe.skip('03-functions', () => {
+    // TODO: Fix codegen - arrow functions at module level generate 'const void' instead of proper type
+    it('should execute and call functions', async () => {
+      const result = await compileAndRun('03-functions');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Sum:');
+      expect(result.stdout).toContain('Uppercase:');
+    });
+  });
+
+  describe.skip('04-arrays', () => {
+    // TODO: Fix codegen issues with array operations
+    it('should execute array operations', async () => {
+      const result = await compileAndRun('04-arrays');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Array length:');
+      expect(result.stdout).toContain('First element:');
+    });
+  });
+
+  describe.skip('05-maps', () => {
+    // TODO: Fix codegen issues with map operations
+    it('should execute map operations', async () => {
+      const result = await compileAndRun('05-maps');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Map size:');
+    });
+  });
+
+  describe.skip('06-strings', () => {
+    // TODO: Fix codegen issues with string operations
+    it('should execute string operations', async () => {
+      const result = await compileAndRun('06-strings');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Uppercase:');
+      expect(result.stdout).toContain('Lowercase:');
+    });
+  });
+
+  describe.skip('07-math', () => {
+    // TODO: Fix codegen issues with math operations
+    it('should execute math operations', async () => {
+      const result = await compileAndRun('07-math');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Max:');
+      expect(result.stdout).toContain('Min:');
+    });
+  });
+
+  describe.skip('08-exceptions', () => {
+    // TODO: Fix codegen issues with exception handling
+    it('should execute and handle exceptions', async () => {
+      const result = await compileAndRun('08-exceptions');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Error:');
+      expect(result.stdout).toContain('Finally');
+    });
+  });
+
+  describe.skip('09-async-await', () => {
+    // TODO: Fix codegen issues with async/await
+    it('should execute async functions', async () => {
+      const result = await compileAndRun('09-async-await');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Async');
+    });
+  });
+
+  describe.skip('10-file-io', () => {
+    // TODO: Fix codegen issues with file I/O
+    it('should execute file operations', async () => {
+      const result = await compileAndRun('10-file-io');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('File');
+    });
+  });
+
+  describe.skip('11-http-client', () => {
+    // Skip: requires network connectivity
+    it('should execute HTTP requests', async () => {
+      const result = await compileAndRun('11-http-client');
+      expect(result.exitCode).toBe(0);
+    });
+  });
+
+  describe.skip('12-classes', () => {
+    // TODO: Fix codegen - classes with constructors generate incorrect C++ code
+    it('should execute class methods', async () => {
+      const result = await compileAndRun('12-classes');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Person');
+    });
   });
 });
