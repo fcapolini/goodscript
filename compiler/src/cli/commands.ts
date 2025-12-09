@@ -131,7 +131,7 @@ export async function compileCommand(options: CliOptions): Promise<CommandResult
     
     // Phase 6: Compile to binary
     if (options.gsCompile && options.gsTarget === 'cpp') {
-      await compileToBinary(generatedFiles, options, errors, warnings);
+      await compileToBinary(generatedFiles, files, options, errors, warnings);
     }
     
     if (errors.length === 0) {
@@ -195,6 +195,7 @@ async function compileWithTypeScript(
  */
 async function compileToBinary(
   sources: Map<string, string>,
+  sourceFiles: string[],
   options: CliOptions,
   errors: string[],
   _warnings: string[]
@@ -206,16 +207,16 @@ async function compileToBinary(
   const runtimeDir = path.join(PACKAGE_ROOT, 'runtime/cpp');
   const cppcoroDir = path.join(PACKAGE_ROOT, 'vendor/cppcoro/include');
   
-  // Determine default output name from first .cpp file if not specified
+  // Determine default output name from first source file if not specified
   let defaultOutput = 'a.out';
-  if (!options.output && sources.size > 0) {
-    // Get first .cpp file
-    const firstCppFile = Array.from(sources.keys()).find(f => f.endsWith('.cpp'));
-    if (firstCppFile) {
-      // Extract basename without extension: main1.cpp -> main1
-      const basename = path.basename(firstCppFile, '.cpp');
-      defaultOutput = basename;
-    }
+  if (!options.output && sourceFiles.length > 0) {
+    // Use first TypeScript source file for binary name
+    // Example: src/main-gs.ts -> main, src/app-gs.ts -> app
+    const firstSourceFile = sourceFiles[0];
+    const basename = path.basename(firstSourceFile)
+      .replace(/-gs\.(tsx?)$/, '')  // Remove -gs.ts or -gs.tsx
+      .replace(/\.(ts|tsx|js|jsx)$/, '');  // Remove .ts, .tsx, .js, .jsx
+    defaultOutput = basename;
   }
   
   const compiler = new ZigCompiler(buildDir, vendorDir);
