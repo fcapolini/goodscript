@@ -670,6 +670,16 @@ export class CppCodegen {
           return `gs::console::${method}(${args})`;
         }
         
+        // Special handling for FileSystem static methods
+        if (expr.callee.kind === 'memberAccess' && 
+            expr.callee.object.kind === 'identifier' && 
+            (expr.callee.object.name === 'FileSystem' || expr.callee.object.name === 'FileSystemAsync')) {
+          const className = expr.callee.object.name;
+          const method = expr.callee.member;
+          const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
+          return `gs::${className}::${method}(${args})`;
+        }
+        
         const callee = this.generateExpression(expr.callee);
         const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
         return `${callee}(${args})`;
@@ -680,6 +690,17 @@ export class CppCodegen {
         // Only sanitize actual C++ keywords (like delete), not stdlib names (like set)
         // Method names don't conflict with stdlib types
         const member = CPP_KEYWORDS.has(expr.member) ? `${expr.member}_` : expr.member;
+        
+        // Special handling for FileSystem and FileSystemAsync static methods
+        if (expr.object.kind === 'identifier' && 
+            (expr.object.name === 'FileSystem' || expr.object.name === 'FileSystemAsync')) {
+          return `gs::${expr.object.name}::${member}`;
+        }
+        
+        // Special handling for console static methods
+        if (expr.object.kind === 'identifier' && expr.object.name === 'console') {
+          return `gs::console::${member}`;
+        }
         
         // In C++, some properties are actually methods that need ()
         // Map.size, Array.length are methods in our C++ runtime
@@ -891,6 +912,10 @@ export class CppCodegen {
         if (obj === 'console') {
           return `gs::console::${expr.member}`;
         }
+        // Special case: FileSystem and FileSystemAsync static methods
+        if (obj === 'FileSystem' || obj === 'FileSystemAsync') {
+          return `gs::${obj}::${expr.member}`;
+        }
         // Special case: array.length and string.length are methods in C++
         if (expr.member === 'length') {
           const objType = expr.object.type;
@@ -922,6 +947,10 @@ export class CppCodegen {
         // Special case: console.log/error/warn -> gs::console::
         if (obj === 'console') {
           return `gs::console::${expr.method}(${args})`;
+        }
+        // Special case: FileSystem and FileSystemAsync static methods
+        if (obj === 'FileSystem' || obj === 'FileSystemAsync') {
+          return `gs::${obj}::${expr.method}(${args})`;
         }
         return `${obj}.${expr.method}(${args})`;
       }
