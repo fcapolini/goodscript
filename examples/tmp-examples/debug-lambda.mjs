@@ -3,7 +3,7 @@
  */
 import { readFile } from 'fs/promises';
 import ts from 'typescript';
-import { IRLowering } from '../compiler/dist/frontend/lowering.js';
+import { IRLowering } from '../../compiler/dist/frontend/lowering.js';
 
 const code = `
 export function main(): void {

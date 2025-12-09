@@ -1,0 +1,8 @@
+{
+  "goodscript": {
+    "target": "cpp",
+    "outFile": "async-await"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

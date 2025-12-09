@@ -9,8 +9,8 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import ts from 'typescript';
-import { IRLowering } from '../compiler/dist/frontend/lowering.js';
-import { CppCodegen } from '../compiler/dist/backend/cpp/codegen.js';
+import { IRLowering } from '../../compiler/dist/frontend/lowering.js';
+import { CppCodegen } from '../../compiler/dist/backend/cpp/codegen.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

@@ -1,0 +1,7 @@
+dist/
+node_modules/
+*.o
+*.out
+test-output.txt
+test-dir/
+async-test.txt

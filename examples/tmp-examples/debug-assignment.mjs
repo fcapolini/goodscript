@@ -1,5 +1,5 @@
 import ts from 'typescript';
-import { IRLowering } from '../compiler/dist/frontend/lowering.js';
+import { IRLowering } from '../../compiler/dist/frontend/lowering.js';
 
 const code = `
 function test() {

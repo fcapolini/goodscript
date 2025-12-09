@@ -1,0 +1,8 @@
+{
+  "goodscript": {
+    "target": "cpp",
+    "outFile": "classes"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
