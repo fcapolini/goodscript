@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseArguments, validateOptions, applyDefaults, loadTsConfig } from '../src/cli/options.js';
+import { parseArguments, validateOptions, applyDefaults, loadTsConfig, mergeOptions } from '../src/cli/options.js';
 
 describe('CLI Options Parser', () => {
   it('should parse basic file arguments', () => {
@@ -357,6 +357,17 @@ describe('tsconfig.json Integration', () => {
     const errors = validateOptions(options);
     
     expect(errors).toContain('No input files specified and no tsconfig.json found');
+  });
+  
+  it('should preserve tsconfig.json properties when merging with empty CLI options', () => {
+    // Simulate what happens when user runs 'gsc' with no arguments
+    const cliOptions = { files: [] };
+    const merged = mergeOptions(cliOptions);
+    
+    // tsconfig.json properties should be preserved (not overridden with undefined)
+    // Note: This uses the actual tsconfig.json in the compiler directory
+    expect(merged.configPath).toBeDefined();
+    expect(merged.include).toBeDefined();
   });
 });
 
