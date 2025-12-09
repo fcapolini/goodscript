@@ -1,7 +1,7 @@
 # Standard Library Requirements for Compiler & Runtime
 
 **Date**: December 9, 2025  
-**Status**: Phase 7a (complete) + Phase 7b.1 (complete) ✅
+**Status**: Phase 7a (complete) + Phase 7b.1 (complete) + Phase 7b.2 (complete) ✅
 
 This document catalogs the language features and runtime APIs required to support the GoodScript standard library. The stdlib defines the requirements; the compiler and runtime must adapt to support them.
 
@@ -15,11 +15,12 @@ This document catalogs the language features and runtime APIs required to suppor
 - ✅ Phase 7a.5: Optional chaining (obj?.field, nested chaining, method calls)
 - ✅ Phase 7a.6: String methods (split, slice, trim, toLowerCase, toUpperCase, indexOf, includes)
 - ✅ Phase 7b.1: Async/await and Promise<T> (all 5 steps complete: IR types, AST lowering, C++ codegen, runtime library, integration tests + documentation)
-- Compiler handles expressions, functions, arrays, objects, lambdas, iteration, nullable access, coroutines
+- ✅ Phase 7b.2: FileSystem API (built-in global classes for sync/async file I/O)
+- Compiler handles expressions, functions, arrays, objects, lambdas, iteration, nullable access, coroutines, file I/O
 - Binary compilation working via Zig
-- 281 tests passing (228→281, +53 async tests)
+- 290 tests passing (228→290, +62 tests total)
 
-**Gap**: stdlib still needs union types, more runtime APIs
+**Gap**: stdlib still needs union types, HTTP client, more runtime APIs
 
 **Priority**: Implement features in phases, starting with most fundamental and widely used.
 
@@ -560,21 +561,30 @@ namespace gs::http {
 
 ---
 
-#### 2.2.2 File System ⚠️ **HIGH**
+#### 2.2.2 File System ✅ **COMPLETE**
 **Used by**: io module
 
+**Status**: ✅ **COMPLETE** (Phase 7b.2)
+
+**Implementation**:
+- Built-in global classes: `FileSystem` (sync), `FileSystemAsync` (async)
+- 18+ methods: exists, readText, writeText, appendText, readBytes, writeBytes, mkdir, mkdirRecursive, readDir, stat, isFile, isDirectory, remove, removeRecursive, copy, move, cwd, absolute
+- Runtime: `runtime/cpp/ownership/gs_filesystem.hpp` (700 lines, cross-platform)
+- Tests: `test/filesystem.test.ts` (9 tests, all passing)
+- Documentation: `FILESYSTEM-API-GUIDE.md` (complete API reference)
+- Example: `examples/filesystem-demo-gs.ts` (comprehensive usage patterns)
+
 **TypeScript/Node.js**: `node:fs`, `node:fs/promises`  
-**C++**: POSIX I/O (read, write, stat, etc.)
+**C++**: std::filesystem (C++17), POSIX I/O
 
 ```cpp
-// C++ file operations
-namespace gs::io {
-  cppcoro::task<std::string> readFile(const std::string& path);
-  void writeFileSync(const std::string& path, const std::string& data);
-  cppcoro::task<void> writeFile(const std::string& path, const std::string& data);
-  bool exists(const std::string& path);
-  int64_t fileSize(const std::string& path);
-}
+// GoodScript usage (no imports needed - built-in globals)
+const content = FileSystem.readText('config.json');
+FileSystem.writeText('output.txt', 'Hello!');
+
+// Async variant
+const data = await FileSystemAsync.readText('large-file.txt');
+await FileSystemAsync.writeText('data.txt', 'Async write!');
 ```
 
 ---
@@ -652,24 +662,25 @@ namespace gs {
 ### Phase 7b: Async Runtime (Week 3-4)
 **Goal**: Enable async I/O and HTTP
 
-1. **Async/Await**
+1. ✅ **Async/Await** (Phase 7b.1 - COMPLETE)
    - AST lowering
    - Promise<T> IR type
    - C++ cppcoro integration
    - Promise runtime implementation
 
-2. **File System API**
-   - Runtime: POSIX I/O (C++)
-   - Runtime: fs/promises wrapper (TS)
-   - Async and sync variants
+2. ✅ **File System API** (Phase 7b.2 - COMPLETE)
+   - Runtime: gs_filesystem.hpp (C++17 std::filesystem)
+   - Built-in FileSystem and FileSystemAsync globals
+   - 18+ methods (sync and async variants)
+   - Cross-platform (POSIX/Windows)
 
-3. **HTTP Client**
+3. ⏳ **HTTP Client** (Phase 7b.3 - PENDING)
    - Vendor libcurl
    - Runtime: C++ HTTP client
    - Runtime: fetch() wrapper (TS)
    - Timeout support
 
-**Tests**: stdlib/io and stdlib/http can compile and run
+**Tests**: ✅ Phase 7b.1 + 7b.2 complete (62 tests), Phase 7b.3 pending
 
 ---
 

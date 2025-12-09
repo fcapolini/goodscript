@@ -28,6 +28,7 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ Optional chaining (obj?.field, nested chaining)
 - ✅ String methods (split, slice, trim, toLowerCase, toUpperCase, indexOf, includes)
 - ✅ Async/await (Promise<T>, async functions, co_await/co_return, cppcoro integration)
+- ✅ FileSystem API (sync and async file I/O, built-in global classes)
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
 **Recent Progress (Dec 9, 2025)**:
@@ -41,7 +42,13 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
   * Type mapping: `Promise<T>` → `cppcoro::task<T>` in generated C++
   * Control flow: `co_return` in async functions, `co_await` for await expressions
   * Documentation: ASYNC-AWAIT-GUIDE.md covering syntax, implementation, examples, limitations
-- All 281 tests passing (228 → 281, +53 async tests)
+- ✅ **Completed Phase 7b.2: FileSystem API** (9 tests)
+  * Built-in FileSystem and FileSystemAsync global classes (like console)
+  * 18+ methods: exists, readText, writeText, appendText, mkdir, readDir, stat, copy, move, etc.
+  * Both sync (FileSystem) and async (FileSystemAsync with Promise<T>) variants
+  * Runtime complete: gs_filesystem.hpp (700 lines, cross-platform POSIX/Windows)
+  * Documentation: FILESYSTEM-API-GUIDE.md with complete API reference and examples
+- All 290 tests passing (228 → 290, +62 tests total)
 
 ## Architecture
 
@@ -249,7 +256,7 @@ const body: IRBlock = {
 ```
 
 ## Testing
-**Current Test Suite (281 tests)**:
+**Current Test Suite (290 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (14 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
@@ -269,9 +276,10 @@ const body: IRBlock = {
 - `test/async-codegen.test.ts` - async/await C++ codegen (14 tests)
 - `test/async-runtime.test.ts` - Promise runtime library (3 tests)
 - `test/async-integration.test.ts` - async/await integration tests (11 tests)
+- `test/filesystem.test.ts` - FileSystem built-in API (9 tests)
 **Run Tests**:
 ```bash
-pnpm test                    # All tests (281 passing, 3 skipped)
+pnpm test                    # All tests (290 passing, 3 skipped)
 pnpm build && pnpm test      # Build + test
 ```
 
