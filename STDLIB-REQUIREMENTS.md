@@ -456,7 +456,7 @@ namespace gs {
 
 ---
 
-#### 2.1.5 String Methods ⚠️ **MEDIUM**
+#### 2.1.5 String Methods ✅ **COMPLETE**
 ```typescript
 str.length: number
 str.split(separator): Array<string>

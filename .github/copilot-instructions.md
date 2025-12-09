@@ -4,7 +4,7 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete (221 tests passing)
+**Current Status**: Phase 1-6 implementation complete (228 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
@@ -26,6 +26,7 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ Exception handling (try/catch/throw/finally)
 - ✅ for-of loops (arrays, strings, break, continue)
 - ✅ Optional chaining (obj?.field, nested chaining)
+- ✅ String methods (split, slice, trim, toLowerCase, toUpperCase, indexOf, includes)
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
 **Recent Progress (Dec 9, 2025)**:
@@ -35,7 +36,12 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
   * Nested chaining: `options?.headers?.has()` fully supported
   * C++ codegen: Basic ternary operator implementation (placeholder)
   * Tests: 5/5 passing (basic, nested, conditionals, method calls)
-- All 221 tests passing (5 new optional chaining tests)
+- Completed Phase 7a.6: String methods
+  * All 7 required methods verified: split, slice, trim, toLowerCase, toUpperCase, indexOf, includes
+  * Runtime implementation: Complete in gs::String class (621 lines)
+  * No compiler changes needed: Method calls work through existing infrastructure
+  * Tests: 7/7 passing (IR lowering verification)
+- All 228 tests passing (5 optional chaining + 7 string method tests)
 
 ## Architecture
 
@@ -243,8 +249,7 @@ const body: IRBlock = {
 ```
 
 ## Testing
-
-**Current Test Suite (216 tests)**:
+**Current Test Suite (228 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (13 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
@@ -257,8 +262,11 @@ const body: IRBlock = {
 - `test/tsconfig-integration.test.ts` - tsconfig.json integration (5 tests)
 - `test/for-of.test.ts` - for-of loop lowering (9 tests)
 - `test/map-methods.test.ts` - Map<K,V> operations (12 tests)
-
+- `test/optional-chaining.test.ts` - Optional chaining (5 tests)
 **Run Tests**:
+```bash
+pnpm test                    # All tests (228 passing, 3 skipped)
+pnpm build && pnpm test      # Build + test
 ```bash
 pnpm test                    # All tests (201 passing + 15 failing)
 pnpm build && pnpm test      # Build + test
