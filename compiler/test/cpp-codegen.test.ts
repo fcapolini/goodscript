@@ -587,10 +587,12 @@ describe('C++ Codegen - Namespaces', () => {
     const output = codegen.generate(createProgram(module), 'gc');
     const header = output.get('vector.hpp');  // Now uses basename
 
+    // Namespace should be based on filename only, not full path
     expect(header).toContain('namespace goodscript {');
-    expect(header).toContain('namespace src {');
-    expect(header).toContain('namespace math {');
     expect(header).toContain('namespace vector_ {');  // Sanitized: 'vector' is stdlib name
+    // Should NOT contain path-based namespaces
+    expect(header).not.toContain('namespace src {');
+    expect(header).not.toContain('namespace math {');
   });
 });
 

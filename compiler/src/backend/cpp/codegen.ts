@@ -106,22 +106,24 @@ export class CppCodegen {
   }
 
   private getNamespaceName(modulePath: string): string[] {
-    // Convert src/math/vector-gs.ts -> ['goodscript', 'src', 'math', 'vector']
-    // Replace dashes with underscores and ensure valid C++ identifiers
-    const parts = modulePath
-      .replace(/-gs\.(tsx?)|\.(gs|js|tsx?)$/, '')
-      .split('/')
-      .filter(part => part.length > 0)  // Remove empty parts (e.g., from leading /)
-      .map(part => {
-        let name = part.replace(/-/g, '_');
-        // Prefix with underscore if starts with digit
-        if (/^\d/.test(name)) {
-          name = '_' + name;
-        }
-        // Sanitize to avoid C++ reserved keywords
-        return this.sanitizeIdentifier(name);
-      });
-    return ['goodscript', ...parts];
+    // Extract just the filename without directory path or extension
+    // /Users/bilbo/.../main-gs.ts -> main
+    // src/math/vector-gs.ts -> vector
+    const basename = path.basename(modulePath)
+      .replace(/-gs\.(tsx?)$/, '')  // Remove -gs.ts, -gs.tsx
+      .replace(/\.(gs|js|tsx?)$/, '');  // Remove .ts, .js, .tsx, .jsx
+    
+    let name = basename.replace(/-/g, '_');  // Replace dashes with underscores
+    
+    // Prefix with underscore if starts with digit
+    if (/^\d/.test(name)) {
+      name = '_' + name;
+    }
+    
+    // Sanitize to avoid C++ reserved keywords
+    name = this.sanitizeIdentifier(name);
+    
+    return ['goodscript', name];
   }
 
   // ========================================================================
@@ -211,9 +213,12 @@ export class CppCodegen {
   }
 
   private getIncludeGuard(modulePath: string): string {
-    // src/math/vector-gs.ts -> GOODSCRIPT_SRC_MATH_VECTOR_HPP_
-    return 'GOODSCRIPT_' + modulePath
-      .replace(/-gs\.(tsx?)|\.gs$/, '')
+    // Extract just the filename: /path/to/vector-gs.ts -> GOODSCRIPT_VECTOR_HPP_
+    const basename = path.basename(modulePath)
+      .replace(/-gs\.(tsx?)$/, '')
+      .replace(/\.(gs|js|tsx?)$/, '');
+    
+    return 'GOODSCRIPT_' + basename
       .replace(/[\/\.\-]/g, '_')  // Replace slashes, dots, and dashes with underscores
       .toUpperCase() + '_HPP_';
   }
