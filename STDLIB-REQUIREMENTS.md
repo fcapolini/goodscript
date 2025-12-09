@@ -1,7 +1,7 @@
 # Standard Library Requirements for Compiler & Runtime
 
 **Date**: December 9, 2025  
-**Status**: Phase 7a (complete) + Phase 7b.1 Steps 1-4 (complete) ✅
+**Status**: Phase 7a (complete) + Phase 7b.1 (complete) ✅
 
 This document catalogs the language features and runtime APIs required to support the GoodScript standard library. The stdlib defines the requirements; the compiler and runtime must adapt to support them.
 
@@ -14,12 +14,12 @@ This document catalogs the language features and runtime APIs required to suppor
 - ✅ Phase 7a.4: Map<K,V> methods (set, get, has, delete, clear, forEach, keys, values, entries, size)
 - ✅ Phase 7a.5: Optional chaining (obj?.field, nested chaining, method calls)
 - ✅ Phase 7a.6: String methods (split, slice, trim, toLowerCase, toUpperCase, indexOf, includes)
-- ✅ Phase 7b.1 (Steps 1-4): Async/await and Promise<T> (IR types, AST lowering, C++ codegen, runtime library)
+- ✅ Phase 7b.1: Async/await and Promise<T> (all 5 steps complete: IR types, AST lowering, C++ codegen, runtime library, integration tests + documentation)
 - Compiler handles expressions, functions, arrays, objects, lambdas, iteration, nullable access, coroutines
 - Binary compilation working via Zig
-- 270 tests passing (228→270, +42 async tests)
+- 281 tests passing (228→281, +53 async tests)
 
-**Gap**: stdlib still needs Promise runtime library, union types, more runtime APIs
+**Gap**: stdlib still needs union types, more runtime APIs
 
 **Priority**: Implement features in phases, starting with most fundamental and widely used.
 
@@ -200,13 +200,15 @@ static async readText(path: string): Promise<string> {
 - http: all async HTTP operations
 - io: async file/directory operations
 
-**Status**: ✅ **COMPLETE** (Phase 7b.1 Steps 1-4)
+**Status**: ✅ **COMPLETE** (Phase 7b.1 all 5 steps)
 - Step 1: IR type system with Promise<T> (11 tests)
 - Step 2: AST lowering for async/await (14 tests)
 - Step 3: C++ codegen with cppcoro (14 tests)
 - Step 4: Runtime Promise library (3 tests)
-- cppcoro already vendored in `compiler/vendor/cppcoro/`
-- 42/42 tests passing
+- Step 5: Integration testing and documentation (11 tests)
+- cppcoro vendored in `compiler/vendor/cppcoro/`
+- ASYNC-AWAIT-GUIDE.md comprehensive documentation
+- 53/53 tests passing (281 total)
 
 **Implementation complete**:
 - ✅ IR: `{ kind: 'promise'; resultType: IRType }`, `async?: boolean` on functions/methods
@@ -214,7 +216,7 @@ static async readText(path: string): Promise<string> {
 - ✅ C++ codegen: cppcoro::task<T>, co_await, co_return
 - ✅ Type signatures: `Promise<${resultType}>` support
 - ✅ Runtime: Promise.resolve(), Promise.reject() static methods
-- ⏳ Integration: End-to-end async examples (Step 5 pending)
+- ✅ Integration: End-to-end async examples, comprehensive documentation
 
 ---
 

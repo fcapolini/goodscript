@@ -31,15 +31,17 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
 **Recent Progress (Dec 9, 2025)**:
-- Completed Phase 7b.1 Steps 1-4: Async/await and Promise<T> (42 tests)
+- ✅ **Completed Phase 7b.1: Async/await and Promise<T>** (53 tests total)
   * Step 1 - IR Type System: Added `Promise<T>` type, async flags on functions/methods (11 tests)
   * Step 2 - AST Lowering: Detect async/await keywords, lower to IR expressions (14 tests)
   * Step 3 - C++ Codegen: Generate cppcoro::task<T>, co_await, co_return (14 tests)
   * Step 4 - Runtime Library: Promise.resolve(), Promise.reject() static methods (3 tests)
+  * Step 5 - Integration Testing & Documentation: Full pipeline tests + comprehensive guide (11 tests)
   * cppcoro integration: Conditional header includes, isAsyncContext tracking
   * Type mapping: `Promise<T>` → `cppcoro::task<T>` in generated C++
   * Control flow: `co_return` in async functions, `co_await` for await expressions
-- All 270 tests passing (228 → 270, +42 async tests)
+  * Documentation: ASYNC-AWAIT-GUIDE.md covering syntax, implementation, examples, limitations
+- All 281 tests passing (228 → 281, +53 async tests)
 
 ## Architecture
 
@@ -247,7 +249,7 @@ const body: IRBlock = {
 ```
 
 ## Testing
-**Current Test Suite (270 tests)**:
+**Current Test Suite (281 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (14 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
@@ -266,9 +268,10 @@ const body: IRBlock = {
 - `test/async-lowering.test.ts` - async/await AST lowering (14 tests)
 - `test/async-codegen.test.ts` - async/await C++ codegen (14 tests)
 - `test/async-runtime.test.ts` - Promise runtime library (3 tests)
+- `test/async-integration.test.ts` - async/await integration tests (11 tests)
 **Run Tests**:
 ```bash
-pnpm test                    # All tests (270 passing, 3 skipped)
+pnpm test                    # All tests (281 passing, 3 skipped)
 pnpm build && pnpm test      # Build + test
 ```
 
