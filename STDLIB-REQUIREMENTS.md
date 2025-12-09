@@ -1,7 +1,7 @@
 # Standard Library Requirements for Compiler & Runtime
 
 **Date**: December 9, 2025  
-**Status**: Phase 7a.1-7a.6 COMPLETE ✅
+**Status**: Phase 7a (complete) + Phase 7b.1 Steps 1-3 (complete) ✅
 
 This document catalogs the language features and runtime APIs required to support the GoodScript standard library. The stdlib defines the requirements; the compiler and runtime must adapt to support them.
 
@@ -14,11 +14,12 @@ This document catalogs the language features and runtime APIs required to suppor
 - ✅ Phase 7a.4: Map<K,V> methods (set, get, has, delete, clear, forEach, keys, values, entries, size)
 - ✅ Phase 7a.5: Optional chaining (obj?.field, nested chaining, method calls)
 - ✅ Phase 7a.6: String methods (split, slice, trim, toLowerCase, toUpperCase, indexOf, includes)
-- Compiler handles expressions, functions, arrays, objects, lambdas, iteration, nullable access
+- ✅ Phase 7b.1 (Steps 1-3): Async/await and Promise<T> (IR types, AST lowering, C++ codegen)
+- Compiler handles expressions, functions, arrays, objects, lambdas, iteration, nullable access, coroutines
 - Binary compilation working via Zig
-- 228 tests passing
+- 267 tests passing (228→267, +39 async tests)
 
-**Gap**: stdlib still needs async/await, union types, more runtime APIs
+**Gap**: stdlib still needs Promise runtime library, union types, more runtime APIs
 
 **Priority**: Implement features in phases, starting with most fundamental and widely used.
 
@@ -199,14 +200,19 @@ static async readText(path: string): Promise<string> {
 - http: all async HTTP operations
 - io: async file/directory operations
 
-**Implementation needs**:
-- AST lowering: `AsyncKeyword`, `AwaitExpression`
-- IR: Promise type, async IR instructions
-- C++ codegen: cppcoro integration (already vendored!)
-- TypeScript: native async/await (already works)
-- Runtime: Promise<T> implementation
+**Status**: ✅ **COMPLETE** (Phase 7b.1 Steps 1-3)
+- Step 1: IR type system with Promise<T> (11 tests)
+- Step 2: AST lowering for async/await (14 tests)
+- Step 3: C++ codegen with cppcoro (14 tests)
+- cppcoro already vendored in `compiler/vendor/cppcoro/`
+- 39/39 tests passing
 
-**Note**: cppcoro is already vendored in `compiler/vendor/cppcoro/` for C++ coroutines
+**Implementation complete**:
+- ✅ IR: `{ kind: 'promise'; resultType: IRType }`, `async?: boolean` on functions/methods
+- ✅ AST lowering: Detect AsyncKeyword, lower AwaitExpression
+- ✅ C++ codegen: cppcoro::task<T>, co_await, co_return
+- ✅ Type signatures: `Promise<${resultType}>` support
+- ⏳ Runtime: Promise library (Step 4 pending)
 
 ---
 

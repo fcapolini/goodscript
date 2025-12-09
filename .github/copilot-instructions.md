@@ -4,7 +4,7 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete (228 tests passing)
+**Current Status**: Phase 1-6 implementation complete + async/await (267 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
@@ -27,21 +27,18 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ for-of loops (arrays, strings, break, continue)
 - ✅ Optional chaining (obj?.field, nested chaining)
 - ✅ String methods (split, slice, trim, toLowerCase, toUpperCase, indexOf, includes)
+- ✅ Async/await (Promise<T>, async functions, co_await/co_return, cppcoro integration)
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
 **Recent Progress (Dec 9, 2025)**:
-- Completed Phase 7a.5: Optional chaining (obj?.field)
-  * IR support: Added `optional?: boolean` flag to SSA and AST-level memberAccess
-  * TypeScript AST lowering: Detects `questionDotToken` on PropertyAccessExpression
-  * Nested chaining: `options?.headers?.has()` fully supported
-  * C++ codegen: Basic ternary operator implementation (placeholder)
-  * Tests: 5/5 passing (basic, nested, conditionals, method calls)
-- Completed Phase 7a.6: String methods
-  * All 7 required methods verified: split, slice, trim, toLowerCase, toUpperCase, indexOf, includes
-  * Runtime implementation: Complete in gs::String class (621 lines)
-  * No compiler changes needed: Method calls work through existing infrastructure
-  * Tests: 7/7 passing (IR lowering verification)
-- All 228 tests passing (5 optional chaining + 7 string method tests)
+- Completed Phase 7b.1 Steps 1-3: Async/await and Promise<T> (39 tests)
+  * Step 1 - IR Type System: Added `Promise<T>` type, async flags on functions/methods (11 tests)
+  * Step 2 - AST Lowering: Detect async/await keywords, lower to IR expressions (14 tests)
+  * Step 3 - C++ Codegen: Generate cppcoro::task<T>, co_await, co_return (14 tests)
+  * cppcoro integration: Conditional header includes, isAsyncContext tracking
+  * Type mapping: `Promise<T>` → `cppcoro::task<T>` in generated C++
+  * Control flow: `co_return` in async functions, `co_await` for await expressions
+- All 267 tests passing (228 → 267, +39 async tests)
 
 ## Architecture
 
@@ -249,26 +246,27 @@ const body: IRBlock = {
 ```
 
 ## Testing
-**Current Test Suite (228 tests)**:
+**Current Test Suite (267 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
-- `test/lowering.test.ts` - AST → IR conversion (13 tests)
+- `test/lowering.test.ts` - AST → IR conversion (14 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
 - `test/signatures.test.ts` - Type signatures (11 tests)
 - `test/ownership.test.ts` - Ownership cycle detection (31 tests, including type alias and intersection type support)
 - `test/null-checker.test.ts` - use<T> lifetime safety (13 tests)
 - `test/optimizer.test.ts` - IR optimization passes (15 tests, 15 currently failing - pre-existing)
-- `test/cpp-codegen.test.ts` - C++ code generation (17 tests, includes source maps)
+- `test/cpp-codegen.test.ts` - C++ code generation (28 tests, includes source maps)
 - `test/zig-compiler.test.ts` - Zig compiler integration (10 tests)
 - `test/tsconfig-integration.test.ts` - tsconfig.json integration (5 tests)
 - `test/for-of.test.ts` - for-of loop lowering (9 tests)
 - `test/map-methods.test.ts` - Map<K,V> operations (12 tests)
 - `test/optional-chaining.test.ts` - Optional chaining (5 tests)
+- `test/string-methods.test.ts` - String method lowering (10 tests)
+- `test/async-types.test.ts` - Promise<T> IR type system (11 tests)
+- `test/async-lowering.test.ts` - async/await AST lowering (14 tests)
+- `test/async-codegen.test.ts` - async/await C++ codegen (14 tests)
 **Run Tests**:
 ```bash
-pnpm test                    # All tests (228 passing, 3 skipped)
-pnpm build && pnpm test      # Build + test
-```bash
-pnpm test                    # All tests (201 passing + 15 failing)
+pnpm test                    # All tests (267 passing, 3 skipped)
 pnpm build && pnpm test      # Build + test
 ```
 
