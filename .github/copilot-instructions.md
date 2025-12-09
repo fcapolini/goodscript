@@ -4,7 +4,7 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete + async/await (267 tests passing)
+**Current Status**: Phase 1-6 implementation complete + async/await (270 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
@@ -31,14 +31,15 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
 **Recent Progress (Dec 9, 2025)**:
-- Completed Phase 7b.1 Steps 1-3: Async/await and Promise<T> (39 tests)
+- Completed Phase 7b.1 Steps 1-4: Async/await and Promise<T> (42 tests)
   * Step 1 - IR Type System: Added `Promise<T>` type, async flags on functions/methods (11 tests)
   * Step 2 - AST Lowering: Detect async/await keywords, lower to IR expressions (14 tests)
   * Step 3 - C++ Codegen: Generate cppcoro::task<T>, co_await, co_return (14 tests)
+  * Step 4 - Runtime Library: Promise.resolve(), Promise.reject() static methods (3 tests)
   * cppcoro integration: Conditional header includes, isAsyncContext tracking
   * Type mapping: `Promise<T>` → `cppcoro::task<T>` in generated C++
   * Control flow: `co_return` in async functions, `co_await` for await expressions
-- All 267 tests passing (228 → 267, +39 async tests)
+- All 270 tests passing (228 → 270, +42 async tests)
 
 ## Architecture
 
@@ -246,7 +247,7 @@ const body: IRBlock = {
 ```
 
 ## Testing
-**Current Test Suite (267 tests)**:
+**Current Test Suite (270 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (14 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
@@ -264,9 +265,10 @@ const body: IRBlock = {
 - `test/async-types.test.ts` - Promise<T> IR type system (11 tests)
 - `test/async-lowering.test.ts` - async/await AST lowering (14 tests)
 - `test/async-codegen.test.ts` - async/await C++ codegen (14 tests)
+- `test/async-runtime.test.ts` - Promise runtime library (3 tests)
 **Run Tests**:
 ```bash
-pnpm test                    # All tests (267 passing, 3 skipped)
+pnpm test                    # All tests (270 passing, 3 skipped)
 pnpm build && pnpm test      # Build + test
 ```
 
