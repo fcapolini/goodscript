@@ -21,7 +21,7 @@ This document catalogs the language features and runtime APIs required to suppor
 - ✅ Phase 7c.2: JSON object (JSON.stringify() for basic types)
 - Compiler handles expressions, functions, arrays, objects, lambdas, iteration, nullable access, coroutines, file I/O, HTTP requests, Math operations, JSON serialization
 - Binary compilation working via Zig
-- 317 tests passing (228→317, +89 tests total)
+- 319 tests passing (228→319, +91 tests total)
 
 **Gap**: stdlib still needs union types, more runtime APIs (JSON.parse with nlohmann/json, tuple types, etc.)
 

@@ -73,7 +73,7 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
   * Pattern: Math.min(a, b) → gs::Math::min(a, b), JSON.stringify(x) → gs::JSON::stringify(x)
   * Tests: 15 Math integration tests + 5 JSON integration tests
   * Documentation: PHASE-7C-UTILITIES-PLAN.md with roadmap for union types and tuple types
-- All 317 tests passing (228 → 317, +89 tests total)
+- All 319 tests passing (228 → 319, +91 tests total)
 
 ## Architecture
 
@@ -281,7 +281,7 @@ const body: IRBlock = {
 ```
 
 ## Testing
-**Current Test Suite (317 tests)**:
+**Current Test Suite (319 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (14 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
@@ -307,9 +307,10 @@ const body: IRBlock = {
 - `test/http-integration.test.ts` - HTTP client integration tests (3 tests)
 - `test/math-integration.test.ts` - Math object integration tests (15 tests)
 - `test/json-integration.test.ts` - JSON object integration tests (5 tests)
+- `test/math-json-demo.test.ts` - Math/JSON demo compilation tests (2 tests)
 **Run Tests**:
 ```bash
-pnpm test                    # All tests (317 passing, 4 skipped)
+pnpm test                    # All tests (319 passing, 4 skipped)
 pnpm build && pnpm test      # Build + test
 ```
 
