@@ -15,7 +15,7 @@ import { execSync } from 'child_process';
 describe('FileSystem Simple Demo', () => {
   it('should compile filesystem-simple-demo to C++', () => {
     // Read the demo file
-    const source = readFileSync(path.join(__dirname, '../../examples/filesystem-simple-demo-gs.ts'), 'utf-8');
+    const source = readFileSync(path.join(__dirname, '../../examples/tmp-examples/filesystem-simple-demo-gs.ts'), 'utf-8');
     
     // Create TypeScript program
     const sourceFile = ts.createSourceFile(
@@ -73,7 +73,7 @@ describe('FileSystem Simple Demo', () => {
     }
 
     // Read the demo file
-    const demoPath = path.join(__dirname, '../../examples/filesystem-simple-demo-gs.ts');
+    const demoPath = path.join(__dirname, '../../examples/tmp-examples/filesystem-simple-demo-gs.ts');
     const source = readFileSync(demoPath, 'utf-8');
     
     // Create TypeScript program

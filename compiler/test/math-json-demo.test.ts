@@ -33,7 +33,7 @@ describe('Math and JSON Demo Compilation', () => {
   }
 
   it('should compile math-demo-gs.ts without errors', () => {
-    const mathDemoPath = path.join(projectRoot, 'examples', 'math-demo-gs.ts');
+    const mathDemoPath = path.join(projectRoot, 'examples', 'tmp-examples', 'math-demo-gs.ts');
     const sourceCode = fs.readFileSync(mathDemoPath, 'utf-8');
     
     const cpp = compileToCpp(sourceCode);
@@ -55,7 +55,7 @@ describe('Math and JSON Demo Compilation', () => {
   });
 
   it('should compile json-demo-gs.ts without errors', () => {
-    const jsonDemoPath = path.join(projectRoot, 'examples', 'json-demo-gs.ts');
+    const jsonDemoPath = path.join(projectRoot, 'examples', 'tmp-examples', 'json-demo-gs.ts');
     const sourceCode = fs.readFileSync(jsonDemoPath, 'utf-8');
     
     const cpp = compileToCpp(sourceCode);

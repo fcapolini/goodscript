@@ -363,6 +363,12 @@ export class CppCodegen {
       this.emit('// Initialize process.argv');
       this.emit('gs::process::init(argc, argv);');
       this.emit('');
+      // Add using namespace directive to access module-level constants
+      if (this.currentNamespace.length > 0) {
+        this.emit(`// Import module namespace`);
+        this.emit(`using namespace ${this.currentNamespace.join('::')}; `);
+        this.emit('');
+      }
       this.emit('// Execute top-level statements');
       for (const stmt of module.initStatements) {
         this.generateStatement(stmt);
@@ -717,6 +723,15 @@ export class CppCodegen {
           return `gs::JSON::${method}(${args})`;
         }
         
+        // Special handling for String static methods (e.g., String::from() for template literals)
+        if (expr.callee.kind === 'memberAccess' && 
+            expr.callee.object.kind === 'identifier' && 
+            expr.callee.object.name === 'String') {
+          const method = expr.callee.member;
+          const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
+          return `gs::String::${method}(${args})`;
+        }
+        
         // Special handling for FileSystem static methods
         if (expr.callee.kind === 'memberAccess' && 
             expr.callee.object.kind === 'identifier' && 
@@ -756,6 +771,11 @@ export class CppCodegen {
         // Special handling for JSON static methods
         if (expr.object.kind === 'identifier' && expr.object.name === 'JSON') {
           return `gs::JSON::${member}`;
+        }
+        
+        // Special handling for String static methods
+        if (expr.object.kind === 'identifier' && expr.object.name === 'String') {
+          return `gs::String::${member}`;
         }
         
         // Special handling for FileSystem and FileSystemAsync static methods
@@ -1000,6 +1020,10 @@ export class CppCodegen {
         // Special case: JSON static methods
         if (obj === 'JSON') {
           return `gs::JSON::${expr.member}`;
+        }
+        // Special case: String static methods (e.g., String.from)
+        if (obj === 'String') {
+          return `gs::String::${expr.member}`;
         }
         // Special case: FileSystem and FileSystemAsync static methods
         if (obj === 'FileSystem' || obj === 'FileSystemAsync') {

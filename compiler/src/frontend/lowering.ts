@@ -1177,10 +1177,23 @@ export class IRLowering {
       return expr;
     }
 
-    // For numbers and booleans, we need to convert to string
-    // In C++, this will use std::to_string() or similar
-    // For now, we'll use a type cast (will need proper runtime support later)
-    // TODO: Add proper toString() conversion in runtime
-    return expr;  // Temporary: rely on C++ operator+ overloading
+    // For other types, use String::from() to convert
+    // This generates gs::String::from(expr) in C++ codegen
+    return {
+      kind: 'callExpr',
+      callee: {
+        kind: 'member',
+        object: {
+          kind: 'variable',
+          name: 'String',
+          version: 0,
+          type: types.void(), // Type doesn't matter for static class reference
+        },
+        member: 'from',
+        type: types.function([expr.type], types.string()),
+      },
+      args: [expr],
+      type: types.string(),
+    };
   }
 }

@@ -203,7 +203,7 @@ describe('Union Types', () => {
       const fs = require('fs');
       const path = require('path');
       
-      const demoPath = path.join(__dirname, '../../examples/union-types-demo-gs.ts');
+      const demoPath = path.join(__dirname, '../../examples/tmp-examples/union-types-demo-gs.ts');
       const source = fs.readFileSync(demoPath, 'utf-8');
       
       // Should compile without throwing
