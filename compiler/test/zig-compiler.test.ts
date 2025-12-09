@@ -181,7 +181,10 @@ int main() {
       output: 'build-test-gs/app',
       mode: 'ownership',
       optimize: '0',
-      includePaths: [path.join(process.cwd(), '..')], // Include parent dir for runtime/cpp/
+      includePaths: [
+        process.cwd(), // Include compiler/ for runtime/cpp/ownership includes
+        path.join(process.cwd(), 'runtime/cpp'), // Include runtime/cpp for ownership/ subdirectory
+      ],
     });
 
     if (!result.success) {

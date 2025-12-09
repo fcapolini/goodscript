@@ -1,4 +1,4 @@
-# GoodScript Compiler v0.12.0
+# GoodScript Compiler v0.12.3
 
 Complete TypeScript-to-C++/TypeScript compiler with binary compilation support.
 

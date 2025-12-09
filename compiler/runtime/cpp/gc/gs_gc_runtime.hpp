@@ -18,7 +18,7 @@
 #include "gc/memory-profile.hpp"
 #endif
 
-// GC runtime types
+// GC runtime types (must be included BEFORE common files)
 #include "gc/string.hpp"
 #include "gc/string-builder.hpp"
 #include "gc/array.hpp"
@@ -28,24 +28,27 @@
 #include "gc/date.hpp"
 #include "gc/error.hpp"
 #include "gc/promise.hpp"  // Promise wrapper for async operations
-#include "gs_iterator.hpp"  // Iterator protocol support
-#include "gs_timer.hpp"      // Timer support (setTimeout/clearTimeout)
-#include "gs_process.hpp"    // Process API (command-line arguments)
+#include "gc/iterator.hpp"
+#include "gc/timer.hpp"
+#include "gc/process.hpp"
+#include "gc/console.hpp"
+#include "gc/math.hpp"
+#include "gc/json.hpp"
 
 // FileSystem support (requires std::filesystem)
 // Not available on wasm32-wasi and some embedded platforms
 #ifdef GS_ENABLE_FILESYSTEM
-#include "gs_filesystem.hpp" // Filesystem operations (FileSystem, FileSystemAsync)
+#include "gc/filesystem.hpp"
 #endif
 
 // HTTP support (requires libcurl)
 #ifdef GS_ENABLE_HTTP
-#include "gs_http.hpp"       // HTTP client (HTTP, HTTPAsync)
+#include "gc/http.hpp"
 #endif
 
 // RegExp support (requires PCRE2 library)
 #ifdef GS_ENABLE_REGEXP
-#include "gs_regexp.hpp"     // Regular expression support (RegExp)
+#include "gc/regexp.hpp"
 #else
 // Stub RegExp class when PCRE2 not available
 namespace gs {
@@ -67,64 +70,6 @@ namespace gs {
 
 namespace gs {
 
-// Console namespace for logging
-namespace console {
-  inline void log(const String& str) {
-    std::cout << str.c_str() << std::endl;
-  }
-  
-  inline void log(bool value) {
-    std::cout << (value ? "true" : "false") << std::endl;
-  }
-  
-  template<typename T>
-  void log(const T& value) {
-    std::cout << value << std::endl;
-  }
-
-  inline void error(const String& str) {
-    std::cerr << str.c_str() << std::endl;
-  }
-  
-  template<typename T>
-  void error(const T& value) {
-    std::cerr << value << std::endl;
-  }
-}
-
-// JSON namespace (simplified)
-namespace JSON {
-  // Forward declarations for template specializations
-  template<typename T>
-  String stringify(const Array<T>& arr);
-  
-  template<typename T>
-  String stringify(const T& value) {
-    std::ostringstream oss;
-    oss << value;
-    return String(oss.str());
-  }
-  
-  // Specialization for String
-  inline String stringify(const String& str) {
-    return String("\"") + str + String("\"");
-  }
-  
-  // Specialization for Array
-  template<typename T>
-  String stringify(const Array<T>& arr) {
-    String result = String("[");
-    for (size_t i = 0; i < arr.length(); ++i) {
-      if (i > 0) {
-        result += String(",");
-      }
-      result += stringify(arr[i]);
-    }
-    result += String("]");
-    return result;
-  }
-}
-
 // Global functions
 inline int64_t parseInt(const String& str, int base = 10) {
   return std::strtoll(str.c_str(), nullptr, base);
@@ -140,27 +85,6 @@ inline bool isNaN(double value) {
 
 inline bool isFinite(double value) {
   return std::isfinite(value);
-}
-
-// Math namespace
-namespace Math {
-  constexpr double PI = 3.14159265358979323846;
-  constexpr double E = 2.71828182845904523536;
-  
-  inline double abs(double x) { return std::abs(x); }
-  inline double floor(double x) { return std::floor(x); }
-  inline double ceil(double x) { return std::ceil(x); }
-  inline double round(double x) { return std::round(x); }
-  inline double sqrt(double x) { return std::sqrt(x); }
-  inline double pow(double x, double y) { return std::pow(x, y); }
-  inline double sin(double x) { return std::sin(x); }
-  inline double cos(double x) { return std::cos(x); }
-  inline double tan(double x) { return std::tan(x); }
-  inline double max(double a, double b) { return std::max(a, b); }
-  inline double min(double a, double b) { return std::min(a, b); }
-  inline double random() { return static_cast<double>(rand()) / RAND_MAX; }
-  inline int sign(double x) { return (x > 0) - (x < 0); }
-  inline int sign(int x) { return (x > 0) - (x < 0); }
 }
 
 // Type name helpers for runtime typeof checks

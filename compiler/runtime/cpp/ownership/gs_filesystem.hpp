@@ -31,8 +31,8 @@
 #endif
 
 // Forward declarations - actual types provided by gs_runtime.hpp or gs_gc_runtime.hpp
-// #include "gs_string.hpp"
-// #include "gs_array.hpp"
+// // String/Array defined by mode-specific runtime
+// // String/Array defined by mode-specific runtime
 // #include "gs_error.hpp"
 
 // Helper macros for string access (different APIs in GC vs ownership mode)

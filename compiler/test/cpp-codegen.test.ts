@@ -585,7 +585,7 @@ describe('C++ Codegen - Namespaces', () => {
     };
 
     const output = codegen.generate(createProgram(module), 'gc');
-    const header = output.get('src/math/vector.hpp');
+    const header = output.get('vector.hpp');  // Now uses basename
 
     expect(header).toContain('namespace goodscript {');
     expect(header).toContain('namespace src {');

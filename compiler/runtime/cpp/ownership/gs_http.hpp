@@ -31,7 +31,7 @@
 #endif
 
 // Forward declarations - actual types provided by gs_runtime.hpp or gs_gc_runtime.hpp
-// #include "gs_string.hpp"
+// // String/Array defined by mode-specific runtime
 // #include "gs_map.hpp"
 // #include "gs_error.hpp"
 

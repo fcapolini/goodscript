@@ -3,7 +3,9 @@
  */
 
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import ts from 'typescript';
 import { CliOptions } from './options.js';
 import { Validator } from '../frontend/validator.js';
@@ -11,6 +13,10 @@ import { IRLowering } from '../frontend/lowering.js';
 import { CppCodegen } from '../backend/cpp/codegen.js';
 import { ZigCompiler } from '../backend/cpp/zig-compiler.js';
 import type { CompileOptions as ZigCompileOptions } from '../backend/cpp/zig-compiler.js';
+
+// Get the package root directory (where vendor/ and runtime/ are located)
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PACKAGE_ROOT = path.resolve(__dirname, '../..');
 
 export interface CommandResult {
   success: boolean;
@@ -105,6 +111,11 @@ export async function compileCommand(options: CliOptions): Promise<CommandResult
       return { success: errors.length === 0, errors, warnings };
     }
     
+    // Use TypeScript's own compiler for js/ts targets
+    if ((options.gsTarget === 'js' || options.gsTarget === 'ts') && generatedFiles.size === 0) {
+      await compileWithTypeScript(program, options, errors, warnings);
+    }
+    
     // Write generated files
     if (generatedFiles.size > 0 && options.outDir) {
       await fs.mkdir(options.outDir, { recursive: true });
@@ -136,6 +147,50 @@ export async function compileCommand(options: CliOptions): Promise<CommandResult
 }
 
 /**
+ * Compile with TypeScript's own compiler (for js/ts targets)
+ */
+async function compileWithTypeScript(
+  program: ts.Program,
+  options: CliOptions,
+  errors: string[],
+  _warnings: string[]
+): Promise<void> {
+  const outDir = options.outDir || 'dist';
+  await fs.mkdir(outDir, { recursive: true });
+  
+  const emitResult = program.emit(
+    undefined, // emit all files
+    (fileName, data) => {
+      // Write file callback (synchronous)
+      const relativePath = path.relative(process.cwd(), fileName);
+      fsSync.writeFileSync(fileName, data, 'utf-8');
+      console.log(`  ✓ ${relativePath}`);
+    },
+    undefined, // cancellation token
+    false, // emit only .d.ts files
+    {
+      before: [],
+      after: [],
+    }
+  );
+  
+  // Collect diagnostics
+  const allDiagnostics = ts.getPreEmitDiagnostics(program).concat(emitResult.diagnostics);
+  
+  for (const diagnostic of allDiagnostics) {
+    const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
+    
+    if (diagnostic.file && diagnostic.start !== undefined) {
+      const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
+      const fileName = path.relative(process.cwd(), diagnostic.file.fileName);
+      errors.push(`${fileName}:${line + 1}:${character + 1} - ${message}`);
+    } else {
+      errors.push(message);
+    }
+  }
+}
+
+/**
  * Compile C++ to native binary using Zig
  */
 async function compileToBinary(
@@ -146,8 +201,12 @@ async function compileToBinary(
 ): Promise<void> {
   console.log('\n🔨 Compiling to native binary...');
   
-  const compiler = new ZigCompiler();
   const buildDir = path.join(options.outDir || 'dist', 'build');
+  const vendorDir = path.join(PACKAGE_ROOT, 'vendor');
+  const runtimeDir = path.join(PACKAGE_ROOT, 'runtime/cpp');
+  const cppcoroDir = path.join(PACKAGE_ROOT, 'vendor/cppcoro/include');
+  
+  const compiler = new ZigCompiler(buildDir, vendorDir);
   
   const compileOptions: ZigCompileOptions = {
     sources,
@@ -156,6 +215,8 @@ async function compileToBinary(
     target: options.gsTriple,
     optimize: options.gsOptimize || (options.sourceMap ? '0' : '3'),
     buildDir,
+    vendorDir,
+    includePaths: [PACKAGE_ROOT, runtimeDir, cppcoroDir], // Add all necessary include paths
     debug: options.gsDebug || options.sourceMap || false,
     sourceMap: options.sourceMap || options.gsDebug || false,
   };
@@ -184,12 +245,13 @@ export async function watchCommand(_options: CliOptions): Promise<CommandResult>
 /**
  * Create TypeScript program
  */
-function createProgram(files: string[], _options: CliOptions): ts.Program {
+function createProgram(files: string[], options: CliOptions): ts.Program {
   const compilerOptions: ts.CompilerOptions = {
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.ES2022,
-    moduleResolution: ts.ModuleResolutionKind.NodeNext,
-    strict: true,
+    outDir: options.outDir || 'dist',
+    sourceMap: options.sourceMap,
+    skipLibCheck: true, // Skip type checking of declaration files
   };
   
   return ts.createProgram(files, compilerOptions);

@@ -70,6 +70,9 @@ export class ZigCompiler {
     const diagnostics: string[] = [];
 
     try {
+      // Use vendorDir from options if provided, otherwise use constructor value
+      const vendorDir = options.vendorDir || this.vendorDir;
+      
       // Ensure directories exist
       await this.ensureDirectories(options);
 
@@ -78,7 +81,7 @@ export class ZigCompiler {
 
       // Compile vendored dependencies (cached)
       if (options.mode === 'gc') {
-        await this.compileVendoredDep('mps', options, diagnostics);
+        await this.compileVendoredDep('mps', vendorDir, options, diagnostics);
       }
       
       // TODO: Compile PCRE2 only if RegExp is used
@@ -131,6 +134,7 @@ export class ZigCompiler {
 
   private async compileVendoredDep(
     name: string,
+    vendorDir: string,
     _options: CompileOptions,
     diagnostics: string[]
   ): Promise<string> {
@@ -149,20 +153,20 @@ export class ZigCompiler {
 
     switch (name) {
       case 'mps':
-        sourceFile = path.join(this.vendorDir, 'mps/src/mps.c');
+        sourceFile = path.join(vendorDir, 'mps/src/mps.c');
         // MPS uses __DATE__ and __TIME__ macros, which Zig treats as non-reproducible
         flags.push('-Wno-date-time');
         break;
       case 'pcre2':
-        sourceFile = path.join(this.vendorDir, 'pcre2/src/pcre2_all.c');
+        sourceFile = path.join(vendorDir, 'pcre2/src/pcre2_all.c');
         flags.push('-DPCRE2_CODE_UNIT_WIDTH=8');
         break;
       case 'curl':
-        sourceFile = path.join(this.vendorDir, 'curl/lib/curl_all.c');
+        sourceFile = path.join(vendorDir, 'curl/lib/curl_all.c');
         flags.push('-DHAVE_CONFIG_H');
         flags.push('-DCURL_STATICLIB');
-        flags.push(`-I${path.join(this.vendorDir, 'curl/include')}`);
-        flags.push(`-I${path.join(this.vendorDir, 'curl/lib')}`);
+        flags.push(`-I${path.join(vendorDir, 'curl/include')}`);
+        flags.push(`-I${path.join(vendorDir, 'curl/lib')}`);
         // Suppress warnings for vendored code
         flags.push('-Wno-everything');
         break;

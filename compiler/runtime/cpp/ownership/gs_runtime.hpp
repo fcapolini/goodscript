@@ -35,6 +35,7 @@
 
 #include <functional>
 
+// Ownership mode runtime types (must be included BEFORE common files)
 #include "gs_string.hpp"
 #include "gs_string_builder.hpp"
 #include "gs_array.hpp"

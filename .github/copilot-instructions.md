@@ -4,7 +4,7 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP + Math + JSON + Union Types (331 tests passing)
+**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP + Math + JSON + Union Types (373 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
@@ -36,6 +36,13 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
 **Recent Progress (Dec 9, 2025)**:
+- ✅ **Runtime Reorganization** (373 tests passing)
+  * Moved runtime/ from workspace root into compiler/runtime/
+  * Separated GC and ownership modes: runtime/cpp/gc/ vs runtime/cpp/ownership/
+  * Created GC-specific implementations: console.hpp, json.hpp using c_str() API
+  * Shared utility files: filesystem, http, regexp work with both modes via macros
+  * Updated all include paths and test configurations
+  * CLI and binary compilation fully working with new structure
 - ✅ **Completed Phase 8: Union Types (T | null, T | undefined)** (12 tests, 4 skipped)
   * IR type system: Union types already existed in IRType
   * AST lowering: Added ts.UnionTypeNode support, normalizeUnion() for T | null
@@ -85,7 +92,7 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
   * Pattern: Math.min(a, b) → gs::Math::min(a, b), JSON.stringify(x) → gs::JSON::stringify(x)
   * Tests: 15 Math integration tests + 5 JSON integration tests
   * Documentation: PHASE-7C-UTILITIES-PLAN.md with roadmap for union types and tuple types
-- All 319 tests passing (228 → 319, +91 tests total)
+- All 373 tests passing (228 → 373, +145 tests total)
 
 ## Architecture
 
@@ -293,7 +300,7 @@ const body: IRBlock = {
 ```
 
 ## Testing
-**Current Test Suite (319 tests)**:
+**Current Test Suite (373 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (14 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
@@ -321,9 +328,10 @@ const body: IRBlock = {
 - `test/json-integration.test.ts` - JSON object integration tests (5 tests)
 - `test/math-json-demo.test.ts` - Math/JSON demo compilation tests (2 tests)
 - `test/union-types.test.ts` - Union type support (12 tests, 4 skipped)
+- `test/cli.test.ts` - CLI functionality tests (42 tests)
 **Run Tests**:
 ```bash
-pnpm test                    # All tests (331 passing, 8 skipped)
+pnpm test                    # All tests (373 passing, 8 skipped)
 pnpm build && pnpm test      # Build + test
 ```
 
@@ -474,8 +482,13 @@ compiler/
 │   ├── ir/          # IR types, builder, signatures
 │   ├── analysis/    # Ownership, null checker
 │   ├── optimizer/   # IR optimization passes
-│   └── codegen/     # C++/TS backends
+│   └── backend/     # C++/TS backends
+├── runtime/
+│   └── cpp/
+│       ├── gc/           # GC mode runtime (console, json, etc. using c_str())
+│       └── ownership/    # Ownership mode runtime (using str())
 ├── test/            # Vitest test files
+├── vendor/          # Vendored dependencies (MPS, cppcoro, PCRE2, libcurl)
 └── docs/            # Language & architecture specs
 ```
 
@@ -488,4 +501,4 @@ vitest --watch             # Watch mode
 
 ---
 
-Last Updated: December 8, 2025
+Last Updated: December 9, 2025

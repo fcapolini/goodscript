@@ -3,14 +3,15 @@
 #include <iostream>
 #include <sstream>
 #include <optional>
-#include "gs_string.hpp"
+// String/Array defined by mode-specific runtime
 
 namespace gs {
 
 /**
- * GoodScript console class - TypeScript-compatible console logging
+ * GoodScript console class - TypeScript-compatible console logging (GC mode)
  * 
  * Provides console.log(), console.error(), console.warn() functionality.
+ * Uses c_str() for GC String access.
  */
 class console {
 public:
@@ -23,7 +24,7 @@ public:
   }
   
   static void log(const String& message) {
-    std::cout << message.str() << std::endl;
+    std::cout << message.c_str() << std::endl;
   }
   
   static void log(const char* message) {
@@ -59,7 +60,7 @@ public:
   }
   
   static void error(const String& message) {
-    std::cerr << message.str() << std::endl;
+    std::cerr << message.c_str() << std::endl;
   }
   
   static void error(const char* message) {
@@ -87,15 +88,15 @@ public:
   }
   
   /**
-   * Prints to stdout with a warning prefix
+   * Prints a warning to stdout with a prefix
    * Equivalent to TypeScript: console.warn(...args)
    */
   static void warn() {
-    std::cout << std::endl;
+    std::cout << "Warning: " << std::endl;
   }
   
   static void warn(const String& message) {
-    std::cout << "Warning: " << message.str() << std::endl;
+    std::cout << "Warning: " << message.c_str() << std::endl;
   }
   
   static void warn(const char* message) {
@@ -124,10 +125,9 @@ public:
   }
 
 private:
-  // Helper functions for printing without newlines
-  
+  // Implementation helpers for variadic log
   static void log_impl(const String& value) {
-    std::cout << value.str();
+    std::cout << value.c_str();
   }
   
   static void log_impl(const char* value) {
@@ -135,10 +135,6 @@ private:
   }
   
   static void log_impl(int value) {
-    std::cout << value;
-  }
-  
-  static void log_impl(int64_t value) {
     std::cout << value;
   }
   
@@ -150,37 +146,21 @@ private:
     std::cout << (value ? "true" : "false");
   }
   
-  // Support for optional values - print "undefined" if empty
   template<typename T>
-  static void log_impl(const std::optional<T>& value) {
-    if (value.has_value()) {
-      log_impl(*value);
-    } else {
-      std::cout << "undefined";
-    }
+  static void log_impl(const T& value) {
+    std::cout << value;
   }
   
-  // Support for arrays - print in JavaScript format
-  template<typename T>
-  static void log_impl(const Array<T>& value) {
-    std::cout << "[ ";
-    bool first = true;
-    for (const auto& item : value) {
-      if (!first) std::cout << ", ";
-      log_impl(item);
-      first = false;
-    }
-    std::cout << " ]";
-  }
-  
+  // Space + value for subsequent args
   template<typename T>
   static void log_space_impl(const T& value) {
-    std::cout << ' ';
+    std::cout << " ";
     log_impl(value);
   }
   
+  // Implementation helpers for variadic error
   static void error_impl(const String& value) {
-    std::cerr << value.str();
+    std::cerr << value.c_str();
   }
   
   static void error_impl(const char* value) {
@@ -199,22 +179,15 @@ private:
     std::cerr << (value ? "true" : "false");
   }
   
-  // Support for arrays - print in JavaScript format
   template<typename T>
-  static void error_impl(const Array<T>& value) {
-    std::cerr << "[ ";
-    bool first = true;
-    for (const auto& item : value) {
-      if (!first) std::cerr << ", ";
-      error_impl(item);
-      first = false;
-    }
-    std::cerr << " ]";
+  static void error_impl(const T& value) {
+    std::cerr << value;
   }
   
+  // Space + value for subsequent args
   template<typename T>
   static void error_space_impl(const T& value) {
-    std::cerr << ' ';
+    std::cerr << " ";
     error_impl(value);
   }
 };

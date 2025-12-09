@@ -245,8 +245,20 @@ export function loadTsConfig(projectPath?: string): Partial<CliOptions> {
     
     return result;
   } catch (err) {
-    // Ignore errors, just return empty config
-    return {};
+    if (err instanceof SyntaxError) {
+      // JSON parse error - provide helpful message
+      const relativePath = path.relative(process.cwd(), configPath);
+      throw new Error(
+        `Failed to parse ${relativePath}: ${err.message}\n` +
+        `Please check for syntax errors such as trailing commas, missing quotes, or invalid JSON.`
+      );
+    }
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      // File not found - this shouldn't happen since we check existence before
+      throw new Error(`tsconfig.json not found at: ${configPath}`);
+    }
+    // Other errors (permission, etc.)
+    throw err;
   }
 }
 

@@ -104,8 +104,8 @@ describe('FileSystem Simple Demo', () => {
     const ir = lowering.lower(program);
 
     // Generate C++
-    const codegen = new CppCodegen('gc');
-    const sources = codegen.generate(ir);
+    const codegen = new CppCodegen();
+    const sources = codegen.generate(ir, 'gc');
 
     // Add C++ main() that calls testBasicOperations()
     // The generated files use the module name without -gs suffix
@@ -134,7 +134,11 @@ describe('FileSystem Simple Demo', () => {
       output: binaryPath,
       mode: 'gc',
       optimize: '0',
-      includePaths: [path.join(__dirname, '../..')],
+      includePaths: [
+        path.join(__dirname, '..'),  // Point to compiler/ directory for runtime/cpp/gc includes
+        path.join(__dirname, '../runtime/cpp'),  // Point to runtime/cpp for gc/allocator.hpp includes
+        path.join(__dirname, '../vendor/cppcoro/include'),  // Point to cppcoro include directory
+      ],
       cxxFlags: ['-DGS_ENABLE_FILESYSTEM'],
     });
 

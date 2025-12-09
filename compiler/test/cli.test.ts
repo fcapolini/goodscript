@@ -369,5 +369,33 @@ describe('tsconfig.json Integration', () => {
     expect(merged.configPath).toBeDefined();
     expect(merged.include).toBeDefined();
   });
+  
+  it('should throw helpful error for invalid JSON in tsconfig.json', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    
+    // Create a temporary directory with invalid tsconfig.json
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsc-test-'));
+    const tsconfigPath = path.join(tmpDir, 'tsconfig.json');
+    
+    // Write invalid JSON (trailing comma)
+    fs.writeFileSync(tsconfigPath, '{\n  "compilerOptions": {\n    "outDir": "dist",\n  }\n}');
+    
+    try {
+      expect(() => {
+        loadTsConfig(tsconfigPath);
+      }).toThrow(/Failed to parse.*tsconfig\.json/);
+      
+      expect(() => {
+        loadTsConfig(tsconfigPath);
+      }).toThrow(/trailing commas|syntax errors/i);
+    } finally {
+      // Cleanup
+      fs.unlinkSync(tsconfigPath);
+      fs.rmdirSync(tmpDir);
+    }
+  });
 });
+
 

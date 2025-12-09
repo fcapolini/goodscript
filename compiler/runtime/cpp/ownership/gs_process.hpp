@@ -15,8 +15,8 @@
  *       (Node.js has argv[0] = node path, argv[1] = script path, argv[2] = first arg)
  */
 
-#include "gs_string.hpp"
-#include "gs_array.hpp"
+// String/Array defined by mode-specific runtime
+// String/Array defined by mode-specific runtime
 
 namespace gs {
 namespace process {

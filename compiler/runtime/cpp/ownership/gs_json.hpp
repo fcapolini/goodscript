@@ -5,8 +5,8 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include "gs_string.hpp"
-#include "gs_array.hpp"
+// String/Array defined by mode-specific runtime
+// String/Array defined by mode-specific runtime
 #include "gs_property.hpp"
 
 namespace gs {

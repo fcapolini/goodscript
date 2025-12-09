@@ -4,6 +4,7 @@
  * IR → C++ code generation
  */
 
+import * as path from 'path';
 import type {
   IRProgram,
   IRModule,
@@ -54,7 +55,7 @@ const CPP_STDLIB_NAMES = new Set([
 const CPP_RESERVED_KEYWORDS = new Set([...CPP_KEYWORDS, ...CPP_STDLIB_NAMES]);
 
 export class CppCodegen {
-  private mode: MemoryMode = 'gc';
+  private mode: MemoryMode;
   private sourceMap = false;
   private indent = 0;
   private output: string[] = [];
@@ -62,6 +63,10 @@ export class CppCodegen {
   private structRegistry = new Map<string, { name: string; fields: Array<{ name: string; type: IRType }> }>();
   private structCounter = 0;
   private isAsyncContext = false;  // Track if we're in an async function (for co_return vs return)
+
+  constructor(mode: MemoryMode = 'gc') {
+    this.mode = mode;
+  }
 
   /**
    * Sanitize identifier to avoid C++ reserved keywords
@@ -79,39 +84,41 @@ export class CppCodegen {
     const files = new Map<string, string>();
 
     for (const module of program.modules) {
+      // Get relative or base filenames for output
+      const baseName = path.basename(module.path);
+      const relativeHeaderPath = baseName.replace(/-gs\.(tsx?)|\.(gs|js|tsx?)$/, '.hpp');
+      const relativeSourcePath = baseName.replace(/-gs\.(tsx?)|\.(gs|js|tsx?)$/, '.cpp');
+      
       // Generate header file
       this.output = [];
       this.indent = 0;
       this.generateHeader(module);
-      const headerPath = this.getHeaderPath(module.path);
-      files.set(headerPath, this.output.join('\n'));
+      files.set(relativeHeaderPath, this.output.join('\n'));
 
-      // Generate source file
+      // Generate source file (use relative path in #include)
       this.output = [];
       this.indent = 0;
-      this.generateSource(module, headerPath);
-      const sourcePath = this.getSourcePath(module.path);
-      files.set(sourcePath, this.output.join('\n'));
+      this.generateSource(module, relativeHeaderPath);
+      files.set(relativeSourcePath, this.output.join('\n'));
     }
 
     return files;
   }
 
-  private getHeaderPath(modulePath: string): string {
-    return modulePath.replace(/-gs\.(tsx?)|\.(gs|js|tsx?)$/, '.hpp');
-  }
-
-  private getSourcePath(modulePath: string): string {
-    return modulePath.replace(/-gs\.(tsx?)|\.(gs|js|tsx?)$/, '.cpp');
-  }
-
   private getNamespaceName(modulePath: string): string[] {
     // Convert src/math/vector-gs.ts -> ['goodscript', 'src', 'math', 'vector']
-    // Replace dashes with underscores for valid C++ identifiers
+    // Replace dashes with underscores and ensure valid C++ identifiers
     const parts = modulePath
       .replace(/-gs\.(tsx?)|\.(gs|js|tsx?)$/, '')
       .split('/')
-      .map(part => part.replace(/-/g, '_'));
+      .map(part => {
+        let name = part.replace(/-/g, '_');
+        // Prefix with underscore if starts with digit
+        if (/^\d/.test(name)) {
+          name = '_' + name;
+        }
+        return name;
+      });
     return ['goodscript', ...parts];
   }
 
@@ -132,7 +139,7 @@ export class CppCodegen {
 
     // GoodScript runtime
     if (this.mode === 'gc') {
-      this.emit('#include "runtime/cpp/ownership/gs_gc_runtime.hpp"');
+      this.emit('#include "runtime/cpp/gc/gs_gc_runtime.hpp"');
     } else {
       this.emit('#include "runtime/cpp/ownership/gs_runtime.hpp"');
     }
@@ -146,7 +153,9 @@ export class CppCodegen {
 
     // Module imports -> #includes
     for (const imp of module.imports) {
-      const headerPath = this.getHeaderPath(imp.from.replace(/^\.\//, ''));
+      // Use basename for imports too
+      const baseName = path.basename(imp.from.replace(/^\.\//, ''));
+      const headerPath = baseName.replace(/-gs\.(tsx?)|\.(gs|js|tsx?)$/, '.hpp');
       this.emit(`#include "${headerPath}"`);
     }
 

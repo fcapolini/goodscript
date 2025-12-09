@@ -38,7 +38,13 @@ async function main() {
   }
   
   // Merge with tsconfig.json
-  const mergedOptions = mergeOptions(rawOptions);
+  let mergedOptions;
+  try {
+    mergedOptions = mergeOptions(rawOptions);
+  } catch (err) {
+    console.error(`❌ ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
   
   // Apply defaults
   const options = applyDefaults(mergedOptions);

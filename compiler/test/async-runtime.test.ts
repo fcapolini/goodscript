@@ -70,11 +70,11 @@ describe('Async Runtime', () => {
     it('should have Promise static methods in runtime headers', async () => {
       // Verify gs_promise.hpp contains resolve() and reject()
       const ownershipPromise = await fs.readFile(
-        '../runtime/cpp/ownership/gs_promise.hpp',
+        'runtime/cpp/ownership/gs_promise.hpp',
         'utf-8'
       );
       const gcPromise = await fs.readFile(
-        '../runtime/cpp/gc/promise.hpp',
+        'runtime/cpp/gc/promise.hpp',
         'utf-8'
       );
       
@@ -91,7 +91,7 @@ describe('Async Runtime', () => {
     
     it('should have cppcoro integration', async () => {
       const ownershipPromise = await fs.readFile(
-        '../runtime/cpp/ownership/gs_promise.hpp',
+        'runtime/cpp/ownership/gs_promise.hpp',
         'utf-8'
       );
       
