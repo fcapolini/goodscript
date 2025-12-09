@@ -4,7 +4,7 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP (297 tests passing)
+**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP + Math + JSON (317 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
@@ -30,6 +30,8 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ Async/await (Promise<T>, async functions, co_await/co_return, cppcoro integration)
 - ✅ FileSystem API (sync and async file I/O, built-in global classes)
 - ✅ HTTP Client (libcurl integration, sync and async, built-in globals)
+- ✅ Math object (min, max, abs, floor, ceil, round, sqrt, pow, trigonometry, logarithms, constants)
+- ✅ JSON object (JSON.stringify() for basic types)
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
 **Recent Progress (Dec 9, 2025)**:
@@ -63,7 +65,15 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
   * Zig compiler integration: Added curl to VENDORED_LIBS with proper configuration
   * Documentation: PHASE-7B3-HTTP-CLIENT-PLAN.md, vendor/curl/README.md
   * Requires GS_ENABLE_HTTP flag for compilation
-- All 297 tests passing (228 → 297, +69 tests total)
+- ✅ **Completed Phase 7c: Math and JSON Integration** (20 tests)
+  * Math object: All 20+ methods integrated (min, max, abs, floor, ceil, round, sqrt, pow, sin, cos, tan, log, etc.)
+  * JSON object: JSON.stringify() for primitives (number, string, boolean)
+  * Runtime complete: gs_math.hpp (146 lines), gs_json.hpp (246 lines) - already existed
+  * Codegen integration: Added Math/JSON to built-in globals alongside console/FileSystem/HTTP
+  * Pattern: Math.min(a, b) → gs::Math::min(a, b), JSON.stringify(x) → gs::JSON::stringify(x)
+  * Tests: 15 Math integration tests + 5 JSON integration tests
+  * Documentation: PHASE-7C-UTILITIES-PLAN.md with roadmap for union types and tuple types
+- All 317 tests passing (228 → 317, +89 tests total)
 
 ## Architecture
 
@@ -271,7 +281,7 @@ const body: IRBlock = {
 ```
 
 ## Testing
-**Current Test Suite (297 tests)**:
+**Current Test Suite (317 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (14 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
@@ -295,9 +305,11 @@ const body: IRBlock = {
 - `test/filesystem-demo.test.ts` - FileSystem demo compilation and execution (2 tests)
 - `test/member-access.test.ts` - Member access codegen (struct fields vs Map/Array methods) (2 tests)
 - `test/http-integration.test.ts` - HTTP client integration tests (3 tests)
+- `test/math-integration.test.ts` - Math object integration tests (15 tests)
+- `test/json-integration.test.ts` - JSON object integration tests (5 tests)
 **Run Tests**:
 ```bash
-pnpm test                    # All tests (297 passing, 4 skipped)
+pnpm test                    # All tests (317 passing, 4 skipped)
 pnpm build && pnpm test      # Build + test
 ```
 

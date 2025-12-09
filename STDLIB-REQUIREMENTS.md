@@ -17,11 +17,13 @@ This document catalogs the language features and runtime APIs required to suppor
 - ✅ Phase 7b.1: Async/await and Promise<T> (all 5 steps complete: IR types, AST lowering, C++ codegen, runtime library, integration tests + documentation)
 - ✅ Phase 7b.2: FileSystem API (built-in global classes for sync/async file I/O)
 - ✅ Phase 7b.3: HTTP Client (libcurl integration, HTTP/HTTPAsync built-in globals, sync and async support)
-- Compiler handles expressions, functions, arrays, objects, lambdas, iteration, nullable access, coroutines, file I/O, HTTP requests
+- ✅ Phase 7c.1: Math object (min, max, abs, floor, ceil, round, sqrt, pow, trigonometry, logarithms, constants)
+- ✅ Phase 7c.2: JSON object (JSON.stringify() for basic types)
+- Compiler handles expressions, functions, arrays, objects, lambdas, iteration, nullable access, coroutines, file I/O, HTTP requests, Math operations, JSON serialization
 - Binary compilation working via Zig
-- 297 tests passing (228→297, +69 tests total)
+- 317 tests passing (228→317, +89 tests total)
 
-**Gap**: stdlib still needs union types, more runtime APIs (JSON parser, Math object, etc.)
+**Gap**: stdlib still needs union types, more runtime APIs (JSON.parse with nlohmann/json, tuple types, etc.)
 
 **Priority**: Implement features in phases, starting with most fundamental and widely used.
 
