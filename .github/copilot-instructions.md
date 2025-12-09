@@ -42,13 +42,15 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
   * Type mapping: `Promise<T>` → `cppcoro::task<T>` in generated C++
   * Control flow: `co_return` in async functions, `co_await` for await expressions
   * Documentation: ASYNC-AWAIT-GUIDE.md covering syntax, implementation, examples, limitations
-- ✅ **Completed Phase 7b.2: FileSystem API** (9 tests)
+- ✅ **Completed Phase 7b.2: FileSystem API** (10 tests)
   * Built-in FileSystem and FileSystemAsync global classes (like console)
   * 18+ methods: exists, readText, writeText, appendText, mkdir, readDir, stat, copy, move, etc.
   * Both sync (FileSystem) and async (FileSystemAsync with Promise<T>) variants
   * Runtime complete: gs_filesystem.hpp (700 lines, cross-platform POSIX/Windows)
   * Documentation: FILESYSTEM-API-GUIDE.md with complete API reference and examples
-- All 290 tests passing (228 → 290, +62 tests total)
+  * End-to-end execution test: Full pipeline TypeScript → IR → C++ → Binary → Execution
+  * Requires GS_ENABLE_FILESYSTEM flag for compilation
+- All 292 tests passing (228 → 292, +64 tests total)
 
 ## Architecture
 
@@ -256,7 +258,7 @@ const body: IRBlock = {
 ```
 
 ## Testing
-**Current Test Suite (290 tests)**:
+**Current Test Suite (292 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (14 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
@@ -277,9 +279,10 @@ const body: IRBlock = {
 - `test/async-runtime.test.ts` - Promise runtime library (3 tests)
 - `test/async-integration.test.ts` - async/await integration tests (11 tests)
 - `test/filesystem.test.ts` - FileSystem built-in API (9 tests)
+- `test/filesystem-demo.test.ts` - FileSystem demo compilation and execution (2 tests)
 **Run Tests**:
 ```bash
-pnpm test                    # All tests (290 passing, 3 skipped)
+pnpm test                    # All tests (292 passing, 3 skipped)
 pnpm build && pnpm test      # Build + test
 ```
 
