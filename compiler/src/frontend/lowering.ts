@@ -1072,7 +1072,18 @@ export class IRLowering {
       return types.array(types.void());
     }
     
-    // Check for object types (struct) - after arrays!
+    // Check for Map types (BEFORE general Object check!)
+    if (tsType.symbol && tsType.symbol.name === 'Map') {
+      const typeArgs = (tsType as ts.TypeReference).typeArguments;
+      if (typeArgs && typeArgs.length >= 2) {
+        const keyType = this.convertTsTypeToIRType(typeArgs[0], visited);
+        const valueType = this.convertTsTypeToIRType(typeArgs[1], visited);
+        return types.map(keyType, valueType);
+      }
+      return types.map(types.void(), types.void());
+    }
+    
+    // Check for object types (struct) - after arrays and maps!
     if (tsType.flags & ts.TypeFlags.Object) {
       const properties = tsType.getProperties();
       if (properties.length > 0) {

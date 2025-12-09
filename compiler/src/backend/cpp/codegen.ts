@@ -703,13 +703,16 @@ export class CppCodegen {
         }
         
         // In C++, Map.size and Array.length are methods that need ()
-        // Only apply this for actual Map and Array types, not for struct fields
+        // Check the type to determine if this is a Map/Array or a struct field
         let accessExpr = member;
         if (member === 'size' || member === 'length') {
           const objectType = expr.object.type;
           // Check if the object type is a Map or Array
           const isMapOrArray = objectType.kind === 'map' || objectType.kind === 'array';
-          accessExpr = isMapOrArray ? `${member}()` : member;
+          // Also check for String.length
+          const isString = member === 'length' && objectType.kind === 'primitive' && objectType.type === PrimitiveType.String;
+          const isMethodProperty = isMapOrArray || isString;
+          accessExpr = isMethodProperty ? `${member}()` : member;
         }
         
         // Optional chaining: obj?.field becomes (obj != nullptr ? obj->field : nullptr)
