@@ -145,42 +145,13 @@ public:
     // Get value by key
     // For pointer types: returns V (pointer) or nullptr
     // For value types: returns V* (pointer to value) or nullptr
-    auto get(const K& key) {
+    V get(const K& key) const {
         auto it = index_.find(key);
         if (it == index_.end()) {
-            if constexpr (std::is_pointer<V>::value) {
-                return static_cast<V>(nullptr);
-            } else {
-                return static_cast<V*>(nullptr);
-            }
+            // Return default-constructed value (matches JavaScript undefined for primitives)
+            return V{};
         }
-        
-        if constexpr (std::is_pointer<V>::value) {
-            // V is already a pointer (e.g., gs::Person*)
-            return items_[it->second].second;
-        } else {
-            // V is a value type (e.g., bool, gs::String)
-            // Return pointer to value
-            return &items_[it->second].second;
-        }
-    }
-
-    auto get(const K& key) const {
-        auto it = index_.find(key);
-        if (it == index_.end()) {
-            if constexpr (std::is_pointer<V>::value) {
-                return static_cast<V>(nullptr);
-            } else {
-                return static_cast<V*>(nullptr);
-            }
-        }
-        
-        if constexpr (std::is_pointer<V>::value) {
-            return items_[it->second].second;
-        } else {
-            // Cast away const for value types - needed for compatibility
-            return const_cast<V*>(&items_[it->second].second);
-        }
+        return items_[it->second].second;
     }
 
     // Set key-value pair
@@ -227,6 +198,18 @@ public:
     // Get size
     size_t size() const {
         return index_.size();
+    }
+
+    // forEach - iterate over entries in insertion order
+    // Callback signature: (value, key) => void (matches JavaScript Map.forEach)
+    template<typename Func>
+    void forEach(Func callback) const {
+        for (size_t i = 0; i < items_.size(); ++i) {
+            // Check if this slot is occupied (key exists in index)
+            if (index_.find(items_[i].first) != index_.end()) {
+                callback(items_[i].second, items_[i].first);
+            }
+        }
     }
 
     // Forward declaration for Array<T>

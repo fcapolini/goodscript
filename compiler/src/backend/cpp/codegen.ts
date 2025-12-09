@@ -23,7 +23,7 @@ import type {
   IRStatement,
   IRExpression,
 } from '../../ir/types.js';
-import { Ownership, PrimitiveType } from '../../ir/types.js';
+import { Ownership, PrimitiveType, BinaryOp } from '../../ir/types.js';
 import { types } from '../../ir/builder.js';
 
 type MemoryMode = 'ownership' | 'gc';
@@ -349,9 +349,20 @@ export class CppCodegen {
 
   private generateHeaderConst(constDecl: any): void {
     // For function types (lambdas), use auto since lambda types can't be expressed explicitly
-    const typeStr = constDecl.type.kind === 'function' 
-      ? 'auto' 
-      : `const ${this.generateCppType(constDecl.type)}`;
+    if (constDecl.type.kind === 'function') {
+      this.emit(`extern auto ${this.sanitizeIdentifier(constDecl.name)};`);
+      return;
+    }
+    
+    // For mutable types (Map, Array, objects), don't use const in C++
+    // TypeScript const means the binding is const, not the value
+    const needsConst = constDecl.type.kind === 'primitive' || 
+                       (constDecl.type.kind === 'own' && constDecl.type.inner.kind === 'primitive') ||
+                       (constDecl.type.kind === 'share' && constDecl.type.inner.kind === 'primitive');
+    
+    const typeStr = needsConst 
+      ? `const ${this.generateCppType(constDecl.type)}`
+      : this.generateCppType(constDecl.type);
     this.emit(`extern ${typeStr} ${this.sanitizeIdentifier(constDecl.name)};`);
   }
 
@@ -496,11 +507,22 @@ export class CppCodegen {
   private generateSourceConst(constDecl: any): void {
     // For function types that aren't lambda literals, use std::function to match header
     // Lambda literals use auto and are emitted inline in header
-    const typeStr = (constDecl.type.kind === 'function' && constDecl.value.kind !== 'lambda')
-      ? this.generateCppType(constDecl.type)
-      : (constDecl.type.kind === 'function')
-        ? 'auto'
-        : `const ${this.generateCppType(constDecl.type)}`;
+    if (constDecl.type.kind === 'function') {
+      const typeStr = constDecl.value.kind !== 'lambda'
+        ? this.generateCppType(constDecl.type)
+        : 'auto';
+      this.emit(`${typeStr} ${this.sanitizeIdentifier(constDecl.name)} = ${this.generateExpr(constDecl.value)};`);
+      return;
+    }
+    
+    // For mutable types (Map, Array, objects), don't use const in C++
+    const needsConst = constDecl.type.kind === 'primitive' || 
+                       (constDecl.type.kind === 'own' && constDecl.type.inner.kind === 'primitive') ||
+                       (constDecl.type.kind === 'share' && constDecl.type.inner.kind === 'primitive');
+    
+    const typeStr = needsConst 
+      ? `const ${this.generateCppType(constDecl.type)}`
+      : this.generateCppType(constDecl.type);
     this.emit(`${typeStr} ${this.sanitizeIdentifier(constDecl.name)} = ${this.generateExpr(constDecl.value)};`);
   }
 
@@ -711,7 +733,14 @@ export class CppCodegen {
         if (expr.value === null) {
           return 'nullptr';
         } else if (typeof expr.value === 'string') {
-          return `gs::String("${expr.value.replace(/"/g, '\\"')}")`;
+          // Escape string literals properly for C++
+          const escaped = expr.value
+            .replace(/\\/g, '\\\\')
+            .replace(/"/g, '\\"')
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r')
+            .replace(/\t/g, '\\t');
+          return `gs::String("${escaped}")`;
         } else if (typeof expr.value === 'boolean') {
           return expr.value ? 'true' : 'false';
         } else {
@@ -724,6 +753,21 @@ export class CppCodegen {
       case 'binary': {
         const left = this.generateExpression(expr.left);
         const right = this.generateExpression(expr.right);
+        
+        // Special handling for modulo operator on floating-point types
+        if (expr.operator === BinaryOp.Mod) {
+          // Check if we're dealing with floating-point types (number in TypeScript)
+          const leftType = expr.left.type;
+          const rightType = expr.right.type;
+          const isFloatingPoint = 
+            (leftType.kind === 'primitive' && leftType.type === 'number') ||
+            (rightType.kind === 'primitive' && rightType.type === 'number');
+          
+          if (isFloatingPoint) {
+            return `std::fmod(${left}, ${right})`;
+          }
+        }
+        
         return `(${left} ${expr.operator} ${right})`;
       }
       
@@ -1047,8 +1091,25 @@ export class CppCodegen {
         return this.generateLiteral(expr.value);
       case 'variable':
         return this.sanitizeIdentifier(expr.name);
-      case 'binary':
-        return `(${this.generateExpr(expr.left)} ${expr.op} ${this.generateExpr(expr.right)})`;
+      case 'binary': {
+        const left = this.generateExpr(expr.left);
+        const right = this.generateExpr(expr.right);
+        
+        // Special handling for modulo operator on floating-point types
+        if (expr.op === BinaryOp.Mod) {
+          const leftType = expr.left.type;
+          const rightType = expr.right.type;
+          const isFloatingPoint = 
+            (leftType.kind === 'primitive' && leftType.type === PrimitiveType.Number) ||
+            (rightType.kind === 'primitive' && rightType.type === PrimitiveType.Number);
+          
+          if (isFloatingPoint) {
+            return `std::fmod(${left}, ${right})`;
+          }
+        }
+        
+        return `(${left} ${expr.op} ${right})`;
+      }
       case 'unary':
         if (expr.op === 'typeof') {
           return this.generateTypeof(expr.operand);
@@ -1129,7 +1190,7 @@ export class CppCodegen {
         return `${obj}.${expr.method}(${args})`;
       }
       case 'new':
-        return this.generateNew(expr.className, expr.args);
+        return this.generateNew(expr.className, expr.args, expr.type);
       case 'array': {
         // Extract element type from array type
         const elementType = expr.type.kind === 'array' ? expr.type.element : types.void();
@@ -1158,11 +1219,28 @@ export class CppCodegen {
     }
   }
 
-  private generateNew(className: string, args: IRExpr[]): string {
+  private generateNew(className: string, args: IRExpr[], type?: IRType): string {
     const argsList = args.map(a => this.generateExpr(a)).join(', ');
     
+    // Special handling for Map - use direct construction with template params
+    if (className === 'Map' && type && type.kind === 'map') {
+      const keyType = this.generateCppType(type.key);
+      const valueType = this.generateCppType(type.value);
+      return `gs::Map<${keyType}, ${valueType}>(${argsList})`;
+    }
+    
+    // Special handling for Array - use direct construction
+    if (className === 'Array' && type && type.kind === 'array') {
+      const elementType = this.generateCppType(type.element);
+      return `gs::Array<${elementType}>(${argsList})`;
+    }
+    
     if (this.mode === 'gc') {
-      // GC mode: use GC_malloc or new with GC allocator
+      // GC mode: For Error and other heap-allocated classes, use new
+      // For built-in value types, use direct construction with gs:: namespace
+      if (className === 'Error' || className === 'TypeError' || className === 'RangeError') {
+        return `gs::${className}(${argsList})`;
+      }
       return `new ${className}(${argsList})`;
     } else {
       // Ownership mode: use std::make_unique

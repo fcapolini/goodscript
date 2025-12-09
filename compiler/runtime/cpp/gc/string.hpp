@@ -568,6 +568,25 @@ public:
     // Split string by separator (implemented in array.hpp after Array is defined)
     Array<String> split(const String& separator) const;
 
+    // slice() - alias for substring() (JavaScript compatibility)
+    String slice(int start) const {
+        // Handle negative indices
+        size_t actualStart = start < 0 ? std::max(0, static_cast<int>(length_) + start) : static_cast<size_t>(start);
+        return substring(actualStart);
+    }
+
+    String slice(int start, int end) const {
+        // Handle negative indices
+        size_t actualStart = start < 0 ? std::max(0, static_cast<int>(length_) + start) : static_cast<size_t>(start);
+        size_t actualEnd = end < 0 ? std::max(0, static_cast<int>(length_) + end) : static_cast<size_t>(end);
+        return substring(actualStart, actualEnd);
+    }
+
+    // includes() - check if string contains substring (JavaScript compatibility)
+    bool includes(const String& searchString) const {
+        return indexOf(searchString) != -1;
+    }
+
     // Conversion
     const char* c_str() const {
         return data();
@@ -652,7 +671,12 @@ public:
 
 // Stream output operator
 inline std::ostream& operator<<(std::ostream& os, const String& str) {
-    return os << str.c_str();
+    const char* cstr = str.c_str();
+    if (cstr) {
+        return os << cstr;
+    } else {
+        return os << "(null)";
+    }
 }
 
 } // namespace gs

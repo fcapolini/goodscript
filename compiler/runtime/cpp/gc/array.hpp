@@ -3,6 +3,7 @@
 #include "allocator.hpp"
 #include "string.hpp"
 #include "string-builder.hpp"
+#include <iostream>  // For std::ostream and operator<<
 #include <stdexcept>
 #include <algorithm>
 #include <optional>
@@ -390,6 +391,18 @@ public:
     }
 
     /**
+     * Subscript operator for convenient array indexing
+     * Returns const reference for efficient access
+     */
+    const T& operator[](int index) const {
+        return at_ref(index);
+    }
+
+    T& operator[](int index) {
+        return at_ref(index);
+    }
+
+    /**
      * Direct element assignment without bounds checking or resize
      * For performance-critical code where bounds are known to be valid
      */
@@ -488,6 +501,38 @@ inline Array<String> String::split(const String& separator) const {
     }
     
     return result;
+}
+
+// Stream output operators for Array types (must be after Array template definition)
+inline std::ostream& operator<<(std::ostream& os, const Array<double>& arr) {
+    os << "[";
+    for (size_t i = 0; i < arr.length(); ++i) {
+        if (i > 0) os << ", ";
+        os << arr[static_cast<int>(i)];
+    }
+    os << "]";
+    return os;
+}
+
+inline std::ostream& operator<<(std::ostream& os, const Array<int32_t>& arr) {
+    os << "[";
+    for (size_t i = 0; i < arr.length(); ++i) {
+        if (i > 0) os << ", ";
+        os << arr[static_cast<int>(i)];
+    }
+    os << "]";
+    return os;
+}
+
+inline std::ostream& operator<<(std::ostream& os, const Array<String>& arr) {
+    os << "[";
+    for (size_t i = 0; i < arr.length(); ++i) {
+        if (i > 0) os << ", ";
+        // Use c_str() directly to avoid potential operator<< issues
+        os << "\"" << arr[static_cast<int>(i)].c_str() << "\"";
+    }
+    os << "]";
+    return os;
 }
 
 } // namespace gs

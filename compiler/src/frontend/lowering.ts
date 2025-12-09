@@ -857,6 +857,14 @@ export class IRLowering {
     const captures: Array<{ name: string; type: IRType }> = [];
     const captureSet = new Set<string>();
     const paramNames = new Set(params.map(p => p.name));
+    
+    // Built-in globals that should never be captured
+    const builtins = new Set([
+      'console', 'Math', 'JSON', 'String', 'Number', 'Boolean',
+      'Array', 'Map', 'Set', 'Object', 'Error',
+      'FileSystem', 'FileSystemAsync', 'HTTP', 'HTTPAsync',
+      'Promise', 'undefined', 'null', 'NaN', 'Infinity'
+    ]);
 
     const visit = (node: ts.Node) => {
       if (ts.isIdentifier(node)) {
@@ -864,9 +872,9 @@ export class IRLowering {
         // Capture if:
         // 1. Not a parameter
         // 2. Not already captured
-        // 3. Not a global (console, etc.)
+        // 3. Not a built-in global
         // 4. Has a binding in the type checker (is a local variable)
-        if (!paramNames.has(name) && !captureSet.has(name)) {
+        if (!paramNames.has(name) && !captureSet.has(name) && !builtins.has(name)) {
           const symbol = this.typeChecker.getSymbolAtLocation(node);
           if (symbol) {
             const declarations = symbol.getDeclarations();
