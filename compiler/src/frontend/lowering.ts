@@ -13,6 +13,7 @@ export class IRLowering {
   private builder = new IRBuilder();
   private typeChecker!: ts.TypeChecker;
   private declaredVariables = new Set<string>();
+  private currentFunctionIsAsync = false;
 
   lower(program: ts.Program): IRProgram {
     this.typeChecker = program.getTypeChecker();
@@ -37,13 +38,12 @@ export class IRLowering {
       const decl = this.lowerDeclaration(node, sourceFile);
       if (decl) {
         declarations.push(decl);
-      } else if (ts.isExpressionStatement(node)) {
-        // Handle top-level expression statements (e.g., console.log())
-        const expression = this.lowerExpression(node.expression, sourceFile);
-        initStatements.push({
-          kind: 'expressionStatement',
-          expression,
-        });
+      } else if (ts.isStatement(node)) {
+        // Handle all top-level statements (not just expression statements)
+        const stmt = this.lowerStatementAST(node, sourceFile);
+        if (stmt) {
+          initStatements.push(stmt);
+        }
       }
     });
 
@@ -97,8 +97,13 @@ export class IRLowering {
     }));
 
     const returnType = this.lowerTypeNode(node.type, sourceFile);
-    const body = node.body ? this.lowerFunctionBody(node.body, sourceFile) : this.builder.functionBody([]);
     const async = node.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ?? false;
+    
+    // Set async context before lowering body
+    const previousAsync = this.currentFunctionIsAsync;
+    this.currentFunctionIsAsync = async;
+    const body = node.body ? this.lowerFunctionBody(node.body, sourceFile) : this.builder.functionBody([]);
+    this.currentFunctionIsAsync = previousAsync;
 
     return {
       kind: 'function',
@@ -198,7 +203,34 @@ export class IRLowering {
 
     // Return statement
     if (ts.isReturnStatement(node)) {
-      const value = node.expression ? this.lowerExpression(node.expression, sourceFile) : undefined;
+      let value = node.expression ? this.lowerExpression(node.expression, sourceFile) : undefined;
+      
+      // In async functions, unwrap Promise.resolve(x) to just x
+      // and convert Promise.reject(x) to throw x
+      if (this.currentFunctionIsAsync && value && node.expression && ts.isCallExpression(node.expression)) {
+        const call = node.expression;
+        if (ts.isPropertyAccessExpression(call.expression) &&
+            ts.isIdentifier(call.expression.expression) &&
+            call.expression.expression.text === 'Promise') {
+          const method = call.expression.name.text;
+          
+          if (method === 'resolve') {
+            // Promise.resolve(x) -> return x
+            if (call.arguments.length > 0) {
+              value = this.lowerExpression(call.arguments[0], sourceFile);
+            } else {
+              value = undefined; // Promise.resolve() with no args
+            }
+          } else if (method === 'reject') {
+            // Promise.reject(x) -> throw x
+            if (call.arguments.length > 0) {
+              const error = this.lowerExpression(call.arguments[0], sourceFile);
+              return stmts.throw(error);
+            }
+          }
+        }
+      }
+      
       return stmts.return(value);
     }
 
@@ -907,6 +939,13 @@ export class IRLowering {
       type: this.lowerTypeNode(p.type, sourceFile),
     }));
 
+    // Check if this is an async arrow function
+    const isAsync = node.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ?? false;
+    
+    // Set async context before lowering body
+    const previousAsync = this.currentFunctionIsAsync;
+    this.currentFunctionIsAsync = isAsync;
+
     // Analyze captures (free variables in the lambda body)
     const captures = this.analyzeLambdaCaptures(node, sourceFile, params);
 
@@ -919,6 +958,9 @@ export class IRLowering {
       const returnValue = this.lowerExpr(node.body, sourceFile);
       body = this.builder.block([], { kind: 'return', value: returnValue });
     }
+    
+    // Restore previous async context
+    this.currentFunctionIsAsync = previousAsync;
 
     // Infer function type
     const paramTypes = params.map(p => p.type);

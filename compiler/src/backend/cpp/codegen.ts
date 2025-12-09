@@ -568,14 +568,30 @@ export class CppCodegen {
         // Skip void expressions (like console.log) which generate nullptr
         const exprCode = this.generateExpression(stmt.expression);
         if (exprCode !== 'nullptr') {
-          this.emit(`${exprCode};`);
+          // Check if this is a call to an async function (returns Promise/task)
+          // If so, we need to use cppcoro::sync_wait to execute it
+          const isAsyncCall = stmt.expression.kind === 'call' && 
+                             stmt.expression.type.kind === 'promise';
+          
+          if (isAsyncCall) {
+            // Async function call at statement level needs sync_wait
+            this.emit(`cppcoro::sync_wait(${exprCode});`);
+          } else {
+            this.emit(`${exprCode};`);
+          }
         }
         break;
       
       case 'return':
         if (stmt.value) {
           const returnKeyword = this.isAsyncContext ? 'co_return' : 'return';
-          this.emit(`${returnKeyword} ${this.generateExpression(stmt.value)};`);
+          const valueCode = this.generateExpression(stmt.value);
+          // For void async functions, don't emit nullptr/undefined
+          if (this.isAsyncContext && (valueCode === 'nullptr' || valueCode === 'undefined')) {
+            this.emit(`${returnKeyword};`);
+          } else {
+            this.emit(`${returnKeyword} ${valueCode};`);
+          }
         } else {
           const returnKeyword = this.isAsyncContext ? 'co_return' : 'return';
           this.emit(`${returnKeyword};`);
@@ -754,6 +770,21 @@ export class CppCodegen {
         const left = this.generateExpression(expr.left);
         const right = this.generateExpression(expr.right);
         
+        // Special handling for + operator with strings (string concatenation)
+        if (expr.operator === BinaryOp.Add) {
+          const leftType = expr.left.type;
+          const rightType = expr.right.type;
+          const leftIsString = leftType.kind === 'primitive' && leftType.type === 'string';
+          const rightIsString = rightType.kind === 'primitive' && rightType.type === 'string';
+          
+          // If either operand is a string, convert both to strings and concatenate
+          if (leftIsString || rightIsString) {
+            const leftStr = leftIsString ? left : `gs::String::from(${left})`;
+            const rightStr = rightIsString ? right : `gs::String::from(${right})`;
+            return `(${leftStr} + ${rightStr})`;
+          }
+        }
+        
         // Special handling for modulo operator on floating-point types
         if (expr.operator === BinaryOp.Mod) {
           // Check if we're dealing with floating-point types (number in TypeScript)
@@ -813,6 +844,15 @@ export class CppCodegen {
           return `gs::JSON::${method}(${args})`;
         }
         
+        // Special handling for Promise static methods
+        if (expr.callee.kind === 'memberAccess' && 
+            expr.callee.object.kind === 'identifier' && 
+            expr.callee.object.name === 'Promise') {
+          const method = expr.callee.member;
+          const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
+          return `gs::Promise::${method}(${args})`;
+        }
+        
         // Special handling for String static methods (e.g., String::from() for template literals)
         if (expr.callee.kind === 'memberAccess' && 
             expr.callee.object.kind === 'identifier' && 
@@ -861,6 +901,11 @@ export class CppCodegen {
         // Special handling for JSON static methods
         if (expr.object.kind === 'identifier' && expr.object.name === 'JSON') {
           return `gs::JSON::${member}`;
+        }
+        
+        // Special handling for Promise static methods
+        if (expr.object.kind === 'identifier' && expr.object.name === 'Promise') {
+          return `gs::Promise::${member}`;
         }
         
         // Special handling for String static methods
@@ -1108,6 +1153,20 @@ export class CppCodegen {
           }
         }
         
+        // Special handling for + operator with string concatenation
+        if (expr.op === BinaryOp.Add) {
+          const leftType = expr.left.type;
+          const rightType = expr.right.type;
+          const leftIsString = leftType.kind === 'primitive' && leftType.type === 'string';
+          const rightIsString = rightType.kind === 'primitive' && rightType.type === 'string';
+          
+          if (leftIsString || rightIsString) {
+            const leftStr = leftIsString ? left : `gs::String::from(${left})`;
+            const rightStr = rightIsString ? right : `gs::String::from(${right})`;
+            return `(${leftStr} + ${rightStr})`;
+          }
+        }
+        
         return `(${left} ${expr.op} ${right})`;
       }
       case 'unary':
@@ -1130,6 +1189,10 @@ export class CppCodegen {
         // Special case: JSON static methods
         if (obj === 'JSON') {
           return `gs::JSON::${expr.member}`;
+        }
+        // Special case: Promise static methods
+        if (obj === 'Promise') {
+          return `gs::Promise::${expr.member}`;
         }
         // Special case: String static methods (e.g., String.from)
         if (obj === 'String') {

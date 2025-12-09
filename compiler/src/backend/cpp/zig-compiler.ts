@@ -84,6 +84,9 @@ export class ZigCompiler {
         await this.compileVendoredDep('mps', vendorDir, options, diagnostics);
       }
       
+      // Always compile cppcoro when using async/await
+      await this.compileVendoredDep('cppcoro', vendorDir, options, diagnostics);
+      
       // TODO: Compile PCRE2 only if RegExp is used
       // await this.compileVendoredDep('pcre2', options, diagnostics);
 
@@ -157,6 +160,44 @@ export class ZigCompiler {
         // MPS uses __DATE__ and __TIME__ macros, which Zig treats as non-reproducible
         flags.push('-Wno-date-time');
         break;
+      case 'cppcoro': {
+        // cppcoro has multiple .cpp files - compile each separately
+        const cppcoroDir = path.join(vendorDir, 'cppcoro/lib');
+        const sourceFiles = [
+          'lightweight_manual_reset_event.cpp',
+          'spin_wait.cpp',
+          'spin_mutex.cpp',
+        ];
+        
+        flags.push(`-I${path.join(vendorDir, 'cppcoro/include')}`);
+        flags.push('-std=c++20');
+        flags.push('-Wno-everything'); // Suppress warnings for vendored code
+        
+        // Compile each file separately and collect object files
+        const objectFiles: string[] = [];
+        for (const file of sourceFiles) {
+          const sourceFile = path.join(cppcoroDir, file);
+          const objFile = path.join(path.dirname(outputPath), file.replace('.cpp', '.o'));
+          
+          await this.runZigCXX([
+            ...flags,
+            '-c',
+            sourceFile,
+            '-o', objFile,
+          ]);
+          
+          objectFiles.push(objFile);
+        }
+        
+        // For linking, we'll return the output path as a marker
+        // Don't call saveCacheInfo with a directory - just touch the output file
+        await fs.writeFile(outputPath, ''); // Create empty marker file
+        
+        // Store the list of object files so the linker can find them
+        await fs.writeFile(outputPath + '.files', objectFiles.join('\n'));
+        
+        return outputPath;
+      }
       case 'pcre2':
         sourceFile = path.join(vendorDir, 'pcre2/src/pcre2_all.c');
         flags.push('-DPCRE2_CODE_UNIT_WIDTH=8');
@@ -257,6 +298,17 @@ export class ZigCompiler {
     // Add vendored dependencies
     if (options.mode === 'gc') {
       objectFiles.push(path.join(this.cacheDir, 'vendor', 'mps.o'));
+    }
+    
+    // Always link cppcoro when using async/await
+    // Read the list of cppcoro object files
+    const cppcoroFilesPath = path.join(this.cacheDir, 'vendor', 'cppcoro.o.files');
+    try {
+      const cppcoroFiles = (await fs.readFile(cppcoroFilesPath, 'utf-8')).trim().split('\n');
+      objectFiles.push(...cppcoroFiles);
+    } catch {
+      // Fallback if .files doesn't exist
+      objectFiles.push(path.join(this.cacheDir, 'vendor', 'cppcoro.o'));
     }
 
     // Target specification
