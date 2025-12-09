@@ -4,7 +4,7 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete + async/await (270 tests passing)
+**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP (297 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
@@ -29,6 +29,7 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ String methods (split, slice, trim, toLowerCase, toUpperCase, indexOf, includes)
 - ✅ Async/await (Promise<T>, async functions, co_await/co_return, cppcoro integration)
 - ✅ FileSystem API (sync and async file I/O, built-in global classes)
+- ✅ HTTP Client (libcurl integration, sync and async, built-in globals)
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
 **Recent Progress (Dec 9, 2025)**:
@@ -51,7 +52,18 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
   * End-to-end execution test: Full pipeline TypeScript → IR → C++ → Binary → Execution
   * Requires GS_ENABLE_FILESYSTEM flag for compilation
   * Fixed struct field access codegen bug (size/length on structs vs Map/Array)
-- All 294 tests passing (228 → 294, +66 tests total)
+- ✅ **Completed Phase 7b.3: HTTP Client** (3 tests)
+  * Vendored libcurl 8.7.1 (382 files, MIT-like license, ~2.8MB source)
+  * Created curl_all.c amalgamation file (133 .c includes) for simplified compilation
+  * Runtime complete: gs_http.hpp (~350 lines, sync and async support)
+  * Built-in globals: HTTP (sync), HTTPAsync (async) following FileSystem/console pattern
+  * Methods: HTTP.syncFetch(), HTTPAsync.fetch() returning Promise<HttpResponse>
+  * Features: Custom headers, POST/PUT, timeout support, automatic CURL initialization
+  * Platform SSL: macOS (Secure Transport), Windows (Schannel), Linux (HTTP-only or OpenSSL)
+  * Zig compiler integration: Added curl to VENDORED_LIBS with proper configuration
+  * Documentation: PHASE-7B3-HTTP-CLIENT-PLAN.md, vendor/curl/README.md
+  * Requires GS_ENABLE_HTTP flag for compilation
+- All 297 tests passing (228 → 297, +69 tests total)
 
 ## Architecture
 
@@ -259,7 +271,7 @@ const body: IRBlock = {
 ```
 
 ## Testing
-**Current Test Suite (294 tests)**:
+**Current Test Suite (297 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (14 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
@@ -282,9 +294,10 @@ const body: IRBlock = {
 - `test/filesystem.test.ts` - FileSystem built-in API (9 tests)
 - `test/filesystem-demo.test.ts` - FileSystem demo compilation and execution (2 tests)
 - `test/member-access.test.ts` - Member access codegen (struct fields vs Map/Array methods) (2 tests)
+- `test/http-integration.test.ts` - HTTP client integration tests (3 tests)
 **Run Tests**:
 ```bash
-pnpm test                    # All tests (294 passing, 3 skipped)
+pnpm test                    # All tests (297 passing, 4 skipped)
 pnpm build && pnpm test      # Build + test
 ```
 
@@ -302,13 +315,15 @@ pnpm build && pnpm test      # Build + test
 - **MPS 1.118.0**: Garbage collection (GC mode) - BSD 2-clause, ~300KB
 - **cppcoro**: Async/await via C++20 coroutines - MIT, header-only
 - **PCRE2 10.47**: Regular expressions - BSD 3-clause, ~500KB
+- **libcurl 8.7.1**: HTTP/HTTPS client library - MIT-like, ~2.8MB source
 
 All dependencies compiled on-the-fly (~1-3s each, cached):
 ```bash
 zig cc -O2 -c vendor/mps/src/mps.c -o build/mps.o           # GC mode
 zig cc -O2 -c vendor/pcre2/src/pcre2_all.c -o build/pcre2.o # RegExp
+zig cc -O2 -c vendor/curl/lib/curl_all.c -o build/curl.o   # HTTP client
 zig c++ -std=c++20 -c build/main.cpp -o build/main.o        # GoodScript code
-zig c++ build/main.o build/mps.o build/pcre2.o -o myapp    # Link
+zig c++ build/main.o build/mps.o build/pcre2.o build/curl.o -o myapp # Link
 ```
 
 **Why Vendored?**

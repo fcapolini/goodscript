@@ -1,7 +1,7 @@
 # Standard Library Requirements for Compiler & Runtime
 
 **Date**: December 9, 2025  
-**Status**: Phase 7a (complete) + Phase 7b.1 (complete) + Phase 7b.2 (complete) ✅
+**Status**: Phase 7a (complete) + Phase 7b (complete) ✅
 
 This document catalogs the language features and runtime APIs required to support the GoodScript standard library. The stdlib defines the requirements; the compiler and runtime must adapt to support them.
 
@@ -16,11 +16,12 @@ This document catalogs the language features and runtime APIs required to suppor
 - ✅ Phase 7a.6: String methods (split, slice, trim, toLowerCase, toUpperCase, indexOf, includes)
 - ✅ Phase 7b.1: Async/await and Promise<T> (all 5 steps complete: IR types, AST lowering, C++ codegen, runtime library, integration tests + documentation)
 - ✅ Phase 7b.2: FileSystem API (built-in global classes for sync/async file I/O)
-- Compiler handles expressions, functions, arrays, objects, lambdas, iteration, nullable access, coroutines, file I/O
+- ✅ Phase 7b.3: HTTP Client (libcurl integration, HTTP/HTTPAsync built-in globals, sync and async support)
+- Compiler handles expressions, functions, arrays, objects, lambdas, iteration, nullable access, coroutines, file I/O, HTTP requests
 - Binary compilation working via Zig
-- 290 tests passing (228→290, +62 tests total)
+- 297 tests passing (228→297, +69 tests total)
 
-**Gap**: stdlib still needs union types, HTTP client, more runtime APIs
+**Gap**: stdlib still needs union types, more runtime APIs (JSON parser, Math object, etc.)
 
 **Priority**: Implement features in phases, starting with most fundamental and widely used.
 
@@ -674,13 +675,16 @@ namespace gs {
    - 18+ methods (sync and async variants)
    - Cross-platform (POSIX/Windows)
 
-3. ⏳ **HTTP Client** (Phase 7b.3 - PENDING)
-   - Vendor libcurl
-   - Runtime: C++ HTTP client
-   - Runtime: fetch() wrapper (TS)
-   - Timeout support
+3. ✅ **HTTP Client** (Phase 7b.3 - COMPLETE)
+   - Vendored libcurl 8.7.1 (382 files, MIT-like license)
+   - Runtime: gs_http.hpp (~350 lines, sync and async support)
+   - Built-in globals: HTTP (sync), HTTPAsync (async)
+   - Methods: HTTP.syncFetch(), HTTPAsync.fetch()
+   - Features: Custom headers, POST/PUT, timeout support
+   - Platform SSL: macOS (Secure Transport), Windows (Schannel), Linux (HTTP-only or OpenSSL)
+   - Documentation: PHASE-7B3-HTTP-CLIENT-PLAN.md, vendor/curl/README.md
 
-**Tests**: ✅ Phase 7b.1 + 7b.2 complete (62 tests), Phase 7b.3 pending
+**Tests**: ✅ All Phase 7b complete (65 tests total: 11 async/await, 10 FileSystem, 44 runtime library, 3 HTTP)
 
 ---
 
