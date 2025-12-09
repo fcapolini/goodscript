@@ -61,6 +61,7 @@ export class CppCodegen {
   private currentNamespace: string[] = [];
   private structRegistry = new Map<string, { name: string; fields: Array<{ name: string; type: IRType }> }>();
   private structCounter = 0;
+  private isAsyncContext = false;  // Track if we're in an async function (for co_return vs return)
 
   /**
    * Sanitize identifier to avoid C++ reserved keywords
@@ -136,6 +137,11 @@ export class CppCodegen {
       this.emit('#include "runtime/cpp/ownership/gs_runtime.hpp"');
     }
     
+    // cppcoro for async/await support (if module contains async functions)
+    if (this.moduleUsesAsync(module)) {
+      this.emit('#include <cppcoro/task.hpp>');
+    }
+    
     this.emit('');
 
     // Module imports -> #includes
@@ -199,6 +205,23 @@ export class CppCodegen {
       .replace(/-gs\.(tsx?)|\.gs$/, '')
       .replace(/[\/\.\-]/g, '_')  // Replace slashes, dots, and dashes with underscores
       .toUpperCase() + '_HPP_';
+  }
+
+  private moduleUsesAsync(module: IRModule): boolean {
+    // Check if any function or method is async
+    for (const decl of module.declarations) {
+      if (decl.kind === 'function' && decl.async) {
+        return true;
+      }
+      if (decl.kind === 'class') {
+        for (const method of decl.methods) {
+          if (method.async) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
   }
 
   private generateHeaderDeclaration(decl: IRDeclaration): void {
@@ -345,7 +368,7 @@ export class CppCodegen {
     
     this.emit(`${returnType} ${this.sanitizeIdentifier(func.name)}(${params}) {`);
     this.indent++;
-    this.generateFunctionBody(func.body);
+    this.generateFunctionBody(func.body, func.async);
     this.indent--;
     this.emit('}');
   }
@@ -386,7 +409,7 @@ export class CppCodegen {
       
       this.emit(`${returnType} ${staticMod}${this.sanitizeIdentifier(method.name)}(${params}) {`);
       this.indent++;
-      this.generateFunctionBody(method.body);
+      this.generateFunctionBody(method.body, method.async);
       this.indent--;
       this.emit('}');
       
@@ -403,7 +426,11 @@ export class CppCodegen {
   /**
    * Generate C++ code from AST-level function body
    */
-  private generateFunctionBody(body: IRFunctionBody | IRBlock): void {
+  private generateFunctionBody(body: IRFunctionBody | IRBlock, isAsync?: boolean): void {
+    // Track if we're in an async function for co_return vs return
+    const wasAsync = this.isAsyncContext;
+    this.isAsyncContext = isAsync ?? false;
+    
     // Support both old IRBlock format (from tests) and new IRFunctionBody format
     if ('statements' in body) {
       // New AST-level format
@@ -417,6 +444,8 @@ export class CppCodegen {
       }
       this.generateTerminator(body.terminator);
     }
+    
+    this.isAsyncContext = wasAsync;
   }
 
   /**
@@ -442,9 +471,11 @@ export class CppCodegen {
       
       case 'return':
         if (stmt.value) {
-          this.emit(`return ${this.generateExpression(stmt.value)};`);
+          const returnKeyword = this.isAsyncContext ? 'co_return' : 'return';
+          this.emit(`${returnKeyword} ${this.generateExpression(stmt.value)};`);
         } else {
-          this.emit('return;');
+          const returnKeyword = this.isAsyncContext ? 'co_return' : 'return';
+          this.emit(`${returnKeyword};`);
         }
         break;
       
@@ -622,6 +653,11 @@ export class CppCodegen {
           return `gs::typeOf(${operand})`;
         }
         return `(${expr.operator}${operand})`;
+      }
+      
+      case 'await': {
+        const expression = this.generateExpression(expr.expression);
+        return `co_await ${expression}`;
       }
       
       case 'call': {
@@ -1023,9 +1059,8 @@ export class CppCodegen {
       case 'map':
         return `gs::Map<${this.generateCppType(type.key)}, ${this.generateCppType(type.value)}>`;
       case 'promise':
-        // Promise<T> → cppcoro::task<T> (for now, placeholder)
-        // TODO: Implement proper Promise runtime with cppcoro
-        return `gs::Promise<${this.generateCppType(type.resultType)}>`;
+        // Promise<T> → cppcoro::task<T>
+        return `cppcoro::task<${this.generateCppType(type.resultType)}>`;
       case 'function': {
         const params = type.params.map(p => this.generateCppType(p)).join(', ');
         return `std::function<${this.generateCppType(type.returnType)}(${params})>`;
