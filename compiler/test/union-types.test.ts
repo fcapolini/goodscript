@@ -198,6 +198,24 @@ describe('Union Types', () => {
     });
   });
 
+  describe('Step 6: Demo Compilation', () => {
+    it('should compile union-types-demo-gs.ts without errors', () => {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const demoPath = path.join(__dirname, '../../examples/union-types-demo-gs.ts');
+      const source = fs.readFileSync(demoPath, 'utf-8');
+      
+      // Should compile without throwing
+      expect(() => {
+        const cpp = compileToCpp(source);
+        expect(cpp).toContain('maybeGetName');
+        expect(cpp).toContain('findNumber');
+        expect(cpp).toContain('getFromMap');
+      }).not.toThrow();
+    });
+  });
+
   describe('Edge Cases', () => {
     it('should handle union with duplicate types', () => {
       const union = types.union([

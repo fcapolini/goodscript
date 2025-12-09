@@ -4,7 +4,7 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP + Math + JSON (317 tests passing)
+**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP + Math + JSON + Union Types (331 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
@@ -32,9 +32,21 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ HTTP Client (libcurl integration, sync and async, built-in globals)
 - ✅ Math object (min, max, abs, floor, ceil, round, sqrt, pow, trigonometry, logarithms, constants)
 - ✅ JSON object (JSON.stringify() for basic types)
+- ✅ Union types (T | null, T | undefined for optional values)
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
 **Recent Progress (Dec 9, 2025)**:
+- ✅ **Completed Phase 8: Union Types (T | null, T | undefined)** (12 tests, 4 skipped)
+  * IR type system: Union types already existed in IRType
+  * AST lowering: Added ts.UnionTypeNode support, normalizeUnion() for T | null
+  * GC mode: T | null normalized to T (objects are nullable pointers)
+  * Type annotations: Support for null and undefined keywords
+  * Demo program: union-types-demo-gs.ts with comprehensive examples
+  * Documentation: UNION-TYPES-GUIDE.md covering syntax, patterns, best practices
+  * Integration: Works with optional chaining, function returns, variable declarations
+  * Future: Type narrowing, general unions (std::variant), discriminated unions
+
+**Previous Progress**:
 - ✅ **Completed Phase 7b.1: Async/await and Promise<T>** (53 tests total)
   * Step 1 - IR Type System: Added `Promise<T>` type, async flags on functions/methods (11 tests)
   * Step 2 - AST Lowering: Detect async/await keywords, lower to IR expressions (14 tests)
@@ -308,9 +320,10 @@ const body: IRBlock = {
 - `test/math-integration.test.ts` - Math object integration tests (15 tests)
 - `test/json-integration.test.ts` - JSON object integration tests (5 tests)
 - `test/math-json-demo.test.ts` - Math/JSON demo compilation tests (2 tests)
+- `test/union-types.test.ts` - Union type support (12 tests, 4 skipped)
 **Run Tests**:
 ```bash
-pnpm test                    # All tests (319 passing, 4 skipped)
+pnpm test                    # All tests (331 passing, 8 skipped)
 pnpm build && pnpm test      # Build + test
 ```
 

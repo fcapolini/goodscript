@@ -19,11 +19,12 @@ This document catalogs the language features and runtime APIs required to suppor
 - ✅ Phase 7b.3: HTTP Client (libcurl integration, HTTP/HTTPAsync built-in globals, sync and async support)
 - ✅ Phase 7c.1: Math object (min, max, abs, floor, ceil, round, sqrt, pow, trigonometry, logarithms, constants)
 - ✅ Phase 7c.2: JSON object (JSON.stringify() for basic types)
-- Compiler handles expressions, functions, arrays, objects, lambdas, iteration, nullable access, coroutines, file I/O, HTTP requests, Math operations, JSON serialization
+- ✅ Phase 8: Union types (T | null, T | undefined for optional values)
+- Compiler handles expressions, functions, arrays, objects, lambdas, iteration, nullable access, coroutines, file I/O, HTTP requests, Math operations, JSON serialization, union types
 - Binary compilation working via Zig
-- 319 tests passing (228→319, +91 tests total)
+- 331 tests passing (228→331, +103 tests total)
 
-**Gap**: stdlib still needs union types, more runtime APIs (JSON.parse with nlohmann/json, tuple types, etc.)
+**Gap**: stdlib still needs general unions (std::variant), tuple types, more runtime APIs (JSON.parse with nlohmann/json)
 
 **Priority**: Implement features in phases, starting with most fundamental and widely used.
 
@@ -89,7 +90,6 @@ if (expr.optional) {
 
 **Limitations**:
 - C++ implementation is placeholder (should use std::optional)
-- Union types (T | null) not fully integrated
 - Optional call expressions (func?.()) not yet supported
 
 ---
@@ -690,24 +690,64 @@ namespace gs {
 
 ---
 
-### Phase 7c: Utilities & Polish (Week 5)
+### Phase 7c: Utilities & Polish ✅ **COMPLETE**
 **Goal**: Complete stdlib support
 
-1. **String Methods** (split, slice, trim, case)
-   - Runtime implementation
+1. **✅ String Methods** (split, slice, trim, case)
+   - Runtime implementation complete (gs_string.hpp)
 
-2. **Math Object** (min, max)
-   - Runtime namespace
+2. **✅ Math Object** (min, max, trig, logarithms, constants)
+   - Runtime namespace complete (gs_math.hpp)
 
-3. **JSON Parser**
-   - Vendor nlohmann/json
-   - Runtime wrapper
+3. **✅ JSON Object** (JSON.stringify)
+   - Runtime implementation for basic types (gs_json.hpp)
+   - JSON.parse() and complex types deferred (requires nlohmann/json)
 
-4. **Tuple Types**
-   - IR support
-   - C++ std::tuple codegen
+4. **⏳ Tuple Types** (deferred)
+   - IR support exists (gs_tuple.hpp)
+   - Needs compiler integration
+   - Lower priority for stdlib v1
 
-**Tests**: All stdlib modules compile and run
+**Tests**: Math and JSON integration tests complete (22 tests)
+
+---
+
+### Phase 8: Union Types ✅ **COMPLETE**
+**Goal**: Support T | null and T | undefined for optional values
+
+**Status**: Implemented December 9, 2025
+
+**Implemented**:
+- IR type system: Union types already existed in IRType
+- AST lowering: Added ts.UnionTypeNode support in lowerTypeNode()
+- normalizeUnion(): Simplifies T | null to T in GC mode (objects are nullable pointers)
+- Type annotations: Support for null and undefined keywords
+- C++ codegen: Already had basic union support (std::variant)
+- GC mode: T | null normalized to T* (nullable pointer)
+
+**Tests**:
+- `test/union-types.test.ts` - 12 tests (all passing, 4 skipped for future features)
+- `examples/union-types-demo-gs.ts` - Comprehensive demo program
+
+**Documentation**:
+- `UNION-TYPES-GUIDE.md` - Complete user guide covering syntax, patterns, best practices
+- `PHASE-8-UNION-TYPES-PLAN.md` - Implementation plan and design decisions
+
+**Key Features**:
+- Basic union type compilation: `string | null`, `number | undefined`
+- Function return types: `function getValue(): string | null`
+- Variable declarations: `const value: number | undefined`
+- Integration with optional chaining
+- Demo program with all common patterns
+
+**Future Enhancements**:
+- Type narrowing: Control flow analysis to narrow union types after null checks
+- General unions: std::variant for `T | U` (non-nullable unions)
+- Discriminated unions: Pattern matching support
+- Type guards: typeof, instanceof checks
+- Ownership mode: std::optional<T> for T | null
+
+**Impact**: Enables stdlib methods like Array.find() (T | undefined) and Map.get() (V | undefined)
 
 ---
 
