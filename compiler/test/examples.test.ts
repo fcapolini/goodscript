@@ -24,8 +24,27 @@ describe('Examples', () => {
   // Note: These tests validate TypeScript → IR → C++ compilation.
   // They do not test binary compilation or execution, which is covered by CLI tests.
   
-  describe.skip('01-hello-world', () => {
-    // Skip: uses main1-gs.ts instead of main-gs.ts (original example)
+  describe('01-hello-world', () => {
+    it('should compile to C++', () => {
+      const mainFile = path.join(EXAMPLES_DIR, '01-hello-world', 'src/main-gs.ts');
+      const program = createProgram([mainFile]);
+      const sourceFile = program.getSourceFile(mainFile);
+      expect(sourceFile).toBeTruthy();
+      
+      const validator = new Validator();
+      const diagnostics = validator.validate(sourceFile!);
+      expect(diagnostics.filter(d => d.severity === 'error').length).toBe(0);
+      
+      const lowering = new IRLowering();
+      const irProgram = lowering.lower(program);
+      
+      const codegen = new CppCodegen();
+      const cppFiles = codegen.generate(irProgram, 'gc', false);
+      expect(cppFiles.size).toBeGreaterThan(0);
+      
+      const cppContent = Array.from(cppFiles.values()).join('\n');
+      expect(cppContent).toContain('Hello, GoodScript!');
+    });
   });
 
   describe('02-variables-and-types', () => {
