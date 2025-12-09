@@ -275,10 +275,12 @@ export function mergeOptions(cliOptions: CliOptions, configPath?: string): CliOp
   
   return {
     ...tsConfigOptions,
-    ...cliOptions,
+    ...Object.fromEntries(
+      Object.entries(cliOptions).filter(([_, v]) => v !== undefined)
+    ),
     // Files are only from CLI, not tsconfig
     files: cliOptions.files,
-  };
+  } as CliOptions;
 }
 
 /**
