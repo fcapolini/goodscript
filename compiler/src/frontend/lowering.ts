@@ -961,6 +961,16 @@ export class IRLowering {
         return types.boolean();
       case ts.SyntaxKind.VoidKeyword:
         return types.void();
+      case ts.SyntaxKind.NullKeyword:
+        return types.nullable(types.void());
+      case ts.SyntaxKind.UndefinedKeyword:
+        return types.void();
+    }
+
+    // Handle union types (A | B)
+    if (ts.isUnionTypeNode(typeNode)) {
+      const types_arr = typeNode.types.map(t => this.lowerTypeNode(t, sourceFile));
+      return this.normalizeUnion(types_arr);
     }
 
     if (ts.isTypeReferenceNode(typeNode)) {
@@ -1008,6 +1018,29 @@ export class IRLowering {
     }
 
     return types.void();
+  }
+
+  /**
+   * Normalize a union type to simplify common patterns
+   */
+  private normalizeUnion(unionTypes: IRType[]): IRType {
+    // For now, special handling for T | null and T | undefined
+    // Full normalization (flattening, deduplication) can come later
+    
+    // Check if this is a T | null pattern
+    const nonNullTypes = unionTypes.filter(t => 
+      !(t.kind === 'nullable' && t.inner.kind === 'primitive' && t.inner.type === PrimitiveType.Void)
+    );
+    
+    const hasNull = unionTypes.length > nonNullTypes.length;
+    
+    // If T | null, just return T (in GC mode, all objects are nullable by default)
+    if (hasNull && nonNullTypes.length === 1) {
+      return nonNullTypes[0];
+    }
+    
+    // Otherwise return the full union
+    return types.union(unionTypes);
   }
 
   private lowerType(decl: ts.VariableDeclaration, sourceFile: ts.SourceFile): IRType {
