@@ -50,7 +50,8 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
   * Documentation: FILESYSTEM-API-GUIDE.md with complete API reference and examples
   * End-to-end execution test: Full pipeline TypeScript → IR → C++ → Binary → Execution
   * Requires GS_ENABLE_FILESYSTEM flag for compilation
-- All 292 tests passing (228 → 292, +64 tests total)
+  * Fixed struct field access codegen bug (size/length on structs vs Map/Array)
+- All 294 tests passing (228 → 294, +66 tests total)
 
 ## Architecture
 
@@ -258,7 +259,7 @@ const body: IRBlock = {
 ```
 
 ## Testing
-**Current Test Suite (292 tests)**:
+**Current Test Suite (294 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (14 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
@@ -280,9 +281,10 @@ const body: IRBlock = {
 - `test/async-integration.test.ts` - async/await integration tests (11 tests)
 - `test/filesystem.test.ts` - FileSystem built-in API (9 tests)
 - `test/filesystem-demo.test.ts` - FileSystem demo compilation and execution (2 tests)
+- `test/member-access.test.ts` - Member access codegen (struct fields vs Map/Array methods) (2 tests)
 **Run Tests**:
 ```bash
-pnpm test                    # All tests (292 passing, 3 skipped)
+pnpm test                    # All tests (294 passing, 3 skipped)
 pnpm build && pnpm test      # Build + test
 ```
 
