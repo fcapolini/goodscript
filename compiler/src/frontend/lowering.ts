@@ -1134,17 +1134,13 @@ export class IRLowering {
 
   private inferType(node: ts.Node): IRType {
     const tsType = this.typeChecker.getTypeAtLocation(node);
-    return this.convertTsTypeToIRType(tsType);
+    // Create a fresh visited set for each top-level type conversion
+    return this.convertTsTypeToIRType(tsType, new Set());
   }
 
   private convertTsTypeToIRType(tsType: ts.Type, visited: Set<ts.Type> = new Set()): IRType {
-    // Cycle detection to prevent infinite recursion
-    if (visited.has(tsType)) {
-      return types.void(); // Break cycles
-    }
-    visited.add(tsType);
-    
-    // Check primitive types first
+    // Check primitive types FIRST to avoid adding them to visited
+    // TypeScript reuses primitive type objects globally, so adding them to visited causes false cycles
     if (tsType.flags & ts.TypeFlags.Number) {
       return types.number();
     }
@@ -1157,6 +1153,18 @@ export class IRLowering {
     if (tsType.flags & ts.TypeFlags.Void) {
       return types.void();
     }
+    if (tsType.flags & ts.TypeFlags.Undefined) {
+      return types.void(); // Treat undefined as void in IR
+    }
+    if (tsType.flags & ts.TypeFlags.Null) {
+      return types.void(); // Treat null as void in IR (will be enhanced with ownership system)
+    }
+    
+    // Cycle detection for STRUCTURAL types only (functions, objects, etc.)
+    if (visited.has(tsType)) {
+      return types.void(); // Break cycles
+    }
+    visited.add(tsType);
     
     // Check for function types (call signatures)
     const callSignatures = tsType.getCallSignatures();
@@ -1166,7 +1174,8 @@ export class IRLowering {
         const paramType = this.typeChecker.getTypeOfSymbolAtLocation(param, param.valueDeclaration!);
         return this.convertTsTypeToIRType(paramType, visited);
       });
-      const returnType = this.convertTsTypeToIRType(signature.getReturnType(), visited);
+      const tsReturnType = signature.getReturnType();
+      const returnType = this.convertTsTypeToIRType(tsReturnType, visited);
       return types.function(params, returnType);
     }
     
