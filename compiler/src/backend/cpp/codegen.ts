@@ -204,6 +204,17 @@ export class CppCodegen {
       this.emit('');
     }
 
+    // Lambda literal definitions (inline in header since they can't be forward-declared)
+    // Only emit lambda literals, not function calls that return lambdas
+    for (const decl of module.declarations) {
+      if (decl.kind === 'const' && decl.type.kind === 'function' && decl.value.kind === 'lambda') {
+        this.emit(`inline auto ${this.sanitizeIdentifier(decl.name)} = ${this.generateExpr(decl.value)};`);
+      }
+    }
+    if (module.declarations.some(d => d.kind === 'const' && d.type.kind === 'function' && d.value.kind === 'lambda')) {
+      this.emit('');
+    }
+
     // Close namespace
     for (let i = this.currentNamespace.length - 1; i >= 0; i--) {
       this.emit(`}  // namespace ${this.currentNamespace[i]}`);
@@ -252,13 +263,25 @@ export class CppCodegen {
         this.generateHeaderInterface(decl);
         break;
       case 'const':
-        this.generateHeaderConst(decl);
+        // Emit header declarations for non-lambda function constants
+        // Lambda literals are emitted inline later, so skip them here
+        if (decl.type.kind === 'function' && decl.value.kind !== 'lambda') {
+          // Function-type const that's not a lambda literal (e.g., result of function call)
+          // Use std::function wrapper for extern declaration
+          const funcType = this.generateCppType(decl.type);
+          this.emit(`extern ${funcType} ${this.sanitizeIdentifier(decl.name)};`);
+        } else if (decl.type.kind !== 'function') {
+          // Regular (non-function) constants
+          this.generateHeaderConst(decl);
+        }
+        // Lambda literals are emitted inline after declarations
         break;
     }
   }
 
   private generateHeaderFunction(func: IRFunctionDecl): void {
-    const returnType = this.generateCppType(func.returnType);
+    // For functions returning lambdas, use auto to avoid std::function overhead
+    const returnType = func.returnType.kind === 'function' ? 'auto' : this.generateCppType(func.returnType);
     const params = func.params.map(p => this.generateParam(p)).join(', ');
     this.emit(`${returnType} ${this.sanitizeIdentifier(func.name)}(${params});`);
   }
@@ -325,7 +348,11 @@ export class CppCodegen {
   }
 
   private generateHeaderConst(constDecl: any): void {
-    this.emit(`extern const ${this.generateCppType(constDecl.type)} ${this.sanitizeIdentifier(constDecl.name)};`);
+    // For function types (lambdas), use auto since lambda types can't be expressed explicitly
+    const typeStr = constDecl.type.kind === 'function' 
+      ? 'auto' 
+      : `const ${this.generateCppType(constDecl.type)}`;
+    this.emit(`extern ${typeStr} ${this.sanitizeIdentifier(constDecl.name)};`);
   }
 
   // ========================================================================
@@ -394,13 +421,20 @@ export class CppCodegen {
         this.generateSourceClass(decl);
         break;
       case 'const':
-        this.generateSourceConst(decl);
+        // Emit lambda literals in header (inline), but function-type const variables
+        // that are initialized with function calls need to be in the source file
+        if (decl.type.kind === 'function' && decl.value.kind === 'lambda') {
+          // Skip - already emitted inline in header
+        } else {
+          this.generateSourceConst(decl);
+        }
         break;
     }
   }
 
   private generateSourceFunction(func: IRFunctionDecl): void {
-    const returnType = this.generateCppType(func.returnType);
+    // For functions returning lambdas, use auto to avoid std::function overhead
+    const returnType = func.returnType.kind === 'function' ? 'auto' : this.generateCppType(func.returnType);
     const params = func.params.map(p => this.generateCppParam(p)).join(', ');
     
     // Emit source location for function declaration
@@ -460,7 +494,14 @@ export class CppCodegen {
   }
 
   private generateSourceConst(constDecl: any): void {
-    this.emit(`const ${this.generateCppType(constDecl.type)} ${this.sanitizeIdentifier(constDecl.name)} = ${this.generateExpr(constDecl.value)};`);
+    // For function types that aren't lambda literals, use std::function to match header
+    // Lambda literals use auto and are emitted inline in header
+    const typeStr = (constDecl.type.kind === 'function' && constDecl.value.kind !== 'lambda')
+      ? this.generateCppType(constDecl.type)
+      : (constDecl.type.kind === 'function')
+        ? 'auto'
+        : `const ${this.generateCppType(constDecl.type)}`;
+    this.emit(`${typeStr} ${this.sanitizeIdentifier(constDecl.name)} = ${this.generateExpr(constDecl.value)};`);
   }
 
   /**
@@ -888,6 +929,9 @@ export class CppCodegen {
         // Generate C++ lambda with auto return type (C++ will infer it)
         const params = expr.params.map(p => `${this.generateCppType(p.type)} ${this.sanitizeIdentifier(p.name)}`).join(', ');
         
+        // Generate capture list
+        const captureList = expr.captures.map(c => this.sanitizeIdentifier(c.name)).join(', ');
+        
         // Generate lambda body (IRBlock format)
         const savedOutput = this.output;
         const savedIndent = this.indent;
@@ -903,7 +947,7 @@ export class CppCodegen {
         this.output = savedOutput;
         this.indent = savedIndent;
         
-        return `[](${params}) {\n${bodyCode}\n}`;
+        return `[${captureList}](${params}) {\n${bodyCode}\n}`;
       }
 
       default:
@@ -1134,9 +1178,14 @@ export class CppCodegen {
     // Generate C++ lambda: [captures](params) -> returnType { body }
     const params = lambda.params.map(p => `${this.generateCppType(p.type)} ${this.sanitizeIdentifier(p.name)}`).join(', ');
     
-    // For now, capture everything by value (simple approach)
-    // TODO: Proper capture analysis for optimization
-    const capture = lambda.captures.length > 0 ? '=' : '';
+    // Generate explicit capture list
+    // Capture by value for primitives and stack values, by reference for heap types
+    const captureList = lambda.captures.map(c => {
+      const name = this.sanitizeIdentifier(c.name);
+      // Capture by value (copy) - C++ will handle copying correctly
+      return name;
+    }).join(', ');
+    const capture = captureList || '';
     
     // Check for simple expression body (no instructions, just return)
     if (lambda.body.instructions.length === 0 && lambda.body.terminator.kind === 'return' && lambda.body.terminator.value) {

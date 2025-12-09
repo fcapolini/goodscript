@@ -61,10 +61,12 @@ export class IRLowering {
       if (!decl) return null;
 
       const name = decl.name.getText(sourceFile);
-      const type = this.lowerType(decl, sourceFile);
       const init = decl.initializer ? this.lowerExpr(decl.initializer, sourceFile) : null;
 
       if (!init) return null;
+
+      // Prefer explicit type annotation, fall back to initializer's type
+      const type = decl.type ? this.lowerTypeNode(decl.type, sourceFile) : init.type;
 
       return {
         kind: 'const',
@@ -844,12 +846,61 @@ export class IRLowering {
     return expr.literal(null, types.void());
   }
 
+  /**
+   * Analyze lambda body to find variables that need to be captured
+   */
+  private analyzeLambdaCaptures(
+    node: ts.ArrowFunction,
+    sourceFile: ts.SourceFile,
+    params: Array<{ name: string; type: IRType }>
+  ): Array<{ name: string; type: IRType }> {
+    const captures: Array<{ name: string; type: IRType }> = [];
+    const captureSet = new Set<string>();
+    const paramNames = new Set(params.map(p => p.name));
+
+    const visit = (node: ts.Node) => {
+      if (ts.isIdentifier(node)) {
+        const name = node.getText(sourceFile);
+        // Capture if:
+        // 1. Not a parameter
+        // 2. Not already captured
+        // 3. Not a global (console, etc.)
+        // 4. Has a binding in the type checker (is a local variable)
+        if (!paramNames.has(name) && !captureSet.has(name)) {
+          const symbol = this.typeChecker.getSymbolAtLocation(node);
+          if (symbol) {
+            const declarations = symbol.getDeclarations();
+            // Only capture if it's a local variable (not a global or built-in)
+            if (declarations && declarations.length > 0) {
+              const decl = declarations[0];
+              // Check if it's a parameter or variable declaration in an outer scope
+              if (ts.isParameter(decl) || ts.isVariableDeclaration(decl)) {
+                // Get the type and convert to IR type
+                const type = this.typeChecker.getTypeAtLocation(node);
+                const irType = this.convertTsTypeToIRType(type);
+                captures.push({ name, type: irType });
+                captureSet.add(name);
+              }
+            }
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+
+    visit(node.body);
+    return captures;
+  }
+
   private lowerArrowFunction(node: ts.ArrowFunction, sourceFile: ts.SourceFile): IRExpr {
     // Extract parameters
     const params = node.parameters.map(p => ({
       name: p.name.getText(sourceFile),
       type: this.lowerTypeNode(p.type, sourceFile),
     }));
+
+    // Analyze captures (free variables in the lambda body)
+    const captures = this.analyzeLambdaCaptures(node, sourceFile, params);
 
     // Lower the body
     let body: IRBlock;
@@ -860,10 +911,6 @@ export class IRLowering {
       const returnValue = this.lowerExpr(node.body, sourceFile);
       body = this.builder.block([], { kind: 'return', value: returnValue });
     }
-
-    // For now, assume no captures (simple lambdas only)
-    // TODO: Implement proper capture analysis for closures
-    const captures: Array<{ name: string; type: IRType }> = [];
 
     // Infer function type
     const paramTypes = params.map(p => p.type);
@@ -1026,6 +1073,13 @@ export class IRLowering {
       return types.array(element, Ownership.Value);
     }
 
+    // Function type: (x: number) => number
+    if (ts.isFunctionTypeNode(typeNode)) {
+      const params = typeNode.parameters.map(p => this.lowerTypeNode(p.type, sourceFile));
+      const returnType = this.lowerTypeNode(typeNode.type, sourceFile);
+      return types.function(params, returnType);
+    }
+
     return types.void();
   }
 
@@ -1102,6 +1156,18 @@ export class IRLowering {
     }
     if (tsType.flags & ts.TypeFlags.Void) {
       return types.void();
+    }
+    
+    // Check for function types (call signatures)
+    const callSignatures = tsType.getCallSignatures();
+    if (callSignatures && callSignatures.length > 0) {
+      const signature = callSignatures[0];
+      const params = signature.getParameters().map(param => {
+        const paramType = this.typeChecker.getTypeOfSymbolAtLocation(param, param.valueDeclaration!);
+        return this.convertTsTypeToIRType(paramType, visited);
+      });
+      const returnType = this.convertTsTypeToIRType(signature.getReturnType(), visited);
+      return types.function(params, returnType);
     }
     
     // Check for array types (BEFORE general Object check!)
