@@ -702,10 +702,15 @@ export class CppCodegen {
           return `gs::console::${member}`;
         }
         
-        // In C++, some properties are actually methods that need ()
-        // Map.size, Array.length are methods in our C++ runtime
-        const isMethodProperty = member === 'size' || member === 'length';
-        const accessExpr = isMethodProperty ? `${member}()` : member;
+        // In C++, Map.size and Array.length are methods that need ()
+        // Only apply this for actual Map and Array types, not for struct fields
+        let accessExpr = member;
+        if (member === 'size' || member === 'length') {
+          const objectType = expr.object.type;
+          // Check if the object type is a Map or Array
+          const isMapOrArray = objectType.kind === 'map' || objectType.kind === 'array';
+          accessExpr = isMapOrArray ? `${member}()` : member;
+        }
         
         // Optional chaining: obj?.field becomes (obj != nullptr ? obj->field : nullptr)
         // For now, we'll use a simpler approach: obj != nullptr && obj.field
@@ -916,9 +921,13 @@ export class CppCodegen {
         if (obj === 'FileSystem' || obj === 'FileSystemAsync') {
           return `gs::${obj}::${expr.member}`;
         }
-        // Special case: array.length and string.length are methods in C++
+        // Special case: Map.size and Array.length are methods in C++
+        // Only apply this for actual Map/Array types, not for struct fields
+        const objType = expr.object.type;
+        if (expr.member === 'size' && objType.kind === 'map') {
+          return `${obj}.size()`;
+        }
         if (expr.member === 'length') {
-          const objType = expr.object.type;
           if (objType.kind === 'array' || (objType.kind === 'primitive' && objType.type === PrimitiveType.String)) {
             return `${obj}.length()`;
           }

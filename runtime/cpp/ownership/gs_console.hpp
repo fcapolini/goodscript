@@ -138,6 +138,10 @@ private:
     std::cout << value;
   }
   
+  static void log_impl(int64_t value) {
+    std::cout << value;
+  }
+  
   static void log_impl(double value) {
     std::cout << value;
   }

@@ -156,8 +156,9 @@ describe('FileSystem Simple Demo', () => {
     expect(output).toContain('Read content:');
     expect(output).toContain('Hello from GoodScript!');
     expect(output).toContain('File exists:');
-    expect(output).toContain('Got file info');
+    expect(output).toContain('File info:');
     expect(output).toContain('test.txt');
+    expect(output).toContain('Size:');
     expect(output).toContain('Demo complete!');
 
     // Verify files were created

@@ -21,8 +21,10 @@ function testBasicOperations(): void {
   console.log(exists);
   
   const info = FileSystem.stat('test.txt');
-  console.log('Got file info');
+  console.log('File info:');
   console.log(info.path);
+  console.log('Size:');
+  console.log(info.size);
   
   console.log('');
   console.log('Demo complete!');
