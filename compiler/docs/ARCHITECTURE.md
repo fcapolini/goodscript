@@ -1,10 +1,20 @@
 # GoodScript Compiler Architecture
 
-**Version:** 0.12.0
+**Version:** 0.12.9
 
 ## Overview
 
 The GoodScript compiler is a multi-phase compiler that transforms TypeScript source code into either native C++ code or transpiled JavaScript, with comprehensive static analysis and optimization. It supports ES module syntax for proper code organization and reusability.
+
+**Recent Improvements (v0.12.9)**:
+- **Full async/await support**: Promise<T> with cppcoro integration
+- **FileSystem API**: Sync and async file I/O operations
+- **Runtime library**: Comprehensive built-in globals (Math, JSON, String, Array, Map, Promise, FileSystem)
+- **Automatic type conversions**: Number-to-string in concatenation operations
+- **Exception handling**: try-catch-finally with proper code generation
+- **Statement lowering**: All statement types supported at top-level (not just expressions)
+- **Compile-time constant detection**: Distinguishes const declarations from runtime initialization
+- **394 tests passing**: Comprehensive test coverage across all phases
 
 ## Module System
 
@@ -295,10 +305,20 @@ interface Renderable { draw(): void; }
 
 **Handles**:
 - Declarations (functions, classes, interfaces, consts)
-- Expressions (literals, binary/unary, calls, members)
-- Type annotations (primitives, ownership, generics)
-- Control flow (if, while, for, switch, return)
+- Expressions (literals, binary/unary, calls, members, await)
+- Type annotations (primitives, ownership, generics, Promise<T>, union types)
+- Control flow (if, while, for, for-of, switch, return, try-catch-finally)
+- **Async/await**: Promise unwrapping and coroutine transformation
+- **Top-level statements**: All statement types including try-catch, for-of
+- **Compile-time detection**: Distinguishes const declarations from runtime init
 - **Source location tracking**: Preserve file/line/column for debugging
+
+**Key Features (v0.12.9)**:
+- **Async context tracking**: Tracks when inside async functions for Promise unwrapping
+- **Promise.resolve/reject unwrapping**: `return Promise.resolve(x)` → `return x` in async functions
+- **Statement type support**: try-catch-finally, for-of loops, all expression statements
+- **Runtime vs compile-time**: Detects if variable initializers need runtime execution
+- **Union types**: T | null and T | undefined for optional values
 
 **Source Location Tracking**:
 
@@ -332,6 +352,7 @@ IRProgram
 ├── IRModule[]
     ├── IRDeclaration[] (function, class, interface, const)
     ├── IRImport[]
+    ├── IRStatement[] (top-level init statements)
     └── IRExport[]
 ```
 
@@ -491,6 +512,39 @@ class Node {
   Node* next;  // ✅ GC handles cycles
 };
 ```
+
+**Built-in Globals**:
+
+The C++ codegen recognizes several built-in global objects and maps them to C++ namespaces:
+
+- `console` → `gs::Console::` (console.log, console.error, etc.)
+- `Math` → `gs::Math::` (Math.min, Math.max, Math.sqrt, etc.)
+- `JSON` → `gs::JSON::` (JSON.stringify)
+- `Promise` → `gs::Promise::` (Promise.resolve, Promise.reject)
+- `FileSystem` → `gs::FileSystem::` (FileSystem.readText, FileSystem.writeText, etc.)
+- `FileSystemAsync` → `gs::FileSystemAsync::` (returns Promise<T>)
+- `HTTP` → `gs::HTTP::` (HTTP.syncFetch)
+- `HTTPAsync` → `gs::HTTPAsync::` (HTTPAsync.fetch returning Promise<T>)
+- `String` → `std::string` (string methods as member functions)
+- `Array` → `std::vector<T>` (array methods as member functions)
+- `Map` → `std::unordered_map<K,V>` (Map methods as member functions)
+
+**Async/Await Support**:
+
+When async functions are detected, the codegen:
+1. Includes cppcoro headers: `#include "cppcoro/task.hpp"`
+2. Maps `Promise<T>` → `cppcoro::task<T>`
+3. Generates `co_return` for return statements in async functions
+4. Generates `co_await` for await expressions
+
+**Compilation Flags**:
+
+The Zig compiler integration automatically adds required flags:
+- `-DGS_ENABLE_FILESYSTEM` - Always defined (FileSystem API)
+- `-DGS_ENABLE_HTTP` - Disabled temporarily (curl has errors)
+- `-std=c++20` - Required for coroutines (co_await, co_return)
+
+**Implementation**: `src/backend/cpp/codegen.ts`
 
 #### Source Maps
 
@@ -792,8 +846,10 @@ The compiler automatically compiles vendored dependencies on-the-fly:
 2. **Compile vendored dependencies** (once per build, cached):
    - **MPS (GC mode only)**: `zig cc -O2 -c vendor/mps/src/mps.c -o build/mps.o` (~1-2s)
    - **PCRE2 (if RegExp used)**: `zig cc -O2 -DPCRE2_CODE_UNIT_WIDTH=8 -c vendor/pcre2/src/pcre2_all.c -o build/pcre2.o` (~2-3s)
-   - **cppcoro**: Header-only + 3 `.cpp` files for sync primitives
+   - **libcurl (if HTTP used)**: `zig cc -O2 -c vendor/curl/lib/curl_all.c -o build/curl.o` (~3-5s, currently disabled)
+   - **cppcoro**: Header-only + 3 `.cpp` files for sync primitives (~1s)
 3. **Compile GoodScript code**: `zig c++ -std=c++20 -O3 -c build/main.cpp -o build/main.o`
+
 **Vendored Dependencies** (in `compiler/vendor/`):
 
 | Library | Purpose | Version | License | Size |
@@ -801,17 +857,27 @@ The compiler automatically compiles vendored dependencies on-the-fly:
 | **MPS** | Garbage collection (GC mode) | 1.118.0 | BSD 2-clause | ~300KB |
 | **cppcoro** | Async/await via C++20 coroutines | andreasbuhr/cppcoro fork | MIT | Header-only + 3 files |
 | **PCRE2** | Regular expressions | 10.47 | BSD 3-clause | ~500KB |
+| **libcurl** | HTTP/HTTPS client library | 8.7.1 | MIT-like | ~2.8MB source |
 
-**Custom Runtime Headers** (in `compiler/runtime/`):
+**Custom Runtime Headers** (in `compiler/runtime/cpp/`):
 
-| Header | Purpose | Dependencies |
-|--------|---------|--------------|
-| **gs_ptr.hpp** | Thread-unsafe smart pointers (`own_ptr<T>`, `share_ptr<T>`) | C++17 |
-| **gs_worker.hpp** | Worker API and registry | C++20 threads |
-| **gs_timer.hpp** | Timer implementation (event queue) | C++20 threads |
-| **gs_eventloop.hpp** | Event loop with coroutine integration | cppcoro | ~300KB |
-| **cppcoro** | Async/await via C++20 coroutines | andreasbuhr/cppcoro fork | MIT | Header-only + 3 files |
-| **PCRE2** | Regular expressions | 10.47 | BSD 3-clause | ~500KB |
+| Header | Purpose | Dependencies | Mode |
+|--------|---------|--------------|------|
+| **gs_ptr.hpp** | Thread-unsafe smart pointers | C++17 | Both |
+| **gs_worker.hpp** | Worker API and registry | C++20 threads | Both |
+| **gs_timer.hpp** | Timer implementation | C++20 threads | Both |
+| **gs_eventloop.hpp** | Event loop with coroutine integration | cppcoro | Both |
+| **gs_console.hpp** | console.log and methods | - | GC mode |
+| **gs_json.hpp** | JSON.stringify | - | GC mode |
+| **gs_math.hpp** | Math object methods | `<cmath>` | Both |
+| **gs_filesystem.hpp** | FileSystem sync/async API | POSIX/Windows | Both |
+| **gs_http.hpp** | HTTP sync/async client | libcurl | Both |
+| **gs_regexp.hpp** | RegExp support | PCRE2 | Both |
+
+**Runtime Organization (v0.12.9)**:
+- `runtime/cpp/gc/` - GC mode implementations (c_str() API)
+- `runtime/cpp/ownership/` - Ownership mode implementations (str() API)
+- Shared utilities: filesystem, http, regexp work with both modes via macros
 
 **Why Vendored?**
 - ✅ Zero system dependencies (`npm i -g goodscript` just works)

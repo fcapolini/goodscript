@@ -1,6 +1,6 @@
-# GoodScript Compiler v0.12.3
+# GoodScript Compiler v0.12.9
 
-Complete TypeScript-to-C++/TypeScript compiler with binary compilation support.
+Complete TypeScript-to-C++/TypeScript compiler with binary compilation support and comprehensive runtime library.
 
 ## Installation
 
@@ -119,7 +119,7 @@ pnpm install
 # Build
 pnpm build
 
-# Test (149 tests)
+# Test (394 tests passing)
 pnpm test
 
 # Watch mode
@@ -128,25 +128,45 @@ pnpm dev
 
 ## Status
 
-✅ **Phases 1-6 Complete** (149 tests passing)
+✅ **Phases 1-8 Complete** (394 tests passing, 19 skipped)
 - ✅ Phase 1: Frontend (validator, parser)
 - ✅ Phase 2: Analysis (ownership, null checking, type signatures)
-- ✅ Phase 3: IR Lowering (AST → IR)
+- ✅ Phase 3: IR Lowering (AST → IR, statement types, async context)
 - ✅ Phase 4: Optimizer (constant folding, DCE)
-- ✅ Phase 5: Code Generation (C++)
-- ✅ Phase 6: Binary Compilation (Zig integration)
+- ✅ Phase 5: Code Generation (C++, string concat, async/await)
+- ✅ Phase 6: Binary Compilation (Zig + cppcoro integration)
+- ✅ Phase 7: Runtime Library (FileSystem, async/await, Math, JSON, String, Array, Map)
+- ✅ Phase 8: Union Types (T | null, T | undefined)
 - ✅ CLI Tool (`gsc` command - drop-in replacement for `tsc`)
 
-**Features**:
-- Command-line interface compatible with `tsc`
-- GoodScript-specific `--gs*` flags (e.g., `--gsTarget`, `--gsMemory`, `--gsCompile`)
-- tsconfig.json integration with `goodscript` section
-- Progressive toolchain (validation → C++ generation → binary compilation)
-- 368 tests passing (including 37 CLI tests)
+**Working Features**:
+- **Core Language**: Functions, lambdas, classes, arrays, maps, strings
+- **Async/await**: Full Promise<T> support with cppcoro
+- **Exception handling**: try-catch-finally
+- **File I/O**: FileSystem sync/async API
+- **Math operations**: All Math.* methods
+- **String operations**: Concatenation, slice, includes, split, trim, etc.
+- **Type safety**: Compile-time constant detection, union types
+- **Automatic conversions**: Number-to-string in concatenation
+- **Built-in globals**: console, Math, JSON, Promise, FileSystem, String, Array, Map
+
+**Working Examples** (8 out of 12):
+- ✅ 03-functions: Lambda captures, higher-order functions
+- ✅ 04-arrays: Array operations, methods, iteration
+- ✅ 05-maps: Map construction, get/set/delete, forEach
+- ✅ 06-strings: String methods and operations
+- ✅ 07-math: All Math methods + string concatenation
+- ✅ 08-exceptions: try-catch-finally error handling
+- ✅ 09-async-await: async/await with Promise handling
+- ✅ 10-file-io: FileSystem sync/async file operations
+
+**In Progress**:
+- ⏳ HTTP client (curl compilation issues)
+- ⏳ Object literals/structs (for classes example)
 
 **Next Steps**:
-- Runtime library implementation
-- Standard library porting
+- Fix curl compilation for HTTP support
+- Implement object literals/structs
 - Watch mode for `gsc`
 - IDE integration (LSP server)
 
