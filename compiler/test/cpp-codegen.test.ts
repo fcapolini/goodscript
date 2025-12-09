@@ -590,7 +590,7 @@ describe('C++ Codegen - Namespaces', () => {
     expect(header).toContain('namespace goodscript {');
     expect(header).toContain('namespace src {');
     expect(header).toContain('namespace math {');
-    expect(header).toContain('namespace vector {');
+    expect(header).toContain('namespace vector_ {');  // Sanitized: 'vector' is stdlib name
   });
 });
 

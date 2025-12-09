@@ -1,6 +1,6 @@
 {
   "name": "goodscript",
-  "version": "0.12.4",
+  "version": "0.12.8",
   "description": "GoodScript compiler - TypeScript to native code",
   "type": "module",
   "main": "./dist/index.js",

@@ -10,45 +10,45 @@
 #define GS_GC_MODE  // Define GS_GC_MODE for conditional compilation
 
 // MPS (Memory Pool System) garbage collector
-#include "gc/allocator.hpp"
-#include "gc/allocator-bump.hpp"  // Fast bump allocator for short-lived objects
+#include "allocator.hpp"
+#include "allocator-bump.hpp"  // Fast bump allocator for short-lived objects
 
 // Memory profiling (optional, enabled with -DGS_MEMORY_PROFILE)
 #ifdef GS_MEMORY_PROFILE
-#include "gc/memory-profile.hpp"
+#include "memory-profile.hpp"
 #endif
 
 // GC runtime types (must be included BEFORE common files)
-#include "gc/string.hpp"
-#include "gc/string-builder.hpp"
-#include "gc/array.hpp"
-#include "gc/map.hpp"
-#include "gc/set.hpp"
-#include "gc/number.hpp"
-#include "gc/date.hpp"
-#include "gc/error.hpp"
-#include "gc/promise.hpp"  // Promise wrapper for async operations
-#include "gc/iterator.hpp"
-#include "gc/timer.hpp"
-#include "gc/process.hpp"
-#include "gc/console.hpp"
-#include "gc/math.hpp"
-#include "gc/json.hpp"
+#include "string.hpp"
+#include "string-builder.hpp"
+#include "array.hpp"
+#include "map.hpp"
+#include "set.hpp"
+#include "number.hpp"
+#include "date.hpp"
+#include "error.hpp"
+#include "promise.hpp"  // Promise wrapper for async operations
+#include "iterator.hpp"
+#include "timer.hpp"
+#include "process.hpp"
+#include "console.hpp"
+#include "math.hpp"
+#include "json.hpp"
 
 // FileSystem support (requires std::filesystem)
 // Not available on wasm32-wasi and some embedded platforms
 #ifdef GS_ENABLE_FILESYSTEM
-#include "gc/filesystem.hpp"
+#include "filesystem.hpp"
 #endif
 
 // HTTP support (requires libcurl)
 #ifdef GS_ENABLE_HTTP
-#include "gc/http.hpp"
+#include "http.hpp"
 #endif
 
 // RegExp support (requires PCRE2 library)
 #ifdef GS_ENABLE_REGEXP
-#include "gc/regexp.hpp"
+#include "regexp.hpp"
 #else
 // Stub RegExp class when PCRE2 not available
 namespace gs {

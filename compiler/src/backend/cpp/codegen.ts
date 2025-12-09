@@ -111,13 +111,15 @@ export class CppCodegen {
     const parts = modulePath
       .replace(/-gs\.(tsx?)|\.(gs|js|tsx?)$/, '')
       .split('/')
+      .filter(part => part.length > 0)  // Remove empty parts (e.g., from leading /)
       .map(part => {
         let name = part.replace(/-/g, '_');
         // Prefix with underscore if starts with digit
         if (/^\d/.test(name)) {
           name = '_' + name;
         }
-        return name;
+        // Sanitize to avoid C++ reserved keywords
+        return this.sanitizeIdentifier(name);
       });
     return ['goodscript', ...parts];
   }
