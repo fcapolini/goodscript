@@ -38,6 +38,11 @@
 #include "gs_filesystem.hpp" // Filesystem operations (FileSystem, FileSystemAsync)
 #endif
 
+// HTTP support (requires libcurl)
+#ifdef GS_ENABLE_HTTP
+#include "gs_http.hpp"       // HTTP client (HTTP, HTTPAsync)
+#endif
+
 // RegExp support (requires PCRE2 library)
 #ifdef GS_ENABLE_REGEXP
 #include "gs_regexp.hpp"     // Regular expression support (RegExp)

@@ -64,6 +64,12 @@
 #include "gs_filesystem.hpp"
 #endif
 
+// HTTP support (requires libcurl)
+// Define GS_ENABLE_HTTP to include HTTP support
+#ifdef GS_ENABLE_HTTP
+#include "gs_http.hpp"
+#endif
+
 // RegExp support (requires PCRE2 library)
 // Define GS_ENABLE_REGEXP and link with: -lpcre2-8
 #ifdef GS_ENABLE_REGEXP

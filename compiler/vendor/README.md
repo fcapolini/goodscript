@@ -205,12 +205,67 @@ npm test test/phase3/runtime-regexp.test.ts
 npm test test/phase3/concrete-examples  # Tests that use RegExp
 ```
 
+## libcurl
+
+**Version:** 8.7.1  
+**License:** MIT-like (curl license)  
+**Source:** https://curl.se/  
+**Purpose:** HTTP/HTTPS client for stdlib HTTP module
+
+### Files Included
+
+- `lib/*.c` - All libcurl source files (133 files, ~2.8MB)
+- `lib/*.h` - All libcurl headers (145 files)
+- `include/curl/*.h` - Public API headers
+- `lib/curl_config.h` - **CUSTOM**: Minimal configuration for GoodScript
+- `LICENSE` - curl license
+
+### Why Vendored?
+
+libcurl is vendored to:
+1. Enable HTTP/HTTPS support in stdlib
+2. Eliminate need for system libcurl installation
+3. Work on all platforms (macOS, Linux, Windows)
+4. Simplify to just `npm i -g goodscript`
+
+### Configuration
+
+Custom minimal configuration (`lib/curl_config.h`):
+- **Enabled**: HTTP and HTTPS only
+- **Disabled**: FTP, SMTP, IMAP, POP3, LDAP, cookies, proxy, etc.
+- **SSL**: macOS (Secure Transport), Windows (Schannel), Linux (HTTP-only or OpenSSL)
+
+### Build Process
+
+```bash
+# Compiled on-the-fly via Zig
+zig cc -std=c99 -O2 -DHAVE_CONFIG_H -DCURL_STATICLIB \
+  -I vendor/curl/include -I vendor/curl/lib \
+  -c vendor/curl/lib/*.c -o build/curl.o
+
+# Link with program
+zig c++ build/program.o build/curl.o -o program
+```
+
+Compilation takes ~5-10 seconds, cached for subsequent builds.
+
+### Modifications
+
+- `lib/curl_config.h` - Custom minimal config (created by GoodScript)
+- All other files unmodified from curl 8.7.1
+
+### Updating
+
+See `curl/README.md` for update instructions.
+
+---
+
 ## License Compliance
 
-All vendored dependencies are under permissive licenses (MIT, BSD) that allow:
+All vendored dependencies are under permissive licenses (MIT, BSD, curl-license) that allow:
 - ✅ Use in commercial software
 - ✅ Bundling/redistribution
-- ✅ Modification (though we don't modify)
+- ✅ Modification (though we minimize modifications)
 
 See each dependency's LICENSE file for full terms.
 

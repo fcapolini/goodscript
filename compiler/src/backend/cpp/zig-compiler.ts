@@ -157,6 +157,15 @@ export class ZigCompiler {
         sourceFile = path.join(this.vendorDir, 'pcre2/src/pcre2_all.c');
         flags.push('-DPCRE2_CODE_UNIT_WIDTH=8');
         break;
+      case 'curl':
+        sourceFile = path.join(this.vendorDir, 'curl/lib/curl_all.c');
+        flags.push('-DHAVE_CONFIG_H');
+        flags.push('-DCURL_STATICLIB');
+        flags.push(`-I${path.join(this.vendorDir, 'curl/include')}`);
+        flags.push(`-I${path.join(this.vendorDir, 'curl/lib')}`);
+        // Suppress warnings for vendored code
+        flags.push('-Wno-everything');
+        break;
       default:
         throw new Error(`Unknown vendored dependency: ${name}`);
     }
