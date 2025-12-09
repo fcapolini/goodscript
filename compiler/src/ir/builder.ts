@@ -114,6 +114,10 @@ export const types = {
     return { kind: 'map', key, value, ownership: ownership ?? Ownership.Value };
   },
 
+  promise(resultType: IRType): IRType {
+    return { kind: 'promise', resultType };
+  },
+
   nullable(inner: IRType): IRType {
     return { kind: 'nullable', inner };
   },

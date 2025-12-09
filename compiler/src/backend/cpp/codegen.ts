@@ -1022,6 +1022,10 @@ export class CppCodegen {
         return `gs::Array<${this.generateCppType(type.element)}>`;
       case 'map':
         return `gs::Map<${this.generateCppType(type.key)}, ${this.generateCppType(type.value)}>`;
+      case 'promise':
+        // Promise<T> → cppcoro::task<T> (for now, placeholder)
+        // TODO: Implement proper Promise runtime with cppcoro
+        return `gs::Promise<${this.generateCppType(type.resultType)}>`;
       case 'function': {
         const params = type.params.map(p => this.generateCppType(p)).join(', ');
         return `std::function<${this.generateCppType(type.returnType)}(${params})>`;

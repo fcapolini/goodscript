@@ -167,6 +167,10 @@ export class TypeSignatureGenerator {
         result = `Map<${this.getTypeString(type.key)},${this.getTypeString(type.value)},${type.ownership}>`;
         break;
 
+      case 'promise':
+        result = `Promise<${this.getTypeString(type.resultType)}>`;
+        break;
+
       case 'function':
         const params = type.params.map(p => this.getTypeString(p)).join(',');
         result = `(${params})->${this.getTypeString(type.returnType)}`;

@@ -26,6 +26,7 @@ export type IRType =
   | { kind: 'struct'; fields: Array<{ name: string; type: IRType }>; ownership: Ownership }
   | { kind: 'array'; element: IRType; ownership: Ownership }
   | { kind: 'map'; key: IRType; value: IRType; ownership: Ownership }
+  | { kind: 'promise'; resultType: IRType }
   | { kind: 'function'; params: IRType[]; returnType: IRType }
   | { kind: 'union'; types: IRType[] }
   | { kind: 'intersection'; types: IRType[] }
