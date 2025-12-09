@@ -1,7 +1,7 @@
 # Standard Library Requirements for Compiler & Runtime
 
 **Date**: December 9, 2025  
-**Status**: Phase 7a.1-7a.5 COMPLETE ✅
+**Status**: Phase 7a.1-7a.6 COMPLETE ✅
 
 This document catalogs the language features and runtime APIs required to support the GoodScript standard library. The stdlib defines the requirements; the compiler and runtime must adapt to support them.
 
@@ -13,13 +13,50 @@ This document catalogs the language features and runtime APIs required to suppor
 - ✅ Phase 7a.3: for-of loops (arrays, strings, break, continue, nested loops)
 - ✅ Phase 7a.4: Map<K,V> methods (set, get, has, delete, clear, forEach, keys, values, entries, size)
 - ✅ Phase 7a.5: Optional chaining (obj?.field, nested chaining, method calls)
+- ✅ Phase 7a.6: String methods (split, slice, trim, toLowerCase, toUpperCase, indexOf, includes)
 - Compiler handles expressions, functions, arrays, objects, lambdas, iteration, nullable access
 - Binary compilation working via Zig
-- 221 tests passing
+- 228 tests passing
 
-**Gap**: stdlib still needs async/await, string methods, union types
+**Gap**: stdlib still needs async/await, union types, more runtime APIs
 
 **Priority**: Implement features in phases, starting with most fundamental and widely used.
+
+---
+
+### ✅ 7a.6 String Methods (COMPLETE)
+**Status**: Implemented December 9, 2025
+
+**Implemented**:
+- Runtime: Complete gs::String implementation (621 lines)
+- All 7 required methods: split(), slice(), trim(), toLowerCase(), toUpperCase(), indexOf(), includes()
+- Plus 10+ bonus methods: lastIndexOf, substring, startsWith, endsWith, repeat, padStart, padEnd, match
+- No compiler changes needed - method calls work through existing infrastructure
+- Method chaining fully supported
+
+**Tests**:
+- `test/string-methods.test.ts` - 7 comprehensive tests (all passing)
+- `examples/string-methods-test-gs.ts` - End-to-end testing
+
+**Runtime Implementation**:
+```cpp
+namespace gs {
+  class String {
+    std::string impl_;
+  public:
+    int indexOf(const String& searchString) const;
+    String slice(int beginIndex, std::optional<int> endIndex) const;
+    String trim() const;
+    String toLowerCase() const;
+    String toUpperCase() const;
+    bool includes(const String& searchString) const;
+    Array<String> split(const String& separator) const;
+    // ... 10+ more methods
+  };
+}
+```
+
+**Key Insight**: Good architecture means features "just work". String methods required zero new compiler code.
 
 ---
 
