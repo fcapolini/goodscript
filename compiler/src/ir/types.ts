@@ -105,6 +105,7 @@ export interface IRFunctionDecl {
   params: IRParam[];
   returnType: IRType;
   body: IRFunctionBody | IRBlock;  // AST-level (new) or SSA-level (old, for tests)
+  async?: boolean;  // true for async functions
   typeParams?: IRTypeParam[];
   source?: SourceLocation;
 }
@@ -161,6 +162,7 @@ export interface IRMethod {
   params: IRParam[];
   returnType: IRType;
   body: IRFunctionBody;  // AST-level statements (before SSA conversion)
+  async?: boolean;  // true for async methods
   isStatic: boolean;
 }
 
@@ -415,6 +417,7 @@ export enum UnaryOp {
   Neg = '-',
   Plus = '+',
   Typeof = 'typeof',
+  Await = 'await',
 }
 
 // ============================================================================
@@ -437,7 +440,8 @@ export type IRExpression =
   | { kind: 'objectLiteral'; properties: Array<{ key: string; value: IRExpression }>; type: IRType; location?: { line: number; column: number } }
   | { kind: 'newExpression'; className: string; arguments: IRExpression[]; type: IRType; location?: { line: number; column: number } }
   | { kind: 'conditional'; condition: IRExpression; thenExpr: IRExpression; elseExpr: IRExpression; type: IRType; location?: { line: number; column: number } }
-  | { kind: 'lambda'; params: IRParam[]; body: IRBlock; captures: Array<{ name: string; type: IRType }>; type: IRType; location?: { line: number; column: number } };
+  | { kind: 'lambda'; params: IRParam[]; body: IRBlock; captures: Array<{ name: string; type: IRType }>; type: IRType; location?: { line: number; column: number } }
+  | { kind: 'await'; expression: IRExpression; type: IRType; location?: { line: number; column: number } };
 
 /**
  * AST-level statements (before lowering to SSA)

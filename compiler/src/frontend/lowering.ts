@@ -87,6 +87,7 @@ export class IRLowering {
 
     const returnType = this.lowerTypeNode(node.type, sourceFile);
     const body = node.body ? this.lowerFunctionBody(node.body, sourceFile) : this.builder.functionBody([]);
+    const async = node.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ?? false;
 
     return {
       kind: 'function',
@@ -94,6 +95,7 @@ export class IRLowering {
       params,
       returnType,
       body,
+      async,
     };
   }
 
@@ -125,7 +127,7 @@ export class IRLowering {
     };
   }
 
-  private lowerMethod(node: ts.MethodDeclaration, sourceFile: ts.SourceFile): { name: string; params: { name: string; type: IRType }[]; returnType: IRType; body: IRFunctionBody; isStatic: boolean } | null {
+  private lowerMethod(node: ts.MethodDeclaration, sourceFile: ts.SourceFile): { name: string; params: { name: string; type: IRType }[]; returnType: IRType; body: IRFunctionBody; async?: boolean; isStatic: boolean } | null {
     const name = node.name.getText(sourceFile);
     
     const params = node.parameters.map(p => ({
@@ -136,12 +138,14 @@ export class IRLowering {
     const returnType = this.lowerTypeNode(node.type, sourceFile);
     const body = node.body ? this.lowerFunctionBody(node.body, sourceFile) : this.builder.functionBody([]);
     const isStatic = node.modifiers?.some(m => m.kind === ts.SyntaxKind.StaticKeyword) ?? false;
+    const async = node.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ?? false;
 
     return {
       name,
       params,
       returnType,
       body,
+      async,
       isStatic,
     };
   }
@@ -340,6 +344,14 @@ export class IRLowering {
         };
       
       case 'unary':
+        // Check if this is an await expression
+        if (ssaExpr.op === UnaryOp.Await) {
+          return {
+            kind: 'await',
+            expression: this.convertExprToExpression(ssaExpr.operand),
+            type: ssaExpr.type,
+          };
+        }
         return {
           kind: 'unary',
           operator: ssaExpr.op,
@@ -717,6 +729,19 @@ export class IRLowering {
       return expr.unary(UnaryOp.Typeof, operand, types.string());
     }
 
+    // Await expression
+    if (ts.isAwaitExpression(node)) {
+      const expression = this.lowerExpr(node.expression, sourceFile);
+      // Extract the result type from Promise<T>
+      let resultType = types.void();
+      if (expression.type.kind === 'promise') {
+        resultType = expression.type.resultType;
+      }
+      // For SSA-level, we'll use unary operator for now
+      // TODO: Add proper await IR expression kind
+      return expr.unary(UnaryOp.Await, expression, resultType);
+    }
+
     // Variable reference
     if (ts.isIdentifier(node)) {
       const name = node.text;
@@ -966,6 +991,12 @@ export class IRLowering {
       if (name === 'Array' && typeNode.typeArguments) {
         const element = this.lowerTypeNode(typeNode.typeArguments[0], sourceFile);
         return types.array(element, Ownership.Value);
+      }
+
+      // Promise type
+      if (name === 'Promise' && typeNode.typeArguments) {
+        const resultType = this.lowerTypeNode(typeNode.typeArguments[0], sourceFile);
+        return types.promise(resultType);
       }
 
       return types.class(name, Ownership.Own);
