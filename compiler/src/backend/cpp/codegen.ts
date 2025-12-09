@@ -853,6 +853,24 @@ export class CppCodegen {
           return `gs::Promise::${method}(${args})`;
         }
         
+        // Special handling for FileSystem static methods
+        if (expr.callee.kind === 'memberAccess' && 
+            expr.callee.object.kind === 'identifier' && 
+            expr.callee.object.name === 'FileSystem') {
+          const method = expr.callee.member;
+          const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
+          return `gs::FileSystem::${method}(${args})`;
+        }
+        
+        // Special handling for FileSystemAsync static methods
+        if (expr.callee.kind === 'memberAccess' && 
+            expr.callee.object.kind === 'identifier' && 
+            expr.callee.object.name === 'FileSystemAsync') {
+          const method = expr.callee.member;
+          const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
+          return `gs::FileSystemAsync::${method}(${args})`;
+        }
+        
         // Special handling for String static methods (e.g., String::from() for template literals)
         if (expr.callee.kind === 'memberAccess' && 
             expr.callee.object.kind === 'identifier' && 
@@ -908,6 +926,16 @@ export class CppCodegen {
           return `gs::Promise::${member}`;
         }
         
+        // Special handling for FileSystem static methods
+        if (expr.object.kind === 'identifier' && expr.object.name === 'FileSystem') {
+          return `gs::FileSystem::${member}`;
+        }
+        
+        // Special handling for FileSystemAsync static methods
+        if (expr.object.kind === 'identifier' && expr.object.name === 'FileSystemAsync') {
+          return `gs::FileSystemAsync::${member}`;
+        }
+
         // Special handling for String static methods
         if (expr.object.kind === 'identifier' && expr.object.name === 'String') {
           return `gs::String::${member}`;
@@ -1193,6 +1221,14 @@ export class CppCodegen {
         // Special case: Promise static methods
         if (obj === 'Promise') {
           return `gs::Promise::${expr.member}`;
+        }
+        // Special case: FileSystem static methods
+        if (obj === 'FileSystem') {
+          return `gs::FileSystem::${expr.member}`;
+        }
+        // Special case: FileSystemAsync static methods
+        if (obj === 'FileSystemAsync') {
+          return `gs::FileSystemAsync::${expr.member}`;
         }
         // Special case: String static methods (e.g., String.from)
         if (obj === 'String') {

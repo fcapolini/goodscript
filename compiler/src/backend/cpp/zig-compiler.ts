@@ -87,6 +87,9 @@ export class ZigCompiler {
       // Always compile cppcoro when using async/await
       await this.compileVendoredDep('cppcoro', vendorDir, options, diagnostics);
       
+      // TODO: Fix curl compilation issues
+      // await this.compileVendoredDep('curl', vendorDir, options, diagnostics);
+      
       // TODO: Compile PCRE2 only if RegExp is used
       // await this.compileVendoredDep('pcre2', options, diagnostics);
 
@@ -249,6 +252,9 @@ export class ZigCompiler {
         '-std=c++20',
         `-O${optimize}`,
         '-c',
+        '-DGS_ENABLE_FILESYSTEM',  // Enable FileSystem API
+        // TODO: Fix curl compilation issues before enabling HTTP
+        // '-DGS_ENABLE_HTTP',
       ];
 
       if (options.debug) {
@@ -310,6 +316,20 @@ export class ZigCompiler {
       // Fallback if .files doesn't exist
       objectFiles.push(path.join(this.cacheDir, 'vendor', 'cppcoro.o'));
     }
+    
+    // TODO: Link curl when HTTP is enabled
+    // objectFiles.push(path.join(this.cacheDir, 'vendor', 'curl.o'));
+    
+    // Add platform-specific SSL libraries for curl (when enabled)
+    // macOS: Secure Transport (built-in)
+    // Windows: Schannel (built-in)
+    // Linux: depends on what's available, curl auto-detects
+    // if (process.platform === 'darwin') {
+    //   flags.push('-framework', 'Security');
+    //   flags.push('-framework', 'CoreFoundation');
+    // } else if (process.platform === 'win32') {
+    //   flags.push('-lws2_32', '-lwldap32', '-ladvapi32', '-lcrypt32');
+    // }
 
     // Target specification
     if (options.target) {

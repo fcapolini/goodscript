@@ -35,14 +35,31 @@ export class IRLowering {
     const initStatements: IRStatement[] = [];
     
     ts.forEachChild(sourceFile, (node) => {
-      const decl = this.lowerDeclaration(node, sourceFile);
-      if (decl) {
-        declarations.push(decl);
-      } else if (ts.isStatement(node)) {
-        // Handle all top-level statements (not just expression statements)
-        const stmt = this.lowerStatementAST(node, sourceFile);
-        if (stmt) {
-          initStatements.push(stmt);
+      // Special handling for variable statements at top level
+      if (ts.isVariableStatement(node)) {
+        const varDecl = node.declarationList.declarations[0];
+        if (varDecl && varDecl.initializer) {
+          // Check if initializer is compile-time constant
+          if (this.isCompileTimeConstant(varDecl.initializer)) {
+            // Treat as const declaration
+            const decl = this.lowerDeclaration(node, sourceFile);
+            if (decl) declarations.push(decl);
+          } else {
+            // Treat as initialization statement in main()
+            const stmt = this.lowerStatementAST(node, sourceFile);
+            if (stmt) initStatements.push(stmt);
+          }
+        }
+      } else {
+        const decl = this.lowerDeclaration(node, sourceFile);
+        if (decl) {
+          declarations.push(decl);
+        } else if (ts.isStatement(node)) {
+          // Handle all top-level statements (not just expression statements)
+          const stmt = this.lowerStatementAST(node, sourceFile);
+          if (stmt) {
+            initStatements.push(stmt);
+          }
         }
       }
     });
@@ -53,6 +70,52 @@ export class IRLowering {
       imports: [],
       initStatements: initStatements.length > 0 ? initStatements : undefined,
     };
+  }
+
+  /**
+   * Check if an expression is a compile-time constant that can be a const declaration
+   */
+  private isCompileTimeConstant(node: ts.Expression): boolean {
+    // Literals are always compile-time constants
+    if (ts.isStringLiteral(node) || ts.isNumericLiteral(node) || 
+        node.kind === ts.SyntaxKind.TrueKeyword || 
+        node.kind === ts.SyntaxKind.FalseKeyword ||
+        node.kind === ts.SyntaxKind.NullKeyword ||
+        node.kind === ts.SyntaxKind.UndefinedKeyword) {
+      return true;
+    }
+    
+    // Template literals without expressions are compile-time
+    if (ts.isTemplateExpression(node)) {
+      // Only constant if it has no template spans with expressions
+      return node.templateSpans.length === 0;
+    }
+    if (ts.isNoSubstitutionTemplateLiteral(node)) {
+      return true;
+    }
+    
+    // Array literals are compile-time if all elements are
+    if (ts.isArrayLiteralExpression(node)) {
+      return node.elements.every(e => this.isCompileTimeConstant(e));
+    }
+    
+    // Binary expressions are compile-time if both operands are
+    if (ts.isBinaryExpression(node)) {
+      return this.isCompileTimeConstant(node.left) && this.isCompileTimeConstant(node.right);
+    }
+    
+    // Unary expressions
+    if (ts.isPrefixUnaryExpression(node)) {
+      return this.isCompileTimeConstant(node.operand);
+    }
+    
+    // Lambda/arrow functions are compile-time (function objects)
+    if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
+      return true;
+    }
+    
+    // Everything else (function calls, property access, etc.) is runtime
+    return false;
   }
 
   private lowerDeclaration(node: ts.Node, sourceFile: ts.SourceFile): IRDeclaration | null {
