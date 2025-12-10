@@ -5,7 +5,7 @@
  */
 
 import ts from 'typescript';
-import type { IRModule, IRProgram, IRDeclaration, IRExpr, IRType, IRBlock, IRInstruction, IRTerminator, IRStatement, IRFunctionBody, IRExpression } from '../ir/types.js';
+import type { IRModule, IRProgram, IRDeclaration, IRExpr, IRType, IRBlock, IRInstruction, IRTerminator, IRStatement, IRFunctionBody, IRExpression, IRMethodSignature } from '../ir/types.js';
 import { BinaryOp, UnaryOp, Ownership, PrimitiveType } from '../ir/types.js';
 import { IRBuilder, types, expr, stmts } from '../ir/builder.js';
 

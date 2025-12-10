@@ -154,7 +154,7 @@ export interface IRTypeAliasDecl {
 export interface IRField {
   name: string;
   type: IRType;
-  initializer?: IRExpr;
+  initializer?: IRExpression;  // AST-level expression for default value
   isReadonly: boolean;
 }
 

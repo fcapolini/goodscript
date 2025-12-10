@@ -4,19 +4,30 @@
   "description": "GoodScript compiler - TypeScript to native code",
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./types/index.d.ts",
   "bin": {
     "gsc": "./bin/gsc"
   },
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./types/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./runtime": {
+      "types": "./types/runtime.d.ts"
+    },
+    "./globals": {
+      "types": "./types/globals.d.ts"
+    },
+    "./compiler": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   },
   "files": [
     "dist",
     "bin",
+    "types",
     "vendor",
     "runtime",
     "CLI.md",

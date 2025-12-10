@@ -189,29 +189,58 @@ GoodScript uses `-gs.ts` and `-gs.tsx` suffixes (not `.gs`):
 **Example**:
 ```typescript
 // math-gs.ts
-import type { own, share, use, integer, integer53 } from '@goodscript/types';
+import type { own, share, use, integer, integer53 } from 'goodscript';
 
 export function fibonacci(n: integer): integer {
-  // Your GoodScript code here - fully type-checked by tsc
+  if (n <= 1) return n;
+  return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+export class Buffer {
+  data: own<ArrayBuffer>;
+  
+  constructor(size: integer) {
+    this.data = new ArrayBuffer(size);
+  }
 }
 ```
 
 Then compile to native binary:
 ```bash
-gsc --target cpp --compile src/math-gs.ts -o build/math
+gsc --target cpp -o myapp src/math-gs.ts
+./myapp
 ```
+
+### Type Definitions
+
+GoodScript provides TypeScript type definitions for ownership types and integers.
+
+**Option 1: Explicit imports (recommended)**
+```typescript
+import type { own, share, use, integer, integer53 } from 'goodscript';
+```
+
+**Option 2: Global types (include in tsconfig.json)**
+```json
+{
+  "include": [
+    "src/**/*",
+    "node_modules/goodscript/types/globals.d.ts"
+  ]
+}
+```
+
+See [`types/README.md`](./types/README.md) for complete type documentation.
 
 ## TypeScript/JavaScript Output
 
 **Note**: For TypeScript/JavaScript output, just use `tsc` directly on your `-gs.ts` or `-gs.tsx` files.
-GoodScript files are valid TypeScript with type aliases:
+GoodScript files are valid TypeScript - the ownership and integer types are simple aliases:
 ```typescript
-// Ownership types (semantics only enforced in C++ mode)
+// In JS/TS mode (semantics only enforced in C++ mode)
 type own<T> = T;
 type share<T> = T;
 type use<T> = T;
-
-// Integer types (full semantics only in C++ mode)
 type integer = number;    // int32_t in C++, number in JS
 type integer53 = number;  // int64_t in C++, safe integer in JS
 ```
