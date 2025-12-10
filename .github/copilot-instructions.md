@@ -4,7 +4,7 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP/HTTPS + Math + JSON + Union Types + Interfaces + Traditional For Loops (419 tests passing)
+**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP/HTTPS + Math + JSON + Union Types + Interfaces + Traditional For Loops + Date.now() (424 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
@@ -33,6 +33,7 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ HTTP/HTTPS Client (cpp-httplib, OpenSSL/BearSSL, certificate verification, SNI support)
 - ✅ Math object (min, max, abs, floor, ceil, round, sqrt, pow, trigonometry, logarithms, constants)
 - ✅ JSON object (JSON.stringify() for basic types)
+- ✅ Date object (Date.now() for timing measurement)
 - ✅ Union types (T | null, T | undefined for optional values)
 - ✅ Interface declarations (TypeScript interfaces → C++ structs with pure virtual methods)
 - ✅ Class field initializers (default values in member initializer lists)
@@ -40,6 +41,22 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
 **Recent Progress (Dec 10, 2025)**:
+- ✅ **Date.now() Support** (424 tests passing)
+  * Date class with static now() method in both GC and ownership modes
+  * Returns milliseconds since Unix epoch (number type)
+  * Full codegen integration for Date.now() calls
+  * Works in expressions and variable declarations
+  * Example: 13-date-timing demonstrating timing measurement
+  * Performance benchmarking infrastructure now has proper timing
+- ✅ **Map.get() Auto-Dereferencing in Ownership Mode**
+  * Map.get() returns V* in ownership mode, V in GC mode
+  * Compiler automatically dereferences: (*map.get(key))
+  * All 4 performance benchmarks now working in triple-mode
+- ✅ **Performance Benchmark Infrastructure**
+  * 4 benchmarks: fibonacci, array-ops, string-ops, map-ops
+  * Triple-mode execution: Node.js, GC C++, Ownership C++
+  * npm scripts: bench:all, bench:fibonacci, bench:array, bench:string, bench:map
+  * Mode-specific: bench:node, bench:gc, bench:ownership
 - ✅ **Traditional For Loop Support** (419 tests passing)
   * Complete for loop implementation: `for (init; condition; increment) { body }`
   * Supports variable declaration, expression, and empty initializers
@@ -351,7 +368,7 @@ const body: IRBlock = {
 ```
 
 ## Testing
-**Current Test Suite (419 tests)**:
+**Current Test Suite (424 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (14 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
@@ -379,11 +396,12 @@ const body: IRBlock = {
 - `test/math-integration.test.ts` - Math object integration tests (15 tests)
 - `test/json-integration.test.ts` - JSON object integration tests (5 tests)
 - `test/math-json-demo.test.ts` - Math/JSON demo compilation tests (2 tests)
+- `test/date.test.ts` - Date object integration tests (5 tests)
 - `test/union-types.test.ts` - Union type support (12 tests, 4 skipped)
 - `test/cli.test.ts` - CLI functionality tests (42 tests)
 **Run Tests**:
 ```bash
-pnpm test                    # All tests (419 passing, 19 skipped)
+pnpm test                    # All tests (424 passing, 19 skipped)
 pnpm build && pnpm test      # Build + test
 ```
 
