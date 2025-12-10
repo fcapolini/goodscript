@@ -16,28 +16,41 @@ Unlike unit tests (which test compiler internals) or performance benchmarks (whi
 
 ```
 equivalence/
-├── README.md           # This file
-├── run-equivalence.ts  # Test runner (compiles & executes in all 3 modes)
-├── basic/              # Basic language features
-│   ├── arithmetic.test.ts
-│   ├── strings.test.ts
-│   ├── arrays.test.ts
-│   └── objects.test.ts
-├── edge-cases/         # Edge cases and corner cases
-│   ├── empty-arrays.test.ts
-│   ├── null-handling.test.ts
-│   ├── unicode.test.ts
-│   └── large-numbers.test.ts
-├── stdlib/             # Standard library equivalence
-│   ├── map.test.ts
-│   ├── date.test.ts
-│   ├── math.test.ts
-│   └── json.test.ts
-└── integration/        # Complex integration scenarios
+├── README.md               # This file
+├── run-equivalence.ts      # Test runner (compiles & executes in all 3 modes)
+├── test-framework.ts       # Test framework core
+├── index.ts                # Test suite index and exports
+├── basic/                  # Basic language features (11 suites, 84 tests)
+│   ├── arithmetic.test.ts      # Arithmetic operations (8 tests)
+│   ├── arrays.test.ts          # Array operations (6 tests)
+│   ├── strings.test.ts         # String operations (7 tests)
+│   ├── functions.test.ts       # Functions and lambdas (10 tests)
+│   ├── control-flow.test.ts    # If/while/for/switch (11 tests)
+│   ├── classes.test.ts         # Class instantiation (6 tests)
+│   ├── exceptions.test.ts      # Try/catch/finally (6 tests)
+│   ├── types.test.ts           # Type system features (6 tests)
+│   ├── template-literals.test.ts # Template strings (7 tests)
+│   ├── variables.test.ts       # Variable declarations (7 tests)
+│   └── operators.test.ts       # Operator precedence (10 tests)
+├── edge-cases/             # Edge cases and corner cases (5 suites, 36 tests)
+│   ├── empty-collections.test.ts   # Empty arrays/maps (7 tests)
+│   ├── number-edge-cases.test.ts   # Zero, negatives, overflow (8 tests)
+│   ├── string-edge-cases.test.ts   # Special chars, slicing (10 tests)
+│   ├── boolean-logic.test.ts       # AND/OR/NOT (9 tests)
+│   └── optional-chaining.test.ts   # ?. operator (2 tests, Node.js only)
+├── stdlib/                 # Standard library equivalence (5 suites, 41 tests)
+│   ├── map.test.ts             # Map operations (10 tests)
+│   ├── math.test.ts            # Math object (11 tests)
+│   ├── date.test.ts            # Date.now() (4 tests)
+│   ├── json.test.ts            # JSON.stringify (6 tests)
+│   └── array-methods.test.ts   # Array methods (10 tests)
+└── integration/            # Complex integration scenarios (coming soon)
     ├── recursion.test.ts
     ├── async-await.test.ts
     └── class-inheritance.test.ts
 ```
+
+**Total: 21 test suites, 161 tests, 483 total executions (3 modes each)**
 
 ## Running Tests
 
@@ -47,6 +60,11 @@ pnpm test:equivalence
 
 # Run specific test suite
 pnpm test:equivalence basic/arithmetic
+
+# Run specific category
+pnpm test:equivalence basic
+pnpm test:equivalence stdlib
+pnpm test:equivalence edge-cases
 
 # Run with verbose output
 pnpm test:equivalence --verbose
@@ -143,11 +161,10 @@ Equivalence tests run **3x** the number of compilations (one per mode), so:
 ## Current Status
 
 **Test Coverage:**
-- ✅ Performance benchmarks verified (4 tests, all passing)
-- 📋 Basic language features (TODO)
-- 📋 Edge cases (TODO)
-- 📋 Standard library (TODO)
-- 📋 Integration scenarios (TODO)
+- ✅ Basic language features: 11 test suites, 84 tests
+- ✅ Standard library: 5 test suites, 41 tests
+- ✅ Edge cases: 5 test suites, 36 tests
+- 📋 Integration scenarios (coming soon)
 
 **Known Equivalence Issues:**
 - None identified yet! 🎉
