@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <iomanip>
 #include <sstream>
 #include <optional>
 // String/Array defined by mode-specific runtime
@@ -35,11 +36,46 @@ public:
   }
   
   static void log(double value) {
-    std::cout << value << std::endl;
+    // Use maximum precision for JavaScript compatibility
+    std::cout << std::setprecision(17) << value << std::endl;
   }
   
   static void log(bool value) {
     std::cout << (value ? "true" : "false") << std::endl;
+  }
+  
+  // Pointer overloads - dereference and call value version
+  // (In ownership mode, array indexing returns T*, Map.get() returns V*, etc.)
+  static void log(const String* message) {
+    if (message) {
+      std::cout << message->str() << std::endl;
+    } else {
+      std::cout << "null" << std::endl;
+    }
+  }
+  
+  static void log(const int* value) {
+    if (value) {
+      std::cout << *value << std::endl;
+    } else {
+      std::cout << "null" << std::endl;
+    }
+  }
+  
+  static void log(const double* value) {
+    if (value) {
+      std::cout << *value << std::endl;
+    } else {
+      std::cout << "null" << std::endl;
+    }
+  }
+  
+  static void log(const bool* value) {
+    if (value) {
+      std::cout << (*value ? "true" : "false") << std::endl;
+    } else {
+      std::cout << "null" << std::endl;
+    }
   }
   
   // Variadic template for multiple arguments
@@ -143,11 +179,22 @@ private:
   }
   
   static void log_impl(double value) {
-    std::cout << value;
+    std::cout << std::setprecision(17) << value;
   }
   
   static void log_impl(bool value) {
     std::cout << (value ? "true" : "false");
+  }
+  
+  // Pointer template - dereference for all pointer types
+  // (In ownership mode, array/map access returns T*)
+  template<typename T>
+  static void log_impl(const T* value) {
+    if (value) {
+      log_impl(*value);  // Dereference and print the value
+    } else {
+      std::cout << "null";
+    }
   }
   
   // Support for optional values - print "undefined" if empty

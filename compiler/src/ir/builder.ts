@@ -266,6 +266,7 @@ export const stmts = {
     name: string,
     variableType: IRType,
     initializer?: IRExpression,
+    mutable?: boolean,
     location?: { line: number; column: number }
   ): IRStatement {
     return {
@@ -273,6 +274,7 @@ export const stmts = {
       name,
       variableType,
       initializer,
+      mutable,
       location,
     };
   },

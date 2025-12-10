@@ -18,7 +18,9 @@
     "bench:map": "tsx performance/run-benchmark.ts map-ops",
     "bench:node": "tsx performance/run-benchmark.ts node",
     "bench:gc": "tsx performance/run-benchmark.ts gc",
-    "bench:ownership": "tsx performance/run-benchmark.ts ownership"
+    "bench:ownership": "tsx performance/run-benchmark.ts ownership",
+    "test:equivalence": "tsx equivalence/run-equivalence.ts",
+    "test:equiv": "tsx equivalence/run-equivalence.ts"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <iomanip>
 #include <sstream>
 #include <optional>
 // String/Array defined by mode-specific runtime
@@ -36,7 +37,8 @@ public:
   }
   
   static void log(double value) {
-    std::cout << value << std::endl;
+    // Use maximum precision for JavaScript compatibility
+    std::cout << std::setprecision(17) << value << std::endl;
   }
   
   static void log(bool value) {
@@ -139,7 +141,7 @@ private:
   }
   
   static void log_impl(double value) {
-    std::cout << value;
+    std::cout << std::setprecision(17) << value;
   }
   
   static void log_impl(bool value) {

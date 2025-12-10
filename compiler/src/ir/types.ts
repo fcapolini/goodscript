@@ -449,7 +449,7 @@ export type IRExpression =
  * AST-level statements (before lowering to SSA)
  */
 export type IRStatement =
-  | { kind: 'variableDeclaration'; name: string; variableType: IRType; initializer?: IRExpression; location?: { line: number; column: number } }
+  | { kind: 'variableDeclaration'; name: string; variableType: IRType; mutable?: boolean; initializer?: IRExpression; location?: { line: number; column: number } }
   | { kind: 'assignment'; target: string; value: IRExpression; location?: { line: number; column: number } }
   | { kind: 'expressionStatement'; expression: IRExpression; location?: { line: number; column: number } }
   | { kind: 'return'; value?: IRExpression; location?: { line: number; column: number } }

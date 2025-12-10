@@ -39,13 +39,14 @@ export class IRLowering {
       if (ts.isVariableStatement(node)) {
         const varDecl = node.declarationList.declarations[0];
         if (varDecl && varDecl.initializer) {
-          // Check if initializer is compile-time constant
-          if (this.isCompileTimeConstant(varDecl.initializer)) {
+          // Check if variable is immutable (const) AND initializer is compile-time constant
+          const isConst = (node.declarationList.flags & ts.NodeFlags.Const) !== 0;
+          if (isConst && this.isCompileTimeConstant(varDecl.initializer)) {
             // Treat as const declaration
             const decl = this.lowerDeclaration(node, sourceFile);
             if (decl) declarations.push(decl);
           } else {
-            // Treat as initialization statement in main()
+            // Treat as initialization statement in main() (either mutable or non-constant)
             const stmt = this.lowerStatementAST(node, sourceFile);
             if (stmt) initStatements.push(stmt);
           }
@@ -124,12 +125,17 @@ export class IRLowering {
       if (!decl) return null;
 
       const name = decl.name.getText(sourceFile);
-      const init = decl.initializer ? this.lowerExpr(decl.initializer, sourceFile) : null;
+      
+      // Get the expected type first (from explicit annotation if present)
+      const expectedType = decl.type ? this.lowerTypeNode(decl.type, sourceFile) : undefined;
+      
+      // Pass expectedType to lowerExpr so it can infer array element types correctly
+      const init = decl.initializer ? this.lowerExpr(decl.initializer, sourceFile, expectedType) : null;
 
       if (!init) return null;
 
       // Prefer explicit type annotation, fall back to initializer's type
-      const type = decl.type ? this.lowerTypeNode(decl.type, sourceFile) : init.type;
+      const type = expectedType || init.type;
 
       return {
         kind: 'const',
@@ -301,10 +307,13 @@ export class IRLowering {
       const type = this.lowerType(decl, sourceFile);
       const initializer = decl.initializer ? this.lowerExpression(decl.initializer, sourceFile, type) : undefined;
       
+      // Detect const vs let (var is forbidden by validator)
+      const mutable = (node.declarationList.flags & ts.NodeFlags.Const) === 0;
+      
       // Mark this variable as declared
       this.declaredVariables.add(name);
 
-      return stmts.variableDeclaration(name, type, initializer);
+      return stmts.variableDeclaration(name, type, initializer, mutable);
     }
 
     // Return statement
@@ -421,8 +430,10 @@ export class IRLowering {
             const name = decl.name.getText(sourceFile);
             const type = this.lowerType(decl, sourceFile);
             const initializer = decl.initializer ? this.lowerExpression(decl.initializer, sourceFile, type) : undefined;
+            // Detect const vs let
+            const mutable = (node.initializer.flags & ts.NodeFlags.Const) === 0;
             this.declaredVariables.add(name);
-            init = stmts.variableDeclaration(name, type, initializer);
+            init = stmts.variableDeclaration(name, type, initializer, mutable);
           }
         } else {
           // Expression initializer
@@ -979,12 +990,19 @@ export class IRLowering {
     if (ts.isArrayLiteralExpression(node)) {
       const elements = node.elements.map(el => this.lowerExpr(el, sourceFile));
       
-      // For arrays, prefer contextual type (from return type, assignment, etc.)
-      // This handles empty arrays correctly
-      const contextualType = this.typeChecker.getContextualType(node);
-      const fullType = contextualType ? this.convertTsTypeToIRType(contextualType) : this.inferType(node);
-      const elementType = fullType.kind === 'array' ? fullType.element : types.void();
+      // Determine element type:
+      // 1. Use expectedType if provided (from variable declaration, parameter, etc.)
+      // 2. Fall back to contextual type (from return type, assignment, etc.)
+      // 3. Fall back to type inference
+      let fullType: IRType;
+      if (expectedType && expectedType.kind === 'array') {
+        fullType = expectedType;
+      } else {
+        const contextualType = this.typeChecker.getContextualType(node);
+        fullType = contextualType ? this.convertTsTypeToIRType(contextualType) : this.inferType(node);
+      }
       
+      const elementType = fullType.kind === 'array' ? fullType.element : types.void();
       const arrayType = types.array(elementType);
       return expr.array(elements, arrayType);
     }

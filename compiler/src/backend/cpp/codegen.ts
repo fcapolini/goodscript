@@ -587,11 +587,14 @@ export class CppCodegen {
         const needsExplicitType = stmt.variableType.kind === 'primitive' && 
                                   stmt.variableType.type === PrimitiveType.Integer53;
         
+        // Use const for immutable variables (const in source), omit for mutable (let in source)
+        const constQualifier = stmt.mutable === false ? 'const ' : '';
+        
         if (needsExplicitType) {
           const cppType = this.generateCppType(stmt.variableType);
-          this.emit(`${cppType} ${this.sanitizeIdentifier(stmt.name)} = ${stmt.initializer ? this.generateExpression(stmt.initializer) : '0'};`);
+          this.emit(`${constQualifier}${cppType} ${this.sanitizeIdentifier(stmt.name)} = ${stmt.initializer ? this.generateExpression(stmt.initializer) : '0'};`);
         } else {
-          this.emit(`auto ${this.sanitizeIdentifier(stmt.name)} = ${stmt.initializer ? this.generateExpression(stmt.initializer) : 'nullptr'};`);
+          this.emit(`${constQualifier}auto ${this.sanitizeIdentifier(stmt.name)} = ${stmt.initializer ? this.generateExpression(stmt.initializer) : 'nullptr'};`);
         }
         break;
       }
