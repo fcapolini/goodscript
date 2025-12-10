@@ -86,7 +86,8 @@ export async function compileCommand(options: CliOptions): Promise<CommandResult
         if (optimizeLevel !== '0') {
           const { Optimizer } = await import('../optimizer/optimizer.js');
           const optimizer = new Optimizer();
-          irProgram = optimizer.optimize(irProgram, 1); // Use level 1 for now (enables hoisting)
+          const level = parseInt(optimizeLevel, 10);
+          irProgram = optimizer.optimize(irProgram, level);
         }
         
         if (options.gsShowIR) {

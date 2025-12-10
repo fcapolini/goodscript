@@ -710,13 +710,45 @@ export class CppCodegen {
         const condCode = stmt.condition ? this.generateExpression(stmt.condition) : '';
         const incrCode = stmt.increment ? this.generateExpression(stmt.increment) : '';
         
-        this.emit(`for (${initCode}; ${condCode}; ${incrCode}) {`);
-        this.indent++;
-        for (const bodyStmt of stmt.body) {
-          this.generateStatement(bodyStmt);
+        // Check for StringBuilder optimization opportunity
+        const sbOpportunity = this.mode === 'gc' ? this.detectStringBuilderOpportunity(stmt.body) : null;
+        
+        if (sbOpportunity) {
+          // Use StringBuilder for efficient string concatenation
+          const { varName, stmtIndex, appendExpr } = sbOpportunity;
+          const sbName = `${varName}_sb`;
+          
+          // Declare StringBuilder before loop
+          this.emit(`gs::StringBuilder ${sbName};`);
+          
+          // Generate loop with append instead of concatenation
+          this.emit(`for (${initCode}; ${condCode}; ${incrCode}) {`);
+          this.indent++;
+          
+          for (let i = 0; i < stmt.body.length; i++) {
+            if (i === stmtIndex) {
+              // Replace concatenation with append
+              this.emit(`${sbName}.append(${this.generateExpression(appendExpr)});`);
+            } else {
+              this.generateStatement(stmt.body[i]);
+            }
+          }
+          
+          this.indent--;
+          this.emit('}');
+          
+          // Convert StringBuilder to String after loop
+          this.emit(`${this.sanitizeIdentifier(varName)} = ${sbName}.toString();`);
+        } else {
+          // Normal for loop without StringBuilder optimization
+          this.emit(`for (${initCode}; ${condCode}; ${incrCode}) {`);
+          this.indent++;
+          for (const bodyStmt of stmt.body) {
+            this.generateStatement(bodyStmt);
+          }
+          this.indent--;
+          this.emit('}');
         }
-        this.indent--;
-        this.emit('}');
         break;
       }
       
@@ -725,15 +757,45 @@ export class CppCodegen {
         const varName = this.sanitizeIdentifier(stmt.variable);
         const iterableCode = this.generateExpression(stmt.iterable);
         
-        // Determine if we need const or auto based on variable type
-        // For now, use auto& for efficiency (no copies)
-        this.emit(`for (auto ${varName} : ${iterableCode}) {`);
-        this.indent++;
-        for (const bodyStmt of stmt.body) {
-          this.generateStatement(bodyStmt);
+        // Check for StringBuilder optimization opportunity
+        const sbOpportunity = this.mode === 'gc' ? this.detectStringBuilderOpportunity(stmt.body) : null;
+        
+        if (sbOpportunity) {
+          // Use StringBuilder for efficient string concatenation
+          const { varName: concatVarName, stmtIndex, appendExpr } = sbOpportunity;
+          const sbName = `${concatVarName}_sb`;
+          
+          // Declare StringBuilder before loop
+          this.emit(`gs::StringBuilder ${sbName};`);
+          
+          // Generate loop with append instead of concatenation
+          this.emit(`for (auto ${varName} : ${iterableCode}) {`);
+          this.indent++;
+          
+          for (let i = 0; i < stmt.body.length; i++) {
+            if (i === stmtIndex) {
+              // Replace concatenation with append
+              this.emit(`${sbName}.append(${this.generateExpression(appendExpr)});`);
+            } else {
+              this.generateStatement(stmt.body[i]);
+            }
+          }
+          
+          this.indent--;
+          this.emit('}');
+          
+          // Convert StringBuilder to String after loop
+          this.emit(`${this.sanitizeIdentifier(concatVarName)} = ${sbName}.toString();`);
+        } else {
+          // Normal for-of loop without StringBuilder optimization
+          this.emit(`for (auto ${varName} : ${iterableCode}) {`);
+          this.indent++;
+          for (const bodyStmt of stmt.body) {
+            this.generateStatement(bodyStmt);
+          }
+          this.indent--;
+          this.emit('}');
         }
-        this.indent--;
-        this.emit('}');
         break;
       }
       
@@ -788,6 +850,70 @@ export class CppCodegen {
         break;
       }
     }
+  }
+
+  /**
+   * Check if a statement is a string concatenation assignment: result = result + str
+   */
+  private isStringConcatAssignment(stmt: IRStatement): { varName: string; appendExpr: IRExpression } | null {
+    // Check for direct assignment statement
+    if (stmt.kind === 'assignment') {
+      if (stmt.value.kind !== 'binary') return null;
+      
+      const binary = stmt.value;
+      if (binary.operator !== BinaryOp.Add) return null;
+      if (binary.type.kind !== 'primitive' || binary.type.type !== 'string') return null;
+      
+      const targetName = stmt.target;
+      
+      // Check: result = result + str
+      if (binary.left.kind === 'identifier' && binary.left.name === targetName) {
+        return { varName: targetName, appendExpr: binary.right };
+      }
+      
+      return null;
+    }
+    
+    // Check for expression statement with assignment expression
+    if (stmt.kind !== 'expressionStatement') return null;
+    if (stmt.expression.kind !== 'assignment') return null;
+    
+    const assignment = stmt.expression;
+    // Assignment expressions use 'left' and 'right', not 'target' and 'value'
+    if (assignment.left.kind !== 'identifier') return null;
+    if (assignment.right.kind !== 'binary') return null;
+    
+    const binary = assignment.right;
+    if (binary.operator !== BinaryOp.Add) return null;
+    if (binary.type.kind !== 'primitive' || binary.type.type !== 'string') return null;
+    
+    const targetName = assignment.left.name;
+    
+    // Check: result = result + str
+    if (binary.left.kind === 'identifier' && binary.left.name === targetName) {
+      return { varName: targetName, appendExpr: binary.right };
+    }
+    
+    // Check: result = str + result (append at beginning)
+    if (binary.right.kind === 'identifier' && binary.right.name === targetName) {
+      // For now, skip this case (prepend is less common)
+      return null;
+    }
+    
+    return null;
+  }
+
+  /**
+   * Detect if a loop body has string concatenation pattern that can use StringBuilder
+   */
+  private detectStringBuilderOpportunity(body: IRStatement[]): { varName: string; stmtIndex: number; appendExpr: IRExpression } | null {
+    for (let i = 0; i < body.length; i++) {
+      const pattern = this.isStringConcatAssignment(body[i]);
+      if (pattern) {
+        return { ...pattern, stmtIndex: i };
+      }
+    }
+    return null;
   }
 
   /**
