@@ -1,23 +1,43 @@
 {
   "name": "@goodscript/http",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "HTTP client utilities for GoodScript",
   "type": "module",
   "main": "./dist/index-gs.js",
   "types": "./dist/index-gs.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm build && pnpm test"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fcapolini/goodscript.git",
+    "directory": "stdlib/http"
+  },
+  "bugs": {
+    "url": "https://github.com/fcapolini/goodscript/issues"
+  },
+  "homepage": "https://github.com/fcapolini/goodscript/tree/main/stdlib/http#readme",
   "keywords": [
     "goodscript",
+    "stdlib",
     "http",
+    "https",
     "fetch",
     "rest",
-    "api"
+    "api",
+    "client"
   ],
-  "author": "GoodScript Team",
+  "author": "GoodScript Contributors",
   "license": "MIT OR Apache-2.0",
   "devDependencies": {
     "typescript": "^5.6.0",

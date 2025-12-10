@@ -1,20 +1,39 @@
 {
   "name": "@goodscript/io",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "GoodScript file system I/O utilities",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm build && pnpm test"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fcapolini/goodscript.git",
+    "directory": "stdlib/io"
+  },
+  "bugs": {
+    "url": "https://github.com/fcapolini/goodscript/issues"
+  },
+  "homepage": "https://github.com/fcapolini/goodscript/tree/main/stdlib/io#readme",
   "keywords": [
     "goodscript",
     "stdlib",
     "io",
-    "filesystem"
+    "filesystem",
+    "file",
+    "directory"
   ],
   "author": "GoodScript Contributors",
   "license": "MIT OR Apache-2.0",
