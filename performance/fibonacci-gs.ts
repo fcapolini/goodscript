@@ -12,11 +12,17 @@ function runBenchmark(): void {
   const n: integer = 30; // Smaller for faster iteration
   const iterations: integer = 5;
   
-  // Just run the benchmark - timing handled externally
+  const startTotal: number = Date.now();
+  
   for (let i: integer = 0; i < iterations; i = i + 1) {
+    const start: number = Date.now();
     const result: integer = fibonacci(n);
-    console.log(`Iteration ${i + 1}: fib(${n}) = ${result}`);
+    const elapsed: number = Date.now() - start;
+    console.log(`Iteration ${i + 1}: fib(${n}) = ${result} (${elapsed}ms)`);
   }
+  
+  const totalTime: number = Date.now() - startTotal;
+  console.log(`Total time: ${totalTime}ms`);
 }
 
 runBenchmark();

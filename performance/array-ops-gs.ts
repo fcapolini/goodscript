@@ -35,11 +35,17 @@ function runBenchmark(): void {
   const size: integer = 100000;
   const iterations: integer = 10;
   
-  // Just run the benchmark - timing handled externally
+  const startTotal: number = Date.now();
+  
   for (let i: integer = 0; i < iterations; i = i + 1) {
+    const start: number = Date.now();
     const result: integer53 = arrayOperations(size);
-    console.log(`Iteration ${i + 1}: sum = ${result}`);
+    const elapsed: number = Date.now() - start;
+    console.log(`Iteration ${i + 1}: sum = ${result} (${elapsed}ms)`);
   }
+  
+  const totalTime: number = Date.now() - startTotal;
+  console.log(`Total time: ${totalTime}ms`);
 }
 
 runBenchmark();
