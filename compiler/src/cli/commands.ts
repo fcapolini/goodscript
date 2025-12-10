@@ -79,7 +79,15 @@ export async function compileCommand(options: CliOptions): Promise<CommandResult
       // Phase 2-3: Lower to IR
       if (options.gsShowIR || options.gsTarget === 'cpp') {
         const lowering = new IRLowering();
-        const irProgram = lowering.lower(program);
+        let irProgram = lowering.lower(program);
+        
+        // Phase 4: Optimize (if not disabled)
+        const optimizeLevel = options.gsOptimize || '3';
+        if (optimizeLevel !== '0') {
+          const { Optimizer } = await import('../optimizer/optimizer.js');
+          const optimizer = new Optimizer();
+          irProgram = optimizer.optimize(irProgram, 1); // Use level 1 for now (enables hoisting)
+        }
         
         if (options.gsShowIR) {
           console.log('\n--- IR for', file, '---');

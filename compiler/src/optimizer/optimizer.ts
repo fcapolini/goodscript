@@ -2,6 +2,7 @@
  * IR Optimizer
  * 
  * Optimization passes on IR:
+ * - Function hoisting (nested functions without closures)
  * - Constant folding
  * - Dead code elimination
  * - Ownership simplification (for GC mode)
@@ -21,12 +22,19 @@ import type {
   IRTerminator,
 } from '../ir/types.js';
 import { types } from '../ir/builder.js';
+import { FunctionHoister } from './function-hoister.js';
 
 export class Optimizer {
   private modified: boolean = false;
+  private hoister = new FunctionHoister();
 
-  optimize(program: IRProgram, _level: number): IRProgram {
-    // Multiple passes until fixed point
+  optimize(program: IRProgram, level: number): IRProgram {
+    // First, apply function hoisting (level 1+)
+    if (level >= 1) {
+      program = this.hoister.hoist(program);
+    }
+
+    // Then apply iterative optimizations
     let iterations = 0;
     const maxIterations = 10;
 

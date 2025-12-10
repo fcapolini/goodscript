@@ -751,16 +751,25 @@ export class CppCodegen {
         break;
       
       case 'functionDecl': {
-        // Nested function declaration - generate as local lambda or function
-        // For now, generate as a local lambda stored in a variable
+        // Nested function declaration
+        // Check if function is recursive (calls itself in body)
         const funcName = this.sanitizeIdentifier(stmt.name);
+        const isRecursive = this.isRecursiveFunction(stmt.name, stmt.body);
+        
         const params = stmt.params.map(p => 
           `${this.generateCppType(p.type)} ${this.sanitizeIdentifier(p.name)}`
         ).join(', ');
         const returnType = this.generateCppType(stmt.returnType);
         
-        // Generate as lambda: auto funcName = [](params) -> returnType { body };
-        this.emit(`auto ${funcName} = [](${params}) -> ${returnType} {`);
+        if (isRecursive) {
+          // Recursive function: use std::function so it can reference itself
+          this.emit(`std::function<${returnType}(${stmt.params.map(p => this.generateCppType(p.type)).join(', ')})> ${funcName};`);
+          this.emit(`${funcName} = [&${funcName}](${params}) -> ${returnType} {`);
+        } else {
+          // Non-recursive: simple lambda
+          this.emit(`auto ${funcName} = [](${params}) -> ${returnType} {`);
+        }
+        
         this.indent++;
         
         // Generate function body statements
@@ -1788,6 +1797,89 @@ export class CppCodegen {
     }
     
     return structInfo.name;
+  }
+
+  /**
+   * Check if a function is recursive (calls itself)
+   */
+  private isRecursiveFunction(funcName: string, body: { statements: any[] }): boolean {
+    for (const stmt of body.statements) {
+      if (this.statementCallsFunction(stmt, funcName)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private statementCallsFunction(stmt: any, funcName: string): boolean {
+    if (!stmt) return false;
+    
+    switch (stmt.kind) {
+      case 'expressionStatement':
+        return this.expressionCallsFunction(stmt.expression, funcName);
+      case 'return':
+        return stmt.value ? this.expressionCallsFunction(stmt.value, funcName) : false;
+      case 'if':
+        return this.expressionCallsFunction(stmt.condition, funcName) ||
+               (stmt.thenBranch?.some((s: any) => this.statementCallsFunction(s, funcName)) ?? false) ||
+               (stmt.elseBranch?.some((s: any) => this.statementCallsFunction(s, funcName)) ?? false);
+      case 'while':
+      case 'for-of':
+        return this.expressionCallsFunction(stmt.condition || stmt.iterable, funcName) ||
+               (stmt.body?.some((s: any) => this.statementCallsFunction(s, funcName)) ?? false);
+      case 'for':
+        return (stmt.init ? this.statementCallsFunction(stmt.init, funcName) : false) ||
+               (stmt.condition ? this.expressionCallsFunction(stmt.condition, funcName) : false) ||
+               (stmt.increment ? this.expressionCallsFunction(stmt.increment, funcName) : false) ||
+               (stmt.body?.some((s: any) => this.statementCallsFunction(s, funcName)) ?? false);
+      case 'variableDeclaration':
+        return stmt.initializer ? this.expressionCallsFunction(stmt.initializer, funcName) : false;
+      case 'assignment':
+        return this.expressionCallsFunction(stmt.value, funcName);
+      case 'try':
+        return (stmt.tryBlock?.some((s: any) => this.statementCallsFunction(s, funcName)) ?? false) ||
+               (stmt.catchClause?.body?.some((s: any) => this.statementCallsFunction(s, funcName)) ?? false) ||
+               (stmt.finallyBlock?.some((s: any) => this.statementCallsFunction(s, funcName)) ?? false);
+      case 'throw':
+        return this.expressionCallsFunction(stmt.expression, funcName);
+      case 'block':
+        return stmt.statements?.some((s: any) => this.statementCallsFunction(s, funcName)) ?? false;
+      default:
+        return false;
+    }
+  }
+
+  private expressionCallsFunction(expr: any, funcName: string): boolean {
+    if (!expr) return false;
+    
+    switch (expr.kind) {
+      case 'call':
+        if (expr.callee?.kind === 'identifier' && expr.callee.name === funcName) {
+          return true;
+        }
+        return this.expressionCallsFunction(expr.callee, funcName) ||
+               (expr.arguments?.some((arg: any) => this.expressionCallsFunction(arg, funcName)) ?? false);
+      case 'binary':
+        return this.expressionCallsFunction(expr.left, funcName) ||
+               this.expressionCallsFunction(expr.right, funcName);
+      case 'unary':
+        return this.expressionCallsFunction(expr.operand, funcName);
+      case 'conditional':
+        return this.expressionCallsFunction(expr.condition, funcName) ||
+               this.expressionCallsFunction(expr.thenExpr, funcName) ||
+               this.expressionCallsFunction(expr.elseExpr, funcName);
+      case 'memberAccess':
+        return this.expressionCallsFunction(expr.object, funcName);
+      case 'indexAccess':
+        return this.expressionCallsFunction(expr.object, funcName) ||
+               this.expressionCallsFunction(expr.index, funcName);
+      case 'arrayLiteral':
+        return expr.elements?.some((e: any) => this.expressionCallsFunction(e, funcName)) ?? false;
+      case 'objectLiteral':
+        return expr.properties?.some((p: any) => this.expressionCallsFunction(p.value, funcName)) ?? false;
+      default:
+        return false;
+    }
   }
 
   /**
