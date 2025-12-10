@@ -184,6 +184,7 @@ export class IRLowering {
 
     const fields: Array<{ name: string; type: IRType; isReadonly: boolean }> = [];
     const methods: Array<{ name: string; params: { name: string; type: IRType }[]; returnType: IRType; body: IRFunctionBody; isStatic: boolean }> = [];
+    let constructor: { params: { name: string; type: IRType }[]; body: IRFunctionBody } | undefined = undefined;
 
     for (const member of node.members) {
       if (ts.isPropertyDeclaration(member)) {
@@ -191,6 +192,13 @@ export class IRLowering {
         const fieldType = this.lowerTypeNode(member.type, sourceFile);
         const isReadonly = member.modifiers?.some(m => m.kind === ts.SyntaxKind.ReadonlyKeyword) ?? false;
         fields.push({ name: fieldName, type: fieldType, isReadonly });
+      } else if (ts.isConstructorDeclaration(member)) {
+        const params = member.parameters.map(p => ({
+          name: p.name.getText(sourceFile),
+          type: this.lowerTypeNode(p.type, sourceFile),
+        }));
+        const body = member.body ? this.lowerFunctionBody(member.body, sourceFile) : this.builder.functionBody([]);
+        constructor = { params, body };
       } else if (ts.isMethodDeclaration(member)) {
         const method = this.lowerMethod(member, sourceFile);
         if (method) methods.push(method);
@@ -202,7 +210,7 @@ export class IRLowering {
       name,
       fields,
       methods,
-      constructor: undefined,
+      constructor,
     };
   }
 
@@ -1176,6 +1184,13 @@ export class IRLowering {
       if (name === 'Promise' && typeNode.typeArguments) {
         const resultType = this.lowerTypeNode(typeNode.typeArguments[0], sourceFile);
         return types.promise(resultType);
+      }
+
+      // Map type
+      if (name === 'Map' && typeNode.typeArguments && typeNode.typeArguments.length === 2) {
+        const key = this.lowerTypeNode(typeNode.typeArguments[0], sourceFile);
+        const value = this.lowerTypeNode(typeNode.typeArguments[1], sourceFile);
+        return types.map(key, value, Ownership.Value);
       }
 
       return types.class(name, Ownership.Own);

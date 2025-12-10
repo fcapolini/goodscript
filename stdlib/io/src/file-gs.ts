@@ -21,10 +21,12 @@ export class File {
   // ============================================================
 
   /**
-   * Read file as UTF-8 text. Non-blocking, rejects on error.
+   * Read file as text with optional encoding. Non-blocking, rejects on error.
+   * @param path - File path to read
+   * @param encoding - Text encoding (utf-8, ascii, latin1, utf-16le, utf-16be). Default: utf-8
    */
-  static async readText(path: string): Promise<string> {
-    const result = await File.tryReadText(path);
+  static async readText(path: string, encoding?: string): Promise<string> {
+    const result = await File.tryReadText(path, encoding);
     if (result === null) {
       throw new Error(`Failed to read file: ${path}`);
     }
@@ -32,21 +34,26 @@ export class File {
   }
 
   /**
-   * Read file as UTF-8 text. Non-blocking, returns null on error.
+   * Read file as text with optional encoding. Non-blocking, returns null on error.
+   * @param path - File path to read
+   * @param encoding - Text encoding (utf-8, ascii, latin1, utf-16le, utf-16be). Default: utf-8
    */
-  static async tryReadText(path: string): Promise<string | null> {
+  static async tryReadText(path: string, encoding?: string): Promise<string | null> {
     try {
-      return await fs.promises.readFile(path, 'utf-8');
+      const enc = encoding || 'utf-8';
+      return await fs.promises.readFile(path, enc as BufferEncoding);
     } catch {
       return null;
     }
   }
 
   /**
-   * Read file as UTF-8 text. Blocks, throws on error.
+   * Read file as text with optional encoding. Blocks, throws on error.
+   * @param path - File path to read
+   * @param encoding - Text encoding (utf-8, ascii, latin1, utf-16le, utf-16be). Default: utf-8
    */
-  static syncReadText(path: string): string {
-    const result = File.trySyncReadText(path);
+  static syncReadText(path: string, encoding?: string): string {
+    const result = File.trySyncReadText(path, encoding);
     if (result === null) {
       throw new Error(`Failed to read file: ${path}`);
     }
@@ -54,11 +61,14 @@ export class File {
   }
 
   /**
-   * Read file as UTF-8 text. Blocks, returns null on error.
+   * Read file as text with optional encoding. Blocks, returns null on error.
+   * @param path - File path to read
+   * @param encoding - Text encoding (utf-8, ascii, latin1, utf-16le, utf-16be). Default: utf-8
    */
-  static trySyncReadText(path: string): string | null {
+  static trySyncReadText(path: string, encoding?: string): string | null {
     try {
-      return fs.readFileSync(path, 'utf-8');
+      const enc = encoding || 'utf-8';
+      return fs.readFileSync(path, enc as BufferEncoding);
     } catch {
       return null;
     }
@@ -118,21 +128,28 @@ export class File {
   // ============================================================
 
   /**
-   * Write text to file. Non-blocking, rejects on error.
+   * Write text to file with optional encoding. Non-blocking, rejects on error.
+   * @param path - File path to write
+   * @param content - Text content to write
+   * @param encoding - Text encoding (utf-8, ascii, latin1, utf-16le, utf-16be). Default: utf-8
    */
-  static async writeText(path: string, content: string): Promise<void> {
-    const success = await File.tryWriteText(path, content);
+  static async writeText(path: string, content: string, encoding?: string): Promise<void> {
+    const success = await File.tryWriteText(path, content, encoding);
     if (!success) {
       throw new Error(`Failed to write file: ${path}`);
     }
   }
 
   /**
-   * Write text to file. Non-blocking, returns false on error.
+   * Write text to file with optional encoding. Non-blocking, returns false on error.
+   * @param path - File path to write
+   * @param content - Text content to write
+   * @param encoding - Text encoding (utf-8, ascii, latin1, utf-16le, utf-16be). Default: utf-8
    */
-  static async tryWriteText(path: string, content: string): Promise<boolean> {
+  static async tryWriteText(path: string, content: string, encoding?: string): Promise<boolean> {
     try {
-      await fs.promises.writeFile(path, content, 'utf-8');
+      const enc = encoding || 'utf-8';
+      await fs.promises.writeFile(path, content, enc as BufferEncoding);
       return true;
     } catch {
       return false;
@@ -140,20 +157,27 @@ export class File {
   }
 
   /**
-   * Write text to file. Blocks, throws on error.
+   * Write text to file with optional encoding. Blocks, throws on error.
+   * @param path - File path to write
+   * @param content - Text content to write
+   * @param encoding - Text encoding (utf-8, ascii, latin1, utf-16le, utf-16be). Default: utf-8
    */
-  static syncWriteText(path: string, content: string): void {
-    if (!File.trySyncWriteText(path, content)) {
+  static syncWriteText(path: string, content: string, encoding?: string): void {
+    if (!File.trySyncWriteText(path, content, encoding)) {
       throw new Error(`Failed to write file: ${path}`);
     }
   }
 
   /**
-   * Write text to file. Blocks, returns false on error.
+   * Write text to file with optional encoding. Blocks, returns false on error.
+   * @param path - File path to write
+   * @param content - Text content to write
+   * @param encoding - Text encoding (utf-8, ascii, latin1, utf-16le, utf-16be). Default: utf-8
    */
-  static trySyncWriteText(path: string, content: string): boolean {
+  static trySyncWriteText(path: string, content: string, encoding?: string): boolean {
     try {
-      fs.writeFileSync(path, content, 'utf-8');
+      const enc = encoding || 'utf-8';
+      fs.writeFileSync(path, content, enc as BufferEncoding);
       return true;
     } catch {
       return false;
@@ -212,21 +236,28 @@ export class File {
   // ============================================================
 
   /**
-   * Append text to file. Non-blocking, rejects on error.
+   * Append text to file with optional encoding. Non-blocking, rejects on error.
+   * @param path - File path to append to
+   * @param content - Text content to append
+   * @param encoding - Text encoding (utf-8, ascii, latin1, utf-16le, utf-16be). Default: utf-8
    */
-  static async appendText(path: string, content: string): Promise<void> {
-    const success = await File.tryAppendText(path, content);
+  static async appendText(path: string, content: string, encoding?: string): Promise<void> {
+    const success = await File.tryAppendText(path, content, encoding);
     if (!success) {
       throw new Error(`Failed to append to file: ${path}`);
     }
   }
 
   /**
-   * Append text to file. Non-blocking, returns false on error.
+   * Append text to file with optional encoding. Non-blocking, returns false on error.
+   * @param path - File path to append to
+   * @param content - Text content to append
+   * @param encoding - Text encoding (utf-8, ascii, latin1, utf-16le, utf-16be). Default: utf-8
    */
-  static async tryAppendText(path: string, content: string): Promise<boolean> {
+  static async tryAppendText(path: string, content: string, encoding?: string): Promise<boolean> {
     try {
-      await fs.promises.appendFile(path, content, 'utf-8');
+      const enc = encoding || 'utf-8';
+      await fs.promises.appendFile(path, content, enc as BufferEncoding);
       return true;
     } catch {
       return false;
@@ -234,20 +265,27 @@ export class File {
   }
 
   /**
-   * Append text to file. Blocks, throws on error.
+   * Append text to file with optional encoding. Blocks, throws on error.
+   * @param path - File path to append to
+   * @param content - Text content to append
+   * @param encoding - Text encoding (utf-8, ascii, latin1, utf-16le, utf-16be). Default: utf-8
    */
-  static syncAppendText(path: string, content: string): void {
-    if (!File.trySyncAppendText(path, content)) {
+  static syncAppendText(path: string, content: string, encoding?: string): void {
+    if (!File.trySyncAppendText(path, content, encoding)) {
       throw new Error(`Failed to append to file: ${path}`);
     }
   }
 
   /**
-   * Append text to file. Blocks, returns false on error.
+   * Append text to file with optional encoding. Blocks, returns false on error.
+   * @param path - File path to append to
+   * @param content - Text content to append
+   * @param encoding - Text encoding (utf-8, ascii, latin1, utf-16le, utf-16be). Default: utf-8
    */
-  static trySyncAppendText(path: string, content: string): boolean {
+  static trySyncAppendText(path: string, content: string, encoding?: string): boolean {
     try {
-      fs.appendFileSync(path, content, 'utf-8');
+      const enc = encoding || 'utf-8';
+      fs.appendFileSync(path, content, enc as BufferEncoding);
       return true;
     } catch {
       return false;

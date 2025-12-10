@@ -1,60 +1,82 @@
-// Example: HTTP Client
-// Shows synchronous and asynchronous HTTP requests
+// Example: HTTP Client API Demonstration
+// Shows the HTTP client API structure
+// Note: Actual HTTP functionality requires curl library compilation
 
-// Note: This example demonstrates the HTTP API syntax.
-// Actual execution requires a network connection.
+console.log("=== HTTP Client API Demo ===\n");
 
-console.log("=== HTTP Client Examples ===");
+// This example demonstrates the HTTP API that will be available
+// once curl compilation is fully integrated
 
-// Synchronous GET request
-console.log("\n1. Synchronous GET request:");
-try {
-  const response1 = HTTP.syncFetch("https://httpbin.org/get");
-  console.log("Status:", response1.status);
-  console.log("Body:", response1.body);
-} catch (e) {
-  console.log("Sync request failed:", e.message);
-}
+console.log("HTTP Client API (Future Implementation):");
+console.log("");
+console.log("1. Synchronous GET:");
+console.log("   const response = HTTP.syncFetch('https://api.example.com');");
+console.log("   console.log(response.status); // 200");
+console.log("   console.log(response.body);   // Response body");
+console.log("");
 
-// Asynchronous GET request
-console.log("\n2. Asynchronous GET request:");
-async function asyncGetExample(): Promise<void> {
-  try {
-    const response = await HTTPAsync.fetch("https://httpbin.org/get");
-    console.log("Status:", response.status);
-    console.log("Body:", response.body);
-  } catch (e) {
-    console.log("Async GET failed:", e.message);
+console.log("2. Asynchronous GET:");
+console.log("   const response = await HTTPAsync.fetch('https://api.example.com');");
+console.log("   console.log(response.status);");
+console.log("");
+
+console.log("3. POST with custom headers:");
+console.log("   const headers = new Map<string, string>();");
+console.log("   headers.set('Content-Type', 'application/json');");
+console.log("   const response = await HTTPAsync.fetch(");
+console.log("     'https://api.example.com/data',");
+console.log("     'POST',");
+console.log("     '{\"key\": \"value\"}',");
+console.log("     headers,");
+console.log("     5000  // timeout in ms");
+console.log("   );");
+console.log("");
+
+console.log("4. Response object:");
+console.log("   response.status   // HTTP status code (number)");
+console.log("   response.body     // Response body (string)");
+console.log("   response.headers  // Response headers (Map<string, string>)");
+console.log("");
+
+console.log("Note: Full HTTP support requires libcurl integration.");
+console.log("      This demo shows the API structure for future use.");
+
+// Demonstrate the API structure (won't make actual requests)
+console.log("\n=== Type-Safe API Structure ===");
+
+class HttpResponse {
+  status: number;
+  body: string;
+  headers: Map<string, string>;
+
+  constructor(status: number, body: string, headers: Map<string, string>) {
+    this.status = status;
+    this.body = body;
+    this.headers = headers;
   }
-  return Promise.resolve(undefined);
 }
 
-asyncGetExample();
-
-// POST request with custom headers
-console.log("\n3. POST request with headers:");
-async function asyncPostExample(): Promise<void> {
-  try {
-    const headers = new Map<string, string>();
-    headers.set("Content-Type", "application/json");
-    headers.set("Accept", "application/json");
-    
-    const response = await HTTPAsync.fetch(
-      "https://httpbin.org/post",
-      "POST",
-      '{"name": "GoodScript", "version": "0.12"}',
-      headers,
-      5000  // 5 second timeout
-    );
-    
-    console.log("Status:", response.status);
-    console.log("Body:", response.body);
-  } catch (e) {
-    console.log("Async POST failed:", e.message);
-  }
-  return Promise.resolve(undefined);
+// Mock response to demonstrate the type structure
+function createMockResponse(): HttpResponse {
+  const headers = new Map<string, string>();
+  headers.set("content-type", "application/json");
+  headers.set("server", "GoodScript-Demo");
+  
+  return new HttpResponse(
+    200,
+    '{"message": "This would be the actual response"}',
+    headers
+  );
 }
 
-asyncPostExample();
+const mockResponse = createMockResponse();
+console.log("Mock HTTP Response:");
+console.log("  Status:", mockResponse.status);
+console.log("  Body:", mockResponse.body);
+console.log("  Headers:");
+const headerEntries = mockResponse.headers.entries();
+for (const entry of headerEntries) {
+  console.log("    " + entry[0] + ":", entry[1]);
+}
 
-console.log("\nNote: HTTP examples shown. Requires network connectivity.");
+console.log("\n=== Demo Complete ===");

@@ -308,12 +308,10 @@ export class CppCodegen {
       this.emit(`${staticMod}${returnType} ${this.sanitizeIdentifier(method.name)}(${params});`);
     }
 
+    // Fields (public by default to match TypeScript/JavaScript semantics)
     if (cls.fields.length > 0) {
       this.emit('');
-      this.emit('private:');
     }
-
-    // Fields
     for (const field of cls.fields) {
       const constMod = field.isReadonly ? 'const ' : '';
       this.emit(`${constMod}${this.generateCppType(field.type)} ${this.sanitizeIdentifier(field.name)}_;`);
@@ -461,26 +459,39 @@ export class CppCodegen {
   private generateSourceClass(cls: IRClassDecl): void {
     // Constructor implementation
     if (cls.constructor) {
+      const className = this.sanitizeIdentifier(cls.name);
       const params = cls.constructor.params.map(p => this.generateCppParam(p)).join(', ');
       
-      // Generate initializer list for readonly fields
-      const readonlyFields = cls.fields.filter(f => f.isReadonly && f.initializer);
-      if (readonlyFields.length > 0) {
-        this.emit(`${cls.name}::${cls.name}(${params})`);
+      // Generate initializer list from constructor parameters
+      // Match field names to parameter names for simple assignment pattern
+      const fieldInits: string[] = [];
+      for (const field of cls.fields) {
+        const param = cls.constructor.params.find(p => p.name === field.name);
+        if (param) {
+          fieldInits.push(`${this.sanitizeIdentifier(field.name)}_(${this.sanitizeIdentifier(param.name)})`);
+        }
+      }
+      
+      if (fieldInits.length > 0) {
+        this.emit(`${className}::${className}(${params})`);
         this.indent++;
-        for (let i = 0; i < readonlyFields.length; i++) {
-          const field = readonlyFields[i];
+        for (let i = 0; i < fieldInits.length; i++) {
           const prefix = i === 0 ? ': ' : ', ';
-          this.emit(`${prefix}${field.name}_(${this.generateExpr(field.initializer!)})`);
+          this.emit(`${prefix}${fieldInits[i]}`);
         }
         this.indent--;
         this.emit('{');
       } else {
-        this.emit(`${cls.name}::${cls.name}(${params}) {`);
+        this.emit(`${className}::${className}(${params}) {`);
       }
       
       this.indent++;
-      this.generateFunctionBody(cls.constructor.body);
+      // Constructor body: skip if all fields were initialized via member initializer list
+      // This handles the common pattern: constructor(a, b, c) { this.a = a; this.b = b; this.c = c; }
+      // TODO: Properly filter out field assignments or transform constructor body
+      if (fieldInits.length !== cls.fields.length) {
+        this.generateFunctionBody(cls.constructor.body);
+      }
       this.indent--;
       this.emit('}');
       this.emit('');
@@ -960,15 +971,20 @@ export class CppCodegen {
         
         // In C++, Map.size and Array.length are methods that need ()
         // Check the type to determine if this is a Map/Array or a struct field
+        const objectType = expr.object.type;
         let accessExpr = member;
         if (member === 'size' || member === 'length') {
-          const objectType = expr.object.type;
           // Check if the object type is a Map or Array
           const isMapOrArray = objectType.kind === 'map' || objectType.kind === 'array';
           // Also check for String.length
           const isString = member === 'length' && objectType.kind === 'primitive' && objectType.type === PrimitiveType.String;
           const isMethodProperty = isMapOrArray || isString;
           accessExpr = isMethodProperty ? `${member}()` : member;
+        }
+        
+        // For class fields, add underscore suffix (C++ convention to avoid keyword conflicts)
+        if (objectType.kind === 'class' && accessExpr === member) {
+          accessExpr = `${member}_`;
         }
         
         // Optional chaining: obj?.field becomes (obj != nullptr ? obj->field : nullptr)
@@ -981,7 +997,10 @@ export class CppCodegen {
           return `(${obj} != nullptr ? ${obj}->${accessExpr} : nullptr)`;
         }
         
-        return `${obj}.${accessExpr}`;
+        // For class types in GC mode, use -> since they're pointers
+        // In ownership mode with smart pointers, also use ->
+        const accessor = (objectType.kind === 'class') ? '->' : '.';
+        return `${obj}${accessor}${accessExpr}`;
       }
       
       case 'indexAccess': {
@@ -1017,7 +1036,7 @@ export class CppCodegen {
         const className = this.sanitizeIdentifier(expr.className);
         const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
         
-        // For built-in generic classes like Map, use the type to generate template parameters
+        // For built-in generic classes like Map, use the type to generate template params
         if (className === 'Map') {
           if (expr.type.kind === 'map') {
             const keyType = this.generateCppType(expr.type.key);
@@ -1028,11 +1047,24 @@ export class CppCodegen {
           return `gs::Map<gs::String, double>(${args})`;
         }
         
-        // For Error and other built-in classes, use gs:: namespace
+        // For Array, use direct construction
+        if (className === 'Array' && expr.type.kind === 'array') {
+          const elementType = this.generateCppType(expr.type.element);
+          return `gs::Array<${elementType}>(${args})`;
+        }
+        
+        // For Error and other built-in classes that are value types, use direct construction
         if (className === 'Error' || className === 'TypeError' || className === 'RangeError') {
           return `gs::${className}(${args})`;
         }
-        return `${className}(${args})`;
+        
+        // For user-defined classes in GC mode, use new to allocate on heap
+        if (this.mode === 'gc') {
+          return `new ${className}(${args})`;
+        } else {
+          // In ownership mode, use std::make_unique
+          return `std::make_unique<${className}>(${args})`;
+        }
       }
       
       case 'conditional': {
@@ -1253,7 +1285,11 @@ export class CppCodegen {
             return `${obj}.length()`;
           }
         }
-        return `${obj}.${expr.member}`;
+        
+        // For class types in GC mode, use -> since they're pointers
+        // In ownership mode with smart pointers, also use ->
+        const accessor = (objType.kind === 'class') ? '->' : '.';
+        return `${obj}${accessor}${expr.member}`;
       }
       case 'index': {
         const obj = this.generateExpr(expr.object);

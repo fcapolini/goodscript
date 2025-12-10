@@ -1587,26 +1587,94 @@ type IRExpr =
 
 ```
 compiler/test/
-├── infrastructure.test.ts  - IR builder, types, visitor
-├── lowering.test.ts       - AST → IR conversion
-├── validator.test.ts      - Language restrictions
-├── signatures.test.ts     - Type signature system
-├── ownership.test.ts      - Ownership analysis (TODO)
-├── nullcheck.test.ts      - Null safety (TODO)
-└── codegen.test.ts        - Code generation (TODO)
+├── infrastructure.test.ts       - IR builder, types, visitor
+├── lowering.test.ts            - AST → IR conversion
+├── validator.test.ts           - Language restrictions
+├── signatures.test.ts          - Type signature system
+├── ownership.test.ts           - Ownership analysis
+├── null-checker.test.ts        - Null safety
+├── optimizer.test.ts           - IR optimization passes
+├── cpp-codegen.test.ts         - C++ code generation
+├── zig-compiler.test.ts        - Zig compiler integration
+├── tsconfig-integration.test.ts - tsconfig.json support
+├── for-of.test.ts              - for-of loop lowering
+├── map-methods.test.ts         - Map<K,V> operations
+├── optional-chaining.test.ts   - Optional chaining
+├── string-methods.test.ts      - String method lowering
+├── template-literals.test.ts   - Template literal lowering
+├── async-types.test.ts         - Promise<T> IR type system
+├── async-lowering.test.ts      - async/await AST lowering
+├── async-codegen.test.ts       - async/await C++ codegen
+├── async-runtime.test.ts       - Promise runtime library
+├── async-integration.test.ts   - async/await integration
+├── filesystem.test.ts          - FileSystem built-in API
+├── filesystem-demo.test.ts     - FileSystem demo execution
+├── member-access.test.ts       - Member access codegen
+├── http-integration.test.ts    - HTTP client integration
+├── math-integration.test.ts    - Math object integration
+├── json-integration.test.ts    - JSON object integration
+├── math-json-demo.test.ts      - Math/JSON demo compilation
+├── union-types.test.ts         - Union type support
+├── exception-handling.test.ts  - Exception handling
+├── expressions.test.ts         - Expression lowering
+├── element-access.test.ts      - Array/object indexing
+├── examples.test.ts            - Example programs
+└── cli.test.ts                 - CLI functionality
 ```
 
 ### Test Coverage
 
+**Current Status**: 394 tests passing, 19 skipped (33 test files)
+
+**Core Compiler** (114 tests):
 - ✅ **IR Infrastructure** (11 tests) - Type system, builders, visitors
-- ✅ **IR Lowering** (12 tests) - AST to IR conversion
-- ✅ **Validator** (42 tests) - All 15 language restrictions
+- ✅ **IR Lowering** (14 tests) - AST to IR conversion
+- ✅ **Validator** (45 tests) - All 16 language restrictions
 - ✅ **Type Signatures** (11 tests) - Structural typing
-- ⏳ **Ownership Analysis** - DAG cycle detection
-- ⏳ **Null Checker** - use<T> validation
-- ⏳ **Optimizer** - Optimization passes
-- ⏳ **C++ Codegen** - Native code generation
-- ⏳ **TS Codegen** - JavaScript transpilation
+- ✅ **Ownership Analysis** (31 tests) - DAG cycle detection, type aliases, intersections
+- ✅ **Null Checker** (13 tests) - use<T> lifetime safety
+- ✅ **Optimizer** (15 tests) - Constant folding, DCE, multi-pass
+
+**Code Generation** (40 tests):
+- ✅ **C++ Codegen** (28 tests) - Source maps, expressions, statements, classes
+- ✅ **Zig Compiler** (10 tests) - Binary compilation, cross-compilation
+- ✅ **tsconfig.json** (5 tests) - Configuration integration
+
+**Language Features** (99 tests):
+- ✅ **for-of Loops** (9 tests) - Array and string iteration
+- ✅ **Map Methods** (12 tests) - Map<K,V> operations (set, get, has, delete, etc.)
+- ✅ **Optional Chaining** (5 tests) - obj?.field, nested chaining
+- ✅ **String Methods** (10 tests) - split, slice, trim, toLowerCase, etc.
+- ✅ **Template Literals** (7 tests) - String interpolation
+- ✅ **Union Types** (12 tests, 4 skipped) - T | null, T | undefined
+- ✅ **Exception Handling** (11 tests) - try/catch/throw/finally
+- ✅ **Expressions** (14 tests) - Binary, unary, assignment
+- ✅ **Element Access** (6 tests) - Array/object indexing
+- ✅ **Member Access** (2 tests) - Struct fields vs Map/Array methods
+
+**Async/Await** (53 tests):
+- ✅ **Promise<T> Types** (11 tests) - IR type system
+- ✅ **Async Lowering** (14 tests) - AST to IR conversion
+- ✅ **Async Codegen** (14 tests) - cppcoro integration
+- ✅ **Promise Runtime** (3 tests) - Promise.resolve, Promise.reject
+- ✅ **Async Integration** (11 tests) - Full pipeline tests
+
+**Built-in APIs** (46 tests):
+- ✅ **FileSystem API** (9 tests) - Sync and async file I/O
+- ✅ **FileSystem Demo** (2 tests) - End-to-end execution
+- ✅ **HTTP Client** (3 tests) - libcurl integration
+- ✅ **Math Object** (15 tests) - Math.min, Math.max, Math.sqrt, etc.
+- ✅ **JSON Object** (5 tests) - JSON.stringify
+- ✅ **Math/JSON Demo** (2 tests) - Compilation tests
+
+**CLI & Examples** (42 tests):
+- ✅ **CLI Functionality** (42 tests) - Command-line interface
+- ✅ **Example Programs** (in examples.test.ts) - Full compilation pipeline
+
+**Missing/Planned**:
+- ⏳ **TypeScript Backend** - JavaScript/TypeScript code generation
+- ⏳ **Haxe Backend** - Multi-target adapter (JVM, C#, Python, etc.)
+- ⏳ **Standard Library** - Core runtime modules
 
 ## Build System
 

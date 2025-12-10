@@ -24,6 +24,9 @@
 #include <cstdint>
 #include <chrono>
 #include <system_error>
+#include <algorithm>
+#include <codecvt>
+#include <locale>
 
 #ifdef CPPCORO_TASK_HPP_INCLUDED
 #include <cppcoro/task.hpp>
@@ -47,6 +50,110 @@
 #endif
 
 namespace gs {
+
+// Internal encoding conversion helpers
+namespace detail {
+  // Convert bytes to UTF-8 string based on encoding
+  inline std::string decodeBytes(const std::string& bytes, const std::string& encoding) {
+    if (encoding == "utf-8" || encoding == "utf8") {
+      return bytes; // Already UTF-8
+    } else if (encoding == "ascii") {
+      // ASCII is a subset of UTF-8, just validate
+      for (char c : bytes) {
+        if (static_cast<unsigned char>(c) > 127) {
+          throw gs::Error("Invalid ASCII character in file");
+        }
+      }
+      return bytes;
+    } else if (encoding == "latin1" || encoding == "iso-8859-1") {
+      // Convert Latin1 to UTF-8
+      std::string result;
+      for (unsigned char c : bytes) {
+        if (c < 128) {
+          result += c;
+        } else {
+          result += static_cast<char>(0xC0 | (c >> 6));
+          result += static_cast<char>(0x80 | (c & 0x3F));
+        }
+      }
+      return result;
+    } else if (encoding == "utf-16le" || encoding == "utf16le") {
+      // Convert UTF-16LE to UTF-8
+      std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> convert;
+      const char16_t* data = reinterpret_cast<const char16_t*>(bytes.data());
+      size_t len = bytes.size() / 2;
+      return convert.to_bytes(data, data + len);
+    } else if (encoding == "utf-16be" || encoding == "utf16be") {
+      // Convert UTF-16BE to UTF-8 (swap bytes first)
+      std::string swapped;
+      for (size_t i = 0; i + 1 < bytes.size(); i += 2) {
+        swapped += bytes[i + 1];
+        swapped += bytes[i];
+      }
+      std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> convert;
+      const char16_t* data = reinterpret_cast<const char16_t*>(swapped.data());
+      size_t len = swapped.size() / 2;
+      return convert.to_bytes(data, data + len);
+    } else {
+      throw gs::Error("Unsupported encoding: " + encoding + ". Supported: utf-8, ascii, latin1, utf-16le, utf-16be");
+    }
+  }
+
+  // Convert UTF-8 string to bytes based on encoding
+  inline std::string encodeString(const std::string& str, const std::string& encoding) {
+    if (encoding == "utf-8" || encoding == "utf8") {
+      return str; // Already UTF-8
+    } else if (encoding == "ascii") {
+      // Validate ASCII range
+      for (char c : str) {
+        if (static_cast<unsigned char>(c) > 127) {
+          throw gs::Error("String contains non-ASCII characters, cannot encode as ASCII");
+        }
+      }
+      return str;
+    } else if (encoding == "latin1" || encoding == "iso-8859-1") {
+      // Convert UTF-8 to Latin1 (lossy for chars > 255)
+      std::string result;
+      for (size_t i = 0; i < str.size();) {
+        unsigned char c = static_cast<unsigned char>(str[i]);
+        if (c < 128) {
+          result += c;
+          i++;
+        } else if ((c & 0xE0) == 0xC0 && i + 1 < str.size()) {
+          // 2-byte UTF-8 sequence
+          unsigned char c2 = static_cast<unsigned char>(str[i + 1]);
+          uint32_t codepoint = ((c & 0x1F) << 6) | (c2 & 0x3F);
+          if (codepoint > 255) {
+            throw gs::Error("Character U+" + std::to_string(codepoint) + " cannot be encoded as Latin1");
+          }
+          result += static_cast<char>(codepoint);
+          i += 2;
+        } else {
+          throw gs::Error("String contains characters that cannot be encoded as Latin1");
+        }
+      }
+      return result;
+    } else if (encoding == "utf-16le" || encoding == "utf16le") {
+      // Convert UTF-8 to UTF-16LE
+      std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> convert;
+      std::u16string utf16 = convert.from_bytes(str);
+      return std::string(reinterpret_cast<const char*>(utf16.data()), utf16.size() * 2);
+    } else if (encoding == "utf-16be" || encoding == "utf16be") {
+      // Convert UTF-8 to UTF-16BE (swap bytes)
+      std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> convert;
+      std::u16string utf16 = convert.from_bytes(str);
+      std::string result;
+      const char* data = reinterpret_cast<const char*>(utf16.data());
+      for (size_t i = 0; i < utf16.size() * 2; i += 2) {
+        result += data[i + 1];
+        result += data[i];
+      }
+      return result;
+    } else {
+      throw gs::Error("Unsupported encoding: " + encoding + ". Supported: utf-8, ascii, latin1, utf-16le, utf-16be");
+    }
+  }
+} // namespace detail
 
 /**
  * File type enumeration
@@ -93,7 +200,6 @@ public:
    * Read entire file as text
    */
   static gs::String readText(const gs::String& path, const std::optional<gs::String>& encoding = std::nullopt) {
-    // encoding parameter is ignored (always UTF-8 in C++)
     #ifdef GS_GC_MODE
     std::filesystem::path p(GS_STRING_CSTR(path));
     #else
@@ -105,9 +211,13 @@ public:
       throw gs::Error("Failed to open file: " + path);
     }
     
-    // Read entire file into string
-    std::string content((std::istreambuf_iterator<char>(file)),
-                       std::istreambuf_iterator<char>());
+    // Read entire file as bytes
+    std::string bytes((std::istreambuf_iterator<char>(file)),
+                      std::istreambuf_iterator<char>());
+    
+    // Convert from specified encoding to UTF-8
+    std::string enc = encoding.has_value() ? GS_STRING_TO_STD(*encoding) : "utf-8";
+    std::string content = detail::decodeBytes(bytes, enc);
     
     return gs::String(content);
   }
@@ -129,11 +239,12 @@ public:
       throw gs::Error("Failed to open file for writing: " + path);
     }
     
-    #ifdef GS_GC_MODE
-    file << GS_STRING_WRITE(content);
-    #else
-    file << GS_STRING_WRITE(content);
-    #endif
+    // Convert from UTF-8 to specified encoding
+    std::string enc = encoding.has_value() ? GS_STRING_TO_STD(*encoding) : "utf-8";
+    std::string contentStr = GS_STRING_TO_STD(content);
+    std::string bytes = detail::encodeString(contentStr, enc);
+    
+    file << bytes;
     
     // Set permissions if provided (POSIX only)
     #ifndef _WIN32
@@ -162,11 +273,12 @@ public:
       throw gs::Error("Failed to open file for appending: " + path);
     }
     
-    #ifdef GS_GC_MODE
-    file << GS_STRING_WRITE(content);
-    #else
-    file << GS_STRING_WRITE(content);
-    #endif
+    // Convert from UTF-8 to specified encoding
+    std::string enc = encoding.has_value() ? GS_STRING_TO_STD(*encoding) : "utf-8";
+    std::string contentStr = GS_STRING_TO_STD(content);
+    std::string bytes = detail::encodeString(contentStr, enc);
+    
+    file << bytes;
   }
 
   /**

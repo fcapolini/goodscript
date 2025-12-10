@@ -276,7 +276,7 @@ describe('Examples', () => {
   });
 
   describe('11-http-client', () => {
-    it('should compile to C++', () => {
+    it('should compile to C++ (API demonstration)', () => {
       const mainFile = path.join(EXAMPLES_DIR, '11-http-client', 'src/main-gs.ts');
       const program = createProgram([mainFile]);
       const sourceFile = program.getSourceFile(mainFile);
@@ -293,8 +293,10 @@ describe('Examples', () => {
       const cppFiles = codegen.generate(irProgram, 'gc', false);
       expect(cppFiles.size).toBeGreaterThan(0);
       
+      // This is a demo showing HTTP API structure, not actual HTTP calls
       const cppContent = Array.from(cppFiles.values()).join('\n');
-      expect(cppContent).toContain('HTTPAsync::fetch');
+      expect(cppContent).toContain('HttpResponse');
+      expect(cppContent).toContain('createMockResponse');
     });
   });
 

@@ -32,24 +32,35 @@ async function readConfig(): Promise<string> {
 
 #### `readText(path: string, encoding?: string): string`
 
-Read entire file as text (UTF-8).
+Read entire file as text with optional encoding.
 
 ```typescript
-// Read text file
+// Read text file (default UTF-8)
 const config = FileSystem.readText('config.json');
 const readme = FileSystem.readText('README.md');
 
+// Read with specific encoding
+const latin1Text = FileSystem.readText('legacy.txt', 'latin1');
+const asciiData = FileSystem.readText('data.txt', 'ascii');
+
 // Async version
 const content = await FileSystemAsync.readText('large-file.txt');
+const utf16 = await FileSystemAsync.readText('unicode.txt', 'utf-16le');
 ```
 
 **Parameters**:
 - `path`: File path (relative or absolute)
-- `encoding`: Encoding (optional, always UTF-8 in C++)
+- `encoding`: Text encoding (optional, default: `'utf-8'`)
+  - Supported encodings:
+    - `'utf-8'` or `'utf8'` - UTF-8 (default)
+    - `'ascii'` - ASCII (7-bit, validates range 0-127)
+    - `'latin1'` or `'iso-8859-1'` - Latin-1 (8-bit Western European)
+    - `'utf-16le'` or `'utf16le'` - UTF-16 Little Endian
+    - `'utf-16be'` or `'utf16be'` - UTF-16 Big Endian
 
-**Returns**: File contents as string
+**Returns**: File contents as string (always UTF-8 internally in GoodScript)
 
-**Throws**: `Error` if file doesn't exist or can't be read
+**Throws**: `Error` if file doesn't exist, can't be read, or contains invalid data for the specified encoding
 
 ---
 
@@ -74,25 +85,34 @@ const data = await FileSystemAsync.readBytes('file.bin');
 
 #### `writeText(path: string, content: string, encoding?: string, mode?: number): void`
 
-Write text to file (creates or overwrites).
+Write text to file with optional encoding (creates or overwrites).
 
 ```typescript
-// Write text file
+// Write text file (default UTF-8)
 FileSystem.writeText('output.txt', 'Hello, World!');
 
 // Write JSON configuration
 const config = '{"version": 1, "debug": false}';
 FileSystem.writeText('config.json', config);
 
+// Write with specific encoding
+FileSystem.writeText('ascii.txt', 'ASCII only text', 'ascii');
+FileSystem.writeText('legacy.txt', 'Café', 'latin1');
+
 // Async version
 await FileSystemAsync.writeText('data.txt', 'Async write!');
+await FileSystemAsync.writeText('unicode.txt', '日本語', 'utf-16le');
 ```
 
 **Parameters**:
 - `path`: File path
-- `content`: Text content to write
-- `encoding`: Encoding (optional)
+- `content`: Text content to write (UTF-8 string)
+- `encoding`: Target encoding (optional, default: `'utf-8'`)
+  - Supported encodings: same as `readText()`
+  - Content is converted from UTF-8 to the target encoding
 - `mode`: POSIX file permissions (optional, Unix/Linux only)
+
+**Throws**: `Error` if file can't be created/written, or if content contains characters that cannot be represented in the target encoding
 
 ---
 
@@ -113,16 +133,30 @@ await FileSystemAsync.writeBytes('output.bin', data);
 
 #### `appendText(path: string, content: string, encoding?: string, mode?: number): void`
 
-Append text to file (creates if doesn't exist).
+Append text to file with optional encoding (creates if doesn't exist).
 
 ```typescript
-// Append to log file
+// Append to log file (default UTF-8)
 FileSystem.appendText('app.log', '[INFO] Application started\n');
 FileSystem.appendText('app.log', '[INFO] Processing data\n');
 
+// Append with specific encoding
+FileSystem.appendText('legacy.log', 'New entry\n', 'latin1');
+
 // Async version
 await FileSystemAsync.appendText('log.txt', 'New entry\n');
+await FileSystemAsync.appendText('unicode.log', '更新\n', 'utf-16le');
 ```
+
+**Parameters**:
+- `path`: File path
+- `content`: Text content to append (UTF-8 string)
+- `encoding`: Target encoding (optional, default: `'utf-8'`)
+  - Supported encodings: same as `readText()`
+  - **Note**: Ensure the file's existing encoding matches the specified encoding
+- `mode`: POSIX file permissions (optional, Unix/Linux only, only used if file is created)
+
+**Throws**: `Error` if file can't be opened/written, or if content contains characters that cannot be represented in the target encoding
 
 ---
 
@@ -644,6 +678,188 @@ describe('FileSystem Built-in', () => {
     // Verifies async/await and Promise<T> handling
   });
 });
+```
+
+---
+
+## Text Encoding Support
+
+### Overview
+
+All text file operations (`readText`, `writeText`, `appendText`) support multiple character encodings. GoodScript internally uses UTF-8, but can read and write files in different encodings.
+
+### Supported Encodings
+
+| Encoding | Description | Use Case |
+|----------|-------------|----------|
+| `'utf-8'` or `'utf8'` | UTF-8 (default) | Modern text files, JSON, source code |
+| `'ascii'` | ASCII (7-bit) | Plain English text, legacy systems |
+| `'latin1'` or `'iso-8859-1'` | Latin-1 (8-bit) | Western European text, legacy files |
+| `'utf-16le'` | UTF-16 Little Endian | Windows text files, some databases |
+| `'utf-16be'` | UTF-16 Big Endian | Network protocols, Java .class files |
+
+### Reading with Encoding
+
+```typescript
+// Default UTF-8
+const utf8Text = FileSystem.readText('modern.txt');
+
+// Read legacy Latin-1 file
+const legacyData = FileSystem.readText('legacy.txt', 'latin1');
+
+// Read Windows UTF-16 file
+const windowsText = FileSystem.readText('windows.txt', 'utf-16le');
+
+// Validate ASCII file
+try {
+  const asciiData = FileSystem.readText('data.txt', 'ascii');
+  console.log('File is valid ASCII');
+} catch (e) {
+  console.log('File contains non-ASCII characters');
+}
+```
+
+### Writing with Encoding
+
+```typescript
+// Default UTF-8 (recommended for new files)
+FileSystem.writeText('output.txt', 'Hello, 世界!');
+
+// Write ASCII-only file (throws if content has non-ASCII)
+try {
+  FileSystem.writeText('ascii.txt', 'ASCII only', 'ascii');
+} catch (e) {
+  console.log('Content contains non-ASCII characters');
+}
+
+// Write legacy Latin-1 file
+FileSystem.writeText('legacy.txt', 'Café résumé', 'latin1');
+
+// Write Windows-compatible UTF-16LE
+FileSystem.writeText('windows.txt', 'Windows text', 'utf-16le');
+```
+
+### Encoding Conversion
+
+GoodScript automatically converts between encodings:
+
+1. **Reading**: File bytes → specified encoding → UTF-8 (internal)
+2. **Writing**: UTF-8 (internal) → specified encoding → file bytes
+
+```typescript
+// Read Latin-1, write UTF-8
+const content = FileSystem.readText('input.txt', 'latin1');
+FileSystem.writeText('output.txt', content, 'utf-8');
+
+// Read UTF-16LE, write ASCII (may throw if non-ASCII chars)
+const utf16 = FileSystem.readText('unicode.txt', 'utf-16le');
+FileSystem.writeText('ascii.txt', utf16, 'ascii');
+```
+
+### Best Practices
+
+**1. Default to UTF-8**
+```typescript
+// Good: UTF-8 is the default and most compatible
+FileSystem.writeText('data.json', jsonData);
+```
+
+**2. Specify encoding for legacy files**
+```typescript
+// Good: Explicit encoding for legacy systems
+const config = FileSystem.readText('legacy.ini', 'latin1');
+```
+
+**3. Match encoding when appending**
+```typescript
+// Good: Append with same encoding as original file
+const existingEncoding = 'utf-16le';
+FileSystem.appendText('log.txt', 'New entry\\n', existingEncoding);
+```
+
+**4. Validate encoding constraints**
+```typescript
+// Good: Handle encoding errors gracefully
+function writeAsciiFile(path: string, content: string): boolean {
+  try {
+    FileSystem.writeText(path, content, 'ascii');
+    return true;
+  } catch (e) {
+    console.log('Content not ASCII-compatible:', e);
+    return false;
+  }
+}
+```
+
+**5. Document encoding in file comments/headers**
+```typescript
+// Good: Make encoding explicit
+const header = '# encoding: latin1\\n# Legacy configuration\\n';
+FileSystem.writeText('config.ini', header + content, 'latin1');
+```
+
+### Platform Differences
+
+**C++ Backend**:
+- Full encoding support via `<codecvt>` and custom converters
+- Validates encoding constraints (e.g., ASCII range 0-127)
+- Throws `Error` if conversion fails
+
+**TypeScript/JavaScript Backend** (Node.js):
+- Uses Node.js `Buffer` encoding support
+- Supports same encodings via `BufferEncoding` type
+- Compatible encoding names: `'utf-8'`, `'ascii'`, `'latin1'`, `'utf16le'`
+
+**Cross-Platform Tip**: Stick to common encodings (`'utf-8'`, `'ascii'`, `'latin1'`) for maximum compatibility.
+
+### Common Encoding Issues
+
+**1. Non-ASCII characters in ASCII mode**
+```typescript
+// ❌ Throws: String contains non-ASCII
+FileSystem.writeText('file.txt', 'Café', 'ascii');
+
+// ✅ Use Latin-1 or UTF-8 instead
+FileSystem.writeText('file.txt', 'Café', 'latin1');
+```
+
+**2. Characters outside Latin-1 range**
+```typescript
+// ❌ Throws: Character U+4E2D (中) cannot be encoded as Latin1
+FileSystem.writeText('file.txt', '中文', 'latin1');
+
+// ✅ Use UTF-8 or UTF-16 for Unicode
+FileSystem.writeText('file.txt', '中文', 'utf-8');
+```
+
+**3. Mixed encodings in append**
+```typescript
+// ❌ Bad: File is UTF-16, appending UTF-8 corrupts it
+FileSystem.writeText('file.txt', 'Hello', 'utf-16le');
+FileSystem.appendText('file.txt', 'World'); // Wrong encoding!
+
+// ✅ Good: Match the original encoding
+FileSystem.writeText('file.txt', 'Hello', 'utf-16le');
+FileSystem.appendText('file.txt', 'World', 'utf-16le');
+```
+
+**4. Reading unknown encoding**
+```typescript
+// ❌ Bad: Guessing encoding may produce garbage
+const content = FileSystem.readText('unknown.txt'); // Assumes UTF-8
+
+// ✅ Good: Try common encodings or inspect first
+function readTextSafe(path: string): string {
+  const encodings = ['utf-8', 'latin1', 'utf-16le'];
+  for (const enc of encodings) {
+    try {
+      return FileSystem.readText(path, enc);
+    } catch {
+      continue;
+    }
+  }
+  throw new Error('Unable to read file with known encodings');
+}
 ```
 
 ---

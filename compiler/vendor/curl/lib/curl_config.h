@@ -34,9 +34,13 @@
 #define HAVE_STRINGS_H 1
 #define HAVE_SYS_TYPES_H 1
 #define HAVE_SYS_STAT_H 1
+#define HAVE_SYS_TIME_H 1
 #define HAVE_TIME_H 1
 #define HAVE_ERRNO_H 1
 #define HAVE_SIGNAL_H 1
+
+/* Prevent timeval redefinition */
+#define HAVE_STRUCT_TIMEVAL 1
 
 /* Socket functions */
 #define HAVE_SOCKET 1
