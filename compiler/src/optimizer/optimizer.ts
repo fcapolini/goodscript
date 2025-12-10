@@ -26,7 +26,6 @@ export class Optimizer {
   private modified: boolean = false;
 
   optimize(program: IRProgram, _level: number): IRProgram {
-
     // Multiple passes until fixed point
     let iterations = 0;
     const maxIterations = 10;
@@ -47,6 +46,8 @@ export class Optimizer {
   }
 
   private optimizeModule(module: IRModule): IRModule {
+    // Just optimize declarations, don't add hoisted functions here
+    // (hoisting happens in separate pass)
     return {
       ...module,
       declarations: module.declarations.map(d => this.optimizeDeclaration(d)),
