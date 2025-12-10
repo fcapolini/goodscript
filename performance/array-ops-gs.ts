@@ -1,7 +1,7 @@
 // Array operations benchmark
 // Tests array allocation, iteration, and method performance
 
-function arrayOperations(size: integer): integer {
+function arrayOperations(size: integer): integer53 {
   // Create and populate array
   const arr: number[] = [];
   for (let i: integer = 0; i < size; i = i + 1) {
@@ -9,7 +9,7 @@ function arrayOperations(size: integer): integer {
   }
   
   // Sum all elements
-  let sum: integer = 0;
+  let sum: integer53 = 0;
   for (const num of arr) {
     sum = sum + num;
   }
@@ -37,7 +37,7 @@ function runBenchmark(): void {
   
   // Just run the benchmark - timing handled externally
   for (let i: integer = 0; i < iterations; i = i + 1) {
-    const result: integer = arrayOperations(size);
+    const result: integer53 = arrayOperations(size);
     console.log(`Iteration ${i + 1}: sum = ${result}`);
   }
 }

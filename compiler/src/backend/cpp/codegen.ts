@@ -576,9 +576,20 @@ export class CppCodegen {
    */
   private generateStatement(stmt: IRStatement): void {
     switch (stmt.kind) {
-      case 'variableDeclaration':
-        this.emit(`auto ${this.sanitizeIdentifier(stmt.name)} = ${stmt.initializer ? this.generateExpression(stmt.initializer) : 'nullptr'};`);
+      case 'variableDeclaration': {
+        // For integer53 types, we need explicit type annotation since auto with literal 0
+        // will infer int instead of int64_t
+        const needsExplicitType = stmt.variableType.kind === 'primitive' && 
+                                  stmt.variableType.type === PrimitiveType.Integer53;
+        
+        if (needsExplicitType) {
+          const cppType = this.generateCppType(stmt.variableType);
+          this.emit(`${cppType} ${this.sanitizeIdentifier(stmt.name)} = ${stmt.initializer ? this.generateExpression(stmt.initializer) : '0'};`);
+        } else {
+          this.emit(`auto ${this.sanitizeIdentifier(stmt.name)} = ${stmt.initializer ? this.generateExpression(stmt.initializer) : 'nullptr'};`);
+        }
         break;
+      }
       
       case 'assignment':
         this.emit(`${this.sanitizeIdentifier(stmt.target)} = ${this.generateExpression(stmt.value)};`);

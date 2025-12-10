@@ -78,6 +78,10 @@ public:
     return String(std::to_string(value));
   }
   
+  static String from(long long value) {
+    return String(std::to_string(value));
+  }
+  
   static String from(bool value) {
     return String(value ? "true" : "false");
   }
