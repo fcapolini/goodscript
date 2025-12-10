@@ -38,7 +38,8 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ Interface declarations (TypeScript interfaces → C++ structs with pure virtual methods)
 - ✅ Class field initializers (default values in member initializer lists)
 - ✅ Number instance methods (toFixed, toExponential, toPrecision, toString)
-- ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
+- ✅ Object literals (struct types, anonymous structs, C++ designated initializers)
+- ⏳ Type aliases (TypeScript `type` → C++ `using` - needed for object literal type names)
 
 **Recent Progress (Dec 10, 2025)**:
 - ✅ **Function Hoisting Optimization** (431 tests passing)

@@ -192,8 +192,13 @@ export class CppCodegen {
     }
 
     // Anonymous struct definitions (from object literals)
-    // Note: We need to pre-scan declarations to populate the registry
+    // Pre-scan declarations and init statements to populate the struct registry
     this.preScanDeclarations(module.declarations);
+    if (module.initStatements) {
+      for (const stmt of module.initStatements) {
+        this.preScanStatement(stmt);
+      }
+    }
     if (this.structRegistry.size > 0) {
       this.generateStructDefinitions();
     }
@@ -1124,9 +1129,15 @@ export class CppCodegen {
       }
       
       case 'objectLiteral': {
-        // For now, return a placeholder
-        // TODO: Implement struct generation for object literals
-        return '/* object literal not yet implemented */';
+        // Generate struct type and initialization
+        if (expr.type.kind === 'struct') {
+          const structType = this.generateCppType(expr.type);
+          const initializers = expr.properties.map((p: { key: string; value: IRExpression }) => 
+            `.${this.sanitizeIdentifier(p.key)} = ${this.generateExpression(p.value)}`
+          ).join(', ');
+          return `${structType}{ ${initializers} }`;
+        }
+        return `/* object literal (non-struct type) */`;
       }
       
       case 'newExpression': {
@@ -1676,12 +1687,22 @@ export class CppCodegen {
   private preScanDeclaration(decl: IRDeclaration): void {
     switch (decl.kind) {
       case 'function':
-        // TODO: Pre-scan AST-level statements
-        // For now, skip since we're using AST-level function bodies
+        // Pre-scan function body (AST-level statements)
+        if (decl.body && 'statements' in decl.body) {
+          for (const stmt of decl.body.statements) {
+            this.preScanStatement(stmt);
+          }
+        }
         break;
       case 'class':
-        // TODO: Pre-scan AST-level statements
-        // For now, skip since we're using AST-level function bodies
+        // Pre-scan class methods (AST-level)
+        for (const method of decl.methods || []) {
+          if (method.body && 'statements' in method.body) {
+            for (const stmt of method.body.statements) {
+              this.preScanStatement(stmt);
+            }
+          }
+        }
         break;
       case 'const':
         this.preScanExpr(decl.value);
@@ -1772,6 +1793,141 @@ export class CppCodegen {
       case 'move':
       case 'borrow':
         this.preScanExpr(expr.source);
+        break;
+    }
+  }
+
+  /**
+   * Pre-scan AST-level statements to find struct types
+   */
+  private preScanStatement(stmt: IRStatement): void {
+    switch (stmt.kind) {
+      case 'return':
+        if (stmt.value) {
+          this.preScanExpression(stmt.value);
+        }
+        break;
+      case 'variableDeclaration':
+        if (stmt.initializer) {
+          this.preScanExpression(stmt.initializer);
+        }
+        break;
+      case 'expressionStatement':
+        this.preScanExpression(stmt.expression);
+        break;
+      case 'if':
+        this.preScanExpression(stmt.condition);
+        for (const s of stmt.thenBranch || []) {
+          this.preScanStatement(s);
+        }
+        for (const s of stmt.elseBranch || []) {
+          this.preScanStatement(s);
+        }
+        break;
+      case 'while':
+      case 'for-of':
+        if (stmt.kind === 'while' && stmt.condition) {
+          this.preScanExpression(stmt.condition);
+        }
+        if (stmt.kind === 'for-of' && stmt.iterable) {
+          this.preScanExpression(stmt.iterable);
+        }
+        for (const s of stmt.body || []) {
+          this.preScanStatement(s);
+        }
+        break;
+      case 'for':
+        if (stmt.init) {
+          if ('kind' in stmt.init) {
+            this.preScanStatement(stmt.init);
+          } else {
+            this.preScanExpression(stmt.init as IRExpression);
+          }
+        }
+        if (stmt.condition) {
+          this.preScanExpression(stmt.condition);
+        }
+        if (stmt.increment) {
+          this.preScanExpression(stmt.increment);
+        }
+        for (const s of stmt.body || []) {
+          this.preScanStatement(s);
+        }
+        break;
+      case 'try':
+        for (const s of stmt.tryBlock || []) {
+          this.preScanStatement(s);
+        }
+        if (stmt.catchClause) {
+          for (const s of stmt.catchClause.body || []) {
+            this.preScanStatement(s);
+          }
+        }
+        for (const s of stmt.finallyBlock || []) {
+          this.preScanStatement(s);
+        }
+        break;
+    }
+  }
+
+  /**
+   * Pre-scan AST-level expressions to find struct types
+   */
+  private preScanExpression(expr: IRExpression): void {
+    switch (expr.kind) {
+      case 'binary':
+        this.preScanExpression(expr.left);
+        this.preScanExpression(expr.right);
+        break;
+      case 'unary':
+        this.preScanExpression(expr.operand);
+        break;
+      case 'conditional':
+        this.preScanExpression(expr.condition);
+        this.preScanExpression(expr.thenExpr);
+        this.preScanExpression(expr.elseExpr);
+        break;
+      case 'memberAccess':
+      case 'indexAccess':
+        this.preScanExpression(expr.object);
+        if (expr.kind === 'indexAccess') {
+          this.preScanExpression(expr.index);
+        }
+        break;
+      case 'assignment':
+        this.preScanExpression(expr.left);
+        this.preScanExpression(expr.right);
+        break;
+      case 'call':
+        this.preScanExpression(expr.callee);
+        for (const arg of expr.arguments || []) {
+          this.preScanExpression(arg);
+        }
+        break;
+      case 'arrayLiteral':
+        for (const elem of expr.elements || []) {
+          this.preScanExpression(elem);
+        }
+        break;
+      case 'objectLiteral':
+        // Register the struct type
+        if (expr.type.kind === 'struct') {
+          this.getOrCreateStructType(expr.type.fields);
+        }
+        for (const prop of expr.properties || []) {
+          this.preScanExpression(prop.value);
+        }
+        break;
+      case 'newExpression':
+        for (const arg of expr.arguments || []) {
+          this.preScanExpression(arg);
+        }
+        break;
+      case 'lambda':
+        // Lambda body is IRBlock (SSA-level), skip for now
+        break;
+      case 'await':
+        this.preScanExpression(expr.expression);
         break;
     }
   }
