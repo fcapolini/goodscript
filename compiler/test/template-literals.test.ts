@@ -122,7 +122,8 @@ describe('Template Literals', () => {
     // String parameters don't need conversion, they're already strings
     expect(cpp).toContain('"Hello, "');
     expect(cpp).toContain('"!"');
-    expect(cpp).toContain('+ name');
+    // Now uses StringBuilder optimization for template literals
+    expect(cpp).toContain('sb.append(name)');
   });
 
   it('should handle nested template expressions', () => {
