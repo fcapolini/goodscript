@@ -24,6 +24,8 @@
 #include <sys/socket.h>
 #endif
 
+#include "bearssl_certs.hpp"
+
 // BearSSL context wrapper
 struct BearSSLContext {
   br_ssl_client_context client_ctx;
@@ -33,6 +35,7 @@ struct BearSSLContext {
   int socket_fd;
   int last_error;
   bool handshake_done;
+  char server_name[256];  // For SNI (Server Name Indication)
 };
 
 // OpenSSL compatibility types
@@ -121,29 +124,30 @@ static inline void SSL_load_error_strings() {
 
 static inline void OpenSSL_add_all_algorithms() {
   // BearSSL doesn't need algorithm registration
-}
-
 // SSL context creation
 static inline SSL_CTX* SSL_CTX_new(const SSL_METHOD* method) {
   (void)method;
   SSL_CTX* ctx = (SSL_CTX*)calloc(1, sizeof(SSL_CTX));
   if (ctx) {
-    // Initialize with default full profile (all algorithms)
-    // Note: No trust anchors yet - we'll accept all certificates (insecure but simple)
-    br_ssl_client_init_full(&ctx->client_ctx, &ctx->x509_ctx, nullptr, 0);
+    // Load system trust anchors for certificate verification
+    auto* cert_store = gs::bearssl::getCertificateStore();
+    const br_x509_trust_anchor* anchors = nullptr;
+    size_t anchor_count = 0;
+    
+    if (cert_store && cert_store->isLoaded()) {
+      anchors = cert_store->getTrustAnchors();
+      anchor_count = cert_store->getTrustAnchorCount();
+    }
+    
+    // Initialize with full profile and trust anchors
+    br_ssl_client_init_full(&ctx->client_ctx, &ctx->x509_ctx, anchors, anchor_count);
     ctx->socket_fd = -1;
     ctx->last_error = 0;
     ctx->handshake_done = false;
+    ctx->server_name[0] = '\0';
   }
   return ctx;
-}
-
-static inline void SSL_CTX_free(SSL_CTX* ctx) {
-  if (ctx) {
-    free(ctx);
-  }
-}
-
+} }
 // SSL connection creation
 static inline SSL* SSL_new(SSL_CTX* ctx) {
   if (!ctx) return nullptr;
@@ -151,13 +155,33 @@ static inline SSL* SSL_new(SSL_CTX* ctx) {
   // Allocate a new SSL context (copy from the template)
   SSL* ssl = (SSL*)calloc(1, sizeof(SSL));
   if (ssl) {
-    // Re-initialize the SSL context for this connection
-    br_ssl_client_init_full(&ssl->client_ctx, &ssl->x509_ctx, nullptr, 0);
+    // Load system trust anchors for certificate verification
+    auto* cert_store = gs::bearssl::getCertificateStore();
+    const br_x509_trust_anchor* anchors = nullptr;
+    size_t anchor_count = 0;
+    
+    if (cert_store && cert_store->isLoaded()) {
+      anchors = cert_store->getTrustAnchors();
+      anchor_count = cert_store->getTrustAnchorCount();
+    }
+    
+    // Re-initialize the SSL context for this connection with trust anchors
+    br_ssl_client_init_full(&ssl->client_ctx, &ssl->x509_ctx, anchors, anchor_count);
     ssl->socket_fd = -1;
     ssl->last_error = 0;
     ssl->handshake_done = false;
   }
   return ssl;
+} SSL* ssl = (SSL*)calloc(1, sizeof(SSL));
+  if (ssl) {
+    // Re-initialize the SSL context for this connection
+    br_ssl_client_init_full(&ssl->client_ctx, &ssl->x509_ctx, nullptr, 0);
+    ssl->socket_fd = -1;
+    ssl->last_error = 0;
+    ssl->handshake_done = false;
+    ssl->server_name[0] = '\0';
+  }
+  return ctx;
 }
 
 static inline void SSL_free(SSL* ssl) {
@@ -165,7 +189,6 @@ static inline void SSL_free(SSL* ssl) {
     free(ssl);
   }
 }
-
 // Set socket file descriptor
 static inline int SSL_set_fd(SSL* ssl, int fd) {
   if (!ssl) return 0;
@@ -173,6 +196,7 @@ static inline int SSL_set_fd(SSL* ssl, int fd) {
   return 1;
 }
 
+// Set server name for SNI (Server Name Indication)
 // Perform TLS handshake and connection
 static inline int SSL_connect(SSL* ssl) {
   if (!ssl || ssl->socket_fd < 0) {
@@ -187,8 +211,9 @@ static inline int SSL_connect(SSL* ssl) {
   br_ssl_engine_set_buffer(&ssl->client_ctx.eng, ssl->iobuf, sizeof(ssl->iobuf), 1);
   
   // Reset the client context for a new handshake
-  // Note: Using "localhost" as SNI - real implementation should get hostname from URL
-  br_ssl_client_reset(&ssl->client_ctx, "localhost", 0);
+  // Use server name if set, otherwise use "localhost"
+  const char* sni = ssl->server_name[0] != '\0' ? ssl->server_name : "localhost";
+  br_ssl_client_reset(&ssl->client_ctx, sni, 0);
   
   // Initialize the simplified I/O wrapper
   br_sslio_init(&ssl->io_ctx, &ssl->client_ctx.eng,
@@ -196,6 +221,15 @@ static inline int SSL_connect(SSL* ssl) {
                 bearssl_sock_write, &ssl->socket_fd);
   
   // The handshake happens implicitly on first read/write
+  // For now, we'll trigger it by flushing (sends ClientHello)
+  if (br_sslio_flush(&ssl->io_ctx) < 0) {
+    ssl->last_error = br_ssl_engine_last_error(&ssl->client_ctx.eng);
+    return -1;
+  }
+  
+  ssl->handshake_done = true;
+  return 1;
+} // The handshake happens implicitly on first read/write
   // For now, we'll trigger it by flushing (sends ClientHello)
   if (br_sslio_flush(&ssl->io_ctx) < 0) {
     ssl->last_error = br_ssl_engine_last_error(&ssl->client_ctx.eng);
@@ -282,16 +316,21 @@ static inline const SSL_METHOD* TLS_client_method() {
 // Set SSL options
 static inline long SSL_CTX_set_options(SSL_CTX* ctx, long options) {
   (void)ctx;
-  return options;
-}
-
 // Set certificate verification mode
 static inline void SSL_CTX_set_verify(SSL_CTX* ctx, int mode, void* callback) {
   (void)ctx;
   (void)mode;
   (void)callback;
-  // Note: BearSSL requires trust anchors for verification
-  // Current implementation skips verification (nullptr trust anchors)
+  // BearSSL automatically verifies certificates when trust anchors are provided
+  // Verification happens during br_ssl_client_reset() and handshake
+}
+
+// OpenSSL compatibility: Define SSL_set_tlsext_host_name as a macro if needed
+#ifndef SSL_set_tlsext_host_name
+#define SSL_set_tlsext_host_name(ssl, name) SSL_set_tlsext_host_name(ssl, name)
+#endif
+
+#endif // GS_USE_BEARSSLion skips verification (nullptr trust anchors)
 }
 
 #endif // GS_USE_BEARSSL
