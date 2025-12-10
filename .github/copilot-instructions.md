@@ -4,14 +4,14 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP/HTTPS + Math + JSON + Union Types + Interfaces + Traditional For Loops + Date.now() (424 tests passing)
+**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP/HTTPS + Math + JSON + Union Types + Interfaces + Traditional For Loops + Date.now() + Function Hoisting (431 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
 - ✅ AST → IR lowering (expressions, lambdas, templates, arrays)
 - ✅ Ownership analyzer (Phase 2a: cycle detection)
 - ✅ Null checker (Phase 2b: use<T> safety)
-- ✅ Optimizer (constant folding, DCE, multi-pass)
+- ✅ Optimizer (constant folding, DCE, function hoisting, multi-pass)
 - ✅ C++ backend (GC and ownership modes)
 - ✅ Lambda/arrow functions (C++ lambda generation)
 - ✅ C++ identifier sanitization (70+ reserved keywords)
@@ -41,6 +41,16 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
 **Recent Progress (Dec 10, 2025)**:
+- ✅ **Function Hoisting Optimization** (431 tests passing)
+  * Optimizes recursive nested functions by hoisting them to module level
+  * Eliminates closure allocation overhead for functions with no closure dependencies
+  * Recursion detection: Analyzes function bodies for self-calls
+  * Closure analysis: Detects parent scope variable references
+  * C++ codegen: std::function wrapper for recursive lambdas, auto for simple lambdas
+  * Optimizer integration: Runs at optimization level 1+ (--gsOptimize 1|2|3)
+  * Examples: fibonacci, factorial, GCD successfully hoisted (examples/tmp-examples/hoisting-working-gs.ts)
+  * Tests: 7 comprehensive tests covering hoisting criteria, closure detection, shadowing
+  * Limitation: Recursive nested functions WITH closures not yet supported (needs closure capture)
 - ✅ **Date.now() Support** (424 tests passing)
   * Date class with static now() method in both GC and ownership modes
   * Returns milliseconds since Unix epoch (number type)
@@ -368,7 +378,7 @@ const body: IRBlock = {
 ```
 
 ## Testing
-**Current Test Suite (424 tests)**:
+**Current Test Suite (431 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (14 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
@@ -398,10 +408,11 @@ const body: IRBlock = {
 - `test/math-json-demo.test.ts` - Math/JSON demo compilation tests (2 tests)
 - `test/date.test.ts` - Date object integration tests (5 tests)
 - `test/union-types.test.ts` - Union type support (12 tests, 4 skipped)
+- `test/function-hoisting.test.ts` - Function hoisting optimization (7 tests)
 - `test/cli.test.ts` - CLI functionality tests (42 tests)
 **Run Tests**:
 ```bash
-pnpm test                    # All tests (424 passing, 19 skipped)
+pnpm test                    # All tests (431 passing, 19 skipped)
 pnpm build && pnpm test      # Build + test
 ```
 
