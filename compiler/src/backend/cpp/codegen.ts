@@ -951,6 +951,15 @@ export class CppCodegen {
         
         const callee = this.generateExpression(expr.callee);
         const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
+        
+        // Special case: Map.get() in ownership mode returns a pointer, needs dereferencing
+        if (this.mode === 'ownership' && 
+            expr.callee.kind === 'memberAccess' && 
+            expr.callee.member === 'get' && 
+            expr.callee.object.type.kind === 'map') {
+          return `(*${callee}(${args}))`;
+        }
+        
         return `${callee}(${args})`;
       }
       
@@ -1363,6 +1372,10 @@ export class CppCodegen {
         // Special case: HTTP and HTTPAsync static methods
         if (obj === 'HTTP' || obj === 'HTTPAsync') {
           return `gs::http::${obj}::${expr.method}(${args})`;
+        }
+        // Special case: Map.get() in ownership mode returns a pointer, needs dereferencing
+        if (this.mode === 'ownership' && expr.method === 'get' && expr.object.type.kind === 'map') {
+          return `(*${obj}.${expr.method}(${args}))`;
         }
         return `${obj}.${expr.method}(${args})`;
       }
