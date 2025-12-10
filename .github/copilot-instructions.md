@@ -4,7 +4,7 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP + Math + JSON + Union Types + Interfaces (402 tests passing)
+**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP/HTTPS + Math + JSON + Union Types + Interfaces (410 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
@@ -29,7 +29,7 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ String methods (split, slice, trim, toLowerCase, toUpperCase, indexOf, includes)
 - ✅ Async/await (Promise<T>, async functions, co_await/co_return, cppcoro integration)
 - ✅ FileSystem API (sync and async file I/O, built-in global classes)
-- ✅ HTTP Client (cpp-httplib, sync and async with thread pool, built-in globals)
+- ✅ HTTP/HTTPS Client (cpp-httplib, OpenSSL/BearSSL, certificate verification, SNI support)
 - ✅ Math object (min, max, abs, floor, ceil, round, sqrt, pow, trigonometry, logarithms, constants)
 - ✅ JSON object (JSON.stringify() for basic types)
 - ✅ Union types (T | null, T | undefined for optional values)
@@ -38,6 +38,15 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
 **Recent Progress (Dec 10, 2025)**:
+- ✅ **Certificate Verification for HTTPS** (410 tests passing)
+  * Created bearssl_certs.hpp: System CA certificate loading and parsing
+  * Multi-platform support: macOS, Linux (Debian/Ubuntu/Fedora/RHEL), FreeBSD
+  * PEM certificate parsing using BearSSL's br_pem_decoder API
+  * Trust anchor conversion to br_x509_trust_anchor structures
+  * SNI (Server Name Indication) support via SSL_set_tlsext_host_name()
+  * Production-ready: Full certificate verification enabled
+  * Secure by default: System trust anchors loaded automatically
+  * 4 new certificate verification tests (all passing)
 - ✅ **Interface Declaration Support** (402 tests passing)
   * Full interface declaration lowering from TypeScript AST to IR
   * C++ codegen generates structs with pure virtual methods
@@ -100,7 +109,9 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
   * Methods: HTTP.syncFetch(), HTTPAsync.fetch() returning Promise<HttpResponse>
   * True async: Uses cppcoro::static_thread_pool for non-blocking execution
   * Features: Custom headers, POST/PUT, timeout support, redirect following
-  * Platform SSL: System OpenSSL (macOS/Linux) with BearSSL fallback (Windows/minimal systems)
+  * HTTPS support: System OpenSSL (macOS/Linux) with BearSSL fallback (Windows/minimal)
+  * Certificate verification: Full system CA trust anchor loading and validation
+  * SNI support: Server Name Indication for virtual hosting
   * HTTPS detection: Automatic OpenSSL detection, falls back to vendored BearSSL if not found
   * Hybrid approach: Zero overhead on Unix (system SSL), 100% coverage on all platforms (BearSSL fallback)
   * Thread pool: Sized to CPU cores, enables concurrent request execution
@@ -108,6 +119,8 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
   * Requires GS_ENABLE_HTTP flag for compilation
   * Requires GS_ENABLE_HTTPS flag for HTTPS support (auto-enabled)
   * Uses GS_USE_BEARSSL flag when falling back to BearSSL
+  * Certificate store: bearssl_certs.hpp for system CA bundle loading
+  * Security: Production-grade TLS with certificate verification and hostname validation
 - ✅ **Completed Phase 7c: Math and JSON Integration** (20 tests)
   * Math object: All 20+ methods integrated (min, max, abs, floor, ceil, round, sqrt, pow, sin, cos, tan, log, etc.)
   * JSON object: JSON.stringify() for primitives (number, string, boolean)
@@ -116,7 +129,7 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
   * Pattern: Math.min(a, b) → gs::Math::min(a, b), JSON.stringify(x) → gs::JSON::stringify(x)
   * Tests: 15 Math integration tests + 5 JSON integration tests
   * Documentation: PHASE-7C-UTILITIES-PLAN.md with roadmap for union types and tuple types
-- All 398 tests passing (228 → 398, +170 tests total)
+- All 410 tests passing (228 → 410, +182 tests total)
 
 ## Architecture
 
