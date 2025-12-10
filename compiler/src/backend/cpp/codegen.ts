@@ -749,6 +749,29 @@ export class CppCodegen {
         this.indent--;
         this.emit('}');
         break;
+      
+      case 'functionDecl': {
+        // Nested function declaration - generate as local lambda or function
+        // For now, generate as a local lambda stored in a variable
+        const funcName = this.sanitizeIdentifier(stmt.name);
+        const params = stmt.params.map(p => 
+          `${this.generateCppType(p.type)} ${this.sanitizeIdentifier(p.name)}`
+        ).join(', ');
+        const returnType = this.generateCppType(stmt.returnType);
+        
+        // Generate as lambda: auto funcName = [](params) -> returnType { body };
+        this.emit(`auto ${funcName} = [](${params}) -> ${returnType} {`);
+        this.indent++;
+        
+        // Generate function body statements
+        for (const bodyStmt of stmt.body.statements) {
+          this.generateStatement(bodyStmt);
+        }
+        
+        this.indent--;
+        this.emit('};');
+        break;
+      }
     }
   }
 

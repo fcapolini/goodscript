@@ -461,5 +461,6 @@ export type IRStatement =
   | { kind: 'continue'; location?: { line: number; column: number } }
   | { kind: 'try'; tryBlock: IRStatement[]; catchClause?: { variable: string; variableType: IRType; body: IRStatement[] }; finallyBlock?: IRStatement[]; location?: { line: number; column: number } }
   | { kind: 'throw'; expression: IRExpression; location?: { line: number; column: number } }
-  | { kind: 'block'; statements: IRStatement[]; location?: { line: number; column: number } };
+  | { kind: 'block'; statements: IRStatement[]; location?: { line: number; column: number } }
+  | { kind: 'functionDecl'; name: string; params: IRParam[]; returnType: IRType; body: IRFunctionBody; async?: boolean; location?: { line: number; column: number } };
 

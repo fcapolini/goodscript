@@ -399,5 +399,24 @@ export const stmts = {
       location,
     };
   },
+
+  functionDecl(
+    name: string,
+    params: IRParam[],
+    returnType: IRType,
+    body: IRFunctionBody,
+    async?: boolean,
+    location?: { line: number; column: number }
+  ): IRStatement {
+    return {
+      kind: 'functionDecl',
+      name,
+      params,
+      returnType,
+      body,
+      async,
+      location,
+    };
+  },
 };
 

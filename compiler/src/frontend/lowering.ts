@@ -485,6 +485,28 @@ export class IRLowering {
       return stmts.continue();
     }
 
+    // Nested function declaration
+    if (ts.isFunctionDeclaration(node)) {
+      const name = node.name?.getText(sourceFile);
+      if (!name) return null;
+
+      const params = node.parameters.map(p => ({
+        name: p.name.getText(sourceFile),
+        type: this.lowerTypeNode(p.type, sourceFile),
+      }));
+
+      const returnType = this.lowerTypeNode(node.type, sourceFile);
+      const async = node.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ?? false;
+      
+      // Set async context before lowering body
+      const previousAsync = this.currentFunctionIsAsync;
+      this.currentFunctionIsAsync = async;
+      const body = node.body ? this.lowerFunctionBody(node.body, sourceFile) : this.builder.functionBody([]);
+      this.currentFunctionIsAsync = previousAsync;
+
+      return stmts.functionDecl(name, params, returnType, body, async);
+    }
+
     return null;
   }
 
