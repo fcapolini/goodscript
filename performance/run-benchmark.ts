@@ -90,6 +90,37 @@ function formatResults(name: string, results: BenchmarkResult[]): void {
     console.log(result.output.trim());
   }
   
+  // Verify output equivalence (ignoring timing values in parentheses)
+  if (results.length > 1) {
+    // Remove all timing values like "(8ms)" and "Total time: 40ms" for comparison
+    const normalizeOutput = (s: string) => s
+      .replace(/\(\d+ms\)/g, '(Xms)')  // Replace (8ms) with (Xms)
+      .replace(/Total time: \d+ms/g, 'Total time: Xms')  // Replace total time
+      .replace(/Build time: \d+ms/g, 'Build time: Xms'); // Replace build time
+    
+    const baselineNormalized = normalizeOutput(results[0].output.trim());
+    let outputsMatch = true;
+    
+    for (let i = 1; i < results.length; i++) {
+      const currentNormalized = normalizeOutput(results[i].output.trim());
+      if (currentNormalized !== baselineNormalized) {
+        outputsMatch = false;
+        console.log(`\n${'!'.repeat(60)}`);
+        console.log(`⚠️  OUTPUT MISMATCH: ${results[0].mode} vs ${results[i].mode}`);
+        console.log('!'.repeat(60));
+        console.log(`\n${results[0].mode} output (normalized):`);
+        console.log(baselineNormalized);
+        console.log(`\n${results[i].mode} output (normalized):`);
+        console.log(currentNormalized);
+        console.log('!'.repeat(60));
+      }
+    }
+    
+    if (outputsMatch) {
+      console.log(`\n✅ Output verification: All modes produce identical results (timing excluded)`);
+    }
+  }
+  
   // Compare results
   const nodeTime = results.find(r => r.mode === 'node')?.time ?? 0;
   const gcTime = results.find(r => r.mode === 'gc')?.time ?? 0;
