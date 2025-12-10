@@ -1,12 +1,12 @@
 # GoodScript Compiler Architecture
 
-**Version:** 0.12.9
+**Version:** 0.13.0
 
 ## Overview
 
 The GoodScript compiler is a multi-phase compiler that transforms TypeScript source code into either native C++ code or transpiled JavaScript, with comprehensive static analysis and optimization. It supports ES module syntax for proper code organization and reusability.
 
-**Recent Improvements (v0.12.9)**:
+**Recent Improvements (v0.13.0)**:
 - **Full async/await support**: Promise<T> with cppcoro integration
 - **FileSystem API**: Sync and async file I/O operations
 - **Runtime library**: Comprehensive built-in globals (Math, JSON, String, Array, Map, Promise, FileSystem)
@@ -313,7 +313,7 @@ interface Renderable { draw(): void; }
 - **Compile-time detection**: Distinguishes const declarations from runtime init
 - **Source location tracking**: Preserve file/line/column for debugging
 
-**Key Features (v0.12.9)**:
+**Key Features (v0.13.0)**:
 - **Async context tracking**: Tracks when inside async functions for Promise unwrapping
 - **Promise.resolve/reject unwrapping**: `return Promise.resolve(x)` → `return x` in async functions
 - **Statement type support**: try-catch-finally, for-of loops, all expression statements
@@ -882,7 +882,7 @@ The compiler automatically compiles vendored dependencies on-the-fly:
 - **Auto-detection**: Compiler tests for OpenSSL at build time, falls back to BearSSL if not found
 - **Benefits**: 100% HTTPS coverage across all platforms while maintaining zero-dependency philosophy
 
-**Runtime Organization (v0.12.9)**:
+**Runtime Organization (v0.13.0)**:
 - `runtime/cpp/gc/` - GC mode implementations (c_str() API)
 - `runtime/cpp/ownership/` - Ownership mode implementations (str() API)
 - Shared utilities: filesystem, http, regexp work with both modes via macros

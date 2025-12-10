@@ -1,6 +1,6 @@
-# GoodScript Compiler v0.12.9
+# GoodScript Compiler v0.13.0
 
-Complete TypeScript-to-C++/TypeScript compiler with binary compilation support and comprehensive runtime library.
+Complete TypeScript-to-C++/TypeScript compiler with binary compilation support, comprehensive runtime library, and TypeScript type definitions.
 
 ## Installation
 
