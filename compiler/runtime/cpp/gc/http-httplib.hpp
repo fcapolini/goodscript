@@ -24,10 +24,14 @@
 #include <string>
 #include <optional>
 #include <memory>
+#include <future>
+#include <thread>
 
 #ifdef CPPCORO_TASK_HPP_INCLUDED
 #include <cppcoro/task.hpp>
 #include <cppcoro/sync_wait.hpp>
+#include <cppcoro/static_thread_pool.hpp>
+#include <cppcoro/when_all.hpp>
 #endif
 
 namespace gs {
@@ -182,36 +186,73 @@ public:
 };
 
 #ifdef CPPCORO_TASK_HPP_INCLUDED
+
+namespace detail {
+  /**
+   * Global thread pool for async HTTP operations
+   * Uses hardware concurrency to determine optimal thread count
+   */
+  inline cppcoro::static_thread_pool& getHttpThreadPool() {
+    static cppcoro::static_thread_pool pool(std::max(2u, std::thread::hardware_concurrency()));
+    return pool;
+  }
+}
+
 /**
  * HTTPAsync - Asynchronous HTTP client
  * 
  * Static class providing asynchronous (non-blocking) HTTP operations.
  * Methods return cppcoro::task<T> for use with co_await.
+ * 
+ * Implementation: Uses cppcoro::static_thread_pool to execute HTTP requests
+ * on background threads, preventing blocking of the main event loop.
  */
 class HTTPAsync {
 public:
   /**
    * Perform asynchronous HTTP GET request
    * 
+   * Executes the HTTP request on a background thread pool, allowing the calling
+   * coroutine to suspend and resume when the request completes.
+   * 
    * @param url - The URL to fetch
    * @returns cppcoro::task<HttpResponse>
+   * 
+   * Example:
+   *   const response = await HTTPAsync.fetch('http://example.com/api/data');
    */
   static cppcoro::task<HttpResponse> fetch(const gs::String& url) {
-    // For now, async version wraps the sync version
-    // TODO: Implement true async using cpp-httplib async API
-    co_return HTTP::syncFetch(url);
+    // Schedule HTTP request on thread pool to avoid blocking
+    co_await detail::getHttpThreadPool().schedule();
+    
+    // Execute blocking HTTP call on background thread
+    HttpResponse result = HTTP::syncFetch(url);
+    
+    co_return result;
   }
   
   /**
    * Perform asynchronous HTTP POST request
    * 
+   * Executes the HTTP request on a background thread pool, allowing the calling
+   * coroutine to suspend and resume when the request completes.
+   * 
    * @param url - The URL to post to
    * @param body - Request body
    * @param contentType - Content-Type header
    * @returns cppcoro::task<HttpResponse>
+   * 
+   * Example:
+   *   const response = await HTTPAsync.post('http://api.com/data', '{"key":"value"}', 'application/json');
    */
   static cppcoro::task<HttpResponse> post(const gs::String& url, const gs::String& body, const gs::String& contentType) {
-    co_return HTTP::post(url, body, contentType);
+    // Schedule HTTP request on thread pool to avoid blocking
+    co_await detail::getHttpThreadPool().schedule();
+    
+    // Execute blocking HTTP call on background thread
+    HttpResponse result = HTTP::post(url, body, contentType);
+    
+    co_return result;
   }
 };
 #endif

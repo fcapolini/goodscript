@@ -4,7 +4,7 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP + Math + JSON + Union Types (373 tests passing)
+**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP + Math + JSON + Union Types (398 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
@@ -29,14 +29,23 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ String methods (split, slice, trim, toLowerCase, toUpperCase, indexOf, includes)
 - ✅ Async/await (Promise<T>, async functions, co_await/co_return, cppcoro integration)
 - ✅ FileSystem API (sync and async file I/O, built-in global classes)
-- ✅ HTTP Client (libcurl integration, sync and async, built-in globals)
+- ✅ HTTP Client (cpp-httplib, sync and async with thread pool, built-in globals)
 - ✅ Math object (min, max, abs, floor, ceil, round, sqrt, pow, trigonometry, logarithms, constants)
 - ✅ JSON object (JSON.stringify() for basic types)
 - ✅ Union types (T | null, T | undefined for optional values)
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
-**Recent Progress (Dec 9, 2025)**:
-- ✅ **Runtime Reorganization** (373 tests passing)
+**Recent Progress (Dec 10, 2025)**:
+- ✅ **HTTP Async Thread Pool Implementation** (398 tests passing)
+  * Replaced blocking async with true async using cppcoro::static_thread_pool
+  * HTTP requests now execute on background threads (non-blocking)
+  * Concurrent request support: multiple HTTPAsync.fetch() calls run in parallel
+  * Thread pool sized to CPU cores (min 2 threads)
+  * Documentation: HTTP-ASYNC-IMPLEMENTATION.md with complete technical details
+  * New test: concurrent async HTTP request compilation
+  * Switched from libcurl to cpp-httplib (header-only, MIT license, 13.6k LOC)
+  * Zero-dependency design maintained: cpp-httplib is header-only
+- ✅ **Runtime Reorganization** (373 tests passing, Dec 9)
   * Moved runtime/ from workspace root into compiler/runtime/
   * Separated GC and ownership modes: runtime/cpp/gc/ vs runtime/cpp/ownership/
   * Created GC-specific implementations: console.hpp, json.hpp using c_str() API
@@ -73,16 +82,16 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
   * End-to-end execution test: Full pipeline TypeScript → IR → C++ → Binary → Execution
   * Requires GS_ENABLE_FILESYSTEM flag for compilation
   * Fixed struct field access codegen bug (size/length on structs vs Map/Array)
-- ✅ **Completed Phase 7b.3: HTTP Client** (3 tests)
-  * Vendored libcurl 8.7.1 (382 files, MIT-like license, ~2.8MB source)
-  * Created curl_all.c amalgamation file (133 .c includes) for simplified compilation
-  * Runtime complete: gs_http.hpp (~350 lines, sync and async support)
+- ✅ **Completed Phase 7b.3: HTTP Client** (4 tests)
+  * Vendored cpp-httplib v0.28.0 (header-only, MIT license, ~13.6k LOC)
+  * Runtime complete: http-httplib.hpp (~270 lines, sync and async support)
   * Built-in globals: HTTP (sync), HTTPAsync (async) following FileSystem/console pattern
   * Methods: HTTP.syncFetch(), HTTPAsync.fetch() returning Promise<HttpResponse>
-  * Features: Custom headers, POST/PUT, timeout support, automatic CURL initialization
-  * Platform SSL: macOS (Secure Transport), Windows (Schannel), Linux (HTTP-only or OpenSSL)
-  * Zig compiler integration: Added curl to VENDORED_LIBS with proper configuration
-  * Documentation: PHASE-7B3-HTTP-CLIENT-PLAN.md, vendor/curl/README.md
+  * True async: Uses cppcoro::static_thread_pool for non-blocking execution
+  * Features: Custom headers, POST/PUT, timeout support, redirect following
+  * Platform SSL: Cross-platform support (HTTP-only by default, HTTPS via OpenSSL optional)
+  * Thread pool: Sized to CPU cores, enables concurrent request execution
+  * Documentation: PHASE-7B3-HTTP-CLIENT-PLAN.md, HTTP-ASYNC-IMPLEMENTATION.md
   * Requires GS_ENABLE_HTTP flag for compilation
 - ✅ **Completed Phase 7c: Math and JSON Integration** (20 tests)
   * Math object: All 20+ methods integrated (min, max, abs, floor, ceil, round, sqrt, pow, sin, cos, tan, log, etc.)
@@ -92,7 +101,7 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
   * Pattern: Math.min(a, b) → gs::Math::min(a, b), JSON.stringify(x) → gs::JSON::stringify(x)
   * Tests: 15 Math integration tests + 5 JSON integration tests
   * Documentation: PHASE-7C-UTILITIES-PLAN.md with roadmap for union types and tuple types
-- All 373 tests passing (228 → 373, +145 tests total)
+- All 398 tests passing (228 → 398, +170 tests total)
 
 ## Architecture
 

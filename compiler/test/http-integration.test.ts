@@ -94,6 +94,36 @@ describe('HTTP Integration', () => {
     expect(cppSource).toContain('co_await');
     expect(cppSource).toContain('cppcoro::task');
   });
+
+  it('should compile concurrent async HTTP requests', async () => {
+    const source = `
+      async function fetchMultiple(): Promise<void> {
+        const promise1 = HTTPAsync.fetch('http://example.com/1');
+        const promise2 = HTTPAsync.fetch('http://example.com/2');
+        const promise3 = HTTPAsync.fetch('http://example.com/3');
+        
+        const response1 = await promise1;
+        const response2 = await promise2;
+        const response3 = await promise3;
+        
+        console.log(response1.status);
+        console.log(response2.status);
+        console.log(response3.status);
+      }
+    `;
+    
+    const irProgram = parseAndLower(source);
+    const output = codegen.generate(irProgram, 'gc');
+    
+    const cppSource = output.get('test.cpp');
+    expect(cppSource).toBeDefined();
+    expect(cppSource).toContain('gs::http::HTTPAsync::fetch');
+    expect(cppSource).toContain('co_await');
+    
+    // Verify multiple fetch calls
+    const fetchCount = (cppSource!.match(/HTTPAsync::fetch/g) || []).length;
+    expect(fetchCount).toBeGreaterThanOrEqual(3);
+  });
   
   it.skip('should compile and run simple HTTP GET', async () => {
     // Skip this test for now - requires network access

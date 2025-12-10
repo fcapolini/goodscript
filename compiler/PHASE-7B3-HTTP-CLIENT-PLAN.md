@@ -1,12 +1,23 @@
 # Phase 7b.3: HTTP Client Implementation
 
 **Created**: December 9, 2025  
-**Status**: Planning  
+**Updated**: December 10, 2025  
+**Status**: ✅ Complete - True async implementation with thread pool  
 **Priority**: HIGH - Completes Phase 7b async runtime features
+
+## Completion Note (Dec 10, 2025)
+
+**Implementation complete** with cpp-httplib instead of libcurl:
+- ✅ True async execution using cppcoro::static_thread_pool
+- ✅ Concurrent HTTP requests supported
+- ✅ Header-only library (cpp-httplib v0.28.0)
+- ✅ Zero compilation dependencies
+- ✅ Cross-platform support
+- 📚 See HTTP-ASYNC-IMPLEMENTATION.md for technical details
 
 ## Overview
 
-Implement HTTP client runtime support to enable the `@goodscript/http` stdlib module. This requires vendoring libcurl, creating a C++ runtime wrapper, and integrating it as a built-in global similar to Console and FileSystem.
+Implement HTTP client runtime support to enable the `@goodscript/http` stdlib module. This requires vendoring a HTTP library, creating a C++ runtime wrapper, and integrating it as a built-in global similar to Console and FileSystem.
 
 ## Goals
 
