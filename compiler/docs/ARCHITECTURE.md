@@ -857,7 +857,8 @@ The compiler automatically compiles vendored dependencies on-the-fly:
 | **MPS** | Garbage collection (GC mode) | 1.118.0 | BSD 2-clause | ~300KB |
 | **cppcoro** | Async/await via C++20 coroutines | andreasbuhr/cppcoro fork | MIT | Header-only + 3 files |
 | **PCRE2** | Regular expressions | 10.47 | BSD 3-clause | ~500KB |
-| **libcurl** | HTTP/HTTPS client library | 8.7.1 | MIT-like | ~2.8MB source |
+| **cpp-httplib** | HTTP/HTTPS client library | 0.28.0 | MIT | Header-only (~13.6k LOC) |
+| **BearSSL** | SSL/TLS (fallback when no system OpenSSL) | 0.6 | MIT | ~4.3MB source (277 .c files) |
 
 **Custom Runtime Headers** (in `compiler/runtime/cpp/`):
 
@@ -871,8 +872,15 @@ The compiler automatically compiles vendored dependencies on-the-fly:
 | **gs_json.hpp** | JSON.stringify | - | GC mode |
 | **gs_math.hpp** | Math object methods | `<cmath>` | Both |
 | **gs_filesystem.hpp** | FileSystem sync/async API | POSIX/Windows | Both |
-| **gs_http.hpp** | HTTP sync/async client | libcurl | Both |
+| **http-httplib.hpp** | HTTP/HTTPS sync/async client | cpp-httplib, OpenSSL or BearSSL | Both |
+| **bearssl_shim.hpp** | OpenSSL-compatible API for BearSSL | BearSSL | Both |
 | **gs_regexp.hpp** | RegExp support | PCRE2 | Both |
+
+**HTTPS Support Strategy**:
+- **Preferred**: Use system OpenSSL (macOS/Linux) - zero overhead, dynamically linked
+- **Fallback**: Use vendored BearSSL (Windows/minimal systems) - ~300KB, statically linked
+- **Auto-detection**: Compiler tests for OpenSSL at build time, falls back to BearSSL if not found
+- **Benefits**: 100% HTTPS coverage across all platforms while maintaining zero-dependency philosophy
 
 **Runtime Organization (v0.12.9)**:
 - `runtime/cpp/gc/` - GC mode implementations (c_str() API)

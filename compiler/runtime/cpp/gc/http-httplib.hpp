@@ -7,18 +7,25 @@
  * Provides both synchronous and asynchronous HTTP operations.
  * 
  * Platform support:
- *   - macOS: HTTP only (HTTPS requires OpenSSL)
- *   - Windows: HTTP only (HTTPS requires OpenSSL)
- *   - Linux: HTTP only (HTTPS requires OpenSSL)
+ *   - macOS: HTTP always, HTTPS via system OpenSSL/LibreSSL (preferred) or BearSSL fallback
+ *   - Windows: HTTP always, HTTPS via vendored BearSSL (fallback)
+ *   - Linux: HTTP always, HTTPS via system OpenSSL (preferred) or BearSSL fallback
  * 
- * Note: HTTPS support disabled to avoid OpenSSL dependency
+ * Note: HTTPS uses system OpenSSL when available, falls back to vendored BearSSL
  * Requires: cpp-httplib (header-only, MIT license)
  * 
  * Note: This header should be included AFTER gs_string.hpp, gs_map.hpp, and gs_error.hpp
  */
 
-// Disable HTTPS to avoid OpenSSL dependency
-// #define CPPHTTPLIB_OPENSSL_SUPPORT
+// Conditional HTTPS support based on OpenSSL/BearSSL availability
+#ifdef GS_ENABLE_HTTPS
+  #ifdef GS_USE_BEARSSL
+    // Use BearSSL with OpenSSL compatibility shim
+    #include "../bearssl_shim.hpp"
+  #endif
+  #define CPPHTTPLIB_OPENSSL_SUPPORT
+#endif
+
 #include "../../../vendor/cpp-httplib/httplib.h"
 
 #include <string>
@@ -83,6 +90,15 @@ public:
   static HttpResponse syncFetch(const gs::String& url) {
     std::string url_str = url.to_std_string();
     
+    // Check for HTTPS without SSL support
+    #ifndef GS_ENABLE_HTTPS
+    if (url_str.find("https://") == 0) {
+      throw gs::Error("HTTPS not supported - rebuild with OpenSSL to enable HTTPS\n"
+                      "  macOS:  brew install openssl\n"
+                      "  Linux:  sudo apt install libssl-dev");
+    }
+    #endif
+    
     // Parse URL into scheme://host:port/path
     // For simplicity, assume http://hostname/path format
     std::string scheme, host, path;
@@ -93,6 +109,11 @@ public:
     if (scheme_end != std::string::npos) {
       scheme = url_str.substr(0, scheme_end);
       url_str = url_str.substr(scheme_end + 3);
+      
+      // Set default port based on scheme
+      if (scheme == "https") {
+        port = 443;
+      }
     }
     
     size_t path_start = url_str.find('/');
@@ -102,6 +123,7 @@ public:
     } else {
       host = url_str;
       path = "/";
+    }
     }
     
     // Check for port in host

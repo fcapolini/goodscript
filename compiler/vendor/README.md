@@ -2,6 +2,58 @@
 
 This directory contains third-party libraries bundled with GoodScript for ease of installation and deployment.
 
+## cpp-httplib
+
+**Version:** 0.28.0  
+**License:** MIT  
+**Source:** https://github.com/yhirose/cpp-httplib  
+**Purpose:** HTTP/HTTPS client library (header-only)
+
+### Files Included
+
+- `httplib.h` - Complete HTTP/HTTPS client implementation (~13.6k LOC)
+
+### Why Vendored?
+
+cpp-httplib is header-only and vendored to:
+1. Enable HTTP/HTTPS support with zero external dependencies
+2. Work seamlessly with both system OpenSSL and vendored BearSSL
+3. Provide modern HTTP client without complex build requirements
+
+### Modifications
+
+None. File is copied directly from the upstream repository with no changes.
+
+---
+
+## BearSSL
+
+**Version:** 0.6  
+**License:** MIT  
+**Source:** https://bearssl.org/  
+**Purpose:** SSL/TLS library (fallback when system OpenSSL unavailable)
+
+### Files Included
+
+- `src/**/*.c` - BearSSL source files (~277 files)
+- `inc/` - Public headers
+- `LICENSE.txt` - MIT license
+
+### Why Vendored?
+
+BearSSL is vendored as a fallback SSL implementation:
+1. **Hybrid approach**: Use system OpenSSL when available (macOS/Linux)
+2. **Fallback**: Use BearSSL when OpenSSL not found (Windows/minimal systems)
+3. **Small footprint**: ~300KB compiled vs OpenSSL's 10MB
+4. **Simple build**: Plain C, no configure scripts
+5. **100% HTTPS coverage**: Works on all platforms
+
+### Modifications
+
+None. Files are copied directly from the upstream distribution with no changes.
+
+---
+
 ## cppcoro
 
 **Version:** Based on andreasbuhr/cppcoro (C++20 fork of lewissbaker/cppcoro)  

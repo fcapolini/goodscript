@@ -94,15 +94,20 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
   * Fixed struct field access codegen bug (size/length on structs vs Map/Array)
 - ✅ **Completed Phase 7b.3: HTTP Client** (4 tests)
   * Vendored cpp-httplib v0.28.0 (header-only, MIT license, ~13.6k LOC)
+  * Vendored BearSSL 0.6 (MIT license, ~4.3MB source, 277 .c files) - SSL fallback
   * Runtime complete: http-httplib.hpp (~270 lines, sync and async support)
   * Built-in globals: HTTP (sync), HTTPAsync (async) following FileSystem/console pattern
   * Methods: HTTP.syncFetch(), HTTPAsync.fetch() returning Promise<HttpResponse>
   * True async: Uses cppcoro::static_thread_pool for non-blocking execution
   * Features: Custom headers, POST/PUT, timeout support, redirect following
-  * Platform SSL: Cross-platform support (HTTP-only by default, HTTPS via OpenSSL optional)
+  * Platform SSL: System OpenSSL (macOS/Linux) with BearSSL fallback (Windows/minimal systems)
+  * HTTPS detection: Automatic OpenSSL detection, falls back to vendored BearSSL if not found
+  * Hybrid approach: Zero overhead on Unix (system SSL), 100% coverage on all platforms (BearSSL fallback)
   * Thread pool: Sized to CPU cores, enables concurrent request execution
-  * Documentation: PHASE-7B3-HTTP-CLIENT-PLAN.md, HTTP-ASYNC-IMPLEMENTATION.md
+  * Documentation: PHASE-7B3-HTTP-CLIENT-PLAN.md, HTTP-ASYNC-IMPLEMENTATION.md, HTTPS-BORINGSSL-IMPLEMENTATION.md
   * Requires GS_ENABLE_HTTP flag for compilation
+  * Requires GS_ENABLE_HTTPS flag for HTTPS support (auto-enabled)
+  * Uses GS_USE_BEARSSL flag when falling back to BearSSL
 - ✅ **Completed Phase 7c: Math and JSON Integration** (20 tests)
   * Math object: All 20+ methods integrated (min, max, abs, floor, ceil, round, sqrt, pow, sin, cos, tan, log, etc.)
   * JSON object: JSON.stringify() for primitives (number, string, boolean)

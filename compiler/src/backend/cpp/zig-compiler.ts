@@ -82,6 +82,22 @@ export class ZigCompiler {
       // Ensure directories exist
       await this.ensureDirectories(options);
 
+      // Detect OpenSSL if HTTP is enabled
+      let hasHTTPS = false;
+      let useBearSSL = false;
+      if (options.enableHTTP) {
+        hasHTTPS = await this.detectOpenSSL(diagnostics);
+        if (hasHTTPS) {
+          diagnostics.push('HTTPS support: enabled (system OpenSSL detected)');
+        } else {
+          // Fall back to BearSSL
+          diagnostics.push('HTTPS support: enabled (using vendored BearSSL)');
+          diagnostics.push('  System OpenSSL not found - using BearSSL fallback');
+          hasHTTPS = true;
+          useBearSSL = true;
+        }
+      }
+
       // Write source files to disk
       await this.writeSources(options.sources);
 
@@ -93,14 +109,19 @@ export class ZigCompiler {
       // Always compile cppcoro when using async/await
       await this.compileVendoredDep('cppcoro', vendorDir, options, diagnostics);
       
+      // Compile BearSSL if using it for HTTPS
+      if (useBearSSL) {
+        await this.compileVendoredDep('bearssl', vendorDir, options, diagnostics);
+      }
+      
       // TODO: Compile PCRE2 only if RegExp is used
       // await this.compileVendoredDep('pcre2', options, diagnostics);
 
       // Compile GoodScript-generated C++ files
-      const objectFiles = await this.compileGeneratedCode(options, diagnostics);
+      const objectFiles = await this.compileGeneratedCode(options, hasHTTPS, useBearSSL, diagnostics);
 
       // Link everything into final binary
-      await this.link(objectFiles, options, diagnostics);
+      await this.link(objectFiles, options, hasHTTPS, useBearSSL, diagnostics);
 
       const buildTime = Date.now() - startTime;
 
@@ -208,6 +229,64 @@ export class ZigCompiler {
         sourceFile = path.join(vendorDir, 'pcre2/src/pcre2_all.c');
         flags.push('-DPCRE2_CODE_UNIT_WIDTH=8');
         break;
+      case 'bearssl': {
+        // BearSSL has many .c files - compile them all
+        diagnostics.push('Compiling BearSSL (~277 files, may take 20-30 seconds)...');
+        
+        const bearSSLDir = path.join(vendorDir, 'bearssl');
+        const srcDirs = [
+          'src/ssl',
+          'src/x509',
+          'src/hash',
+          'src/kdf',
+          'src/mac',
+          'src/codec',
+          'src/ec',
+          'src/rsa',
+          'src/rand',
+          'src/symcipher',
+          'src/int',
+        ];
+        
+        flags.push(`-I${path.join(bearSSLDir, 'inc')}`);
+        flags.push('-Wno-everything'); // Suppress warnings for vendored code
+        
+        const objectFiles: string[] = [];
+        for (const dir of srcDirs) {
+          const dirPath = path.join(bearSSLDir, dir);
+          try {
+            const files = await fs.readdir(dirPath);
+            for (const file of files) {
+              if (file.endsWith('.c')) {
+                const sourceFile = path.join(dirPath, file);
+                const objFile = path.join(
+                  path.dirname(outputPath),
+                  `bearssl_${dir.replace(/\//g, '_')}_${file.replace('.c', '.o')}`
+                );
+                
+                await this.runZigCC([
+                  ...flags,
+                  '-c',
+                  sourceFile,
+                  '-o', objFile,
+                ]);
+                
+                objectFiles.push(objFile);
+              }
+            }
+          } catch (err) {
+            // Directory might not exist, skip it
+            diagnostics.push(`  Skipping ${dir} (not found)`);
+          }
+        }
+        
+        // Create marker file and store object file list
+        await fs.writeFile(outputPath, ''); // Create empty marker file
+        await fs.writeFile(outputPath + '.files', objectFiles.join('\n'));
+        
+        diagnostics.push(`  Compiled ${objectFiles.length} BearSSL object files`);
+        return outputPath;
+      }
       default:
         throw new Error(`Unknown vendored dependency: ${name}`);
     }
@@ -226,6 +305,8 @@ export class ZigCompiler {
 
   private async compileGeneratedCode(
     options: CompileOptions,
+    hasHTTPS: boolean,
+    useBearSSL: boolean,
     diagnostics: string[]
   ): Promise<string[]> {
     const objectFiles: string[] = [];
@@ -254,6 +335,12 @@ export class ZigCompiler {
       }
       if (options.enableHTTP) {
         flags.push('-DGS_ENABLE_HTTP');  // Enable HTTP API (cpp-httplib, header-only)
+        if (hasHTTPS) {
+          flags.push('-DGS_ENABLE_HTTPS');  // Enable HTTPS support
+          if (useBearSSL) {
+            flags.push('-DGS_USE_BEARSSL');  // Use BearSSL instead of OpenSSL
+          }
+        }
       }
 
       if (options.debug) {
@@ -266,6 +353,9 @@ export class ZigCompiler {
         flags.push('-I', path.join(this.vendorDir, 'mps/src'));
       }
       flags.push('-I', path.join(this.vendorDir, 'cpp-httplib')); // For httplib.h
+      if (useBearSSL) {
+        flags.push('-I', path.join(this.vendorDir, 'bearssl/inc')); // For BearSSL headers
+      }
       
       for (const includePath of options.includePaths ?? []) {
         flags.push('-I', includePath);
@@ -291,6 +381,8 @@ export class ZigCompiler {
   private async link(
     objectFiles: string[],
     options: CompileOptions,
+    hasHTTPS: boolean,
+    useBearSSL: boolean,
     diagnostics: string[]
   ): Promise<void> {
     diagnostics.push('Linking...');
@@ -317,9 +409,27 @@ export class ZigCompiler {
       objectFiles.push(path.join(this.cacheDir, 'vendor', 'cppcoro.o'));
     }
 
+    // Link BearSSL if using it
+    if (useBearSSL) {
+      const bearSSLFilesPath = path.join(this.cacheDir, 'vendor', 'bearssl.o.files');
+      try {
+        const bearSSLFiles = (await fs.readFile(bearSSLFilesPath, 'utf-8')).trim().split('\n');
+        objectFiles.push(...bearSSLFiles);
+        diagnostics.push(`  Linking ${bearSSLFiles.length} BearSSL object files`);
+      } catch {
+        // Fallback if .files doesn't exist
+        objectFiles.push(path.join(this.cacheDir, 'vendor', 'bearssl.o'));
+      }
+    }
+
     // Target specification
     if (options.target) {
       flags.push('-target', options.target);
+    }
+
+    // Link OpenSSL libraries if HTTPS is enabled and not using BearSSL
+    if (hasHTTPS && options.enableHTTP && !useBearSSL) {
+      flags.push('-lssl', '-lcrypto');
     }
 
     // Custom linker flags
@@ -409,6 +519,53 @@ export class ZigCompiler {
         reject(new Error(`Failed to spawn ${command}: ${err.message}`));
       });
     });
+  }
+
+  /**
+   * Detect if OpenSSL is available on the system
+   */
+  private async detectOpenSSL(_diagnostics: string[]): Promise<boolean> {
+    const cacheFile = path.join(this.cacheDir, 'openssl-detect.json');
+    
+    // Check cache first
+    try {
+      const cached = JSON.parse(await fs.readFile(cacheFile, 'utf-8'));
+      if (cached.detected !== undefined) {
+        return cached.detected;
+      }
+    } catch {
+      // Cache miss, proceed with detection
+    }
+
+    try {
+      const testFile = path.join(this.cacheDir, 'ssl-test.cpp');
+      const testCode = `
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+int main() {
+  SSL_library_init();
+  return 0;
+}
+`;
+      await fs.writeFile(testFile, testCode, 'utf-8');
+
+      // Try to compile and link with OpenSSL
+      await this.runZigCXX([
+        '-std=c++20',
+        testFile,
+        '-lssl',
+        '-lcrypto',
+        '-o', path.join(this.cacheDir, 'ssl-test'),
+      ]);
+
+      // Success - OpenSSL found
+      await fs.writeFile(cacheFile, JSON.stringify({ detected: true }), 'utf-8');
+      return true;
+    } catch (error) {
+      // Failed - OpenSSL not found
+      await fs.writeFile(cacheFile, JSON.stringify({ detected: false }), 'utf-8');
+      return false;
+    }
   }
 
   /**
