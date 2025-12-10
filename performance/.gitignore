@@ -1,0 +1,12 @@
+# Compiled binaries
+*-gc
+*-ownership
+
+# Generated C++ code
+*.cpp
+*.hpp
+
+# Build artifacts
+*.o
+*.obj
+*.exe

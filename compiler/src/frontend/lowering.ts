@@ -299,7 +299,7 @@ export class IRLowering {
 
       const name = decl.name.getText(sourceFile);
       const type = this.lowerType(decl, sourceFile);
-      const initializer = decl.initializer ? this.lowerExpression(decl.initializer, sourceFile) : undefined;
+      const initializer = decl.initializer ? this.lowerExpression(decl.initializer, sourceFile, type) : undefined;
       
       // Mark this variable as declared
       this.declaredVariables.add(name);
@@ -410,6 +410,41 @@ export class IRLowering {
       return stmts.block(blockStmts);
     }
 
+    // Traditional for statement (for (init; condition; increment) { body })
+    if (ts.isForStatement(node)) {
+      // Get initializer (variable declaration or expression)
+      let init: IRStatement | null = null;
+      if (node.initializer) {
+        if (ts.isVariableDeclarationList(node.initializer)) {
+          const decl = node.initializer.declarations[0];
+          if (decl) {
+            const name = decl.name.getText(sourceFile);
+            const type = this.lowerType(decl, sourceFile);
+            const initializer = decl.initializer ? this.lowerExpression(decl.initializer, sourceFile, type) : undefined;
+            this.declaredVariables.add(name);
+            init = stmts.variableDeclaration(name, type, initializer);
+          }
+        } else {
+          // Expression initializer
+          const expr = this.lowerExpression(node.initializer, sourceFile);
+          init = stmts.expressionStatement(expr);
+        }
+      }
+      
+      // Get condition
+      const condition = node.condition ? this.lowerExpression(node.condition, sourceFile) : undefined;
+      
+      // Get increment
+      const increment = node.incrementor ? this.lowerExpression(node.incrementor, sourceFile) : undefined;
+      
+      // Get body
+      const body = ts.isBlock(node.statement)
+        ? node.statement.statements.map(s => this.lowerStatementAST(s, sourceFile)).filter((s): s is IRStatement => s !== null)
+        : [this.lowerStatementAST(node.statement, sourceFile)].filter((s): s is IRStatement => s !== null);
+      
+      return stmts.for(init, condition, increment, body);
+    }
+    
     // For-of statement
     if (ts.isForOfStatement(node)) {
       // Get the loop variable
@@ -456,10 +491,10 @@ export class IRLowering {
   /**
    * Lower a TypeScript expression to AST-level IR expression
    */
-  private lowerExpression(node: ts.Expression, sourceFile: ts.SourceFile): IRExpression {
+  private lowerExpression(node: ts.Expression, sourceFile: ts.SourceFile, expectedType?: IRType): IRExpression {
     // For now, delegate to lowerExpr and convert SSA IRExpr to AST IRExpression
     // This is a temporary bridge - we'll eventually have separate implementations
-    const ssaExpr = this.lowerExpr(node, sourceFile);
+    const ssaExpr = this.lowerExpr(node, sourceFile, expectedType);
     return this.convertExprToExpression(ssaExpr);
   }
 
@@ -830,7 +865,7 @@ export class IRLowering {
     return null;
   }
 
-  private lowerExpr(node: ts.Expression, sourceFile: ts.SourceFile): IRExpr {
+  private lowerExpr(node: ts.Expression, sourceFile: ts.SourceFile, expectedType?: IRType): IRExpr {
     // Literals
     if (ts.isNumericLiteral(node)) {
       return expr.literal(parseFloat(node.text), types.number());
@@ -963,7 +998,17 @@ export class IRLowering {
     if (ts.isNewExpression(node)) {
       const className = node.expression.getText(sourceFile);
       const args = node.arguments ? Array.from(node.arguments).map(arg => this.lowerExpr(arg, sourceFile)) : [];
-      const type = this.inferType(node);
+      
+      // For Map/Array/etc., use expectedType from variable declaration if available
+      // This handles `const x: Map<K,V> = new Map()` correctly
+      let type: IRType;
+      if (expectedType) {
+        type = expectedType;
+      } else {
+        const contextualType = this.typeChecker.getContextualType(node);
+        type = contextualType ? this.convertTsTypeToIRType(contextualType) : this.inferType(node);
+      }
+      
       return expr.new(className, args, type);
     }
 
@@ -1146,7 +1191,9 @@ export class IRLowering {
       case ts.SyntaxKind.GreaterThanEqualsToken: return BinaryOp.Ge;
       case ts.SyntaxKind.AmpersandAmpersandToken: return BinaryOp.And;
       case ts.SyntaxKind.BarBarToken: return BinaryOp.Or;
-      default: return BinaryOp.Add;
+      case ts.SyntaxKind.EqualsToken: return BinaryOp.Assign; // Assignment operator
+      default:
+        throw new Error(`Unsupported binary operator: ${ts.SyntaxKind[kind]}`);
     }
   }
 

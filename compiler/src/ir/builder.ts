@@ -321,23 +321,6 @@ export const stmts = {
     };
   },
 
-  for(
-    initializer: IRStatement | undefined,
-    condition: IRExpression | undefined,
-    increment: IRExpression | undefined,
-    body: IRStatement[],
-    location?: { line: number; column: number }
-  ): IRStatement {
-    return {
-      kind: 'for',
-      initializer,
-      condition,
-      increment,
-      body,
-      location,
-    };
-  },
-
   block(statements: IRStatement[], location?: { line: number; column: number }): IRStatement {
     return {
       kind: 'block',
@@ -365,6 +348,23 @@ export const stmts = {
     return {
       kind: 'throw',
       expression,
+      location,
+    };
+  },
+
+  for(
+    init: IRStatement | null,
+    condition: IRExpression | undefined,
+    increment: IRExpression | undefined,
+    body: IRStatement[],
+    location?: { line: number; column: number }
+  ): IRStatement {
+    return {
+      kind: 'for',
+      init,
+      condition,
+      increment,
+      body,
       location,
     };
   },

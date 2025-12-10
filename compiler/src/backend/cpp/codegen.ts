@@ -688,33 +688,13 @@ export class CppCodegen {
         this.emit('}');
         break;
       
-      case 'for':
-        // Build for loop header as single string
-        let forHeader = 'for (';
-        if (stmt.initializer) {
-          // Generate initializer inline (no semicolon, will be added by for syntax)
-          const savedIndent = this.indent;
-          this.indent = 0;
-          const savedOutput = this.output;
-          this.output = [];
-          this.generateStatement(stmt.initializer);
-          const initCode = this.output.join('').trim().replace(/;$/, '');
-          this.output = savedOutput;
-          this.indent = savedIndent;
-          forHeader += initCode + '; ';
-        } else {
-          forHeader += '; ';
-        }
-        if (stmt.condition) {
-          forHeader += this.generateExpression(stmt.condition) + '; ';
-        } else {
-          forHeader += '; ';
-        }
-        if (stmt.increment) {
-          forHeader += this.generateExpression(stmt.increment);
-        }
-        forHeader += ') {';
-        this.emit(forHeader);
+      case 'for': {
+        // Traditional for loop: for (init; condition; increment) { body }
+        const initCode = stmt.init ? this.generateStatementInline(stmt.init) : '';
+        const condCode = stmt.condition ? this.generateExpression(stmt.condition) : '';
+        const incrCode = stmt.increment ? this.generateExpression(stmt.increment) : '';
+        
+        this.emit(`for (${initCode}; ${condCode}; ${incrCode}) {`);
         this.indent++;
         for (const bodyStmt of stmt.body) {
           this.generateStatement(bodyStmt);
@@ -722,6 +702,7 @@ export class CppCodegen {
         this.indent--;
         this.emit('}');
         break;
+      }
       
       case 'for-of': {
         // Range-based for loop in C++
@@ -757,6 +738,26 @@ export class CppCodegen {
         this.indent--;
         this.emit('}');
         break;
+    }
+  }
+
+  /**
+   * Generate inline C++ code from a statement (for use in for loop init, etc.)
+   * Returns code without trailing semicolon
+   */
+  private generateStatementInline(stmt: IRStatement): string {
+    switch (stmt.kind) {
+      case 'variableDeclaration':
+        return `auto ${this.sanitizeIdentifier(stmt.name)} = ${stmt.initializer ? this.generateExpression(stmt.initializer) : 'nullptr'}`;
+      
+      case 'assignment':
+        return `${this.sanitizeIdentifier(stmt.target)} = ${this.generateExpression(stmt.value)}`;
+      
+      case 'expressionStatement':
+        return this.generateExpression(stmt.expression);
+      
+      default:
+        return '';
     }
   }
 
@@ -918,6 +919,23 @@ export class CppCodegen {
           const method = expr.callee.member;
           const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
           return `gs::http::${className}::${method}(${args})`;
+        }
+        
+        // Special handling for number instance methods (e.g., num.toFixed(2))
+        // Convert to static method calls: gs::Number::toFixed(num, 2)
+        if (expr.callee.kind === 'memberAccess') {
+          const objectType = expr.callee.object.type;
+          const isNumber = objectType.kind === 'primitive' && objectType.type === 'number';
+          
+          // Check if this is a Number method
+          const numberMethods = new Set(['toFixed', 'toExponential', 'toPrecision', 'toString']);
+          if (isNumber && numberMethods.has(expr.callee.member)) {
+            const obj = this.generateExpression(expr.callee.object);
+            const method = expr.callee.member;
+            const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg));
+            const allArgs = [obj, ...args].join(', ');
+            return `gs::Number::${method}(${allArgs})`;
+          }
         }
         
         const callee = this.generateExpression(expr.callee);
