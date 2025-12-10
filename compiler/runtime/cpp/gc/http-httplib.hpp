@@ -109,8 +109,16 @@ public:
     
     // Create client with host and port
     httplib::Client client(host, port);
+    
+    // Set reasonable timeouts (in seconds)
+    client.set_connection_timeout(10, 0);  // 10 seconds connection timeout
+    client.set_read_timeout(30, 0);         // 30 seconds read timeout
+    client.set_write_timeout(30, 0);        // 30 seconds write timeout
+    
+    // Enable redirect following
     client.set_follow_location(true);
     
+    // Perform GET request
     auto res = client.Get(path);
     
     if (!res) {
@@ -155,9 +163,14 @@ public:
       host = host.substr(0, port_pos);
     }
     
+    // Create client with timeouts
     httplib::Client client(host, port);
+    client.set_connection_timeout(10, 0);
+    client.set_read_timeout(30, 0);
+    client.set_write_timeout(30, 0);
     client.set_follow_location(true);
     
+    // Perform POST request
     auto res = client.Post(path, body.to_std_string(), contentType.to_std_string());
     
     if (!res) {

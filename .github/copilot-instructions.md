@@ -349,15 +349,14 @@ pnpm build && pnpm test      # Build + test
 - **MPS 1.118.0**: Garbage collection (GC mode) - BSD 2-clause, ~300KB
 - **cppcoro**: Async/await via C++20 coroutines - MIT, header-only
 - **PCRE2 10.47**: Regular expressions - BSD 3-clause, ~500KB
-- **libcurl 8.7.1**: HTTP/HTTPS client library - MIT-like, ~2.8MB source
+- **cpp-httplib v0.28.0**: HTTP/HTTPS client library - MIT, header-only, ~13.6k LOC
 
 All dependencies compiled on-the-fly (~1-3s each, cached):
 ```bash
 zig cc -O2 -c vendor/mps/src/mps.c -o build/mps.o           # GC mode
 zig cc -O2 -c vendor/pcre2/src/pcre2_all.c -o build/pcre2.o # RegExp
-zig cc -O2 -c vendor/curl/lib/curl_all.c -o build/curl.o   # HTTP client
 zig c++ -std=c++20 -c build/main.cpp -o build/main.o        # GoodScript code
-zig c++ build/main.o build/mps.o build/pcre2.o build/curl.o -o myapp # Link
+zig c++ build/main.o build/mps.o build/pcre2.o -o myapp     # Link
 ```
 
 **Why Vendored?**
@@ -368,12 +367,25 @@ zig c++ build/main.o build/mps.o build/pcre2.o build/curl.o -o myapp # Link
 
 **CLI Examples**:
 ```bash
-gsc --target cpp --compile src/main-gs.ts -o myapp       # Compile to native binary
-gsc --target cpp --compile --triple wasm32-wasi src/main-gs.ts  # Compile to WebAssembly
-gsc --target cpp src/main-gs.ts                          # Generate C++ only (no compilation)
+gsc --gsTarget cpp -o myapp src/main-gs.ts                       # Compile to native binary
+gsc --gsTarget cpp --gsTriple wasm32-wasi -o app.wasm src/main-gs.ts  # Compile to WebAssembly
+gsc --gsTarget cpp --gsCodegen src/main-gs.ts                    # Generate C++ only (no compilation)
+gsc --gsMemory ownership --gsTarget cpp -o myapp src/main-gs.ts # Use ownership mode
 ```
 
-**Implementation**: `src/codegen/zig.ts` (future)
+**Correct CLI Flags**:
+- `--gsTarget <target>` - Compilation target (cpp, js, ts, haxe)
+- `--gsMemory <mode>` - Memory mode (gc, ownership)  
+- `--gsCodegen` - Generate code only, don't compile to binary
+- `--gsOptimize <level>` - Optimization level (0, 1, 2, 3, s, z)
+- `--gsTriple <triple>` - Target triple for cross-compilation
+- `-o <path>` - Output binary path
+- `--gsShowIR` - Print IR for debugging
+- `--gsDebug` - Enable debug symbols
+
+Note: `cpp` target compiles to binary by default unless `--gsCodegen` is used.
+
+**Implementation**: `src/backend/cpp/zig-compiler.ts`
 
 ## Common Patterns
 

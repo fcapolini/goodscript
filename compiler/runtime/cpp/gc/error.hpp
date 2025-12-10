@@ -156,4 +156,9 @@ public:
   virtual ~EvalError() noexcept = default;
 };
 
+// Stream operator for Error (for console.log compatibility)
+inline std::ostream& operator<<(std::ostream& os, const Error& err) {
+  return os << err.toString();
+}
+
 } // namespace gs
