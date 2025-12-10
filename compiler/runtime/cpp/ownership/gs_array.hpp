@@ -111,6 +111,22 @@ public:
   }
   
   /**
+   * Reserves capacity for at least the specified number of elements
+   * Equivalent to C++: vector.reserve(capacity)
+   * This is a performance optimization to avoid reallocations during push()
+   */
+  void reserve(size_t capacity) {
+    impl_.reserve(capacity);
+  }
+  
+  /**
+   * Returns the current capacity (number of elements that can be stored without reallocation)
+   */
+  size_t capacity() const {
+    return impl_.capacity();
+  }
+  
+  /**
    * Removes the last element from the array and returns it
    * Equivalent to TypeScript: arr.pop()
    */

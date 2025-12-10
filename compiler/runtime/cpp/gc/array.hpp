@@ -168,6 +168,23 @@ public:
         length_ = new_len;
     }
 
+    /**
+     * Reserves capacity for at least the specified number of elements
+     * This is a performance optimization to avoid reallocations during push()
+     */
+    void reserve(size_t new_capacity) {
+        if (new_capacity > capacity_) {
+            resize_capacity(new_capacity);
+        }
+    }
+    
+    /**
+     * Returns the current capacity (number of elements that can be stored without reallocation)
+     */
+    size_t capacity() const {
+        return capacity_;
+    }
+
     // Methods with optimized growth
     void push(const T& value) {
         if (length_ >= capacity_) {

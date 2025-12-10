@@ -713,6 +713,14 @@ export class CppCodegen {
         // Check for StringBuilder optimization opportunity
         const sbOpportunity = this.mode === 'gc' ? this.detectStringBuilderOpportunity(stmt.body) : null;
         
+        // Check for array reserve optimization opportunity (works in both GC and ownership modes)
+        const arrayReserve = this.detectArrayReserveOpportunity(stmt.body, stmt.condition);
+        
+        if (arrayReserve) {
+          // Emit reserve() before loop for better performance
+          this.emit(`${this.sanitizeIdentifier(arrayReserve.arrayName)}.reserve(${arrayReserve.reserveSize});`);
+        }
+        
         if (sbOpportunity) {
           // Use StringBuilder for efficient string concatenation
           const { varName, stmtIndex, appendExpr } = sbOpportunity;
@@ -962,6 +970,45 @@ export class CppCodegen {
       const pattern = this.isStringConcatAssignment(body[i]);
       if (pattern) {
         return { ...pattern, stmtIndex: i };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Detect if a loop body has array.push() pattern that can benefit from reserve()
+   * Pattern: for (let i = 0; i < size; i++) { arr.push(x); }
+   * Returns: { arrayName, reserveSize } for reserve() optimization
+   */
+  private detectArrayReserveOpportunity(body: IRStatement[], condition?: IRExpression): { arrayName: string; reserveSize: string } | null {
+    // Look for arr.push(x) in loop body
+    for (const stmt of body) {
+      // Check for expression statement containing a method call
+      if (stmt.kind !== 'expressionStatement') continue;
+      const expr = stmt.expression;
+      
+      // Check for method call expression
+      if (expr.kind !== 'call') continue;
+      const call = expr as any;  // Call expression structure varies
+      if (!call.callee || call.callee.kind !== 'memberAccess') continue;
+      
+      const member = call.callee;
+      if (member.member !== 'push') continue;
+      if (member.object.kind !== 'identifier') continue;
+      
+      const arrayName = member.object.name;
+      
+      // Try to extract loop bound from condition: i < size
+      if (condition && condition.kind === 'binary') {
+        const binary = condition as any;
+        if (binary.operator !== '<' && binary.operator !== '<=') return null;
+        
+        const rightSide = binary.right;
+        if (rightSide.kind === 'identifier') {
+          return { arrayName, reserveSize: rightSide.name };
+        } else if (rightSide.kind === 'literal') {
+          return { arrayName, reserveSize: String(rightSide.value) };
+        }
       }
     }
     return null;
