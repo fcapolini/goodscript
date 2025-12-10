@@ -930,6 +930,12 @@ export class IRLowering {
       return expr.literal(null, types.void());
     }
 
+    if (node.kind === ts.SyntaxKind.ThisKeyword) {
+      // In C++ class methods, 'this' is a valid keyword (pointer to current instance)
+      const type = this.inferType(node);
+      return expr.variable('this', 0, type);
+    }
+
     // Binary expressions
     if (ts.isBinaryExpression(node)) {
       return this.lowerBinaryExpr(node, sourceFile);
@@ -966,6 +972,13 @@ export class IRLowering {
       // Handle undefined as a special literal (it's an identifier in TypeScript, not a keyword)
       if (name === 'undefined') {
         return expr.literal(null, types.void());
+      }
+      
+      // Handle 'this' keyword - keep it as-is, it's valid in C++ class methods
+      // Don't add underscore suffix like other reserved words
+      if (name === 'this') {
+        const type = this.inferType(node);
+        return expr.variable('this', 0, type);
       }
       
       const type = this.inferType(node);

@@ -25,79 +25,11 @@ EQUIVALENCE TEST RESULTS
 ✅ Array for-of loop
 ✅ Empty array
 ✅ Array with reserve optimization
-
-❌ Simple class instantiation
-   [gc] Failed (1573ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391733165/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391733165/test-gs.ts
-
-❌ Errors:
-  Binary compilation failed
-    Using cached mps.o
-    Compiling cppcoro...
-    Compiling test.cpp...
-    Command failed: zig c++ -std=c++20 -O3 -c -I dist/build -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/vendor/mps/src -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/vendor/cpp-httplib -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/vendor/cppcoro/include dist/build/test.cpp -o dist/build/test.o
-Exit code: 1
-stderr: dist/build/test.cpp:28:21: error: member reference type 'Point *const' is a pointer; did you mean to use '->'?
-   28 |   gs::console::log(p.x);
-      |                    ~^
-      |                     ->
-dist/build/test.cpp:28:22: error: no member named 'x' in 'goodscript::test::Point'
-   28 |   gs::console::log(p.x);
-      |                    ~ ^
-dist/build/test.cpp:29:21: error: member reference type 'Point *const' is a pointer; did you mean to use '->'?
-   29 |   gs::console::log(p.y);
-      |                    ~^
-      |                     ->
-dist/build/test.cpp:29:22: error: no member named 'y' in 'goodscript::test::Point'
-   29 |   gs::console::log(p.y);
-      |                    ~ ^
-In file included from dist/build/test.cpp:1:
-In file included from dist/build/test.hpp:5:
-In file included from /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp/gc/gs_gc_runtime.hpp:24:
-/Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp/gc/array.hpp:52:29: warning: first argument in call to 'memcpy' is a pointer to non-trivially copyable type 'gs::String' [-Wnontrivial-memcall]
-   52 |                 std::memcpy(new_data, data_, length_ * sizeof(T));
-      |                             ^
-/Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp/gc/array.hpp:191:13: note: in instantiation of member function 'gs::Array<gs::String>::resize_capacity' requested here
-  191 |             resize_capacity(calculate_growth(capacity_));
-      |             ^
-/Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp/gc/array.hpp:499:20: note: in instantiation of member function 'gs::Array<gs::String>::push' requested here
-  499 |             result.push(charAt(i));
-      |                    ^
-/Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp/gc/array.hpp:52:29: note: explicitly cast the pointer to silence this warning
-   52 |                 std::memcpy(new_data, data_, length_ * sizeof(T));
-      |                             ^
-      |                             (void*)
-1 warning and 4 errors generated.
-
-stdout: 
-
-   Expected: "3\n4\n"
-   Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1608ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391733165/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391733165/test-gs.ts
-
-❌ Errors:
-  Binary compilation failed
-    Compiling cppcoro...
-    Compiling test.cpp...
-    Command failed: zig c++ -std=c++20 -O3 -c -I dist/build -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/vendor/cpp-httplib -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/vendor/cppcoro/include dist/build/test.cpp -o dist/build/test.o
-Exit code: 1
-stderr: dist/build/test.cpp:28:22: error: no member named 'x' in 'std::unique_ptr<goodscript::test::Point>'
-   28 |   gs::console::log(p.x);
-      |                    ~ ^
-dist/build/test.cpp:29:22: error: no member named 'y' in 'std::unique_ptr<goodscript::test::Point>'
-   29 |   gs::console::log(p.y);
-      |                    ~ ^
-2 errors generated.
-
-stdout: 
-
-   Expected: "3\n4\n"
-   Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
+✅ Simple class instantiation
 
 ❌ Class with methods
-   [gc] Failed (1617ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391736586/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391736586/test-gs.ts
+   [gc] Failed (1625ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395214621/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395214621/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -118,18 +50,15 @@ dist/build/test.cpp:14:28: error: member reference base type 'std::nullptr_t' is
 dist/build/test.cpp:18:17: error: member reference base type 'std::nullptr_t' is not a structure or union
    18 |   return nullptr.value;
       |          ~~~~~~~^~~~~~
-dist/build/test.cpp:33:24: error: member reference type 'Calculator *const' is a pointer; did you mean to use '->'?
-   33 |   gs::console::log(calc.getValue());
-      |                    ~~~~^
-      |                        ->
-dist/build/test.cpp:34:7: error: member reference type 'Calculator *const' is a pointer; did you mean to use '->'?
-   34 |   calc.add(5);
-      |   ~~~~^
-      |       ->
-dist/build/test.cpp:35:24: error: member reference type 'Calculator *const' is a pointer; did you mean to use '->'?
-   35 |   gs::console::log(calc.getValue());
-      |                    ~~~~^
-      |                        ->
+dist/build/test.cpp:33:26: error: no member named 'getValue_' in 'goodscript::test::Calculator'
+   33 |   gs::console::log(calc->getValue_());
+      |                    ~~~~  ^
+dist/build/test.cpp:34:9: error: no member named 'add_' in 'goodscript::test::Calculator'
+   34 |   calc->add_(5);
+      |   ~~~~  ^
+dist/build/test.cpp:35:26: error: no member named 'getValue_' in 'goodscript::test::Calculator'
+   35 |   gs::console::log(calc->getValue_());
+      |                    ~~~~  ^
 In file included from dist/build/test.cpp:1:
 In file included from dist/build/test.hpp:5:
 In file included from /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp/gc/gs_gc_runtime.hpp:24:
@@ -152,8 +81,8 @@ stdout:
 
    Expected: "10\n15\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1645ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391736586/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391736586/test-gs.ts
+   [ownership] Failed (1719ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395214621/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395214621/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -173,18 +102,15 @@ dist/build/test.cpp:14:28: error: member reference base type 'std::nullptr_t' is
 dist/build/test.cpp:18:17: error: member reference base type 'std::nullptr_t' is not a structure or union
    18 |   return nullptr.value;
       |          ~~~~~~~^~~~~~
-dist/build/test.cpp:33:24: error: no member named 'getValue' in 'std::unique_ptr<goodscript::test::Calculator>'; did you mean to use '->' instead of '.'?
-   33 |   gs::console::log(calc.getValue());
-      |                        ^
-      |                        ->
-dist/build/test.cpp:34:7: error: no member named 'add' in 'std::unique_ptr<goodscript::test::Calculator>'; did you mean to use '->' instead of '.'?
-   34 |   calc.add(5);
-      |       ^
-      |       ->
-dist/build/test.cpp:35:24: error: no member named 'getValue' in 'std::unique_ptr<goodscript::test::Calculator>'; did you mean to use '->' instead of '.'?
-   35 |   gs::console::log(calc.getValue());
-      |                        ^
-      |                        ->
+dist/build/test.cpp:33:26: error: no member named 'getValue_' in 'goodscript::test::Calculator'
+   33 |   gs::console::log(calc->getValue_());
+      |                    ~~~~~~^
+dist/build/test.cpp:34:9: error: no member named 'add_' in 'goodscript::test::Calculator'
+   34 |   calc->add_(5);
+      |   ~~~~~~^
+dist/build/test.cpp:35:26: error: no member named 'getValue_' in 'goodscript::test::Calculator'
+   35 |   gs::console::log(calc->getValue_());
+      |                    ~~~~~~^
 7 errors generated.
 
 stdout: 
@@ -193,8 +119,8 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
 
 ❌ Class with string fields
-   [gc] Failed (1570ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391740077/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391740077/test-gs.ts
+   [gc] Failed (1592ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395218199/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395218199/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -206,17 +132,9 @@ Exit code: 1
 stderr: dist/build/test.cpp:16:57: error: member reference base type 'std::nullptr_t' is not a structure or union
    16 |   gs::console::log((gs::String("Hello, I am ") + nullptr.name));
       |                                                  ~~~~~~~^~~~~
-dist/build/test.cpp:31:8: error: member reference type 'Person *const' is a pointer; did you mean to use '->'?
-   31 |   alice.greet();
-      |   ~~~~~^
-      |        ->
-dist/build/test.cpp:32:25: error: member reference type 'Person *const' is a pointer; did you mean to use '->'?
-   32 |   gs::console::log(alice.age);
-      |                    ~~~~~^
-      |                         ->
-dist/build/test.cpp:32:26: error: no member named 'age' in 'goodscript::test::Person'
-   32 |   gs::console::log(alice.age);
-      |                    ~~~~~ ^
+dist/build/test.cpp:31:10: error: no member named 'greet_' in 'goodscript::test::Person'
+   31 |   alice->greet_();
+      |   ~~~~~  ^
 In file included from dist/build/test.cpp:1:
 In file included from dist/build/test.hpp:5:
 In file included from /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp/gc/gs_gc_runtime.hpp:24:
@@ -233,14 +151,14 @@ In file included from /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runt
    52 |                 std::memcpy(new_data, data_, length_ * sizeof(T));
       |                             ^
       |                             (void*)
-1 warning and 4 errors generated.
+1 warning and 2 errors generated.
 
 stdout: 
 
    Expected: "Hello, I am Alice\n30\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1688ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391740077/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391740077/test-gs.ts
+   [ownership] Failed (1809ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395218199/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395218199/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -251,14 +169,10 @@ Exit code: 1
 stderr: dist/build/test.cpp:16:57: error: member reference base type 'std::nullptr_t' is not a structure or union
    16 |   gs::console::log((gs::String("Hello, I am ") + nullptr.name));
       |                                                  ~~~~~~~^~~~~
-dist/build/test.cpp:31:8: error: no member named 'greet' in 'std::unique_ptr<goodscript::test::Person>'; did you mean to use '->' instead of '.'?
-   31 |   alice.greet();
-      |        ^
-      |        ->
-dist/build/test.cpp:32:26: error: no member named 'age' in 'std::unique_ptr<goodscript::test::Person>'
-   32 |   gs::console::log(alice.age);
-      |                    ~~~~~ ^
-3 errors generated.
+dist/build/test.cpp:31:10: error: no member named 'greet_' in 'goodscript::test::Person'
+   31 |   alice->greet_();
+      |   ~~~~~~~^
+2 errors generated.
 
 stdout: 
 
@@ -266,8 +180,8 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
 
 ❌ Multiple instances
-   [gc] Failed (1565ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391743565/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391743565/test-gs.ts
+   [gc] Failed (1569ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395221820/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395221820/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -288,26 +202,21 @@ dist/build/test.cpp:14:28: error: member reference base type 'std::nullptr_t' is
 dist/build/test.cpp:18:17: error: member reference base type 'std::nullptr_t' is not a structure or union
    18 |   return nullptr.count;
       |          ~~~~~~~^~~~~~
-dist/build/test.cpp:34:5: error: member reference type 'Counter *const' is a pointer; did you mean to use '->'?
-   34 |   c1.increment();
-      |   ~~^
-      |     ->
-dist/build/test.cpp:35:5: error: member reference type 'Counter *const' is a pointer; did you mean to use '->'?
-   35 |   c1.increment();
-      |   ~~^
-      |     ->
-dist/build/test.cpp:36:5: error: member reference type 'Counter *const' is a pointer; did you mean to use '->'?
-   36 |   c2.increment();
-      |   ~~^
-      |     ->
-dist/build/test.cpp:37:22: error: member reference type 'Counter *const' is a pointer; did you mean to use '->'?
-   37 |   gs::console::log(c1.getCount());
-      |                    ~~^
-      |                      ->
-dist/build/test.cpp:38:22: error: member reference type 'Counter *const' is a pointer; did you mean to use '->'?
-   38 |   gs::console::log(c2.getCount());
-      |                    ~~^
-      |                      ->
+dist/build/test.cpp:34:7: error: no member named 'increment_' in 'goodscript::test::Counter'
+   34 |   c1->increment_();
+      |   ~~  ^
+dist/build/test.cpp:35:7: error: no member named 'increment_' in 'goodscript::test::Counter'
+   35 |   c1->increment_();
+      |   ~~  ^
+dist/build/test.cpp:36:7: error: no member named 'increment_' in 'goodscript::test::Counter'
+   36 |   c2->increment_();
+      |   ~~  ^
+dist/build/test.cpp:37:24: error: no member named 'getCount_' in 'goodscript::test::Counter'
+   37 |   gs::console::log(c1->getCount_());
+      |                    ~~  ^
+dist/build/test.cpp:38:24: error: no member named 'getCount_' in 'goodscript::test::Counter'
+   38 |   gs::console::log(c2->getCount_());
+      |                    ~~  ^
 In file included from dist/build/test.cpp:1:
 In file included from dist/build/test.hpp:5:
 In file included from /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp/gc/gs_gc_runtime.hpp:24:
@@ -330,8 +239,8 @@ stdout:
 
    Expected: "2\n1\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1615ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391743565/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391743565/test-gs.ts
+   [ownership] Failed (1662ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395221820/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395221820/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -351,26 +260,21 @@ dist/build/test.cpp:14:28: error: member reference base type 'std::nullptr_t' is
 dist/build/test.cpp:18:17: error: member reference base type 'std::nullptr_t' is not a structure or union
    18 |   return nullptr.count;
       |          ~~~~~~~^~~~~~
-dist/build/test.cpp:34:5: error: no member named 'increment' in 'std::unique_ptr<goodscript::test::Counter>'; did you mean to use '->' instead of '.'?
-   34 |   c1.increment();
-      |     ^
-      |     ->
-dist/build/test.cpp:35:5: error: no member named 'increment' in 'std::unique_ptr<goodscript::test::Counter>'; did you mean to use '->' instead of '.'?
-   35 |   c1.increment();
-      |     ^
-      |     ->
-dist/build/test.cpp:36:5: error: no member named 'increment' in 'std::unique_ptr<goodscript::test::Counter>'; did you mean to use '->' instead of '.'?
-   36 |   c2.increment();
-      |     ^
-      |     ->
-dist/build/test.cpp:37:22: error: no member named 'getCount' in 'std::unique_ptr<goodscript::test::Counter>'; did you mean to use '->' instead of '.'?
-   37 |   gs::console::log(c1.getCount());
-      |                      ^
-      |                      ->
-dist/build/test.cpp:38:22: error: no member named 'getCount' in 'std::unique_ptr<goodscript::test::Counter>'; did you mean to use '->' instead of '.'?
-   38 |   gs::console::log(c2.getCount());
-      |                      ^
-      |                      ->
+dist/build/test.cpp:34:7: error: no member named 'increment_' in 'goodscript::test::Counter'
+   34 |   c1->increment_();
+      |   ~~~~^
+dist/build/test.cpp:35:7: error: no member named 'increment_' in 'goodscript::test::Counter'
+   35 |   c1->increment_();
+      |   ~~~~^
+dist/build/test.cpp:36:7: error: no member named 'increment_' in 'goodscript::test::Counter'
+   36 |   c2->increment_();
+      |   ~~~~^
+dist/build/test.cpp:37:24: error: no member named 'getCount_' in 'goodscript::test::Counter'
+   37 |   gs::console::log(c1->getCount_());
+      |                    ~~~~^
+dist/build/test.cpp:38:24: error: no member named 'getCount_' in 'goodscript::test::Counter'
+   38 |   gs::console::log(c2->getCount_());
+      |                    ~~~~^
 9 errors generated.
 
 stdout: 
@@ -379,85 +283,24 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
 
 ❌ Class field initialization
-   [gc] Failed (1568ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391746964/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391746964/test-gs.ts
-
-❌ Errors:
-  Binary compilation failed
-    Using cached mps.o
-    Compiling cppcoro...
-    Compiling test.cpp...
-    Command failed: zig c++ -std=c++20 -O3 -c -I dist/build -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/vendor/mps/src -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/vendor/cpp-httplib -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/vendor/cppcoro/include dist/build/test.cpp -o dist/build/test.o
-Exit code: 1
-stderr: dist/build/test.cpp:25:26: error: member reference type 'Config *const' is a pointer; did you mean to use '->'?
-   25 |   gs::console::log(config.timeout);
-      |                    ~~~~~~^
-      |                          ->
-dist/build/test.cpp:25:27: error: no member named 'timeout' in 'goodscript::test::Config'
-   25 |   gs::console::log(config.timeout);
-      |                    ~~~~~~ ^
-dist/build/test.cpp:26:26: error: member reference type 'Config *const' is a pointer; did you mean to use '->'?
-   26 |   gs::console::log(config.retries);
-      |                    ~~~~~~^
-      |                          ->
-dist/build/test.cpp:26:27: error: no member named 'retries' in 'goodscript::test::Config'
-   26 |   gs::console::log(config.retries);
-      |                    ~~~~~~ ^
-In file included from dist/build/test.cpp:1:
-In file included from dist/build/test.hpp:5:
-In file included from /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp/gc/gs_gc_runtime.hpp:24:
-/Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp/gc/array.hpp:52:29: warning: first argument in call to 'memcpy' is a pointer to non-trivially copyable type 'gs::String' [-Wnontrivial-memcall]
-   52 |                 std::memcpy(new_data, data_, length_ * sizeof(T));
-      |                             ^
-/Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp/gc/array.hpp:191:13: note: in instantiation of member function 'gs::Array<gs::String>::resize_capacity' requested here
-  191 |             resize_capacity(calculate_growth(capacity_));
-      |             ^
-/Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp/gc/array.hpp:499:20: note: in instantiation of member function 'gs::Array<gs::String>::push' requested here
-  499 |             result.push(charAt(i));
-      |                    ^
-/Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp/gc/array.hpp:52:29: note: explicitly cast the pointer to silence this warning
-   52 |                 std::memcpy(new_data, data_, length_ * sizeof(T));
-      |                             ^
-      |                             (void*)
-1 warning and 4 errors generated.
-
-stdout: 
-
+   [gc] Failed (1976ms)
    Expected: "5000\n3\n"
-   Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1682ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391746964/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391746964/test-gs.ts
-
-❌ Errors:
-  Binary compilation failed
-    Compiling cppcoro...
-    Compiling test.cpp...
-    Command failed: zig c++ -std=c++20 -O3 -c -I dist/build -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/vendor/cpp-httplib -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/runtime/cpp -I /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/vendor/cppcoro/include dist/build/test.cpp -o dist/build/test.o
-Exit code: 1
-stderr: dist/build/test.cpp:25:27: error: no member named 'timeout' in 'std::unique_ptr<goodscript::test::Config>'
-   25 |   gs::console::log(config.timeout);
-      |                    ~~~~~~ ^
-dist/build/test.cpp:26:27: error: no member named 'retries' in 'std::unique_ptr<goodscript::test::Config>'
-   26 |   gs::console::log(config.retries);
-      |                    ~~~~~~ ^
-2 errors generated.
-
-stdout: 
-
+   Got:      "134217232\n84512936\n"
+   [ownership] Failed (2056ms)
    Expected: "5000\n3\n"
-   Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
+   Got:      "820010584\n5119136\n"
 
 ❌ Class with boolean field
-   [gc] Failed (764ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391750438/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391750438/test-gs.ts
+   [gc] Failed (777ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395229531/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395229531/test-gs.ts
 
 ❌ Errors:
-  /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391750438/test-gs.ts:10:26 - GS110: Use explicit comparisons instead of truthy/falsy checks
+  /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395229531/test-gs.ts:10:26 - GS110: Use explicit comparisons instead of truthy/falsy checks
   Binary compilation failed
     Using cached mps.o
     Compiling cppcoro...
     Linking...
-    Command failed: zig c++ dist/build/.cache/vendor/mps.o dist/build/.cache/vendor/lightweight_manual_reset_event.o dist/build/.cache/vendor/spin_wait.o dist/build/.cache/vendor/spin_mutex.o -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391750438/test-gc
+    Command failed: zig c++ dist/build/.cache/vendor/mps.o dist/build/.cache/vendor/lightweight_manual_reset_event.o dist/build/.cache/vendor/spin_wait.o dist/build/.cache/vendor/spin_mutex.o -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395229531/test-gc
 Exit code: 1
 stderr: error: undefined symbol: _main
     note: referenced with linker flag -e
@@ -466,15 +309,15 @@ stdout:
 
    Expected: "true\nfalse\n"
    Got:      "📦 Compiling 1 file(s)...\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (769ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391750438/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391750438/test-gs.ts
+   [ownership] Failed (748ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395229531/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395229531/test-gs.ts
 
 ❌ Errors:
-  /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391750438/test-gs.ts:10:26 - GS110: Use explicit comparisons instead of truthy/falsy checks
+  /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395229531/test-gs.ts:10:26 - GS110: Use explicit comparisons instead of truthy/falsy checks
   Binary compilation failed
     Compiling cppcoro...
     Linking...
-    Command failed: zig c++ dist/build/.cache/vendor/lightweight_manual_reset_event.o dist/build/.cache/vendor/spin_wait.o dist/build/.cache/vendor/spin_mutex.o -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391750438/test-ownership
+    Command failed: zig c++ dist/build/.cache/vendor/lightweight_manual_reset_event.o dist/build/.cache/vendor/spin_wait.o dist/build/.cache/vendor/spin_mutex.o -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395229531/test-ownership
 Exit code: 1
 stderr: error: undefined symbol: _main
     note: referenced with linker flag -e
@@ -488,10 +331,10 @@ stdout:
 ✅ If-else-if chain
 
 ❌ While loop
-   [gc] Failed (1973ms)
+   [gc] Failed (1985ms)
    Expected: "0\n1\n2\n3\n4\n"
    Got:      ""
-   [ownership] Failed (2096ms)
+   [ownership] Failed (2111ms)
    Expected: "0\n1\n2\n3\n4\n"
    Got:      ""
 ✅ Traditional for loop
@@ -502,16 +345,16 @@ stdout:
 ✅ Nested loops
 
 ❌ Switch statement
-   [gc] Failed (2016ms)
+   [gc] Failed (2053ms)
    Expected: "weekend\nweekday\nweekend\ninvalid\n"
    Got:      ""
-   [ownership] Failed (2146ms)
+   [ownership] Failed (2145ms)
    Expected: "weekend\nweekday\nweekend\ninvalid\n"
    Got:      ""
 
 ❌ Simple try-catch
-   [gc] Failed (1585ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391800902/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391800902/test-gs.ts
+   [gc] Failed (1584ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395279752/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395279752/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -584,8 +427,8 @@ stdout:
 
    Expected: "before throw\ncaught: error message\nafter catch\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1650ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391800902/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391800902/test-gs.ts
+   [ownership] Failed (1699ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395279752/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395279752/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -640,8 +483,8 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
 
 ❌ Try-finally
-   [gc] Failed (1578ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391804366/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391804366/test-gs.ts
+   [gc] Failed (1612ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395283253/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395283253/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -675,8 +518,8 @@ stdout:
 
    Expected: "try block\nfinally block\nafter try-finally\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1691ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391804366/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391804366/test-gs.ts
+   [ownership] Failed (1672ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395283253/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395283253/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -695,8 +538,8 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
 
 ❌ Try-catch-finally
-   [gc] Failed (1589ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391807860/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391807860/test-gs.ts
+   [gc] Failed (1593ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395286758/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395286758/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -769,8 +612,8 @@ stdout:
 
    Expected: "try\ncatch: error\nfinally\ndone\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1681ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391807860/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391807860/test-gs.ts
+   [ownership] Failed (1698ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395286758/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395286758/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -826,7 +669,7 @@ stdout:
 
 ❌ Nested try-catch
    [gc] Failed (1611ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391811349/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391811349/test-gs.ts
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395290271/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395290271/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -899,8 +742,8 @@ stdout:
 
    Expected: "outer try\ninner try\ninner catch: inner error\nafter inner\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1710ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391811349/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391811349/test-gs.ts
+   [ownership] Failed (1674ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395290271/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395290271/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -955,16 +798,16 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
 
 ❌ Exception in function
-   [gc] Failed (772ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391814898/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391814898/test-gs.ts
+   [gc] Failed (794ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395293774/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395293774/test-gs.ts
 
 ❌ Errors:
-  /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391814898/test-gs.ts:3:13 - GS110: Use explicit comparisons instead of truthy/falsy checks
+  /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395293774/test-gs.ts:3:13 - GS110: Use explicit comparisons instead of truthy/falsy checks
   Binary compilation failed
     Using cached mps.o
     Compiling cppcoro...
     Linking...
-    Command failed: zig c++ dist/build/.cache/vendor/mps.o dist/build/.cache/vendor/lightweight_manual_reset_event.o dist/build/.cache/vendor/spin_wait.o dist/build/.cache/vendor/spin_mutex.o -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391814898/test-gc
+    Command failed: zig c++ dist/build/.cache/vendor/mps.o dist/build/.cache/vendor/lightweight_manual_reset_event.o dist/build/.cache/vendor/spin_wait.o dist/build/.cache/vendor/spin_mutex.o -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395293774/test-gc
 Exit code: 1
 stderr: error: undefined symbol: _main
     note: referenced with linker flag -e
@@ -973,15 +816,15 @@ stdout:
 
    Expected: "no error\ncaught: function error\n"
    Got:      "📦 Compiling 1 file(s)...\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (745ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391814898/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391814898/test-gs.ts
+   [ownership] Failed (766ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395293774/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395293774/test-gs.ts
 
 ❌ Errors:
-  /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391814898/test-gs.ts:3:13 - GS110: Use explicit comparisons instead of truthy/falsy checks
+  /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395293774/test-gs.ts:3:13 - GS110: Use explicit comparisons instead of truthy/falsy checks
   Binary compilation failed
     Compiling cppcoro...
     Linking...
-    Command failed: zig c++ dist/build/.cache/vendor/lightweight_manual_reset_event.o dist/build/.cache/vendor/spin_wait.o dist/build/.cache/vendor/spin_mutex.o -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391814898/test-ownership
+    Command failed: zig c++ dist/build/.cache/vendor/lightweight_manual_reset_event.o dist/build/.cache/vendor/spin_wait.o dist/build/.cache/vendor/spin_mutex.o -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395293774/test-ownership
 Exit code: 1
 stderr: error: undefined symbol: _main
     note: referenced with linker flag -e
@@ -992,8 +835,8 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n\n🔨 Compiling to native binary...\n"
 
 ❌ Finally executes on throw
-   [gc] Failed (1657ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391816642/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391816642/test-gs.ts
+   [gc] Failed (1597ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395295568/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395295568/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -1066,8 +909,8 @@ stdout:
 
    Expected: "caught: error\ncleaned up\ntrue\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1715ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391816642/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391816642/test-gs.ts
+   [ownership] Failed (1707ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395295568/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395295568/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -1156,8 +999,8 @@ stdout:
 ✅ Empty interpolation
 
 ❌ typeof operator
-   [gc] Failed (1605ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391975103/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391975103/test-gs.ts
+   [gc] Failed (1552ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395448875/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395448875/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -1197,8 +1040,8 @@ stdout:
 
    Expected: "number\nstring\nboolean\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1701ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391975103/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765391975103/test-gs.ts
+   [ownership] Failed (1678ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395448875/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395448875/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -1240,16 +1083,16 @@ stdout:
 ✅ Strict equality
 
 ❌ Boolean in conditionals
-   [gc] Failed (742ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392054506/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392054506/test-gs.ts
+   [gc] Failed (741ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395526989/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395526989/test-gs.ts
 
 ❌ Errors:
-  /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392054506/test-gs.ts:4:16 - GS110: Use explicit comparisons instead of truthy/falsy checks
+  /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395526989/test-gs.ts:4:16 - GS110: Use explicit comparisons instead of truthy/falsy checks
   Binary compilation failed
     Using cached mps.o
     Compiling cppcoro...
     Linking...
-    Command failed: zig c++ dist/build/.cache/vendor/mps.o dist/build/.cache/vendor/lightweight_manual_reset_event.o dist/build/.cache/vendor/spin_wait.o dist/build/.cache/vendor/spin_mutex.o -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392054506/test-gc
+    Command failed: zig c++ dist/build/.cache/vendor/mps.o dist/build/.cache/vendor/lightweight_manual_reset_event.o dist/build/.cache/vendor/spin_wait.o dist/build/.cache/vendor/spin_mutex.o -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395526989/test-gc
 Exit code: 1
 stderr: error: undefined symbol: _main
     note: referenced with linker flag -e
@@ -1258,15 +1101,15 @@ stdout:
 
    Expected: "correct\n"
    Got:      "📦 Compiling 1 file(s)...\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (732ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392054506/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392054506/test-gs.ts
+   [ownership] Failed (711ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395526989/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395526989/test-gs.ts
 
 ❌ Errors:
-  /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392054506/test-gs.ts:4:16 - GS110: Use explicit comparisons instead of truthy/falsy checks
+  /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395526989/test-gs.ts:4:16 - GS110: Use explicit comparisons instead of truthy/falsy checks
   Binary compilation failed
     Compiling cppcoro...
     Linking...
-    Command failed: zig c++ dist/build/.cache/vendor/lightweight_manual_reset_event.o dist/build/.cache/vendor/spin_wait.o dist/build/.cache/vendor/spin_mutex.o -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392054506/test-ownership
+    Command failed: zig c++ dist/build/.cache/vendor/lightweight_manual_reset_event.o dist/build/.cache/vendor/spin_wait.o dist/build/.cache/vendor/spin_mutex.o -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395526989/test-ownership
 Exit code: 1
 stderr: error: undefined symbol: _main
     note: referenced with linker flag -e
@@ -1283,8 +1126,8 @@ stdout:
 ✅ Empty string operations
 
 ❌ Empty Map
-   [gc] Failed (1553ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392081834/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392081834/test-gs.ts
+   [gc] Failed (1560ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395554804/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395554804/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -1376,8 +1219,8 @@ stdout:
 
    Expected: "0\nfalse\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1640ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392081834/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392081834/test-gs.ts
+   [ownership] Failed (1629ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395554804/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395554804/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -1473,8 +1316,8 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
 
 ❌ Empty Map iteration
-   [gc] Failed (1564ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392085240/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392085240/test-gs.ts
+   [gc] Failed (1554ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395558209/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395558209/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -1695,8 +1538,8 @@ stdout:
 
    Expected: "done\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1635ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392085240/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392085240/test-gs.ts
+   [ownership] Failed (1641ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395558209/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395558209/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -1922,8 +1765,8 @@ stdout:
 ✅ Array push to empty
 
 ❌ Map set on empty
-   [gc] Failed (1569ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392092975/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392092975/test-gs.ts
+   [gc] Failed (1576ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395565854/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395565854/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -1960,8 +1803,8 @@ stdout:
 
    Expected: "0\n1\nvalue\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1632ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392092975/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392092975/test-gs.ts
+   [ownership] Failed (1629ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395565854/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395565854/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -1996,10 +1839,10 @@ stdout:
 ✅ Float precision
 
 ❌ Integer division truncation
-   [gc] Failed (1988ms)
+   [gc] Failed (2049ms)
    Expected: "3.5\n"
    Got:      "3\n"
-   [ownership] Failed (2065ms)
+   [ownership] Failed (2072ms)
    Expected: "3.5\n"
    Got:      "3\n"
 ✅ Modulo with negatives
@@ -2026,8 +1869,8 @@ stdout:
 ✅ Array reverse
 
 ❌ Array concat
-   [gc] Failed (1560ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392204015/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392204015/test-gs.ts
+   [gc] Failed (1592ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395676683/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395676683/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -2061,8 +1904,8 @@ stdout:
 
    Expected: "4\n1\n2\n3\n4\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1629ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392204015/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392204015/test-gs.ts
+   [ownership] Failed (1657ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395676683/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395676683/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -2083,8 +1926,8 @@ stdout:
 ✅ Array indexOf
 
 ❌ Date.now returns a number
-   [gc] Failed (1539ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392216011/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392216011/test-gs.ts
+   [gc] Failed (1553ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395688935/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395688935/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -2118,8 +1961,8 @@ stdout:
 
    Expected: "number\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1652ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392216011/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392216011/test-gs.ts
+   [ownership] Failed (1618ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395688935/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395688935/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -2147,8 +1990,8 @@ stdout:
 ✅ JSON.stringify negative number
 
 ❌ Map creation and size
-   [gc] Failed (1547ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392258192/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392258192/test-gs.ts
+   [gc] Failed (1582ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395732185/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395732185/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -2240,8 +2083,8 @@ stdout:
 
    Expected: "0\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1630ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392258192/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392258192/test-gs.ts
+   [ownership] Failed (1728ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395732185/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395732185/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -2337,8 +2180,8 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
 
 ❌ Map set and get
-   [gc] Failed (1563ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392261593/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392261593/test-gs.ts
+   [gc] Failed (1575ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395735714/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395735714/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -2511,8 +2354,8 @@ stdout:
 
    Expected: "1\n2\n3\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1542ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392261593/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392261593/test-gs.ts
+   [ownership] Failed (1557ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395735714/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395735714/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -2660,8 +2503,8 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
 
 ❌ Map has
-   [gc] Failed (1545ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392264910/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392264910/test-gs.ts
+   [gc] Failed (1646ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395739074/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395739074/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -2756,8 +2599,8 @@ stdout:
 
    Expected: "true\nfalse\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1620ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392264910/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392264910/test-gs.ts
+   [ownership] Failed (1667ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395739074/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395739074/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -2856,8 +2699,8 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
 
 ❌ Map delete
-   [gc] Failed (1565ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392268296/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392268296/test-gs.ts
+   [gc] Failed (1670ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395742603/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395742603/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -2976,8 +2819,8 @@ stdout:
 
    Expected: "2\n1\nfalse\ntrue\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1666ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392268296/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392268296/test-gs.ts
+   [ownership] Failed (1764ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395742603/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395742603/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -3097,8 +2940,8 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
 
 ❌ Map clear
-   [gc] Failed (1557ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392271746/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392271746/test-gs.ts
+   [gc] Failed (1635ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395746259/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395746259/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -3205,8 +3048,8 @@ stdout:
 
    Expected: "3\n0\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1626ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392271746/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392271746/test-gs.ts
+   [ownership] Failed (1706ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395746259/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395746259/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -3317,8 +3160,8 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
 
 ❌ Map forEach
-   [gc] Failed (1564ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392275142/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392275142/test-gs.ts
+   [gc] Failed (1608ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395749827/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395749827/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -3419,8 +3262,8 @@ stdout:
 
    Expected: "one:1\ntwo:2\nthree:3\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1623ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392275142/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392275142/test-gs.ts
+   [ownership] Failed (1715ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395749827/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395749827/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -3654,8 +3497,8 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
 
 ❌ Map keys iteration
-   [gc] Failed (1580ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392278545/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392278545/test-gs.ts
+   [gc] Failed (1635ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395753373/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395753373/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -3885,8 +3728,8 @@ stdout:
 
    Expected: "alpha\nbeta\ngamma\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1633ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392278545/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392278545/test-gs.ts
+   [ownership] Failed (1699ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395753373/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395753373/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -4120,8 +3963,8 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
 
 ❌ Map values iteration
-   [gc] Failed (1456ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392281976/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392281976/test-gs.ts
+   [gc] Failed (1550ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395756961/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395756961/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -4237,8 +4080,8 @@ stdout:
 
    Expected: "10\n20\n30\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1548ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392281976/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392281976/test-gs.ts
+   [ownership] Failed (1644ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395756961/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395756961/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -4369,8 +4212,8 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
 
 ❌ Map string-to-string
-   [gc] Failed (1553ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392285195/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392285195/test-gs.ts
+   [gc] Failed (1683ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395760380/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395760380/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -4413,8 +4256,8 @@ stdout:
 
    Expected: "hello\ngoodbye\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1636ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392285195/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392285195/test-gs.ts
+   [ownership] Failed (1707ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395760380/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395760380/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -4460,8 +4303,8 @@ stdout:
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
 
 ❌ Map integer keys
-   [gc] Failed (1490ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392288603/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392288603/test-gs.ts
+   [gc] Failed (1520ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory gc -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395763996/test-gc /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395763996/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -4705,8 +4548,8 @@ stdout:
 
    Expected: "one\ntwo\nthree\n"
    Got:      "📦 Compiling 1 file(s)...\n  ✓ test.hpp\n  ✓ test.cpp\n\n🔨 Compiling to native binary...\n"
-   [ownership] Failed (1553ms)
-   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392288603/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765392288603/test-gs.ts
+   [ownership] Failed (1661ms)
+   Error: Command failed: /Users/bilbo/Devel/oss/goodscript/goodscript/compiler/bin/gsc --gsTarget cpp --gsMemory ownership -o /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395763996/test-ownership /var/folders/dm/rpn_c6_13k167t8p_0dqr5gm0000gn/T/goodscript-equiv-1765395763996/test-gs.ts
 
 ❌ Errors:
   Binary compilation failed
@@ -4900,10 +4743,10 @@ stdout:
 ✅ Math.ceil
 
 ❌ Math.round
-   [gc] Failed (1941ms)
+   [gc] Failed (1983ms)
    Expected: "3\n4\n4\n-3\n"
    Got:      "3\n4\n4\n-4\n"
-   [ownership] Failed (2056ms)
+   [ownership] Failed (2208ms)
    Expected: "3\n4\n4\n-3\n"
    Got:      "3\n4\n4\n-4\n"
 ✅ Math.sqrt
@@ -4914,7 +4757,7 @@ stdout:
 
 ============================================================
 Total: 161 tests
-Passed: 128 ✅
-Failed: 33 ❌
+Passed: 129 ✅
+Failed: 32 ❌
 ============================================================
  ELIFECYCLE  Command failed with exit code 1.

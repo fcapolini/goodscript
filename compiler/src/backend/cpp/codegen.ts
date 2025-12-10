@@ -72,6 +72,10 @@ export class CppCodegen {
    * Sanitize identifier to avoid C++ reserved keywords
    */
   private sanitizeIdentifier(name: string): string {
+    // Don't sanitize 'this' - it's valid in C++ class methods
+    if (name === 'this') {
+      return name;
+    }
     if (CPP_RESERVED_KEYWORDS.has(name)) {
       return `${name}_`;
     }
@@ -1358,8 +1362,14 @@ export class CppCodegen {
         }
         
         // For class fields, add underscore suffix (C++ convention to avoid keyword conflicts)
+        // But don't add underscore for methods (function types)
         if (this.isClassType(objectType) && accessExpr === member) {
-          accessExpr = `${member}_`;
+          // Check if this is a method by looking at the expression type
+          const memberType = expr.type;
+          const isMethod = memberType.kind === 'function';
+          if (!isMethod) {
+            accessExpr = `${member}_`;
+          }
         }
         
         // Optional chaining: obj?.field becomes (obj != nullptr ? obj->field : nullptr)
