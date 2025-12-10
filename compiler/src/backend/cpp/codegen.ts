@@ -853,6 +853,57 @@ export class CppCodegen {
   }
 
   /**
+   * Collect all parts of a string concatenation chain (AST-level IRExpression)
+   */
+  private collectStringConcatPartsAST(expr: IRExpression): IRExpression[] {
+    if (expr.kind !== 'binary' || expr.operator !== BinaryOp.Add) {
+      return [expr];
+    }
+    
+    const leftType = expr.left.type;
+    const rightType = expr.right.type;
+    const leftIsString = leftType.kind === 'primitive' && leftType.type === 'string';
+    const rightIsString = rightType.kind === 'primitive' && rightType.type === 'string';
+    
+    // Only process string concatenations
+    if (!leftIsString && !rightIsString) {
+      return [expr];
+    }
+    
+    // Recursively collect parts from left and right
+    const leftParts = this.collectStringConcatPartsAST(expr.left);
+    const rightParts = this.collectStringConcatPartsAST(expr.right);
+    
+    return [...leftParts, ...rightParts];
+  }
+
+  /**
+   * Collect all parts of a string concatenation chain
+   * Example: "a" + "b" + "c" -> ["a", "b", "c"]
+   */
+  private collectStringConcatParts(expr: IRExpr): IRExpr[] {
+    if (expr.kind !== 'binary' || expr.op !== BinaryOp.Add) {
+      return [expr];
+    }
+    
+    const leftType = expr.left.type;
+    const rightType = expr.right.type;
+    const leftIsString = leftType.kind === 'primitive' && leftType.type === 'string';
+    const rightIsString = rightType.kind === 'primitive' && rightType.type === 'string';
+    
+    // Only process string concatenations
+    if (!leftIsString && !rightIsString) {
+      return [expr];
+    }
+    
+    // Recursively collect parts from left and right
+    const leftParts = this.collectStringConcatParts(expr.left);
+    const rightParts = this.collectStringConcatParts(expr.right);
+    
+    return [...leftParts, ...rightParts];
+  }
+
+  /**
    * Check if a statement is a string concatenation assignment: result = result + str
    */
   private isStringConcatAssignment(stmt: IRStatement): { varName: string; appendExpr: IRExpression } | null {
@@ -975,6 +1026,23 @@ export class CppCodegen {
           
           // If either operand is a string, convert both to strings and concatenate
           if (leftIsString || rightIsString) {
+            // Check if this is a string concatenation chain (e.g., "a" + "b" + "c")
+            // Use StringBuilder for chains of 3+ concatenations (avoid lambda overhead for simple cases)
+            const parts = this.collectStringConcatPartsAST(expr);
+            if (parts.length >= 3) {
+              // Generate StringBuilder code
+              const builderParts = parts.map(part => {
+                const partType = part.type;
+                const partIsString = partType.kind === 'primitive' && partType.type === 'string';
+                const partExpr = this.generateExpression(part);
+                return partIsString ? partExpr : `gs::String::from(${partExpr})`;
+              });
+              
+              // Generate: ([&]() { auto sb = gs::StringBuilder(); sb.append(part1); ... return sb.toString(); })()
+              return `([&]() { auto sb = gs::StringBuilder(); ${builderParts.map(p => `sb.append(${p});`).join(' ')} return sb.toString(); })()`;
+            }
+            
+            // For short chains, use simple concatenation
             const leftStr = leftIsString ? left : `gs::String::from(${left})`;
             const rightStr = rightIsString ? right : `gs::String::from(${right})`;
             return `(${leftStr} + ${rightStr})`;
@@ -1456,6 +1524,23 @@ export class CppCodegen {
           const rightIsString = rightType.kind === 'primitive' && rightType.type === 'string';
           
           if (leftIsString || rightIsString) {
+            // Check if this is a string concatenation chain (e.g., "a" + "b" + "c")
+            // Use StringBuilder for chains of 3+ concatenations (avoid lambda overhead for simple cases)
+            const parts = this.collectStringConcatParts(expr);
+            if (parts.length >= 3) {
+              // Generate StringBuilder code
+              const builderParts = parts.map(part => {
+                const partType = part.type;
+                const partIsString = partType.kind === 'primitive' && partType.type === 'string';
+                const partExpr = this.generateExpr(part);
+                return partIsString ? partExpr : `gs::String::from(${partExpr})`;
+              });
+              
+              // Generate: ([&]() { auto sb = gs::StringBuilder(); sb.append(part1); ... return sb.toString(); })()
+              return `([&]() { auto sb = gs::StringBuilder(); ${builderParts.map(p => `sb.append(${p});`).join(' ')} return sb.toString(); })()`;
+            }
+            
+            // For short chains (< 3 parts), use simple concatenation
             const leftStr = leftIsString ? left : `gs::String::from(${left})`;
             const rightStr = rightIsString ? right : `gs::String::from(${right})`;
             return `(${leftStr} + ${rightStr})`;
