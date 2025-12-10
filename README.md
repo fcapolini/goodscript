@@ -1,8 +1,8 @@
-# GoodScript v0.12.0
+# GoodScript v0.13.0
 
 Clean TypeScript, compiled to native code.
 
-## 🎉 Status: Core Pipeline Complete (156/156 Tests Passing)
+## 🎉 Status: Core Pipeline Complete (594/594 Tests Passing)
 
 This is a **clean rewrite** of GoodScript with a proper IR-based compiler architecture.
 
@@ -18,18 +18,17 @@ This is a **clean rewrite** of GoodScript with a proper IR-based compiler archit
 - ✅ Source maps (#line directives for debugging)
 
 **Test Suite:**
-- 45 validator tests
-- 13 lowering tests
-- 16 ownership analysis tests
-- 13 null checker tests
-- 11 type signature tests
-- 11 IR infrastructure tests
-- 15 optimizer tests
-- 17 C++ codegen tests (includes source maps)
-- 10 Zig compiler tests
-- 5 tsconfig integration tests
+- 410 compiler tests (validator, lowering, ownership, null checker, optimizer, codegen, async, etc.)
+- 184 standard library tests (@goodscript/core, @goodscript/json, @goodscript/io, @goodscript/http)
 
-**Next**: Runtime library, standard library, and CLI tooling
+**Available on npm:**
+```bash
+npm install goodscript              # Main compiler with TypeScript type definitions
+npm install @goodscript/core        # Core utilities (Array, String, Map methods)
+npm install @goodscript/json        # JSON parsing and serialization
+npm install @goodscript/io          # File system I/O (sync and async)
+npm install @goodscript/http        # HTTP/HTTPS client with TLS support
+```
 
 See the original [GoodScript repository](https://github.com/fcapolini/goodscript0) for the v0.11 implementation.
 
@@ -60,10 +59,14 @@ TypeScript → [Frontend] → IR → [Optimizer] → [Backend] → Native/JS
 
 ```
 goodscript/
-├── compiler/     # Main compiler (TS → IR → C++/TS)
-├── runtime/      # C++ runtime library
-├── stdlib/       # Standard library packages
-└── tools/        # CLI tools and editor support
+├── compiler/     # Main compiler (TS → IR → C++/TS) + TypeScript type definitions
+├── runtime/      # C++ runtime library (GC and ownership modes)
+├── stdlib/       # Standard library packages (published to npm as @goodscript/*)
+│   ├── core/     # Core utilities (89 tests) - @goodscript/core
+│   ├── json/     # JSON support (30 tests) - @goodscript/json
+│   ├── io/       # File I/O (48 tests) - @goodscript/io
+│   └── http/     # HTTP client (17 tests) - @goodscript/http
+└── examples/     # Example programs demonstrating GoodScript features
 ```
 
 ## Development
