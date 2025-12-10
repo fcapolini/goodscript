@@ -124,8 +124,49 @@ Certificates are parsed using BearSSL's PEM decoder and verified during TLS hand
 
 ## Examples Included
 
-1. **main-gs.ts** - Demonstrates HTTPS GET requests with various endpoints
-2. **concurrent-requests-gs.ts** - Shows parallel async HTTPS requests
+All examples compile and run successfully with full HTTPS support:
+
+1. **src/main-gs.ts** - Complete HTTPS demonstration with multiple endpoints
+   - Example.com (basic HTTPS)
+   - GitHub API (JSON responses)
+   - HTTPBin (SNI demonstration)
+   - HTTP fallback example
+
+2. **concurrent-requests-gs.ts** - Parallel async HTTPS requests
+   - Demonstrates thread pool execution
+   - Multiple concurrent connections
+   - Performance analysis
+
+3. **simple-https-test-gs.ts** - Minimal HTTPS verification
+   - Quick certificate validation check
+   - Single endpoint test
+
+4. **http-methods-test-gs.ts** - HTTP methods verification
+   - GET requests
+   - POST with JSON data
+   - POST with form data
+   - Response headers parsing
+   - Multiple status codes (200, 404, 500)
+
+## Running Examples
+
+```bash
+# Compile and run main demo
+../../compiler/bin/gsc --gsTarget cpp -o dist/main src/main-gs.ts
+./dist/dist/main
+
+# Compile and run concurrent requests
+../../compiler/bin/gsc --gsTarget cpp -o dist/concurrent concurrent-requests-gs.ts
+./dist/dist/concurrent
+
+# Compile and run simple HTTPS test
+../../compiler/bin/gsc --gsTarget cpp -o dist/https-test simple-https-test-gs.ts
+./dist/dist/https-test
+
+# Compile and run HTTP methods test
+../../compiler/bin/gsc --gsTarget cpp -o dist/methods-test http-methods-test-gs.ts
+./dist/dist/methods-test
+```
 
 ## See Also
 
