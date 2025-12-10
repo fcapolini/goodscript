@@ -768,8 +768,9 @@ export class CppCodegen {
         
         if (isRecursive) {
           // Recursive function: use std::function so it can reference itself
+          // Capture all by reference [&] to include parent scope variables
           this.emit(`std::function<${returnType}(${stmt.params.map(p => this.generateCppType(p.type)).join(', ')})> ${funcName};`);
-          this.emit(`${funcName} = [&${funcName}](${params}) -> ${returnType} {`);
+          this.emit(`${funcName} = [&](${params}) -> ${returnType} {`);
         } else {
           // Non-recursive: simple lambda
           this.emit(`auto ${funcName} = [](${params}) -> ${returnType} {`);
