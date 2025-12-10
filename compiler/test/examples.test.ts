@@ -293,10 +293,11 @@ describe('Examples', () => {
       const cppFiles = codegen.generate(irProgram, 'gc', false);
       expect(cppFiles.size).toBeGreaterThan(0);
       
-      // This is a demo showing HTTP API structure, not actual HTTP calls
+      // Check that interface declaration is generated
       const cppContent = Array.from(cppFiles.values()).join('\n');
       expect(cppContent).toContain('HttpResponse');
-      expect(cppContent).toContain('createMockResponse');
+      expect(cppContent).toContain('struct HttpResponse');
+      expect(cppContent).toContain('HTTP::syncFetch');
     });
   });
 

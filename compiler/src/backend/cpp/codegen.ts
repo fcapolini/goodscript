@@ -429,6 +429,9 @@ export class CppCodegen {
       case 'class':
         this.generateSourceClass(decl);
         break;
+      case 'interface':
+        // Interfaces are header-only (no source file implementation needed)
+        break;
       case 'const':
         // Emit lambda literals in header (inline), but function-type const variables
         // that are initialized with function calls need to be in the source file
@@ -462,13 +465,19 @@ export class CppCodegen {
       const className = this.sanitizeIdentifier(cls.name);
       const params = cls.constructor.params.map(p => this.generateCppParam(p)).join(', ');
       
-      // Generate initializer list from constructor parameters
-      // Match field names to parameter names for simple assignment pattern
+      // Generate initializer list from:
+      // 1. Constructor parameters that match field names
+      // 2. Field initializers (for fields with default values)
       const fieldInits: string[] = [];
       for (const field of cls.fields) {
         const param = cls.constructor.params.find(p => p.name === field.name);
         if (param) {
+          // Field is initialized from constructor parameter
           fieldInits.push(`${this.sanitizeIdentifier(field.name)}_(${this.sanitizeIdentifier(param.name)})`);
+        } else if (field.initializer) {
+          // Field has a default initializer
+          const initValue = this.generateExpression(field.initializer);
+          fieldInits.push(`${this.sanitizeIdentifier(field.name)}_(${initValue})`);
         }
       }
       

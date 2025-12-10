@@ -4,7 +4,7 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP + Math + JSON + Union Types (398 tests passing)
+**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP + Math + JSON + Union Types + Interfaces (402 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
@@ -33,10 +33,20 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ Math object (min, max, abs, floor, ceil, round, sqrt, pow, trigonometry, logarithms, constants)
 - ✅ JSON object (JSON.stringify() for basic types)
 - ✅ Union types (T | null, T | undefined for optional values)
+- ✅ Interface declarations (TypeScript interfaces → C++ structs with pure virtual methods)
+- ✅ Class field initializers (default values in member initializer lists)
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
 **Recent Progress (Dec 10, 2025)**:
-- ✅ **HTTP Async Thread Pool Implementation** (398 tests passing)
+- ✅ **Interface Declaration Support** (402 tests passing)
+  * Full interface declaration lowering from TypeScript AST to IR
+  * C++ codegen generates structs with pure virtual methods
+  * Header-only generation (no source file needed for interfaces)
+  * Class field initializers now support default values via member initializer lists
+  * Conditional feature flags: HTTP and FileSystem APIs only compiled when used
+  * Auto-detection of feature usage in CLI by scanning generated C++ code
+  * All class constructor tests updated to expect modern C++ initializer lists
+- ✅ **HTTP Async Thread Pool Implementation** (398 tests passing, Dec 10)
   * Replaced blocking async with true async using cppcoro::static_thread_pool
   * HTTP requests now execute on background threads (non-blocking)
   * Concurrent request support: multiple HTTPAsync.fetch() calls run in parallel
@@ -309,7 +319,7 @@ const body: IRBlock = {
 ```
 
 ## Testing
-**Current Test Suite (373 tests)**:
+**Current Test Suite (402 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (14 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
@@ -340,7 +350,7 @@ const body: IRBlock = {
 - `test/cli.test.ts` - CLI functionality tests (42 tests)
 **Run Tests**:
 ```bash
-pnpm test                    # All tests (373 passing, 8 skipped)
+pnpm test                    # All tests (402 passing, 19 skipped)
 pnpm build && pnpm test      # Build + test
 ```
 

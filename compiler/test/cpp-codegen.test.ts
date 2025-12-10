@@ -225,7 +225,7 @@ describe('C++ Codegen - GC Mode - Classes', () => {
 
     expect(header).toContain('Person(gs::String name);');
     expect(source).toContain('Person::Person(gs::String name)');
-    expect(source).toContain('this_.name_ = name;'); // 'this' is sanitized to 'this_'
+    expect(source).toContain(': name_(name)'); // Constructor uses initializer list
   });
 
   it('should generate readonly fields with const qualifier', () => {
@@ -279,6 +279,7 @@ describe('C++ Codegen - GC Mode - Classes', () => {
 
     // Check source has initializer list for readonly fields
     expect(source).toContain('Config::Config()');
+    // Readonly fields with initializers are set via member initializer list
     expect(source).toContain(': version_(gs::String("1.0.0"))');
     expect(source).toContain(', port_(8080)');
   });

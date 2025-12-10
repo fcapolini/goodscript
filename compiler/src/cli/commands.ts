@@ -234,6 +234,11 @@ async function compileToBinary(
   
   const compiler = new ZigCompiler(buildDir, vendorDir);
   
+  // Detect which features are used in the generated code
+  const cppCode = Array.from(sources.values()).join('\n');
+  const usesHTTP = cppCode.includes('gs::http::HTTP') || cppCode.includes('gs::http::HTTPAsync');
+  const usesFileSystem = cppCode.includes('gs::filesystem::FileSystem') || cppCode.includes('gs::filesystem::FileSystemAsync');
+  
   const compileOptions: ZigCompileOptions = {
     sources,
     output: outputPath,
@@ -245,6 +250,8 @@ async function compileToBinary(
     includePaths: [PACKAGE_ROOT, runtimeDir, cppcoroDir], // Add all necessary include paths
     debug: options.gsDebug || options.sourceMap || false,
     sourceMap: options.sourceMap || options.gsDebug || false,
+    enableHTTP: usesHTTP,
+    enableFileSystem: usesFileSystem,
   };
   
   const result = await compiler.compile(compileOptions);

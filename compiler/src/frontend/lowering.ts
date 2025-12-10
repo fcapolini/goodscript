@@ -147,6 +147,10 @@ export class IRLowering {
       return this.lowerClass(node, sourceFile);
     }
 
+    if (ts.isInterfaceDeclaration(node)) {
+      return this.lowerInterface(node, sourceFile);
+    }
+
     return null;
   }
 
@@ -211,6 +215,37 @@ export class IRLowering {
       fields,
       methods,
       constructor,
+    };
+  }
+
+  private lowerInterface(node: ts.InterfaceDeclaration, sourceFile: ts.SourceFile): IRDeclaration | null {
+    const name = node.name?.getText(sourceFile);
+    if (!name) return null;
+
+    const properties: Array<{ name: string; type: IRType }> = [];
+    const methods: IRMethodSignature[] = [];
+
+    for (const member of node.members) {
+      if (ts.isPropertySignature(member)) {
+        const propName = member.name.getText(sourceFile);
+        const propType = this.lowerTypeNode(member.type, sourceFile);
+        properties.push({ name: propName, type: propType });
+      } else if (ts.isMethodSignature(member)) {
+        const methodName = member.name.getText(sourceFile);
+        const params = member.parameters.map(p => ({
+          name: p.name.getText(sourceFile),
+          type: this.lowerTypeNode(p.type, sourceFile),
+        }));
+        const returnType = this.lowerTypeNode(member.type, sourceFile);
+        methods.push({ name: methodName, params, returnType });
+      }
+    }
+
+    return {
+      kind: 'interface',
+      name,
+      properties,
+      methods,
     };
   }
 

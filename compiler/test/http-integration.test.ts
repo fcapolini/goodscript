@@ -157,6 +157,7 @@ describe('HTTP Integration', () => {
       mode: 'gc',
       buildDir,
       vendorDir: path.join(projectRoot, 'compiler/vendor'),
+      enableHTTP: true,  // Enable HTTP API for this test
       cxxFlags: ['-DGS_ENABLE_HTTP'],
       ldFlags: []
     });

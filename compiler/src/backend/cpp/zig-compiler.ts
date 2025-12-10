@@ -45,6 +45,12 @@ export interface CompileOptions {
   
   /** Additional linker flags */
   ldFlags?: string[];
+  
+  /** Enable HTTP API (cpp-httplib) */
+  enableHTTP?: boolean;
+  
+  /** Enable FileSystem API (std::filesystem) */
+  enableFileSystem?: boolean;
 }
 
 export interface CompileResult {
@@ -240,9 +246,15 @@ export class ZigCompiler {
         '-std=c++20',
         `-O${optimize}`,
         '-c',
-        '-DGS_ENABLE_FILESYSTEM',  // Enable FileSystem API
-        '-DGS_ENABLE_HTTP',  // Enable HTTP API (cpp-httplib, header-only)
       ];
+      
+      // Conditionally enable features
+      if (options.enableFileSystem) {
+        flags.push('-DGS_ENABLE_FILESYSTEM');  // Enable FileSystem API
+      }
+      if (options.enableHTTP) {
+        flags.push('-DGS_ENABLE_HTTP');  // Enable HTTP API (cpp-httplib, header-only)
+      }
 
       if (options.debug) {
         flags.push('-g');
