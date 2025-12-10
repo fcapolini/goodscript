@@ -41,11 +41,12 @@ describe('Nested Functions', () => {
     const ir = parseAndLower(source);
     const module = ir.modules[0];
 
-    expect(module.functions.length).toBe(1);
-    expect(module.functions[0].name).toBe('outer');
+    const outerFunc = module.declarations.find((d: any) => d.kind === 'function' && d.name === 'outer');
+    expect(outerFunc).toBeDefined();
+    expect(outerFunc.name).toBe('outer');
     
     // Check that function body contains a nested function declaration
-    const outerBody = module.functions[0].body;
+    const outerBody = outerFunc.body;
     expect(outerBody.statements.length).toBe(2); // functionDecl + return
     expect(outerBody.statements[0].kind).toBe('functionDecl');
     
@@ -66,10 +67,10 @@ describe('Nested Functions', () => {
       }
     `;
     const ir = parseAndLower(source);
-    const module = ir.modules[0];
     
     const codegen = new CppCodegen();
-    const { source: cppSource } = codegen.generateModule(module, 'gc');
+    const files = codegen.generate(ir, 'gc');
+    const cppSource = files.get('test.cpp')!;
     
     // Check that C++ contains a lambda declaration
     expect(cppSource).toContain('auto inner = [](');
@@ -92,12 +93,15 @@ describe('Nested Functions', () => {
     const ir = parseAndLower(source);
     const module = ir.modules[0];
 
-    const outerBody = module.functions[0].body;
+    const outerFunc = module.declarations.find((d: any) => d.kind === 'function' && d.name === 'outer');
+    expect(outerFunc).toBeDefined();
+    const outerBody = outerFunc.body;
     const funcDecls = outerBody.statements.filter(s => s.kind === 'functionDecl');
     expect(funcDecls.length).toBe(2);
     
     const codegen = new CppCodegen();
-    const { source: cppSource } = codegen.generateModule(module, 'gc');
+    const files = codegen.generate(ir, 'gc');
+    const cppSource = files.get('test.cpp')!;
     
     expect(cppSource).toContain('auto add = [](');
     expect(cppSource).toContain('auto multiply = [](');
@@ -113,10 +117,10 @@ describe('Nested Functions', () => {
       }
     `;
     const ir = parseAndLower(source);
-    const module = ir.modules[0];
     
     const codegen = new CppCodegen();
-    const { source: cppSource } = codegen.generateModule(module, 'gc');
+    const files = codegen.generate(ir, 'gc');
+    const cppSource = files.get('test.cpp')!;
     
     // Lambda with no parameters
     expect(cppSource).toContain('auto inner = []() -> double {');
@@ -132,13 +136,13 @@ describe('Nested Functions', () => {
       }
     `;
     const ir = parseAndLower(source);
-    const module = ir.modules[0];
     
     // Note: This test demonstrates the current limitation
     // The nested function references 'x' from outer scope but doesn't capture it
     // This will fail at C++ compilation time - we need closure support
     const codegen = new CppCodegen();
-    const { source: cppSource } = codegen.generateModule(module, 'gc');
+    const files = codegen.generate(ir, 'gc');
+    const cppSource = files.get('test.cpp')!;
     
     // Current implementation generates lambda without capture
     expect(cppSource).toContain('auto inner = []() -> double {');
@@ -158,7 +162,9 @@ describe('Nested Functions', () => {
     const ir = parseAndLower(source);
     const module = ir.modules[0];
 
-    const outerBody = module.functions[0].body;
+    const outerFunc = module.declarations.find((d: any) => d.kind === 'function' && d.name === 'outer');
+    expect(outerFunc).toBeDefined();
+    const outerBody = outerFunc.body;
     expect(outerBody.statements[0].kind).toBe('functionDecl');
     
     if (outerBody.statements[0].kind === 'functionDecl') {
@@ -181,7 +187,9 @@ describe('Nested Functions', () => {
     const ir = parseAndLower(source);
     const module = ir.modules[0];
 
-    const level1Body = module.functions[0].body;
+    const level1Func = module.declarations.find((d: any) => d.kind === 'function' && d.name === 'level1');
+    expect(level1Func).toBeDefined();
+    const level1Body = level1Func.body;
     expect(level1Body.statements[0].kind).toBe('functionDecl');
     
     if (level1Body.statements[0].kind === 'functionDecl') {

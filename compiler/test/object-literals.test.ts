@@ -29,7 +29,9 @@ describe('Object Literal Support', () => {
     const ir = lowering.lower(program);
     
     const codegen = new CppCodegen('gc');
-    const { header, source } = codegen.generate(ir);
+    const files = codegen.generate(ir, 'gc');
+    const header = files.get('test.hpp') || '';
+    const source = files.get('test.cpp') || '';
     
     return { ir, header, source };
   }
