@@ -4,7 +4,7 @@
 
 GoodScript is a statically analyzable subset of TypeScript that compiles to both native C++ and JavaScript/TypeScript. It enforces "good parts" restrictions to ensure code is predictable, type-safe, and optimizable. It uses ES modules for code organization and supports incremental compilation.
 
-**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP/HTTPS + Math + JSON + Union Types + Interfaces (410 tests passing)
+**Current Status**: Phase 1-6 implementation complete + async/await + FileSystem + HTTP/HTTPS + Math + JSON + Union Types + Interfaces + Traditional For Loops (419 tests passing)
 - ✅ Validator (15 language restrictions)
 - ✅ IR type system with ownership semantics (SSA-based)
 - ✅ Type signature system (structural typing)
@@ -25,6 +25,7 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ Map<K,V> operations (set, get, has, delete, clear, forEach, keys, values, entries, size)
 - ✅ Exception handling (try/catch/throw/finally)
 - ✅ for-of loops (arrays, strings, break, continue)
+- ✅ Traditional for loops (for (init; condition; increment) with break, continue)
 - ✅ Optional chaining (obj?.field, nested chaining)
 - ✅ String methods (split, slice, trim, toLowerCase, toUpperCase, indexOf, includes)
 - ✅ Async/await (Promise<T>, async functions, co_await/co_return, cppcoro integration)
@@ -35,10 +36,21 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ✅ Union types (T | null, T | undefined for optional values)
 - ✅ Interface declarations (TypeScript interfaces → C++ structs with pure virtual methods)
 - ✅ Class field initializers (default values in member initializer lists)
+- ✅ Number instance methods (toFixed, toExponential, toPrecision, toString)
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
 **Recent Progress (Dec 10, 2025)**:
-- ✅ **Certificate Verification for HTTPS - VERIFIED WORKING** (410 tests passing)
+- ✅ **Traditional For Loop Support** (419 tests passing)
+  * Complete for loop implementation: `for (init; condition; increment) { body }`
+  * Supports variable declaration, expression, and empty initializers
+  * Assignment operator (BinaryOp.Assign) for increments like `i = i + 1`
+  * Infinite loops with empty condition: `for (;;) { }`
+  * Break and continue statements work correctly
+  * Nested for loops fully supported
+  * Integer53 explicit type annotations to prevent auto inference issues
+  * String::from(long long) overload for int64_t support
+  * Performance benchmarks: fibonacci, array-ops, string-ops working in all modes
+- ✅ **Certificate Verification for HTTPS - VERIFIED WORKING**
   * Created bearssl_certs.hpp: System CA certificate loading and parsing
   * Multi-platform support: macOS, Linux (Debian/Ubuntu/Fedora/RHEL), FreeBSD
   * PEM certificate parsing using BearSSL's br_pem_decoder API
@@ -339,7 +351,7 @@ const body: IRBlock = {
 ```
 
 ## Testing
-**Current Test Suite (402 tests)**:
+**Current Test Suite (419 tests)**:
 - `test/infrastructure.test.ts` - IR builder, types, visitor (11 tests)
 - `test/lowering.test.ts` - AST → IR conversion (14 tests)
 - `test/validator.test.ts` - Language restrictions (45 tests)
@@ -351,6 +363,7 @@ const body: IRBlock = {
 - `test/zig-compiler.test.ts` - Zig compiler integration (10 tests)
 - `test/tsconfig-integration.test.ts` - tsconfig.json integration (5 tests)
 - `test/for-of.test.ts` - for-of loop lowering (9 tests)
+- `test/for-loop.test.ts` - traditional for loop lowering (9 tests)
 - `test/map-methods.test.ts` - Map<K,V> operations (12 tests)
 - `test/optional-chaining.test.ts` - Optional chaining (5 tests)
 - `test/string-methods.test.ts` - String method lowering (10 tests)
@@ -370,7 +383,7 @@ const body: IRBlock = {
 - `test/cli.test.ts` - CLI functionality tests (42 tests)
 **Run Tests**:
 ```bash
-pnpm test                    # All tests (402 passing, 19 skipped)
+pnpm test                    # All tests (419 passing, 19 skipped)
 pnpm build && pnpm test      # Build + test
 ```
 
