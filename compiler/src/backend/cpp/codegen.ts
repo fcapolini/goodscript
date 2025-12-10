@@ -78,6 +78,34 @@ export class CppCodegen {
     return name;
   }
 
+  /**
+   * Unwrap nullable, union, and type alias types to get the underlying type
+   */
+  private unwrapType(type: IRType): IRType {
+    if (type.kind === 'nullable') {
+      return this.unwrapType(type.inner);
+    }
+    if (type.kind === 'union') {
+      // For unions, use the first non-void type
+      const nonVoidType = type.types.find(t => 
+        !(t.kind === 'primitive' && t.type === PrimitiveType.Void)
+      );
+      return nonVoidType ? this.unwrapType(nonVoidType) : type;
+    }
+    if (type.kind === 'typeAlias') {
+      return this.unwrapType(type.aliasedType);
+    }
+    return type;
+  }
+
+  /**
+   * Check if a type (after unwrapping) is a class type
+   */
+  private isClassType(type: IRType): boolean {
+    const unwrapped = this.unwrapType(type);
+    return unwrapped.kind === 'class';
+  }
+
   generate(program: IRProgram, mode: MemoryMode, sourceMap = false): Map<string, string> {
     this.mode = mode;
     this.sourceMap = sourceMap;
@@ -1330,7 +1358,7 @@ export class CppCodegen {
         }
         
         // For class fields, add underscore suffix (C++ convention to avoid keyword conflicts)
-        if (objectType.kind === 'class' && accessExpr === member) {
+        if (this.isClassType(objectType) && accessExpr === member) {
           accessExpr = `${member}_`;
         }
         
@@ -1346,7 +1374,8 @@ export class CppCodegen {
         
         // For class types in GC mode, use -> since they're pointers
         // In ownership mode with smart pointers, also use ->
-        const accessor = (objectType.kind === 'class') ? '->' : '.';
+        // Check the unwrapped type to handle nullable class types
+        const accessor = this.isClassType(objectType) ? '->' : '.';
         return `${obj}${accessor}${accessExpr}`;
       }
       

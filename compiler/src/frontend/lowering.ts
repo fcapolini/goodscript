@@ -1461,7 +1461,21 @@ export class IRLowering {
       return types.map(types.void(), types.void());
     }
     
-    // Check for object types (struct) - after arrays and maps!
+    // Check for class types (BEFORE general Object check!)
+    // TypeScript treats class instances as object types, but we need to preserve class semantics
+    if (tsType.symbol) {
+      const declarations = tsType.symbol.getDeclarations();
+      if (declarations && declarations.length > 0) {
+        const decl = declarations[0];
+        if (ts.isClassDeclaration(decl)) {
+          const className = tsType.symbol.name;
+          // Default to 'own' ownership for class instances created with 'new'
+          return types.class(className, Ownership.Own);
+        }
+      }
+    }
+    
+    // Check for object types (struct) - after arrays, maps, and classes!
     if (tsType.flags & ts.TypeFlags.Object) {
       try {
         // getProperties() can cause stack overflow on complex library types
