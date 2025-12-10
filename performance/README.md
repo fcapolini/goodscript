@@ -10,15 +10,25 @@ This directory contains performance tests that run in **triple-mode**:
 
 ```bash
 # Run all benchmarks in triple-mode
-pnpm perf
+pnpm bench:all
+
+# Run all benchmarks (discovers all *-gs.ts files)
+pnpm bench
 
 # Run a specific benchmark
-pnpm perf fibonacci
+pnpm bench:fibonacci
+pnpm bench:array
+pnpm bench:string
+pnpm bench:map
 
-# Run only in specific modes
-pnpm perf:node fibonacci
-pnpm perf:gc fibonacci
-pnpm perf:ownership fibonacci
+# Run benchmarks in specific modes only
+pnpm bench:node      # Node.js only
+pnpm bench:gc        # GC C++ only
+pnpm bench:ownership # Ownership C++ only
+
+# Advanced: Run specific benchmark in specific mode
+tsx performance/run-benchmark.ts fibonacci node
+tsx performance/run-benchmark.ts array-ops gc
 ```
 
 ## Benchmark Structure

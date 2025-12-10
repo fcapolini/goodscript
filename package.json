@@ -10,10 +10,15 @@
     "dev": "pnpm -r --parallel dev",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
-    "perf": "tsx performance/run-benchmark.ts",
-    "perf:node": "tsx performance/run-benchmark.ts node",
-    "perf:gc": "tsx performance/run-benchmark.ts gc",
-    "perf:ownership": "tsx performance/run-benchmark.ts ownership"
+    "bench": "tsx performance/run-benchmark.ts",
+    "bench:all": "tsx performance/run-benchmark.ts fibonacci array-ops string-ops map-ops",
+    "bench:fibonacci": "tsx performance/run-benchmark.ts fibonacci",
+    "bench:array": "tsx performance/run-benchmark.ts array-ops",
+    "bench:string": "tsx performance/run-benchmark.ts string-ops",
+    "bench:map": "tsx performance/run-benchmark.ts map-ops",
+    "bench:node": "tsx performance/run-benchmark.ts node",
+    "bench:gc": "tsx performance/run-benchmark.ts gc",
+    "bench:ownership": "tsx performance/run-benchmark.ts ownership"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
