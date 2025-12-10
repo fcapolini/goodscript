@@ -124,7 +124,6 @@ public:
       host = url_str;
       path = "/";
     }
-    }
     
     // Check for port in host
     size_t port_pos = host.find(':');

@@ -38,14 +38,16 @@ GoodScript is a statically analyzable subset of TypeScript that compiles to both
 - ⏳ Object literals (IR lowering done, C++ codegen needs struct support)
 
 **Recent Progress (Dec 10, 2025)**:
-- ✅ **Certificate Verification for HTTPS** (410 tests passing)
+- ✅ **Certificate Verification for HTTPS - VERIFIED WORKING** (410 tests passing)
   * Created bearssl_certs.hpp: System CA certificate loading and parsing
   * Multi-platform support: macOS, Linux (Debian/Ubuntu/Fedora/RHEL), FreeBSD
   * PEM certificate parsing using BearSSL's br_pem_decoder API
   * Trust anchor conversion to br_x509_trust_anchor structures
   * SNI (Server Name Indication) support via SSL_set_tlsext_host_name()
-  * Production-ready: Full certificate verification enabled
+  * Production-ready: Full certificate verification enabled and tested
   * Secure by default: System trust anchors loaded automatically
+  * Successfully verified: HTTPS connections to example.com with full cert validation
+  * Hybrid SSL: System OpenSSL (preferred) + BearSSL fallback (Windows/minimal)
   * 4 new certificate verification tests (all passing)
 - ✅ **Interface Declaration Support** (402 tests passing)
   * Full interface declaration lowering from TypeScript AST to IR
