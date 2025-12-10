@@ -253,8 +253,7 @@ export class ZigCompiler {
         `-O${optimize}`,
         '-c',
         '-DGS_ENABLE_FILESYSTEM',  // Enable FileSystem API
-        // TODO: Fix curl compilation issues before enabling HTTP
-        // '-DGS_ENABLE_HTTP',
+        '-DGS_ENABLE_HTTP',  // Enable HTTP API (cpp-httplib, header-only)
       ];
 
       if (options.debug) {
@@ -266,6 +265,7 @@ export class ZigCompiler {
       if (options.mode === 'gc') {
         flags.push('-I', path.join(this.vendorDir, 'mps/src'));
       }
+      flags.push('-I', path.join(this.vendorDir, 'cpp-httplib')); // For httplib.h
       
       for (const includePath of options.includePaths ?? []) {
         flags.push('-I', includePath);

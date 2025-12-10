@@ -41,9 +41,9 @@
 #include "filesystem.hpp"
 #endif
 
-// HTTP support (requires libcurl)
+// HTTP support (requires cpp-httplib, header-only)
 #ifdef GS_ENABLE_HTTP
-#include "http.hpp"
+#include "http-httplib.hpp"
 #endif
 
 // RegExp support (requires PCRE2 library)
