@@ -867,6 +867,15 @@ export class CppCodegen {
           return `gs::Math::${method}(${args})`;
         }
         
+        // Special handling for Date static methods
+        if (expr.callee.kind === 'memberAccess' && 
+            expr.callee.object.kind === 'identifier' && 
+            expr.callee.object.name === 'Date') {
+          const method = expr.callee.member;
+          const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
+          return `gs::Date::${method}(${args})`;
+        }
+        
         // Special handling for JSON static methods
         if (expr.callee.kind === 'memberAccess' && 
             expr.callee.object.kind === 'identifier' && 
@@ -972,6 +981,11 @@ export class CppCodegen {
         // Special handling for Math static methods
         if (expr.object.kind === 'identifier' && expr.object.name === 'Math') {
           return `gs::Math::${member}`;
+        }
+        
+        // Special handling for Date static methods
+        if (expr.object.kind === 'identifier' && expr.object.name === 'Date') {
+          return `gs::Date::${member}`;
         }
         
         // Special handling for JSON static methods
