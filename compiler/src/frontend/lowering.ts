@@ -1057,6 +1057,20 @@ export class IRLowering {
       let type: IRType;
       if (expectedType) {
         type = expectedType;
+      } else if (node.typeArguments && node.typeArguments.length > 0) {
+        // Handle explicit type arguments: new Map<K, V>()
+        if (className === 'Map' && node.typeArguments.length === 2) {
+          const keyType = this.lowerTypeNode(node.typeArguments[0], sourceFile);
+          const valueType = this.lowerTypeNode(node.typeArguments[1], sourceFile);
+          type = types.map(keyType, valueType);
+        } else if (className === 'Array' && node.typeArguments.length === 1) {
+          const elementType = this.lowerTypeNode(node.typeArguments[0], sourceFile);
+          type = types.array(elementType);
+        } else {
+          // For other types, try to infer
+          const contextualType = this.typeChecker.getContextualType(node);
+          type = contextualType ? this.convertTsTypeToIRType(contextualType) : this.inferType(node);
+        }
       } else {
         const contextualType = this.typeChecker.getContextualType(node);
         type = contextualType ? this.convertTsTypeToIRType(contextualType) : this.inferType(node);

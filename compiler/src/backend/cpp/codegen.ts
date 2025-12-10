@@ -619,8 +619,17 @@ export class CppCodegen {
         const needsExplicitType = stmt.variableType.kind === 'primitive' && 
                                   stmt.variableType.type === PrimitiveType.Integer53;
         
-        // Use const for immutable variables (const in source), omit for mutable (let in source)
-        const constQualifier = stmt.mutable === false ? 'const ' : '';
+        // For object types (Map, Array, classes), 'const' in TypeScript means the variable
+        // can't be reassigned, but the object can still be mutated. In C++, we should not
+        // apply 'const' to these types because it would make the object itself immutable.
+        // Only apply 'const' to primitive types and simple values.
+        const isObjectType = stmt.variableType.kind === 'map' || 
+                            stmt.variableType.kind === 'array' ||
+                            stmt.variableType.kind === 'class' ||
+                            stmt.variableType.kind === 'struct';
+        
+        // Use const for immutable variables (const in source), but skip for object types
+        const constQualifier = (stmt.mutable === false && !isObjectType) ? 'const ' : '';
         
         if (needsExplicitType) {
           const cppType = this.generateCppType(stmt.variableType);
