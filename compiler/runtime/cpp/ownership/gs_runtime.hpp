@@ -167,6 +167,13 @@ auto wrap_for_push(ValueType&& value) {
 
 // Type name helpers for runtime typeof checks
 template<typename T>
+inline String type_name(const T& value);
+
+template<typename T>
+inline String typeOf(const T& value);
+
+// Type name helpers for runtime typeof checks (implementation)
+template<typename T>
 inline String type_name(const T& value) {
   // Default: use "object" for any non-primitive type
   return String("object");
@@ -204,6 +211,12 @@ inline String type_name(const std::optional<T>& value) {
     return type_name(value.value());
   }
   return String("undefined");
+}
+
+// typeof operator implementation (JavaScript-compatible)
+template<typename T>
+inline String typeOf(const T& value) {
+  return type_name(value);
 }
 
 } // namespace gs

@@ -53,7 +53,33 @@ async function findAllTests(): Promise<any[]> {
 async function main() {
   const args = process.argv.slice(2);
   const verbose = args.includes('--verbose') || args.includes('-v');
+  const listOnly = args.includes('--list') || args.includes('-l');
   const filterPattern = args.find(a => !a.startsWith('-'));
+  
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
+Equivalence Test Runner
+
+Usage: tsx equivalence/run-equivalence.ts [options] [filter]
+
+Options:
+  -h, --help      Show this help message
+  -v, --verbose   Show verbose output
+  -l, --list      List available tests without running them
+  
+Filter:
+  Provide a string to filter tests by name (case-insensitive)
+  
+Examples:
+  tsx equivalence/run-equivalence.ts                  # Run all tests
+  tsx equivalence/run-equivalence.ts typeof           # Run tests matching "typeof"
+  tsx equivalence/run-equivalence.ts class            # Run all class tests
+  tsx equivalence/run-equivalence.ts "Math."          # Run all Math tests
+  tsx equivalence/run-equivalence.ts --list           # List all available tests
+  tsx equivalence/run-equivalence.ts --list map       # List tests matching "map"
+`);
+    process.exit(0);
+  }
   
   console.log('Loading equivalence tests...\n');
   
@@ -63,11 +89,22 @@ async function main() {
     : tests;
   
   if (filteredTests.length === 0) {
-    console.error('No tests found!');
+    console.error(filterPattern 
+      ? `No tests found matching "${filterPattern}"!`
+      : 'No tests found!');
     process.exit(1);
   }
   
-  console.log(`Running ${filteredTests.length} equivalence test(s)...\n`);
+  if (listOnly) {
+    console.log(`Found ${filteredTests.length} test(s)${filterPattern ? ` matching "${filterPattern}"` : ''}:\n`);
+    filteredTests.forEach((t, i) => {
+      console.log(`  ${i + 1}. ${t.name}`);
+    });
+    console.log('');
+    process.exit(0);
+  }
+  
+  console.log(`Running ${filteredTests.length} equivalence test(s)${filterPattern ? ` matching "${filterPattern}"` : ''}...\n`);
   
   const allResults: TestResult[][] = [];
   

@@ -129,5 +129,11 @@ inline String type_name(const std::optional<T>& value) {
   return String("undefined");
 }
 
+// typeof operator implementation (JavaScript-compatible)
+template<typename T>
+inline String typeOf(const T& value) {
+  return type_name(value);
+}
+
 } // namespace gs
 

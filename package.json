@@ -20,7 +20,13 @@
     "bench:gc": "tsx performance/run-benchmark.ts gc",
     "bench:ownership": "tsx performance/run-benchmark.ts ownership",
     "test:equivalence": "tsx equivalence/run-equivalence.ts",
-    "test:equiv": "tsx equivalence/run-equivalence.ts"
+    "test:equiv": "tsx equivalence/run-equivalence.ts",
+    "test:equiv:list": "tsx equivalence/run-equivalence.ts --list",
+    "test:equiv:typeof": "tsx equivalence/run-equivalence.ts typeof",
+    "test:equiv:class": "tsx equivalence/run-equivalence.ts class",
+    "test:equiv:map": "tsx equivalence/run-equivalence.ts map",
+    "test:equiv:math": "tsx equivalence/run-equivalence.ts math",
+    "test:equiv:array": "tsx equivalence/run-equivalence.ts array"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
