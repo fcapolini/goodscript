@@ -161,4 +161,9 @@ inline std::ostream& operator<<(std::ostream& os, const Error& err) {
   return os << err.toString();
 }
 
+// Implementation of String::from(Error) - must be after Error is fully defined
+inline String String::from(const Error& e) {
+  return e.message;
+}
+
 } // namespace gs

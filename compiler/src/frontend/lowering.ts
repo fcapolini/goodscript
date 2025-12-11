@@ -414,6 +414,33 @@ export class IRLowering {
       return stmts.if(condition, thenBranch, elseBranch);
     }
 
+    // While statement
+    if (ts.isWhileStatement(node)) {
+      const condition = this.lowerExpression(node.expression, sourceFile);
+      const body = ts.isBlock(node.statement)
+        ? node.statement.statements.map(s => this.lowerStatementAST(s, sourceFile)).filter((s): s is IRStatement => s !== null)
+        : [this.lowerStatementAST(node.statement, sourceFile)].filter((s): s is IRStatement => s !== null);
+      return stmts.while(condition, body);
+    }
+
+    // Switch statement
+    if (ts.isSwitchStatement(node)) {
+      const expression = this.lowerExpression(node.expression, sourceFile);
+      const cases = node.caseBlock.clauses.map(clause => {
+        if (ts.isDefaultClause(clause)) {
+          // Default case
+          const body = clause.statements.map(s => this.lowerStatementAST(s, sourceFile)).filter((s): s is IRStatement => s !== null);
+          return { values: 'default' as const, body };
+        } else {
+          // Case clause
+          const values = [this.lowerExpression(clause.expression, sourceFile)];
+          const body = clause.statements.map(s => this.lowerStatementAST(s, sourceFile)).filter((s): s is IRStatement => s !== null);
+          return { values, body };
+        }
+      });
+      return stmts.switch(expression, cases);
+    }
+
     // Block statement
     if (ts.isBlock(node)) {
       const blockStmts = node.statements.map(s => this.lowerStatementAST(s, sourceFile)).filter((s): s is IRStatement => s !== null);

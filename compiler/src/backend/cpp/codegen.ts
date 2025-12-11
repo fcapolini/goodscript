@@ -680,11 +680,44 @@ export class CppCodegen {
         }
         break;
       
-      case 'throw':
-        this.emit(`throw ${this.generateExpression(stmt.expression)};`);
+      case 'throw': {
+        const expr = this.generateExpression(stmt.expression);
+        // Wrap non-Error values in gs::Error
+        // Check if it's already an Error type
+        const isErrorType = stmt.expression.type.kind === 'class' && stmt.expression.type.name === 'Error';
+        if (isErrorType) {
+          this.emit(`throw ${expr};`);
+        } else {
+          // Wrap strings and other values in gs::Error
+          this.emit(`throw gs::Error(${expr});`);
+        }
         break;
+      }
       
       case 'try': {
+        // For try-finally or try-catch-finally, we need finally to run in all cases
+        // C++ doesn't have native finally, so we use a scope guard pattern
+        
+        if (stmt.finallyBlock && stmt.finallyBlock.length > 0) {
+          // Emit a lambda-based scope guard for finally
+          this.emit('{');
+          this.indent++;
+          this.emit('// Scope guard to ensure finally block runs');
+          this.emit('auto __finally_guard = [&]() {');
+          this.indent++;
+          for (const finallyStmt of stmt.finallyBlock) {
+            this.generateStatement(finallyStmt);
+          }
+          this.indent--;
+          this.emit('};');
+          this.emit('struct __FinallyRunner {');
+          this.indent++;
+          this.emit('std::function<void()> func;');
+          this.emit('~__FinallyRunner() { func(); }');
+          this.indent--;
+          this.emit('} __runner{__finally_guard};');
+        }
+        
         this.emit('try {');
         this.indent++;
         for (const tryStmt of stmt.tryBlock) {
@@ -704,18 +737,17 @@ export class CppCodegen {
           }
           this.indent--;
           this.emit('}');
+        } else if (stmt.finallyBlock && stmt.finallyBlock.length > 0) {
+          // C++ requires catch with try, so add a catch-all that re-throws when we have finally but no catch
+          this.emit('catch (...) {');
+          this.indent++;
+          this.emit('throw; // re-throw after finally runs');
+          this.indent--;
+          this.emit('}');
         }
         
-        if (stmt.finallyBlock) {
-          // C++ doesn't have finally, but we can use RAII or scope guards
-          // For now, just emit the code after the try-catch
-          // TODO: Implement proper finally semantics with scope guard
-          this.emit('// finally block (executed after try-catch)');
-          this.emit('{');
-          this.indent++;
-          for (const finallyStmt of stmt.finallyBlock) {
-            this.generateStatement(finallyStmt);
-          }
+        if (stmt.finallyBlock && stmt.finallyBlock.length > 0) {
+          // Close the scope guard block
           this.indent--;
           this.emit('}');
         }
@@ -749,6 +781,28 @@ export class CppCodegen {
         this.indent--;
         this.emit('}');
         break;
+      
+      case 'switch': {
+        this.emit(`switch (${this.generateExpression(stmt.expression)}) {`);
+        this.indent++;
+        for (const caseClause of stmt.cases) {
+          if (caseClause.values === 'default') {
+            this.emit('default:');
+          } else {
+            for (const value of caseClause.values) {
+              this.emit(`case ${this.generateExpression(value)}:`);
+            }
+          }
+          this.indent++;
+          for (const bodyStmt of caseClause.body) {
+            this.generateStatement(bodyStmt);
+          }
+          this.indent--;
+        }
+        this.indent--;
+        this.emit('}');
+        break;
+      }
       
       case 'for': {
         // Traditional for loop: for (init; condition; increment) { body }
@@ -2173,6 +2227,19 @@ export class CppCodegen {
           this.preScanStatement(s);
         }
         break;
+      case 'switch':
+        this.preScanExpression(stmt.expression);
+        for (const caseClause of stmt.cases) {
+          if (caseClause.values !== 'default') {
+            for (const value of caseClause.values) {
+              this.preScanExpression(value);
+            }
+          }
+          for (const s of caseClause.body) {
+            this.preScanStatement(s);
+          }
+        }
+        break;
       case 'for':
         if (stmt.init) {
           if ('kind' in stmt.init) {
@@ -2320,6 +2387,12 @@ export class CppCodegen {
       case 'for-of':
         return this.expressionCallsFunction(stmt.condition || stmt.iterable, funcName) ||
                (stmt.body?.some((s: any) => this.statementCallsFunction(s, funcName)) ?? false);
+      case 'switch':
+        return this.expressionCallsFunction(stmt.expression, funcName) ||
+               (stmt.cases?.some((c: any) => 
+                  (c.values !== 'default' && c.values.some((v: any) => this.expressionCallsFunction(v, funcName))) ||
+                  c.body.some((s: any) => this.statementCallsFunction(s, funcName))
+               ) ?? false);
       case 'for':
         return (stmt.init ? this.statementCallsFunction(stmt.init, funcName) : false) ||
                (stmt.condition ? this.expressionCallsFunction(stmt.condition, funcName) : false) ||

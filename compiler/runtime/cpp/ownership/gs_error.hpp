@@ -165,4 +165,9 @@ public:
   virtual ~EvalError() noexcept = default;
 };
 
+// Implementation of String::from(Error) - must be after Error is fully defined
+inline String String::from(const Error& e) {
+  return e.message;
+}
+
 } // namespace gs

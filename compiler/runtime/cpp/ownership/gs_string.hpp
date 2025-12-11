@@ -11,6 +11,7 @@ namespace gs {
 // Forward declarations
 template<typename T> class Array;
 class RegExp;
+class Error;
 
 /**
  * GoodScript String class - TypeScript-compatible string wrapper
@@ -495,6 +496,9 @@ public:
   static String fromCharCode(int code) {
     return String(std::string(1, static_cast<char>(code)));
   }
+  
+  // Forward declaration required - Error defined in gs_error.hpp
+  static String from(const Error& e);
   
   // Conversion operators for C++ interop
   

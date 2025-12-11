@@ -9,8 +9,9 @@
 
 namespace gs {
 
-// Forward declaration
+// Forward declarations
 template<typename T> class Array;
+class Error;
 
 /**
  * GC-allocated String implementation with Small String Optimization (SSO).
@@ -662,6 +663,9 @@ public:
     static String from(const std::optional<String>& opt) {
         return opt ? *opt : String("null");
     }
+
+    // Forward declaration required - Error defined in error.hpp
+    static String from(const Error& e);
 
     static String fromCharCode(int code) {
         char buf[2] = {static_cast<char>(code), '\0'};

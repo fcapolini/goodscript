@@ -323,6 +323,19 @@ export const stmts = {
     };
   },
 
+  switch(
+    expression: IRExpression,
+    cases: Array<{ values: IRExpression[] | 'default'; body: IRStatement[] }>,
+    location?: { line: number; column: number }
+  ): IRStatement {
+    return {
+      kind: 'switch',
+      expression,
+      cases,
+      location,
+    };
+  },
+
   block(statements: IRStatement[], location?: { line: number; column: number }): IRStatement {
     return {
       kind: 'block',

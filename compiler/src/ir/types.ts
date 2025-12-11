@@ -455,6 +455,7 @@ export type IRStatement =
   | { kind: 'return'; value?: IRExpression; location?: { line: number; column: number } }
   | { kind: 'if'; condition: IRExpression; thenBranch: IRStatement[]; elseBranch?: IRStatement[]; location?: { line: number; column: number } }
   | { kind: 'while'; condition: IRExpression; body: IRStatement[]; location?: { line: number; column: number } }
+  | { kind: 'switch'; expression: IRExpression; cases: Array<{ values: IRExpression[] | 'default'; body: IRStatement[] }>; location?: { line: number; column: number } }
   | { kind: 'for'; init: IRStatement | null; condition?: IRExpression; increment?: IRExpression; body: IRStatement[]; location?: { line: number; column: number } }
   | { kind: 'for-of'; variable: string; variableType: IRType; iterable: IRExpression; body: IRStatement[]; location?: { line: number; column: number } }
   | { kind: 'break'; location?: { line: number; column: number } }
