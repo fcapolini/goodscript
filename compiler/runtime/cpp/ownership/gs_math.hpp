@@ -34,7 +34,10 @@ public:
   }
 
   static double round(double x) {
-    return std::round(x);
+    // JavaScript Math.round rounds half towards positive infinity
+    // e.g., Math.round(3.5) = 4, Math.round(-3.5) = -3
+    // This is "round half up" behavior
+    return std::floor(x + 0.5);
   }
 
   static double trunc(double x) {
