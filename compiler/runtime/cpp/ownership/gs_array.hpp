@@ -344,6 +344,24 @@ public:
   }
   
   /**
+   * Concatenates arrays and returns a new array
+   * Equivalent to TypeScript: arr.concat(other)
+   */
+  Array<T> concat(const Array<T>& other) const {
+    Array<T> result;
+    result.impl_.reserve(impl_.size() + other.impl_.size());
+    // Copy elements from this array
+    for (const auto& elem : impl_) {
+      result.impl_.push_back(elem);
+    }
+    // Copy elements from other array
+    for (const auto& elem : other.impl_) {
+      result.impl_.push_back(elem);
+    }
+    return result;
+  }
+  
+  /**
    * Joins all elements of an array into a string
    * Equivalent to TypeScript: arr.join(separator)
    */

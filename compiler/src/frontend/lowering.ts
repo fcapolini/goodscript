@@ -12,7 +12,7 @@ import { IRBuilder, types, expr, stmts } from '../ir/builder.js';
 export class IRLowering {
   private builder = new IRBuilder();
   private typeChecker!: ts.TypeChecker;
-  private declaredVariables = new Set<string>();
+  private declaredVariables = new Map<string, IRType>();
   private currentFunctionIsAsync = false;
 
   lower(program: ts.Program): IRProgram {
@@ -311,8 +311,8 @@ export class IRLowering {
       // Detect const vs let (var is forbidden by validator)
       const mutable = (node.declarationList.flags & ts.NodeFlags.Const) === 0;
       
-      // Mark this variable as declared
-      this.declaredVariables.add(name);
+      // Track variable type for identifier lookups
+      this.declaredVariables.set(name, type);
 
       return stmts.variableDeclaration(name, type, initializer, mutable);
     }
@@ -433,7 +433,7 @@ export class IRLowering {
             const initializer = decl.initializer ? this.lowerExpression(decl.initializer, sourceFile, type) : undefined;
             // Detect const vs let
             const mutable = (node.initializer.flags & ts.NodeFlags.Const) === 0;
-            this.declaredVariables.add(name);
+            this.declaredVariables.set(name, type);
             init = stmts.variableDeclaration(name, type, initializer, mutable);
           }
         } else {
@@ -469,8 +469,8 @@ export class IRLowering {
         varName = decl.name.getText(sourceFile);
         varType = this.lowerType(decl, sourceFile);
         
-        // Mark variable as declared
-        this.declaredVariables.add(varName);
+        // Track variable type for identifier lookups
+        this.declaredVariables.set(varName, varType);
       } else {
         // Shouldn't happen for valid for-of
         return null;
@@ -738,8 +738,8 @@ export class IRLowering {
       const value = this.lowerExpr(decl.initializer, sourceFile);
       const variable = this.builder.variable(name, type);
       
-      // Mark this variable as declared
-      this.declaredVariables.add(name);
+      // Track variable type for identifier lookups
+      this.declaredVariables.set(name, type);
 
       return {
         kind: 'assign',
@@ -982,7 +982,9 @@ export class IRLowering {
         return expr.variable('this', 0, type);
       }
       
-      const type = this.inferType(node);
+      // Look up type from declared variables first (handles custom types like integer)
+      // Fall back to TypeScript type checker if not found
+      const type = this.declaredVariables.get(name) ?? this.inferType(node);
       return expr.variable(name, 0, type);
     }
 

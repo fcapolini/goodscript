@@ -266,6 +266,20 @@ public:
         return -1;
     }
 
+    // Concatenate arrays (returns new array)
+    Array<T> concat(const Array<T>& other) const {
+        Array<T> result(length_ + other.length_);
+        // Copy elements from this array
+        for (size_t i = 0; i < length_; ++i) {
+            result.push(data_[i]);
+        }
+        // Copy elements from other array
+        for (size_t i = 0; i < other.length_; ++i) {
+            result.push(other.data_[i]);
+        }
+        return result;
+    }
+
     // Join array elements into a string
     String join(const String& separator = String(",")) const {
         if (length_ == 0) {

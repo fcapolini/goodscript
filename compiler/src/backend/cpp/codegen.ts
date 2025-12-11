@@ -614,10 +614,12 @@ export class CppCodegen {
   private generateStatement(stmt: IRStatement): void {
     switch (stmt.kind) {
       case 'variableDeclaration': {
-        // For integer53 types, we need explicit type annotation since auto with literal 0
-        // will infer int instead of int64_t
+        // For integer53 and number types, we need explicit type annotation
+        // - integer53: auto with literal 0 will infer int instead of int64_t
+        // - number: auto with integer division will infer int32_t instead of double
         const needsExplicitType = stmt.variableType.kind === 'primitive' && 
-                                  stmt.variableType.type === PrimitiveType.Integer53;
+                                  (stmt.variableType.type === PrimitiveType.Integer53 ||
+                                   stmt.variableType.type === PrimitiveType.Number);
         
         // For object types (Map, Array, classes), 'const' in TypeScript means the variable
         // can't be reassigned, but the object can still be mutated. In C++, we should not
@@ -1154,6 +1156,13 @@ export class CppCodegen {
           }
         }
         
+        // Special handling for division: always use floating-point division
+        // This matches JavaScript semantics where / always produces a number
+        if (expr.operator === BinaryOp.Div) {
+          // Always cast to double to ensure floating-point division
+          return `(static_cast<double>(${left}) / static_cast<double>(${right}))`;
+        }
+        
         return `(${left} ${expr.operator} ${right})`;
       }
       
@@ -1611,6 +1620,24 @@ export class CppCodegen {
           
           if (isFloatingPoint) {
             return `std::fmod(${left}, ${right})`;
+          }
+        }
+        
+        // Special handling for division: integer / integer always uses floating-point
+        // This matches JavaScript semantics where all division is floating-point
+        if (expr.op === BinaryOp.Div) {
+          const leftType = expr.left.type;
+          const rightType = expr.right.type;
+          
+          // Check if both operands are integers
+          const leftIsInteger = leftType.kind === 'primitive' && 
+            (leftType.type === PrimitiveType.Integer || leftType.type === PrimitiveType.Integer53);
+          const rightIsInteger = rightType.kind === 'primitive' && 
+            (rightType.type === PrimitiveType.Integer || rightType.type === PrimitiveType.Integer53);
+          
+          if (leftIsInteger && rightIsInteger) {
+            // Cast to double for floating-point division (JavaScript semantics)
+            return `(static_cast<double>(${left}) / static_cast<double>(${right}))`;
           }
         }
         
