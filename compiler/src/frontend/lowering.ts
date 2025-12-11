@@ -1402,6 +1402,19 @@ export class IRLowering {
         return types.boolean();
       }
       
+      // Handle 'new' expressions with explicit type arguments: new Map<K, V>()
+      if (ts.isNewExpression(decl.initializer) && decl.initializer.typeArguments) {
+        const className = decl.initializer.expression.getText(sourceFile);
+        if (className === 'Map' && decl.initializer.typeArguments.length === 2) {
+          const keyType = this.lowerTypeNode(decl.initializer.typeArguments[0], sourceFile);
+          const valueType = this.lowerTypeNode(decl.initializer.typeArguments[1], sourceFile);
+          return types.map(keyType, valueType);
+        } else if (className === 'Array' && decl.initializer.typeArguments.length === 1) {
+          const elementType = this.lowerTypeNode(decl.initializer.typeArguments[0], sourceFile);
+          return types.array(elementType);
+        }
+      }
+      
       // Use type checker for complex expressions
       return this.inferType(decl.initializer);
     }
