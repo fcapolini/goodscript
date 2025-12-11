@@ -29,7 +29,7 @@ export async function compile(options: CompileOptions): Promise<CompileResult> {
       const validator = new Validator();
       for (const sourceFile of program.getSourceFiles()) {
         if (!sourceFile.isDeclarationFile) {
-          diagnostics.push(...validator.validate(sourceFile));
+          diagnostics.push(...validator.validate(sourceFile, checker));
         }
       }
     }

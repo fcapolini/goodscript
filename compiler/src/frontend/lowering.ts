@@ -192,7 +192,7 @@ export class IRLowering {
     const name = node.name?.getText(sourceFile);
     if (!name) return null;
 
-    const fields: Array<{ name: string; type: IRType; isReadonly: boolean }> = [];
+    const fields: Array<{ name: string; type: IRType; isReadonly: boolean; initializer?: IRExpression }> = [];
     const methods: Array<{ name: string; params: { name: string; type: IRType }[]; returnType: IRType; body: IRFunctionBody; isStatic: boolean }> = [];
     let constructor: { params: { name: string; type: IRType }[]; body: IRFunctionBody } | undefined = undefined;
 
@@ -201,7 +201,8 @@ export class IRLowering {
         const fieldName = member.name.getText(sourceFile);
         const fieldType = this.lowerTypeNode(member.type, sourceFile);
         const isReadonly = member.modifiers?.some(m => m.kind === ts.SyntaxKind.ReadonlyKeyword) ?? false;
-        fields.push({ name: fieldName, type: fieldType, isReadonly });
+        const initializer = member.initializer ? this.lowerExpression(member.initializer, sourceFile, fieldType) : undefined;
+        fields.push({ name: fieldName, type: fieldType, isReadonly, initializer });
       } else if (ts.isConstructorDeclaration(member)) {
         const params = member.parameters.map(p => ({
           name: p.name.getText(sourceFile),

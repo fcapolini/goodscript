@@ -57,7 +57,7 @@ export async function compileCommand(options: CliOptions): Promise<CommandResult
       // Phase 1: Validate
       if (!options.gsSkipValidation) {
         const validator = new Validator();
-        const diagnostics = validator.validate(sourceFile);
+        const diagnostics = validator.validate(sourceFile, program.getTypeChecker());
         
         for (const diag of diagnostics) {
           if (diag.severity === 'error') {

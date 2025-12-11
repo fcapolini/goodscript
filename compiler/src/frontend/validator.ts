@@ -24,10 +24,12 @@ import type { Diagnostic } from '../types.js';
 export class Validator {
   private diagnostics: Diagnostic[] = [];
   private sourceFile!: ts.SourceFile;
+  private checker?: ts.TypeChecker;
 
-  validate(sourceFile: ts.SourceFile): Diagnostic[] {
+  validate(sourceFile: ts.SourceFile, checker?: ts.TypeChecker): Diagnostic[] {
     this.diagnostics = [];
     this.sourceFile = sourceFile;
+    this.checker = checker;
     
     this.visitNode(sourceFile);
     
@@ -297,6 +299,14 @@ export class Validator {
     // Parenthesized expression
     if (ts.isParenthesizedExpression(expr)) {
       return this.isExplicitBoolean(expr.expression);
+    }
+
+    // Check if expression has boolean type using type checker
+    if (this.checker) {
+      const type = this.checker.getTypeAtLocation(expr);
+      if (type.flags & ts.TypeFlags.Boolean || type.flags & ts.TypeFlags.BooleanLiteral) {
+        return true;
+      }
     }
 
     return false;
