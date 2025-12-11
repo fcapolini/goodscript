@@ -105,7 +105,7 @@ describe('Date Integration', () => {
     `;
     const cpp = compileToCpp(code);
     expect(cpp).toContain('gs::Date::now()');
-    expect(cpp).toContain('auto start =');
-    expect(cpp).toContain('auto end =');
+    expect(cpp).toContain('start = gs::Date::now()');
+    expect(cpp).toContain('end = gs::Date::now()');
   });
 });

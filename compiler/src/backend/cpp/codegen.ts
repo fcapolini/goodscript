@@ -72,10 +72,6 @@ export class CppCodegen {
    * Sanitize identifier to avoid C++ reserved keywords
    */
   private sanitizeIdentifier(name: string): string {
-    // Don't sanitize 'this' - it's valid in C++ class methods
-    if (name === 'this') {
-      return name;
-    }
     if (CPP_RESERVED_KEYWORDS.has(name)) {
       return `${name}_`;
     }
