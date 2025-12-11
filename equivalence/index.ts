@@ -28,6 +28,18 @@ import { tests as numberEdgeCasesTests } from './edge-cases/number-edge-cases.te
 import { tests as stringEdgeCasesTests } from './edge-cases/string-edge-cases.test.ts';
 import { tests as booleanLogicTests } from './edge-cases/boolean-logic.test.ts';
 import { tests as optionalChainingTests } from './edge-cases/optional-chaining.test.ts';
+import { tests as nestedControlFlowTests } from './edge-cases/nested-control-flow.test.ts';
+
+import { tests as asyncAwaitTests } from './integration/async-await.test.ts';
+import { tests as recursionTests } from './integration/recursion.test.ts';
+import { tests as lambdaClosuresTests } from './integration/lambda-closures.test.ts';
+import { tests as functionHoistingTests } from './integration/function-hoisting.test.ts';
+
+// New test suites
+import { tests as unionTypesTests } from './basic/union-types.test.ts';
+import { tests as objectLiteralsTests } from './basic/object-literals.test.ts';
+import { tests as interfacesTests } from './basic/interfaces.test.ts';
+import { tests as arrayAdvancedTests } from './stdlib/array-advanced.test.ts';
 
 // Re-export for direct access
 export {
@@ -51,7 +63,16 @@ export {
   numberEdgeCasesTests,
   stringEdgeCasesTests,
   booleanLogicTests,
-  optionalChainingTests
+  optionalChainingTests,
+  nestedControlFlowTests,
+  asyncAwaitTests,
+  recursionTests,
+  lambdaClosuresTests,
+  functionHoistingTests,
+  unionTypesTests,
+  objectLiteralsTests,
+  interfacesTests,
+  arrayAdvancedTests
 };
 
 /**
@@ -70,21 +91,32 @@ export function getAllTests() {
       types: typesTests,
       templateLiterals: templateLiteralsTests,
       variables: variablesTests,
-      operators: operatorsTests
+      operators: operatorsTests,
+      unionTypes: unionTypesTests,
+      objectLiterals: objectLiteralsTests,
+      interfaces: interfacesTests
     },
     stdlib: {
       map: mapTests,
       math: mathTests,
       date: dateTests,
       json: jsonTests,
-      arrayMethods: arrayMethodsTests
+      arrayMethods: arrayMethodsTests,
+      arrayAdvanced: arrayAdvancedTests
     },
     edgeCases: {
       emptyCollections: emptyCollectionsTests,
       numberEdgeCases: numberEdgeCasesTests,
       stringEdgeCases: stringEdgeCasesTests,
       booleanLogic: booleanLogicTests,
-      optionalChaining: optionalChainingTests
+      optionalChaining: optionalChainingTests,
+      nestedControlFlow: nestedControlFlowTests
+    },
+    integration: {
+      asyncAwait: asyncAwaitTests,
+      recursion: recursionTests,
+      lambdaClosures: lambdaClosuresTests,
+      functionHoisting: functionHoistingTests
     }
   };
 }

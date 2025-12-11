@@ -17,10 +17,11 @@ Unlike unit tests (which test compiler internals) or performance benchmarks (whi
 ```
 equivalence/
 ├── README.md               # This file
+├── EXPANSION-PLAN.md       # Roadmap for test expansion (250+ tests target)
 ├── run-equivalence.ts      # Test runner (compiles & executes in all 3 modes)
 ├── test-framework.ts       # Test framework core
 ├── index.ts                # Test suite index and exports
-├── basic/                  # Basic language features (11 suites, 84 tests)
+├── basic/                  # Basic language features (14 suites, ~110 tests)
 │   ├── arithmetic.test.ts      # Arithmetic operations (8 tests)
 │   ├── arrays.test.ts          # Array operations (6 tests)
 │   ├── strings.test.ts         # String operations (7 tests)
@@ -31,26 +32,33 @@ equivalence/
 │   ├── types.test.ts           # Type system features (6 tests)
 │   ├── template-literals.test.ts # Template strings (7 tests)
 │   ├── variables.test.ts       # Variable declarations (7 tests)
-│   └── operators.test.ts       # Operator precedence (10 tests)
-├── edge-cases/             # Edge cases and corner cases (5 suites, 36 tests)
+│   ├── operators.test.ts       # Operator precedence (10 tests)
+│   ├── union-types.test.ts     # Union types (T | null, T | undefined) (10 tests) ✨ NEW
+│   ├── object-literals.test.ts # Object literals and structs (8 tests) ✨ NEW
+│   └── interfaces.test.ts      # Interface declarations (7 tests) ✨ NEW
+├── edge-cases/             # Edge cases and corner cases (6 suites, ~46 tests)
 │   ├── empty-collections.test.ts   # Empty arrays/maps (7 tests)
 │   ├── number-edge-cases.test.ts   # Zero, negatives, overflow (8 tests)
 │   ├── string-edge-cases.test.ts   # Special chars, slicing (10 tests)
 │   ├── boolean-logic.test.ts       # AND/OR/NOT (9 tests)
-│   └── optional-chaining.test.ts   # ?. operator (2 tests, Node.js only)
-├── stdlib/                 # Standard library equivalence (5 suites, 41 tests)
+│   ├── optional-chaining.test.ts   # ?. operator (2 tests)
+│   └── nested-control-flow.test.ts # Nested loops, breaks (10 tests) ✨ NEW
+├── stdlib/                 # Standard library equivalence (6 suites, ~51 tests)
 │   ├── map.test.ts             # Map operations (10 tests)
 │   ├── math.test.ts            # Math object (11 tests)
 │   ├── date.test.ts            # Date.now() (4 tests)
 │   ├── json.test.ts            # JSON.stringify (6 tests)
-│   └── array-methods.test.ts   # Array methods (10 tests)
-└── integration/            # Complex integration scenarios (coming soon)
-    ├── recursion.test.ts
-    ├── async-await.test.ts
-    └── class-inheritance.test.ts
+│   ├── array-methods.test.ts   # Array methods (10 tests)
+│   └── array-advanced.test.ts  # Advanced array operations (10 tests) ✨ NEW
+└── integration/            # Complex integration scenarios (4 suites, ~49 tests) ✨ NEW
+    ├── async-await.test.ts     # Promise<T> and async/await (15 tests) ✨ NEW
+    ├── recursion.test.ts       # Recursive functions (12 tests) ✨ NEW
+    ├── lambda-closures.test.ts # Closure semantics (12 tests) ✨ NEW
+    └── function-hoisting.test.ts # Hoisting optimization (10 tests) ✨ NEW
 ```
 
-**Total: 21 test suites, 161 tests, 483 total executions (3 modes each)**
+**Total: 30 test suites, ~256 tests, 768 total executions (3 modes each)**
+**New: +9 test suites, +95 tests added! 🎉**
 
 ## Running Tests
 
