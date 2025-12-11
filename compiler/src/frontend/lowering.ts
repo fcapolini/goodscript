@@ -1181,11 +1181,21 @@ export class IRLowering {
   }
 
   private lowerArrowFunction(node: ts.ArrowFunction, sourceFile: ts.SourceFile): IRExpr {
-    // Extract parameters
-    const params = node.parameters.map(p => ({
-      name: p.name.getText(sourceFile),
-      type: this.lowerTypeNode(p.type, sourceFile),
-    }));
+    // Extract parameters with type inference
+    const params = node.parameters.map(p => {
+      let paramType = this.lowerTypeNode(p.type, sourceFile);
+      
+      // If no explicit type annotation, use TypeScript's type inference
+      if (!p.type && paramType.kind === 'primitive' && paramType.type === PrimitiveType.Void) {
+        const tsType = this.typeChecker.getTypeAtLocation(p);
+        paramType = this.convertTsTypeToIRType(tsType);
+      }
+      
+      return {
+        name: p.name.getText(sourceFile),
+        type: paramType,
+      };
+    });
 
     // Check if this is an async arrow function
     const isAsync = node.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ?? false;

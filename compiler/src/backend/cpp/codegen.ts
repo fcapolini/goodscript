@@ -1340,6 +1340,23 @@ export class CppCodegen {
           }
         }
         
+        // Special case: if callee is memberAccess for .length() or .size(),
+        // it already has () so don't add another for zero-arg calls
+        if (expr.callee.kind === 'memberAccess') {
+          const member = expr.callee.member;
+          const objType = expr.callee.object.type;
+          
+          // Check if this is a known zero-arg method (length, size)
+          if ((member === 'length' && (objType.kind === 'array' || (objType.kind === 'primitive' && objType.type === PrimitiveType.String))) ||
+              (member === 'size' && objType.kind === 'map')) {
+            // memberAccess already generates .length() or .size(), so just use it directly
+            // For zero-argument calls, don't add ()
+            if (expr.arguments.length === 0) {
+              return this.generateExpression(expr.callee);
+            }
+          }
+        }
+        
         const callee = this.generateExpression(expr.callee);
         const args = expr.arguments.map((arg: IRExpression) => this.generateExpression(arg)).join(', ');
         
@@ -1460,7 +1477,10 @@ export class CppCodegen {
       case 'indexAccess': {
         const obj = this.generateExpression(expr.object);
         const index = this.generateExpression(expr.index);
-        return `${obj}[static_cast<int>(${index})]`;
+        // Use safe get_or_default() method instead of operator[] to match JavaScript semantics
+        // Cast index to int if it's a number type to avoid ambiguous overload
+        const finalIndex = `static_cast<int>(${index})`;
+        return `${obj}.get_or_default(${finalIndex})`;
       }
       
       case 'assignment': {
@@ -1800,9 +1820,27 @@ export class CppCodegen {
         // JavaScript: arr[100] returns undefined (we use default-initialized value)
         return `${obj}.get_or_default(${finalIndex})`;
       }
-      case 'callExpr':
+      case 'callExpr': {
+        // Special case: if callee is a member access for .length() or .size(), 
+        // it already has () so don't add another
+        if (expr.callee.kind === 'member') {
+          const member = expr.callee.member;
+          const objType = expr.callee.object.type;
+          
+          // Check if this is a known zero-arg method (length, size)
+          if ((member === 'length' && (objType.kind === 'array' || (objType.kind === 'primitive' && objType.type === PrimitiveType.String))) ||
+              (member === 'size' && objType.kind === 'map')) {
+            // member access already generates .length() or .size(), so just use it directly
+            // For zero-argument calls, don't add ()
+            if (expr.args.length === 0) {
+              return this.generateExpr(expr.callee);
+            }
+          }
+        }
+        
+        // Regular function call
         return `${this.generateExpr(expr.callee)}(${expr.args.map(a => this.generateExpr(a)).join(', ')})`;
-      case 'methodCall': {
+      }      case 'methodCall': {
         const obj = this.generateExpr(expr.object);
         const args = expr.args.map(a => this.generateExpr(a)).join(', ');
         // Special case: console.log/error/warn -> gs::console::
