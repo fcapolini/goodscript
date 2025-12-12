@@ -93,7 +93,8 @@ ${test.code}`;
 async function runInNode(name: string, sourceFile: string, expectedOutput: string): Promise<TestResult> {
   const start = Date.now();
   try {
-    const { stdout } = await execAsync(`tsx ${sourceFile}`, {
+    // Use node with tsx module directly to avoid npx overhead and warnings
+    const { stdout } = await execAsync(`node --import tsx ${sourceFile}`, {
       encoding: 'utf-8',
       timeout: 5000,
       maxBuffer: 10 * 1024 * 1024
