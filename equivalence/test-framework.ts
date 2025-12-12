@@ -94,9 +94,10 @@ ${test.code}`;
 async function runInNode(name: string, sourceFile: string, expectedOutput: string): Promise<TestResult> {
   const start = Date.now();
   try {
-    // Just use tsx from PATH, ensure we run from workspace root
+    // Use node with tsx CLI directly (tsx in .bin is a shell wrapper)
     const workspaceRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-    const { stdout } = await execAsync(`tsx ${sourceFile}`, {
+    const tsxCli = join(workspaceRoot, 'node_modules', '.pnpm', 'tsx@4.21.0', 'node_modules', 'tsx', 'dist', 'cli.mjs');
+    const { stdout } = await execAsync(`node ${tsxCli} ${sourceFile}`, {
       encoding: 'utf-8',
       timeout: 5000,
       maxBuffer: 10 * 1024 * 1024,
@@ -118,7 +119,7 @@ async function runInNode(name: string, sourceFile: string, expectedOutput: strin
       mode: 'node',
       passed: false,
       output: error.stdout || '',
-      error: error.message,
+      error: error.stderr || error.message || 'Unknown error',
       duration
     };
   }

@@ -17,7 +17,7 @@ export default defineConfig({
     
     // Massively increase concurrent test execution to saturate all cores
     // Each test spawns 3 processes (node + gc + ownership), so we need high concurrency
-    maxConcurrency: 100, // Allow up to 100 tests running simultaneously
+    maxConcurrency: 10, // Optimal for tsx resource limits (higher values cause timeouts)
     
     // File-level parallelism
     fileParallelism: true,
