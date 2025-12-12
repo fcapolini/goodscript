@@ -11,11 +11,9 @@ import { writeFileSync, mkdirSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
+import { randomBytes } from 'crypto';
 
 const execAsync = promisify(exec);
-
-// Use counter for unique temp directories (Date.now() can collide in parallel tests)
-let tempDirCounter = 0;
 
 export interface EquivalenceTest {
   name: string;
@@ -50,8 +48,9 @@ export async function runEquivalenceTest(test: EquivalenceTest): Promise<TestRes
 
   const skipModes = new Set(test.skipModes || []);
   
-  // Create temp directory for this test (use pid + counter + hrtime for absolute uniqueness)
-  const uniqueId = `${process.pid}-${++tempDirCounter}-${process.hrtime.bigint()}`;
+  // Create temp directory with cryptographically random unique ID
+  // This ensures absolute uniqueness even with parallel threads
+  const uniqueId = randomBytes(16).toString('hex');
   const testDir = join(tmpdir(), `goodscript-equiv-${uniqueId}`);
   mkdirSync(testDir, { recursive: true });
   
@@ -135,7 +134,7 @@ async function runInGC(name: string, sourceFile: string, testDir: string, expect
   
   try {
     // Compile
-    await execAsync(`${COMPILER_BIN} --gsTarget cpp --gsMemory gc -o ${outBin} ${sourceFile}`, {
+    await execAsync(`${COMPILER_BIN} --gsTarget cpp --gsMemory gc --outDir ${testDir} -o ${outBin} ${sourceFile}`, {
       encoding: 'utf-8',
       timeout: 10000,
       maxBuffer: 10 * 1024 * 1024
@@ -175,7 +174,7 @@ async function runInOwnership(name: string, sourceFile: string, testDir: string,
   
   try {
     // Compile
-    await execAsync(`${COMPILER_BIN} --gsTarget cpp --gsMemory ownership -o ${outBin} ${sourceFile}`, {
+    await execAsync(`${COMPILER_BIN} --gsTarget cpp --gsMemory ownership --outDir ${testDir} -o ${outBin} ${sourceFile}`, {
       encoding: 'utf-8',
       timeout: 10000,
       maxBuffer: 10 * 1024 * 1024
