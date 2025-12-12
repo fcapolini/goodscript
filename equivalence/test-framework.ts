@@ -50,8 +50,8 @@ export async function runEquivalenceTest(test: EquivalenceTest): Promise<TestRes
 
   const skipModes = new Set(test.skipModes || []);
   
-  // Create temp directory for this test (use counter + random for uniqueness in parallel execution)
-  const uniqueId = `${Date.now()}-${++tempDirCounter}-${Math.random().toString(36).slice(2)}`;
+  // Create temp directory for this test (use pid + counter + hrtime for absolute uniqueness)
+  const uniqueId = `${process.pid}-${++tempDirCounter}-${process.hrtime.bigint()}`;
   const testDir = join(tmpdir(), `goodscript-equiv-${uniqueId}`);
   mkdirSync(testDir, { recursive: true });
   
