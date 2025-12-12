@@ -52,7 +52,15 @@ export async function runEquivalenceTest(test: EquivalenceTest): Promise<TestRes
   
   try {
     const sourceFile = join(testDir, 'test-gs.ts');
-    writeFileSync(sourceFile, test.code);
+    
+    // Add GoodScript type aliases for Node.js compatibility
+    const codeWithTypeAliases = `// GoodScript type aliases
+type integer = number;
+type integer53 = number;
+
+${test.code}`;
+    
+    writeFileSync(sourceFile, codeWithTypeAliases);
     
     // Run all modes in parallel for maximum CPU utilization
     const promises: Promise<TestResult>[] = [];
