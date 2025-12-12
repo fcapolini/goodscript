@@ -94,11 +94,13 @@ ${test.code}`;
 async function runInNode(name: string, sourceFile: string, expectedOutput: string): Promise<TestResult> {
   const start = Date.now();
   try {
-    // Just use tsx from PATH
+    // Just use tsx from PATH, ensure we run from workspace root
+    const workspaceRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
     const { stdout } = await execAsync(`tsx ${sourceFile}`, {
       encoding: 'utf-8',
       timeout: 5000,
-      maxBuffer: 10 * 1024 * 1024
+      maxBuffer: 10 * 1024 * 1024,
+      cwd: workspaceRoot
     });
     const duration = Date.now() - start;
     
