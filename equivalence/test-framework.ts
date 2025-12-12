@@ -14,6 +14,9 @@ import { fileURLToPath } from 'url';
 
 const execAsync = promisify(exec);
 
+// Use counter for unique temp directories (Date.now() can collide in parallel tests)
+let tempDirCounter = 0;
+
 export interface EquivalenceTest {
   name: string;
   code: string;
@@ -47,8 +50,9 @@ export async function runEquivalenceTest(test: EquivalenceTest): Promise<TestRes
 
   const skipModes = new Set(test.skipModes || []);
   
-  // Create temp directory for this test
-  const testDir = join(tmpdir(), `goodscript-equiv-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  // Create temp directory for this test (use counter + random for uniqueness in parallel execution)
+  const uniqueId = `${Date.now()}-${++tempDirCounter}-${Math.random().toString(36).slice(2)}`;
+  const testDir = join(tmpdir(), `goodscript-equiv-${uniqueId}`);
   mkdirSync(testDir, { recursive: true });
   
   try {
