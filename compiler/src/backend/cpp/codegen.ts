@@ -23,7 +23,7 @@ import type {
   IRStatement,
   IRExpression,
 } from '../../ir/types.js';
-import { Ownership, PrimitiveType, BinaryOp } from '../../ir/types.js';
+import { Ownership, PrimitiveType, BinaryOp, type IRLiteral } from '../../ir/types.js';
 import { types } from '../../ir/builder.js';
 
 type MemoryMode = 'ownership' | 'gc';
@@ -63,6 +63,8 @@ export class CppCodegen {
   private structRegistry = new Map<string, { name: string; fields: Array<{ name: string; type: IRType }> }>();
   private structCounter = 0;
   private isAsyncContext = false;  // Track if we're in an async function (for co_return vs return)
+  private variableTypes = new Map<string, IRType>();  // Track variable types for identifier resolution
+  private currentFunctionReturnType: IRType | null = null;  // Track current function return type for nullopt returns
 
   constructor(mode: MemoryMode = 'gc') {
     this.mode = mode;
@@ -379,6 +381,9 @@ export class CppCodegen {
   }
 
   private generateHeaderConst(constDecl: any): void {
+    // Track the const type for later use in expressions
+    this.variableTypes.set(constDecl.name, constDecl.type);
+    
     // For function types (lambdas), use auto since lambda types can't be expressed explicitly
     if (constDecl.type.kind === 'function') {
       this.emit(`extern auto ${this.sanitizeIdentifier(constDecl.name)};`);
@@ -485,11 +490,17 @@ export class CppCodegen {
     // Emit source location for function declaration
     this.emitSourceLocation(func.source);
     
+    // Track function return type for std::nullopt generation
+    const previousReturnType = this.currentFunctionReturnType;
+    this.currentFunctionReturnType = func.returnType;
+    
     this.emit(`${returnType} ${this.sanitizeIdentifier(func.name)}(${params}) {`);
     this.indent++;
     this.generateFunctionBody(func.body, func.async);
     this.indent--;
     this.emit('}');
+    
+    this.currentFunctionReturnType = previousReturnType;
   }
 
   private generateSourceClass(cls: IRClassDecl): void {
@@ -545,11 +556,17 @@ export class CppCodegen {
       const returnType = this.generateCppType(method.returnType);
       const params = method.params.map(p => this.generateCppParam(p)).join(', ');
       
+      // Track method return type for std::nullopt generation
+      const previousReturnType = this.currentFunctionReturnType;
+      this.currentFunctionReturnType = method.returnType;
+      
       this.emit(`${returnType} ${staticMod}${this.sanitizeIdentifier(method.name)}(${params}) {`);
       this.indent++;
       this.generateFunctionBody(method.body, method.async);
       this.indent--;
       this.emit('}');
+      
+      this.currentFunctionReturnType = previousReturnType;
       
       if (method !== cls.methods[cls.methods.length - 1]) {
         this.emit('');
@@ -558,6 +575,10 @@ export class CppCodegen {
   }
 
   private generateSourceConst(constDecl: any): void {
+    // Check if this is an optional type (T | null)
+    const isOptionalType = constDecl.type.kind === 'union' && this.isUnionWithNull(constDecl.type);
+    const isNullValue = constDecl.value.kind === 'literal' && (constDecl.value as IRLiteral).value === null;
+    
     // For function types that aren't lambda literals, use std::function to match header
     // Lambda literals use auto and are emitted inline in header
     if (constDecl.type.kind === 'function') {
@@ -576,7 +597,13 @@ export class CppCodegen {
     const typeStr = needsConst 
       ? `const ${this.generateCppType(constDecl.type)}`
       : this.generateCppType(constDecl.type);
-    this.emit(`${typeStr} ${this.sanitizeIdentifier(constDecl.name)} = ${this.generateExpr(constDecl.value)};`);
+    
+    // Handle optional types with null values
+    const valueExpr = (isOptionalType && isNullValue) 
+      ? 'std::nullopt'
+      : this.generateExpr(constDecl.value);
+    
+    this.emit(`${typeStr} ${this.sanitizeIdentifier(constDecl.name)} = ${valueExpr};`);
   }
 
   /**
@@ -610,12 +637,18 @@ export class CppCodegen {
   private generateStatement(stmt: IRStatement): void {
     switch (stmt.kind) {
       case 'variableDeclaration': {
+        // Track the variable type for later use in expressions
+        this.variableTypes.set(stmt.name, stmt.variableType);
+        
         // For integer53 and number types, we need explicit type annotation
         // - integer53: auto with literal 0 will infer int instead of int64_t
         // - number: auto with integer division will infer int32_t instead of double
         const needsExplicitType = stmt.variableType.kind === 'primitive' && 
                                   (stmt.variableType.type === PrimitiveType.Integer53 ||
                                    stmt.variableType.type === PrimitiveType.Number);
+        
+        // Check if this is an optional type (T | null) which became std::optional<T>
+        const isOptionalType = stmt.variableType.kind === 'union' && this.isUnionWithNull(stmt.variableType);
         
         // For object types (Map, Array, classes), 'const' in TypeScript means the variable
         // can't be reassigned, but the object can still be mutated. In C++, we should not
@@ -629,11 +662,27 @@ export class CppCodegen {
         // Use const for immutable variables (const in source), but skip for object types
         const constQualifier = (stmt.mutable === false && !isObjectType) ? 'const ' : '';
         
-        if (needsExplicitType) {
-          const cppType = this.generateCppType(stmt.variableType);
-          this.emit(`${constQualifier}${cppType} ${this.sanitizeIdentifier(stmt.name)} = ${stmt.initializer ? this.generateExpression(stmt.initializer) : '0'};`);
+        // Handle initializer value
+        let initValue: string;
+        if (stmt.initializer) {
+          // Check if initializing optional type with null BEFORE generating the expression
+          const isNullLiteral = stmt.initializer.kind === 'literal' && 
+                               (stmt.initializer as IRLiteral).value === null;
+          
+          if (isOptionalType && isNullLiteral) {
+            initValue = 'std::nullopt';
+          } else {
+            initValue = this.generateExpression(stmt.initializer);
+          }
         } else {
-          this.emit(`${constQualifier}auto ${this.sanitizeIdentifier(stmt.name)} = ${stmt.initializer ? this.generateExpression(stmt.initializer) : 'nullptr'};`);
+          initValue = isOptionalType ? 'std::nullopt' : (needsExplicitType ? '0' : 'nullptr');
+        }
+        
+        if (needsExplicitType || isOptionalType) {
+          const cppType = this.generateCppType(stmt.variableType);
+          this.emit(`${constQualifier}${cppType} ${this.sanitizeIdentifier(stmt.name)} = ${initValue};`);
+        } else {
+          this.emit(`${constQualifier}auto ${this.sanitizeIdentifier(stmt.name)} = ${initValue};`);
         }
         break;
       }
@@ -663,7 +712,20 @@ export class CppCodegen {
       case 'return':
         if (stmt.value) {
           const returnKeyword = this.isAsyncContext ? 'co_return' : 'return';
-          const valueCode = this.generateExpression(stmt.value);
+          
+          // Check if we're returning null from a function with optional return type
+          const isNullReturn = stmt.value.kind === 'literal' && (stmt.value as IRLiteral).value === null;
+          const returnTypeIsOptional = this.currentFunctionReturnType && 
+                                      this.currentFunctionReturnType.kind === 'union' && 
+                                      this.isUnionWithNull(this.currentFunctionReturnType);
+          
+          let valueCode: string;
+          if (isNullReturn && returnTypeIsOptional) {
+            valueCode = 'std::nullopt';
+          } else {
+            valueCode = this.generateExpression(stmt.value);
+          }
+          
           // For void async functions, don't emit nullptr/undefined
           if (this.isAsyncContext && (valueCode === 'nullptr' || valueCode === 'undefined')) {
             this.emit(`${returnKeyword};`);
@@ -1157,6 +1219,40 @@ export class CppCodegen {
         return this.sanitizeIdentifier(expr.name);
       
       case 'binary': {
+        // For equality comparisons with null and optional types, handle specially first
+        if ((expr.operator === BinaryOp.Eq || expr.operator === BinaryOp.Ne)) {
+          // Check if we're comparing an optional type with null
+          // Need to look up types from our tracking map since identifiers don't carry types
+          let leftType: IRType | undefined = expr.left.type;
+          let rightType: IRType | undefined = expr.right.type;
+          
+          // If left is an identifier, look up its type from our tracking map
+          if (expr.left.kind === 'identifier') {
+            leftType = this.variableTypes.get(expr.left.name) || leftType;
+          }
+          
+          // If right is an identifier, look up its type from our tracking map
+          if (expr.right.kind === 'identifier') {
+            rightType = this.variableTypes.get(expr.right.name) || rightType;
+          }
+          
+          const leftIsOptional = leftType && leftType.kind === 'union' && 
+                                this.isUnionWithNull(leftType);
+          const rightIsNull = expr.right.kind === 'literal' && 
+                             (expr.right as any).value === null;
+          const leftIsNull = expr.left.kind === 'literal' && 
+                            (expr.left as any).value === null;
+          const rightIsOptional = rightType && rightType.kind === 'union' && 
+                                 this.isUnionWithNull(rightType);
+          
+          if ((leftIsOptional && rightIsNull) || (leftIsNull && rightIsOptional)) {
+            // Generate the optional expression and compare with std::nullopt
+            const optionalExpr = leftIsOptional ? this.generateExpression(expr.left) : this.generateExpression(expr.right);
+            const op = expr.operator === BinaryOp.Eq ? '==' : '!=';
+            return `(${optionalExpr} ${op} std::nullopt)`;
+          }
+        }
+        
         const left = this.generateExpression(expr.left);
         const right = this.generateExpression(expr.right);
         
@@ -1992,6 +2088,7 @@ export class CppCodegen {
 
   private generateLiteral(value: number | string | boolean | null): string {
     if (value === null) {
+      // Return nullptr by default - will be converted to std::nullopt in context
       return 'nullptr';
     }
     if (typeof value === 'string') {
@@ -2024,9 +2121,20 @@ export class CppCodegen {
         const params = type.params.map(p => this.generateCppType(p)).join(', ');
         return `std::function<${this.generateCppType(type.returnType)}(${params})>`;
       }
-      case 'union':
-        // C++ unions require std::variant
+      case 'union': {
+        // Special case: T | null → std::optional<T>
+        // This avoids std::variant<T, void> which is illegal in C++
+        const nonNullTypes = type.types.filter(t => !this.isNullType(t));
+        const hasNull = nonNullTypes.length < type.types.length;
+        
+        if (hasNull && nonNullTypes.length === 1) {
+          // T | null pattern → std::optional<T>
+          return `std::optional<${this.generateCppType(nonNullTypes[0])}>`;
+        }
+        
+        // General unions require std::variant
         return `std::variant<${type.types.map(t => this.generateCppType(t)).join(', ')}>`;
+      }
       case 'nullable':
         // Nullable in C++ is std::optional or raw pointer
         return `std::optional<${this.generateCppType(type.inner)}>`;
@@ -2056,6 +2164,30 @@ export class CppCodegen {
       default:
         return 'void';
     }
+  }
+
+  /**
+   * Check if a type represents null (nullable void or void primitive)
+   */
+  private isNullType(type: IRType): boolean {
+    if (type.kind === 'nullable' && type.inner.kind === 'primitive' && type.inner.type === PrimitiveType.Void) {
+      return true;
+    }
+    // Also check for plain void primitive (from null keyword)
+    if (type.kind === 'primitive' && type.type === PrimitiveType.Void) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Check if a union type contains null (T | null pattern)
+   */
+  private isUnionWithNull(type: IRType): boolean {
+    if (type.kind !== 'union') {
+      return false;
+    }
+    return type.types.some(t => this.isNullType(t));
   }
 
   private generatePointerType(typeName: string, ownership?: Ownership): string {

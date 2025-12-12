@@ -5,10 +5,13 @@
  * and verifies they produce identical outputs.
  */
 
-import { execSync } from 'child_process';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { writeFileSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+
+const execAsync = promisify(exec);
 
 export interface EquivalenceTest {
   name: string;
@@ -34,38 +37,41 @@ export function defineEquivalenceTest(test: EquivalenceTest): EquivalenceTest {
 }
 
 /**
- * Run a single test in all three modes
+ * Run a single test in all three modes (in parallel for maximum CPU utilization)
  */
 export async function runEquivalenceTest(test: EquivalenceTest): Promise<TestResult[]> {
   if (test.skip) {
     return [];
   }
 
-  const results: TestResult[] = [];
   const skipModes = new Set(test.skipModes || []);
   
   // Create temp directory for this test
-  const testDir = join(tmpdir(), `goodscript-equiv-${Date.now()}`);
+  const testDir = join(tmpdir(), `goodscript-equiv-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   mkdirSync(testDir, { recursive: true });
   
   try {
     const sourceFile = join(testDir, 'test-gs.ts');
     writeFileSync(sourceFile, test.code);
     
-    // Run in Node.js
+    // Run all modes in parallel for maximum CPU utilization
+    const promises: Promise<TestResult>[] = [];
+    
     if (!skipModes.has('node')) {
-      results.push(await runInNode(test.name, sourceFile, test.expectedOutput));
+      promises.push(runInNode(test.name, sourceFile, test.expectedOutput));
     }
     
-    // Run in GC C++
     if (!skipModes.has('gc')) {
-      results.push(await runInGC(test.name, sourceFile, testDir, test.expectedOutput));
+      promises.push(runInGC(test.name, sourceFile, testDir, test.expectedOutput));
     }
     
-    // Run in Ownership C++
     if (!skipModes.has('ownership')) {
-      results.push(await runInOwnership(test.name, sourceFile, testDir, test.expectedOutput));
+      promises.push(runInOwnership(test.name, sourceFile, testDir, test.expectedOutput));
     }
+    
+    // Wait for all modes to complete in parallel
+    const results = await Promise.all(promises);
+    return results;
   } finally {
     // Cleanup temp directory
     try {
@@ -74,25 +80,23 @@ export async function runEquivalenceTest(test: EquivalenceTest): Promise<TestRes
       // Ignore cleanup errors
     }
   }
-  
-  return results;
 }
 
 async function runInNode(name: string, sourceFile: string, expectedOutput: string): Promise<TestResult> {
   const start = Date.now();
   try {
-    const output = execSync(`tsx ${sourceFile}`, {
+    const { stdout } = await execAsync(`tsx ${sourceFile}`, {
       encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 5000
+      timeout: 5000,
+      maxBuffer: 10 * 1024 * 1024
     });
     const duration = Date.now() - start;
     
     return {
       name,
       mode: 'node',
-      passed: output === expectedOutput,
-      output,
+      passed: stdout === expectedOutput,
+      output: stdout,
       duration
     };
   } catch (error: any) {
@@ -114,25 +118,25 @@ async function runInGC(name: string, sourceFile: string, testDir: string, expect
   
   try {
     // Compile
-    execSync(`${COMPILER_BIN} --gsTarget cpp --gsMemory gc -o ${outBin} ${sourceFile}`, {
+    await execAsync(`${COMPILER_BIN} --gsTarget cpp --gsMemory gc -o ${outBin} ${sourceFile}`, {
       encoding: 'utf-8',
-      stdio: 'pipe',
-      timeout: 10000
+      timeout: 10000,
+      maxBuffer: 10 * 1024 * 1024
     });
     
     // Execute
-    const output = execSync(outBin, {
+    const { stdout } = await execAsync(outBin, {
       encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 5000
+      timeout: 5000,
+      maxBuffer: 10 * 1024 * 1024
     });
     const duration = Date.now() - start;
     
     return {
       name,
       mode: 'gc',
-      passed: output === expectedOutput,
-      output,
+      passed: stdout === expectedOutput,
+      output: stdout,
       duration
     };
   } catch (error: any) {
@@ -154,25 +158,25 @@ async function runInOwnership(name: string, sourceFile: string, testDir: string,
   
   try {
     // Compile
-    execSync(`${COMPILER_BIN} --gsTarget cpp --gsMemory ownership -o ${outBin} ${sourceFile}`, {
+    await execAsync(`${COMPILER_BIN} --gsTarget cpp --gsMemory ownership -o ${outBin} ${sourceFile}`, {
       encoding: 'utf-8',
-      stdio: 'pipe',
-      timeout: 10000
+      timeout: 10000,
+      maxBuffer: 10 * 1024 * 1024
     });
     
     // Execute
-    const output = execSync(outBin, {
+    const { stdout } = await execAsync(outBin, {
       encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 5000
+      timeout: 5000,
+      maxBuffer: 10 * 1024 * 1024
     });
     const duration = Date.now() - start;
     
     return {
       name,
       mode: 'ownership',
-      passed: output === expectedOutput,
-      output,
+      passed: stdout === expectedOutput,
+      output: stdout,
       duration
     };
   } catch (error: any) {

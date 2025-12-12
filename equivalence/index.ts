@@ -29,6 +29,7 @@ import { tests as stringEdgeCasesTests } from './edge-cases/string-edge-cases.te
 import { tests as booleanLogicTests } from './edge-cases/boolean-logic.test.ts';
 import { tests as optionalChainingTests } from './edge-cases/optional-chaining.test.ts';
 import { tests as nestedControlFlowTests } from './edge-cases/nested-control-flow.test.ts';
+import { tests as equalityTests } from './edge-cases/equality.test.ts';
 
 import { tests as asyncAwaitTests } from './integration/async-await.test.ts';
 import { tests as recursionTests } from './integration/recursion.test.ts';
@@ -65,6 +66,7 @@ export {
   booleanLogicTests,
   optionalChainingTests,
   nestedControlFlowTests,
+  equalityTests,
   asyncAwaitTests,
   recursionTests,
   lambdaClosuresTests,
@@ -110,7 +112,8 @@ export function getAllTests() {
       stringEdgeCases: stringEdgeCasesTests,
       booleanLogic: booleanLogicTests,
       optionalChaining: optionalChainingTests,
-      nestedControlFlow: nestedControlFlowTests
+      nestedControlFlow: nestedControlFlowTests,
+      equality: equalityTests
     },
     integration: {
       asyncAwait: asyncAwaitTests,
