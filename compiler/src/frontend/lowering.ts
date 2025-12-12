@@ -1180,15 +1180,28 @@ export class IRLowering {
     return captures;
   }
 
-  private lowerArrowFunction(node: ts.ArrowFunction, sourceFile: ts.SourceFile): IRExpr {
+  private lowerArrowFunction(node: ts.ArrowFunction, sourceFile: ts.SourceFile, contextualType?: ts.Type): IRExpr {
     // Extract parameters with type inference
-    const params = node.parameters.map(p => {
+    const params = node.parameters.map((p, paramIndex) => {
       let paramType = this.lowerTypeNode(p.type, sourceFile);
       
-      // If no explicit type annotation, use TypeScript's type inference
+      // If no explicit type annotation, try to infer from contextual type
       if (!p.type && paramType.kind === 'primitive' && paramType.type === PrimitiveType.Void) {
-        const tsType = this.typeChecker.getTypeAtLocation(p);
-        paramType = this.convertTsTypeToIRType(tsType);
+        // If we have a contextual type from the parent call expression
+        if (contextualType) {
+          const callSignatures = contextualType.getCallSignatures();
+          if (callSignatures.length > 0) {
+            const sig = callSignatures[0];
+            if (sig.parameters.length > paramIndex) {
+              const lambdaParamSymbol = sig.parameters[paramIndex];
+              const lambdaParamType = this.typeChecker.getTypeOfSymbolAtLocation(
+                lambdaParamSymbol, 
+                lambdaParamSymbol.valueDeclaration || node
+              );
+              paramType = this.convertTsTypeToIRType(lambdaParamType);
+            }
+          }
+        }
       }
       
       return {
@@ -1266,7 +1279,21 @@ export class IRLowering {
       const object = this.lowerExpr(node.expression.expression, sourceFile);
       const method = node.expression.name.text;
       const optional = !!node.expression.questionDotToken;  // preserve optional chaining
-      const args = node.arguments.map(arg => this.lowerExpr(arg, sourceFile));
+      
+      // Get signature to extract contextual types for callback arguments
+      const signature = this.typeChecker.getResolvedSignature(node);
+      const args = node.arguments.map((arg, i) => {
+        // For arrow functions, pass contextual type from signature parameter
+        if (ts.isArrowFunction(arg) && signature && signature.parameters[i]) {
+          const paramType = this.typeChecker.getTypeOfSymbolAtLocation(
+            signature.parameters[i], 
+            node.expression
+          );
+          return this.lowerArrowFunction(arg, sourceFile, paramType);
+        }
+        return this.lowerExpr(arg, sourceFile);
+      });
+      
       const type = this.inferType(node);
       
       // Convert to regular call with fieldAccess callee (preserves optional flag)
@@ -1277,7 +1304,21 @@ export class IRLowering {
     
     // Regular function call
     const callee = this.lowerExpr(node.expression, sourceFile);
-    const args = node.arguments.map(arg => this.lowerExpr(arg, sourceFile));
+    
+    // Get signature to extract contextual types for callback arguments
+    const signature = this.typeChecker.getResolvedSignature(node);
+    const args = node.arguments.map((arg, i) => {
+      // For arrow functions, pass contextual type from signature parameter
+      if (ts.isArrowFunction(arg) && signature && signature.parameters[i]) {
+        const paramType = this.typeChecker.getTypeOfSymbolAtLocation(
+          signature.parameters[i], 
+          node.expression
+        );
+        return this.lowerArrowFunction(arg, sourceFile, paramType);
+      }
+      return this.lowerExpr(arg, sourceFile);
+    });
+    
     const type = this.inferType(node);
 
     return expr.call(callee, args, type);
@@ -1468,9 +1509,18 @@ export class IRLowering {
     return this.convertTsTypeToIRType(tsType, new Set());
   }
 
+  
   private convertTsTypeToIRType(tsType: ts.Type, visited: Set<ts.Type> = new Set()): IRType {
-    // Check primitive types FIRST to avoid adding them to visited
-    // TypeScript reuses primitive type objects globally, so adding them to visited causes false cycles
+    // Check for custom GoodScript types by name FIRST
+    const typeName = this.typeChecker.typeToString(tsType);
+    if (typeName === 'integer') {
+      return types.integer();
+    }
+    if (typeName === 'integer53') {
+      return types.integer53();
+    }
+    
+    // Check primitive types AFTER custom types
     if (tsType.flags & ts.TypeFlags.Number) {
       return types.number();
     }
