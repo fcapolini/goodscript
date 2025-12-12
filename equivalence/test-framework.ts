@@ -8,8 +8,9 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { writeFileSync, mkdirSync, rmSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { tmpdir } from 'os';
+import { fileURLToPath } from 'url';
 
 const execAsync = promisify(exec);
 
@@ -93,8 +94,8 @@ ${test.code}`;
 async function runInNode(name: string, sourceFile: string, expectedOutput: string): Promise<TestResult> {
   const start = Date.now();
   try {
-    // Use node with tsx module directly to avoid npx overhead and warnings
-    const { stdout } = await execAsync(`node --import tsx ${sourceFile}`, {
+    // Just use tsx from PATH
+    const { stdout } = await execAsync(`tsx ${sourceFile}`, {
       encoding: 'utf-8',
       timeout: 5000,
       maxBuffer: 10 * 1024 * 1024
@@ -155,7 +156,7 @@ async function runInGC(name: string, sourceFile: string, testDir: string, expect
       mode: 'gc',
       passed: false,
       output: error.stdout || '',
-      error: error.message,
+      error: error.stderr || error.message,
       duration
     };
   }
@@ -195,7 +196,7 @@ async function runInOwnership(name: string, sourceFile: string, testDir: string,
       mode: 'ownership',
       passed: false,
       output: error.stdout || '',
-      error: error.message,
+      error: error.stderr || error.message,
       duration
     };
   }
